@@ -1,0 +1,19 @@
+; VKS3D.def — Windows DLL export definition
+;
+; Exports exactly the three symbols required by the Vulkan ICD interface.
+; Using a .def file guarantees undecorated export names on both x64 and
+; x86 (32-bit __stdcall would otherwise mangle names as _name@N).
+;
+; The loader looks up these names with GetProcAddress() after loading the
+; ICD DLL listed in the JSON manifest.
+;
+; Additional export: vks3d_internal_marker
+;   Used by the self-detection logic in stereo.c to prevent VKS3D from
+;   accidentally loading itself as the "real" ICD.
+
+LIBRARY VKS3D
+EXPORTS
+    vk_icdNegotiateLoaderICDInterfaceVersion
+    vk_icdGetInstanceProcAddr
+    vk_icdGetPhysicalDeviceProcAddr
+    vks3d_internal_marker

@@ -1,14 +1,49 @@
-build/
-*.so
-*.so.*
-*.o
-*.a
+# Build directories
+build*/
+dist/
+out/
+
+# MSVC / Visual Studio
+*.user
+*.suo
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+.vs/
+x64/
+x86/
+Win32/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+
+# Build outputs
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+*.res
 *.spv
+
+# CMake
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
-Makefile
 CTestTestfile.cmake
 Testing/
 install_manifest.txt
 *.map
+
+# Linux
+*.so
+*.so.*
+*.o
+*.a
+
+# Editor
+.vscode/
+*.swp
+*~

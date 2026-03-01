@@ -1,65 +1,46 @@
-cmake_minimum_required(VERSION 3.16)
-project(stereo_vk_icd VERSION 1.0.0 LANGUAGES C)
+cmake_minimum_required(VERSION 3.20)
 
-# ── Options ──────────────────────────────────────────────────────────────────
-option(STEREO_BUILD_TESTS    "Build the test applications"     ON)
-option(STEREO_BUILD_DEMO     "Build the stereo demo app"       ON)
-option(STEREO_SPIRV_VALIDATE "Run spirv-val on patched shaders" OFF)
+project(VKS3D
+    VERSION 1.0.0
+    LANGUAGES C
+    DESCRIPTION "Vulkan Stereoscopic 3D ICD"
+)
 
-# ── Standard ─────────────────────────────────────────────────────────────────
+# ── Policy: MSVC requires C11 via /std:c11 ─────────────────────────────────
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# ── Find dependencies ─────────────────────────────────────────────────────────
+# ── Determine bitness from generator/toolchain ──────────────────────────────
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(STEREO_BITS 64)
+    set(STEREO_ARCH "x64")
+else()
+    set(STEREO_BITS 32)
+    set(STEREO_ARCH "x86")
+endif()
+message(STATUS "VKS3D: building ${STEREO_ARCH} (${STEREO_BITS}-bit)")
+
+# ── Output names ────────────────────────────────────────────────────────────
+#   VKS3D_x64.dll  /  VKS3D_x86.dll   (Windows)
+#   VKS3D_x64.so   /  VKS3D_x86.so    (Linux)
+set(TARGET_NAME VKS3D_${STEREO_ARCH})
+
+# ── Vulkan SDK ───────────────────────────────────────────────────────────────
 find_package(Vulkan REQUIRED)
 
-# ── Compile GLSL shaders → SPIR-V ─────────────────────────────────────────────
-find_program(GLSLANG_VALIDATOR glslangValidator
-    HINTS $ENV{VULKAN_SDK}/bin /usr/bin /usr/local/bin)
-find_program(GLSLC glslc
-    HINTS $ENV{VULKAN_SDK}/bin /usr/bin /usr/local/bin)
-
-if(GLSLC)
-    set(SHADER_COMPILER ${GLSLC})
-    set(SHADER_ARGS -c)
-elseif(GLSLANG_VALIDATOR)
-    set(SHADER_COMPILER ${GLSLANG_VALIDATOR})
-    set(SHADER_ARGS -V)
-else()
-    message(WARNING "No GLSL compiler found (glslc / glslangValidator). "
-                    "Composite shaders will not be compiled.")
+# Also try the VulkanSDK env var explicitly (MSVC installs don't always set
+# the cmake config path, but the env var is always present after SDK install)
+if(NOT Vulkan_FOUND AND DEFINED ENV{VULKAN_SDK})
+    set(Vulkan_INCLUDE_DIR "$ENV{VULKAN_SDK}/Include")
+    message(STATUS "VKS3D: Using Vulkan headers from VULKAN_SDK env: ${Vulkan_INCLUDE_DIR}")
 endif()
 
-set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
-set(SHADER_OUT ${CMAKE_CURRENT_BINARY_DIR}/shaders)
-file(MAKE_DIRECTORY ${SHADER_OUT})
-
-if(SHADER_COMPILER)
-    add_custom_command(
-        OUTPUT  ${SHADER_OUT}/composite.vert.spv
-        COMMAND ${SHADER_COMPILER} ${SHADER_ARGS}
-                ${SHADER_DIR}/composite.vert.glsl
-                -o ${SHADER_OUT}/composite.vert.spv
-        DEPENDS ${SHADER_DIR}/composite.vert.glsl
-        COMMENT "Compiling composite.vert.glsl"
-    )
-    add_custom_command(
-        OUTPUT  ${SHADER_OUT}/composite.frag.spv
-        COMMAND ${SHADER_COMPILER} ${SHADER_ARGS}
-                ${SHADER_DIR}/composite.frag.glsl
-                -o ${SHADER_OUT}/composite.frag.spv
-        DEPENDS ${SHADER_DIR}/composite.frag.glsl
-        COMMENT "Compiling composite.frag.glsl"
-    )
-    add_custom_target(stereo_shaders
-        DEPENDS ${SHADER_OUT}/composite.vert.spv
-                ${SHADER_OUT}/composite.frag.spv
-    )
-endif()
-
-# ── ICD shared library ────────────────────────────────────────────────────────
-add_library(stereo_vk_icd SHARED
+# ── Source files ─────────────────────────────────────────────────────────────
+set(STEREO_SOURCES
     src/icd_main.c
     src/stereo.c
     src/instance.c
@@ -70,101 +51,137 @@ add_library(stereo_vk_icd SHARED
     src/present.c
 )
 
-target_include_directories(stereo_vk_icd
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${Vulkan_INCLUDE_DIRS}
-)
+# ── Shader compilation ───────────────────────────────────────────────────────
+find_program(GLSLC     glslc
+    HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
+find_program(GLSLANG   glslangValidator
+    HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
 
-target_compile_options(stereo_vk_icd PRIVATE
-    -Wall -Wextra -Wpedantic
-    -Wno-unused-parameter
-    -fvisibility=hidden   # hide all symbols by default
-)
+if(GLSLC OR GLSLANG)
+    set(SHADER_DIR   "${CMAKE_SOURCE_DIR}/shaders")
+    set(SPIRV_OUT    "${CMAKE_BINARY_DIR}/shaders")
+    file(MAKE_DIRECTORY "${SPIRV_OUT}")
 
-# Only export ICD entry points
-target_compile_definitions(stereo_vk_icd PRIVATE
-    VK_ICD_EXPOSE_API           # required by loader
-    STEREO_ICD_VERSION_MAJOR=1
-    STEREO_ICD_VERSION_MINOR=0
-    STEREO_ICD_VERSION_PATCH=0
-    # Shader SPIR-V paths baked in at compile time
-    STEREO_VERT_SPV_PATH="${SHADER_OUT}/composite.vert.spv"
-    STEREO_FRAG_SPV_PATH="${SHADER_OUT}/composite.frag.spv"
-)
+    set(SHADER_TARGETS "")
 
-target_link_libraries(stereo_vk_icd
-    PRIVATE
-        dl          # dlopen / dlsym for real ICD loading
-        pthread     # per-device mutex
-        m           # math (fabs etc.)
-)
+    foreach(SHADER composite.vert composite.frag)
+        string(REPLACE "." "_" SHADER_VAR "${SHADER}")
+        set(GLSL_FILE  "${SHADER_DIR}/${SHADER}.glsl")
+        set(SPIRV_FILE "${SPIRV_OUT}/${SHADER}.spv")
 
-# The ICD must NOT link against libvulkan (that would create a circular dep)
-# We load it dynamically at runtime via dlopen.
-# Explicit: do NOT add Vulkan::Vulkan here.
+        if(GLSLC)
+            add_custom_command(OUTPUT "${SPIRV_FILE}"
+                COMMAND "${GLSLC}" "${GLSL_FILE}" -o "${SPIRV_FILE}"
+                DEPENDS "${GLSL_FILE}"
+                COMMENT "Compiling ${SHADER}.glsl → ${SHADER}.spv")
+        else()
+            string(REGEX REPLACE "\\..*" "" STAGE "${SHADER}")
+            add_custom_command(OUTPUT "${SPIRV_FILE}"
+                COMMAND "${GLSLANG}" -V -S "${STAGE}" "${GLSL_FILE}" -o "${SPIRV_FILE}"
+                DEPENDS "${GLSL_FILE}"
+                COMMENT "Compiling ${SHADER}.glsl → ${SHADER}.spv (glslangValidator)")
+        endif()
 
-if(SHADER_COMPILER)
-    add_dependencies(stereo_vk_icd stereo_shaders)
+        list(APPEND SHADER_TARGETS "${SPIRV_FILE}")
+    endforeach()
+
+    add_custom_target(shaders ALL DEPENDS ${SHADER_TARGETS})
+else()
+    message(WARNING "Neither glslc nor glslangValidator found — shaders won't be compiled.\n"
+                    "Install the Vulkan SDK or set VULKAN_SDK.")
 endif()
 
-# Linker script to expose only the three ICD entry points
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/stereo_icd.map.in
-    ${CMAKE_CURRENT_BINARY_DIR}/stereo_icd.map
-    @ONLY
-)
-set_target_properties(stereo_vk_icd PROPERTIES
-    LINK_FLAGS "-Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/stereo_icd.map"
-    OUTPUT_NAME "stereo_vk_icd"
-    SOVERSION   "1"
+# ── DLL / shared library ─────────────────────────────────────────────────────
+add_library(${TARGET_NAME} SHARED ${STEREO_SOURCES})
+
+set_target_properties(${TARGET_NAME} PROPERTIES
+    OUTPUT_NAME  ${TARGET_NAME}
+    PREFIX       ""           # no "lib" prefix on Linux either
+    C_VISIBILITY_PRESET hidden
 )
 
-# ── Install ───────────────────────────────────────────────────────────────────
-include(GNUInstallDirs)
-
-install(TARGETS stereo_vk_icd
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+target_include_directories(${TARGET_NAME} PRIVATE
+    include
+    ${Vulkan_INCLUDE_DIRS}
 )
 
-install(FILES manifest/stereo_vk_icd.json
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/vulkan/icd.d
-)
+# ── Windows-specific settings ────────────────────────────────────────────────
+if(WIN32)
+    # .def file controls exports (correct on both x64 and x86 __stdcall)
+    target_sources(${TARGET_NAME} PRIVATE src/VKS3D.def src/VKS3D.rc)
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        LINK_FLAGS "/DEF:${CMAKE_SOURCE_DIR}/src/VKS3D.def"
+    )
+    target_link_libraries(${TARGET_NAME} PRIVATE
+        advapi32    # RegOpenKeyEx, RegEnumValue
+    )
+    target_compile_definitions(${TARGET_NAME} PRIVATE
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+        _CRT_SECURE_NO_WARNINGS
+        VKS3D_ARCH="${STEREO_ARCH}"
+    )
+    # MSVC: enable C11, treat warnings sensibly
+    if(MSVC)
+        target_compile_options(${TARGET_NAME} PRIVATE
+            /std:c11
+            /W3
+            /wd4100  # unreferenced formal parameter
+            /wd4152  # nonstandard extension: function/data pointer conversion
+        )
+    else()
+        # MinGW / clang-cl
+        target_compile_options(${TARGET_NAME} PRIVATE
+            -Wall -Wno-unused-parameter
+        )
+    endif()
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
-if(STEREO_BUILD_TESTS)
+    # Install DLL + JSON manifest together
+    install(TARGETS ${TARGET_NAME}
+        RUNTIME DESTINATION "."
+    )
+    install(FILES "manifest/VKS3D_${STEREO_ARCH}.json"
+        DESTINATION "."
+    )
+    install(FILES "scripts/install.bat" "scripts/uninstall.bat" "scripts/Install-VKS3D.ps1"
+        DESTINATION "."
+    )
+
+else()
+    # ── Linux ────────────────────────────────────────────────────────────────
+    target_link_libraries(${TARGET_NAME} PRIVATE dl pthread m)
+
+    # Linker version script: only expose the three ICD symbols
+    if(EXISTS "${CMAKE_SOURCE_DIR}/stereo_icd.map.in")
+        configure_file(stereo_icd.map.in stereo_icd.map @ONLY)
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            LINK_FLAGS "-Wl,--version-script=${CMAKE_BINARY_DIR}/stereo_icd.map"
+        )
+    endif()
+
+    install(TARGETS ${TARGET_NAME} LIBRARY DESTINATION lib)
+    install(FILES "manifest/VKS3D_${STEREO_ARCH}.json" DESTINATION share/vulkan/icd.d)
+endif()
+
+if(TARGET shaders)
+    add_dependencies(${TARGET_NAME} shaders)
+endif()
+
+# ── Tests ────────────────────────────────────────────────────────────────────
+option(VKS3D_BUILD_TESTS "Build unit tests" ON)
+option(VKS3D_BUILD_DEMO  "Build integration demo" ON)
+
+if(VKS3D_BUILD_TESTS OR VKS3D_BUILD_DEMO)
     enable_testing()
     add_subdirectory(tests)
 endif()
 
-# ── Demo app ──────────────────────────────────────────────────────────────────
-if(STEREO_BUILD_DEMO)
-    # demo needs to link against the real Vulkan loader
-    find_package(Vulkan REQUIRED)
-    add_executable(stereo_demo
-        tests/demo.c
-    )
-    target_include_directories(stereo_demo
-        PRIVATE include ${Vulkan_INCLUDE_DIRS})
-    target_link_libraries(stereo_demo
-        PRIVATE Vulkan::Vulkan)
-    target_compile_definitions(stereo_demo PRIVATE
-        STEREO_ICD_JSON_PATH="${CMAKE_CURRENT_SOURCE_DIR}/manifest/stereo_vk_icd.json"
-    )
-endif()
-
-# ── Summary ───────────────────────────────────────────────────────────────────
+# ── Summary ──────────────────────────────────────────────────────────────────
 message(STATUS "")
-message(STATUS "═══════════════════════════════════════════════")
-message(STATUS "  Stereo VK ICD — Build Configuration")
-message(STATUS "═══════════════════════════════════════════════")
-message(STATUS "  Vulkan include : ${Vulkan_INCLUDE_DIRS}")
-message(STATUS "  Shader compiler: ${SHADER_COMPILER}")
-message(STATUS "  Install prefix : ${CMAKE_INSTALL_PREFIX}")
-message(STATUS "")
-message(STATUS "  To use:  export VK_ICD_FILENAMES=$(pwd)/manifest/stereo_vk_icd.json")
-message(STATUS "           export STEREO_REAL_ICD=/path/to/libvulkan_intel.so")
-message(STATUS "           export STEREO_SEPARATION=0.065")
-message(STATUS "           export STEREO_CONVERGENCE=0.030")
-message(STATUS "═══════════════════════════════════════════════")
+message(STATUS "  VKS3D build summary")
+message(STATUS "  -------------------")
+message(STATUS "  Target     : ${TARGET_NAME}")
+message(STATUS "  Arch       : ${STEREO_ARCH} (${STEREO_BITS}-bit)")
+message(STATUS "  Vulkan SDK : ${Vulkan_INCLUDE_DIRS}")
+message(STATUS "  Tests      : ${VKS3D_BUILD_TESTS}")
 message(STATUS "")

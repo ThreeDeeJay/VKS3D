@@ -1,26 +1,70 @@
-cmake_minimum_required(VERSION 3.16)
+# tests/CMakeLists.txt
 
-# ── Unit tests (no GPU required) ─────────────────────────────────────────────
-add_executable(test_spirv_patch
-    test_spirv_patch.c
-    ../src/shader.c
-    ../src/stereo.c
+find_package(Vulkan REQUIRED)
+
+set(TEST_INCLUDE_DIRS
+    ${CMAKE_SOURCE_DIR}/include
+    ${Vulkan_INCLUDE_DIRS}
 )
-target_include_directories(test_spirv_patch PRIVATE
-    ../include ${Vulkan_INCLUDE_DIRS})
-target_link_libraries(test_spirv_patch PRIVATE dl pthread m)
-target_compile_definitions(test_spirv_patch PRIVATE
-    STEREO_UNIT_TEST)
 
-add_test(NAME spirv_patch COMMAND test_spirv_patch)
+set(TEST_COMPILE_DEFS "")
+if(WIN32)
+    list(APPEND TEST_COMPILE_DEFS WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+endif()
 
-# ── Stereo math unit test ─────────────────────────────────────────────────────
-add_executable(test_stereo_math
-    test_stereo_math.c
-    ../src/stereo.c
-)
-target_include_directories(test_stereo_math PRIVATE
-    ../include ${Vulkan_INCLUDE_DIRS})
-target_link_libraries(test_stereo_math PRIVATE dl pthread m)
+# ── SPIR-V patcher unit tests ─────────────────────────────────────────────
+if(VKS3D_BUILD_TESTS)
+    add_executable(test_spirv_patch
+        test_spirv_patch.c
+        ${CMAKE_SOURCE_DIR}/src/shader.c
+        ${CMAKE_SOURCE_DIR}/src/stereo.c
+    )
+    target_include_directories(test_spirv_patch PRIVATE ${TEST_INCLUDE_DIRS})
+    target_compile_definitions(test_spirv_patch PRIVATE ${TEST_COMPILE_DEFS})
+    if(WIN32)
+        target_link_libraries(test_spirv_patch PRIVATE advapi32)
+        if(MSVC)
+            target_compile_options(test_spirv_patch PRIVATE /std:c11 /W3 /wd4100 /wd4152)
+        endif()
+    else()
+        target_link_libraries(test_spirv_patch PRIVATE dl pthread m)
+        target_compile_options(test_spirv_patch PRIVATE -Wall -Wno-unused-parameter)
+    endif()
+    add_test(NAME spirv_patch COMMAND test_spirv_patch)
 
-add_test(NAME stereo_math COMMAND test_stereo_math)
+    # ── Stereo math unit tests ─────────────────────────────────────────────
+    add_executable(test_stereo_math
+        test_stereo_math.c
+        ${CMAKE_SOURCE_DIR}/src/stereo.c
+    )
+    target_include_directories(test_stereo_math PRIVATE ${TEST_INCLUDE_DIRS})
+    target_compile_definitions(test_stereo_math PRIVATE ${TEST_COMPILE_DEFS})
+    if(WIN32)
+        target_link_libraries(test_stereo_math PRIVATE advapi32)
+        if(MSVC)
+            target_compile_options(test_stereo_math PRIVATE /std:c11 /W3 /wd4100 /wd4152)
+        endif()
+    else()
+        target_link_libraries(test_stereo_math PRIVATE dl pthread m)
+        target_compile_options(test_stereo_math PRIVATE -Wall -Wno-unused-parameter)
+    endif()
+    add_test(NAME stereo_math COMMAND test_stereo_math)
+endif()
+
+# ── Integration demo ──────────────────────────────────────────────────────
+if(VKS3D_BUILD_DEMO)
+    add_executable(VKS3D_demo demo.c)
+    target_include_directories(VKS3D_demo PRIVATE ${TEST_INCLUDE_DIRS})
+    target_compile_definitions(VKS3D_demo PRIVATE
+        ${TEST_COMPILE_DEFS}
+        STEREO_ICD_JSON_PATH="${CMAKE_SOURCE_DIR}/manifest/VKS3D_${STEREO_ARCH}.json"
+    )
+    if(WIN32)
+        target_link_libraries(VKS3D_demo PRIVATE Vulkan::Vulkan advapi32)
+        if(MSVC)
+            target_compile_options(VKS3D_demo PRIVATE /std:c11 /W3)
+        endif()
+    else()
+        target_link_libraries(VKS3D_demo PRIVATE Vulkan::Vulkan dl pthread)
+    endif()
+endif()

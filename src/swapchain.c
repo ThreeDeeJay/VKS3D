@@ -317,14 +317,14 @@ stereo_DestroySwapchainKHR(
             sd->real.DestroyRenderPass(sd->real_device, sc->composite_renderpass, NULL);
 
         /* Remove from list */
-        pthread_mutex_lock(&sd->lock);
+        stereo_mutex_lock(&sd->lock);
         for (uint32_t i = 0; i < sd->swapchain_count; i++) {
             if (sd->swapchains[i].real_swapchain == swapchain) {
                 sd->swapchains[i] = sd->swapchains[--sd->swapchain_count];
                 break;
             }
         }
-        pthread_mutex_unlock(&sd->lock);
+        stereo_mutex_unlock(&sd->lock);
     }
 
     sd->real.DestroySwapchainKHR(sd->real_device, swapchain, pAllocator);

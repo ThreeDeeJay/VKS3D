@@ -1,0 +1,43 @@
+/*
+ * VKS3D.rc — Windows DLL version / metadata resource
+ *
+ * Compiled into both VKS3D_x64.dll and VKS3D_x86.dll by the CMake build.
+ * Provides the version info visible in Windows Explorer Properties.
+ */
+
+#include <winver.h>
+
+/* Version numbers — keep in sync with CMakeLists.txt */
+#define VKS3D_VER_MAJOR  1
+#define VKS3D_VER_MINOR  0
+#define VKS3D_VER_PATCH  0
+#define VKS3D_VER_BUILD  0
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     VKS3D_VER_MAJOR, VKS3D_VER_MINOR, VKS3D_VER_PATCH, VKS3D_VER_BUILD
+PRODUCTVERSION  VKS3D_VER_MAJOR, VKS3D_VER_MINOR, VKS3D_VER_PATCH, VKS3D_VER_BUILD
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_DLL
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"   /* Language: US English, Unicode */
+        BEGIN
+            VALUE "CompanyName",      "VKS3D Project"
+            VALUE "FileDescription",  "Vulkan Stereoscopic 3D ICD"
+            VALUE "FileVersion",      "1.0.0.0"
+            VALUE "InternalName",     "VKS3D"
+            VALUE "LegalCopyright",   "MIT License"
+            VALUE "OriginalFilename", "VKS3D.dll"
+            VALUE "ProductName",      "VKS3D — Vulkan Stereoscopic ICD"
+            VALUE "ProductVersion",   "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 0x04b0
+    END
+END

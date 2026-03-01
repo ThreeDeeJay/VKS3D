@@ -1,284 +1,304 @@
-# VKS3D — Vulkan 1.1 Stereoscopic 3D ICD
+# VKS3D — Vulkan Stereoscopic 3D ICD
 
 A **Vulkan 1.1 Installable Client Driver (ICD)** that transparently injects
-stereoscopic Side-By-Side (SBS) 3D rendering into any Vulkan application
-without requiring source changes.
+Side-By-Side (SBS) stereoscopic 3D rendering into **any Vulkan application**
+with no source changes required.
+
+| Platform | 64-bit | 32-bit |
+|---|---|---|
+| **Windows** | `VKS3D_x64.dll` | `VKS3D_x86.dll` |
+| Linux | `VKS3D_x64.so` | `VKS3D_x86.so` |
 
 ```
-App → Vulkan Loader → VKS3D ICD → Real GPU ICD (Intel / AMD / NVIDIA / LLVMpipe)
+App → Vulkan Loader → VKS3D_x64.dll → Real GPU ICD (nvoglv64.dll / amdvlk64.dll …)
 ```
 
-## Features
+## How it works
 
-| Feature | Detail |
+| Step | What VKS3D does |
 |---|---|
-| **VK_KHR_multiview** | Injected into every render pass (viewMask = 0b11) |
-| **SPIR-V patching** | Vertex shaders patched at load time for per-eye clip-space offset |
-| **Side-By-Side output** | Swapchain width doubled; left eye left half, right eye right half |
-| **Configurable IPD** | `STEREO_SEPARATION` env var (default 65 mm) |
-| **Configurable convergence** | `STEREO_CONVERGENCE` for frustum shift (default 30 mm) |
-| **Zero app changes** | Works as a Vulkan ICD layer below the application |
-| **Passthrough mode** | `STEREO_ENABLED=0` for zero-overhead bypass |
+| `vkCreateInstance` | Loads real GPU ICD from registry, injects `VK_KHR_get_physical_device_properties2` |
+| `vkCreateDevice` | Enables `VkPhysicalDeviceMultiviewFeatures.multiview`, adds `VK_KHR_multiview` |
+| `vkCreateRenderPass` | Prepends `VkRenderPassMultiviewCreateInfo` — `viewMask=0b11` for both eyes |
+| `vkCreateShaderModule` | Patches vertex SPIR-V binary to apply per-eye clip-space offset |
+| `vkCreateSwapchainKHR` | Doubles `imageExtent.width` — app sees `W×H`, real swapchain is `2W×H` |
+| `vkGetSwapchainImagesKHR` | Returns 2-layer stereo images to the app (not the real SBS images) |
+| `vkQueuePresentKHR` | Runs `vkCmdBlitImage` composite: layer 0 → left half, layer 1 → right half |
 
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Vulkan Application                                             │
-│  (unchanged — renders W×H as usual)                             │
-└───────────────────┬─────────────────────────────────────────────┘
-                    │  vkCreateInstance / vkCreateDevice / etc.
-┌───────────────────▼─────────────────────────────────────────────┐
-│  Vulkan Loader  (reads VK_ICD_FILENAMES)                        │
-└───────────────────┬─────────────────────────────────────────────┘
-                    │
-┌───────────────────▼─────────────────────────────────────────────┐
-│  VKS3D ICD  (libstereo_vk_icd.so)                               │
-│                                                                 │
-│  ① CreateInstance   — injects VK_KHR_get_physical_device_props2 │
-│  ② CreateDevice     — enables VkPhysicalDeviceMultiviewFeatures │
-│                       + VK_KHR_multiview extension              │
-│  ③ CreateRenderPass — injects VkRenderPassMultiviewCreateInfo   │
-│                       viewMask = 0b11  (both eyes per subpass)  │
-│  ④ CreateShaderModule — patches vertex SPIR-V:                  │
-│       gl_Position.x += sign(eye) * separation * gl_Position.w  │
-│       sign = -1 for view 0 (left), +1 for view 1 (right)       │
-│  ⑤ CreateSwapchainKHR — doubles imageExtent.width (SBS)         │
-│  ⑥ GetSwapchainImagesKHR — returns 2-layer stereo images to app │
-│  ⑦ QueuePresentKHR  — runs composite blit:                      │
-│       layer 0 → left  half  [0,   W)  of real swapchain image   │
-│       layer 1 → right half  [W, 2W)  of real swapchain image   │
-└───────────────────┬─────────────────────────────────────────────┘
-                    │  real Vulkan calls
-┌───────────────────▼─────────────────────────────────────────────┐
-│  Real GPU ICD  (libvulkan_intel.so / libvulkan_radeon.so / etc) │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Stereo Math — Off-Axis Asymmetric Frustum
-
-Per-eye clip-space x offset:
+### Stereo math — off-axis asymmetric frustum
 
 ```
 left_offset  = -(separation/2) + (convergence/2)
 right_offset = +(separation/2) - (convergence/2)
 ```
 
-The SPIR-V-patched vertex shader applies:
+Injected into every vertex shader after the last write to `gl_Position`:
 
 ```glsl
-// Injected after the last write to gl_Position:
-float sign   = (gl_ViewIndex == 0) ? -1.0 : 1.0;
-gl_Position.x += sign * eye_offset * gl_Position.w;
+// Injected by VKS3D SPIR-V patcher at shader load time:
+gl_Position.x += (gl_ViewIndex == 0 ? left_offset : right_offset)
+               * gl_Position.w;   // perspective-correct parallax
 ```
-
-Multiplying by `gl_Position.w` gives the correct perspective-correct
-off-axis shift: objects at the convergence plane appear fused, objects
-nearer/farther show controlled disparity.
-
-### Render Pass Multiview Injection
-
-`VkRenderPassMultiviewCreateInfo` is prepended to the `pNext` chain of
-every `vkCreateRenderPass` call:
-
-```c
-.subpassCount   = N          // all subpasses broadcast to both eyes
-.pViewMasks     = {0x3, …}   // bit 0 = left eye, bit 1 = right eye
-.correlationMasks = {0x3, …} // GPU renders both eyes in same pass
-```
-
-This broadcasts every draw call to both image array layers simultaneously,
-with `gl_ViewIndex` identifying the current eye in the vertex shader.
-
-### SBS Composite Pass
-
-At `vkQueuePresentKHR`, before the real present:
-
-```
-stereo_images[i]  (W×H, arrayLayers=2)
-    │
-    ├─ layer 0  ──[CmdBlitImage]──►  sbs_images[i][0 .. W)
-    └─ layer 1  ──[CmdBlitImage]──►  sbs_images[i][W .. 2W)
-```
-
-The composite uses `VkCmdBlitImage` directly — no pipeline, no shader,
-no descriptor sets. The `dstOffsets` of the right-eye blit are shifted
-by `W` in x.
 
 ---
 
-## Building
+## Installation (Windows)
 
 ### Prerequisites
 
-```bash
-# Ubuntu / Debian
-sudo apt install cmake build-essential libvulkan-dev vulkan-tools \
-                 glslang-tools spirv-tools
+- [Vulkan SDK](https://vulkan.lunarg.com/sdk/home#windows) (for headers/loader — already installed with most GPU drivers)
+- A Vulkan-capable GPU with a working driver (NVIDIA, AMD, Intel)
 
-# Fedora / RHEL
-sudo dnf install cmake gcc libvulkan-devel vulkan-tools glslang
+### Option A — Pre-built release (recommended)
+
+1. Download `VKS3D-vX.Y.Z-windows.zip` from [Releases](../../releases)
+2. Extract to a permanent location, e.g. `C:\VKS3D\`
+3. Run `install.bat` **as Administrator** (or `Install-VKS3D.ps1` in an elevated PowerShell)
+4. Done — VKS3D is now registered for all Vulkan applications
+
+```
+C:\VKS3D\
+├── VKS3D_x64.dll       ← 64-bit ICD  (registered for 64-bit apps)
+├── VKS3D_x86.dll       ← 32-bit ICD  (registered for 32-bit apps)
+├── VKS3D_x64.json      ← Vulkan manifest (64-bit)
+├── VKS3D_x86.json      ← Vulkan manifest (32-bit)
+├── install.bat
+├── uninstall.bat
+└── Install-VKS3D.ps1
 ```
 
-### Build
+### Option B — Manual registry registration
 
-```bash
-git clone https://github.com/ThreeDeeJay/VKS3D.git
-cd VKS3D
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
-make -j$(nproc)
+The Vulkan loader discovers ICDs from:
+
+| Architecture | Registry key |
+|---|---|
+| 64-bit (`VKS3D_x64.dll`) | `HKLM\SOFTWARE\Khronos\Vulkan\Drivers` |
+| 32-bit (`VKS3D_x86.dll`) | `HKLM\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers` |
+
+Each value is: **name** = full path to the JSON manifest, **data** = `DWORD 0`.
+
+```cmd
+:: 64-bit (run as Administrator)
+reg add "HKLM\SOFTWARE\Khronos\Vulkan\Drivers" ^
+    /v "C:\VKS3D\VKS3D_x64.json" /t REG_DWORD /d 0 /f
+
+:: 32-bit (run as Administrator)
+reg add "HKLM\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers" ^
+    /v "C:\VKS3D\VKS3D_x86.json" /t REG_DWORD /d 0 /f
 ```
 
-This produces:
-- `libstereo_vk_icd.so`      — the ICD shared library
-- `stereo_demo`               — headless integration demo
-- `test_spirv_patch`          — SPIR-V patcher unit tests
-- `test_stereo_math`          — stereo math unit tests
+### Uninstall
 
-### Run tests
-
-```bash
-cd build
-ctest --output-on-failure
+```cmd
+C:\VKS3D\uninstall.bat
 ```
 
----
+or
 
-## Usage
-
-### 1. Point the Vulkan loader at VKS3D
-
-```bash
-export VK_ICD_FILENAMES=/path/to/VKS3D/manifest/stereo_vk_icd.json
-```
-
-### 2. Tell VKS3D which real GPU ICD to use
-
-```bash
-# Intel
-export STEREO_REAL_ICD=/usr/lib/x86_64-linux-gnu/libvulkan_intel.so
-
-# AMD
-export STEREO_REAL_ICD=/usr/lib/x86_64-linux-gnu/libvulkan_radeon.so
-
-# Software (LLVMpipe / Lavapipe)
-export STEREO_REAL_ICD=/usr/lib/x86_64-linux-gnu/libvulkan_lvp.so
-
-# NVIDIA (proprietary)
-export STEREO_REAL_ICD=/usr/lib/x86_64-linux-gnu/nvidia/current/libGLX_nvidia.so.0
-```
-
-If `STEREO_REAL_ICD` is not set, VKS3D tries common paths automatically.
-
-### 3. Run any Vulkan application
-
-```bash
-STEREO_SEPARATION=0.065 STEREO_CONVERGENCE=0.030 vkcube
+```powershell
+C:\VKS3D\Install-VKS3D.ps1 -Uninstall
 ```
 
 ---
 
 ## Configuration
 
-All configuration is via environment variables — no recompilation needed.
+All settings are environment variables — no reboot required, changes take effect on the next app launch.
 
 | Variable | Default | Description |
 |---|---|---|
-| `STEREO_ENABLED` | `1` | Set to `0` to disable stereo (pure passthrough) |
+| `STEREO_ENABLED` | `1` | Set to `0` to disable (pure passthrough, zero overhead) |
 | `STEREO_SEPARATION` | `0.065` | Inter-pupillary distance in clip-space units (~65 mm) |
 | `STEREO_CONVERGENCE` | `0.030` | Convergence frustum shift — reduces near-plane diplopia |
-| `STEREO_FLIP_EYES` | `0` | Set to `1` to swap left/right (for cross-eyed displays) |
-| `STEREO_REAL_ICD` | *(auto)* | Path to the real GPU ICD `.so` |
+| `STEREO_FLIP_EYES` | `0` | Set to `1` to swap left/right (cross-eyed / mirrored displays) |
+| `STEREO_REAL_ICD` | *(auto)* | Override — direct path to real GPU ICD DLL |
+
+Set permanently in System Properties → Environment Variables, or per-session:
+
+```cmd
+set STEREO_SEPARATION=0.065
+set STEREO_CONVERGENCE=0.030
+YourVulkanGame.exe
+```
+
+```powershell
+$env:STEREO_SEPARATION  = "0.065"
+$env:STEREO_CONVERGENCE = "0.030"
+.\YourVulkanGame.exe
+```
 
 ### Tuning guide
 
-| Scene | Recommended settings |
+| Scene type | Recommended settings |
 |---|---|
-| Fast-action / racing | `SEPARATION=0.050 CONVERGENCE=0.015` |
-| Cinematic / exploration | `SEPARATION=0.065 CONVERGENCE=0.030` |
-| Very deep scenes | `SEPARATION=0.070 CONVERGENCE=0.035` |
-| Cross-eyed SBS | `STEREO_FLIP_EYES=1` |
-| Passive (anaglyph display) | Combine with post-process anaglyph filter |
+| Racing / fast action | `SEPARATION=0.050  CONVERGENCE=0.015` |
+| General exploration | `SEPARATION=0.065  CONVERGENCE=0.030` |
+| Deep vistas | `SEPARATION=0.070  CONVERGENCE=0.035` |
+| Cross-eyed SBS viewer | `STEREO_FLIP_EYES=1` |
+
+### Override real ICD (advanced)
+
+By default VKS3D auto-detects the real GPU ICD from the registry, skipping
+itself. To force a specific ICD:
+
+```cmd
+set STEREO_REAL_ICD=C:\Windows\System32\nvoglv64.dll   :: NVIDIA 64-bit
+set STEREO_REAL_ICD=C:\Windows\SysWOW64\nvoglv32.dll   :: NVIDIA 32-bit
+set STEREO_REAL_ICD=C:\Windows\System32\amdvlk64.dll   :: AMD 64-bit
+```
 
 ---
 
-## File Layout
+## Building from source
+
+### Requirements
+
+- [Visual Studio 2022](https://visualstudio.microsoft.com/) with **Desktop C++** workload
+  (includes the MSVC compiler and x64/x86 toolchains)
+- [CMake 3.20+](https://cmake.org/download/)
+- [Vulkan SDK 1.3+](https://vulkan.lunarg.com/sdk/home#windows)
+
+### Build both 64-bit and 32-bit
+
+Visual Studio / MSVC cannot target two architectures in a single CMake
+configuration. Run the configure + build steps twice:
+
+```powershell
+# ── 64-bit ──────────────────────────────────────────────────────────────
+cmake -B build_x64 -A x64 -DCMAKE_BUILD_TYPE=Release
+cmake --build build_x64 --config Release --parallel
+# Output: build_x64\Release\VKS3D_x64.dll
+
+# ── 32-bit ──────────────────────────────────────────────────────────────
+cmake -B build_x86 -A Win32 -DCMAKE_BUILD_TYPE=Release
+cmake --build build_x86 --config Release --parallel
+# Output: build_x86\Release\VKS3D_x86.dll
+```
+
+Or from a **Developer Command Prompt for VS 2022**:
+
+```cmd
+:: x64
+mkdir build_x64 && cd build_x64
+cmake .. -G "Visual Studio 17 2022" -A x64
+cmake --build . --config Release
+cd ..
+
+:: x86
+mkdir build_x86 && cd build_x86
+cmake .. -G "Visual Studio 17 2022" -A Win32
+cmake --build . --config Release
+cd ..
+```
+
+### Build with Ninja (faster, single-config)
+
+```cmd
+:: Open "x64 Native Tools Command Prompt for VS 2022"
+cmake -B build_x64 -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build_x64
+
+:: Open "x86 Native Tools Command Prompt for VS 2022"
+cmake -B build_x86 -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build_x86
+```
+
+### Run tests
+
+```powershell
+cd build_x64
+ctest -C Release --output-on-failure
+```
+
+### Install to a directory for packaging
+
+```powershell
+cmake --install build_x64 --prefix dist\x64
+cmake --install build_x86 --prefix dist\x86
+```
+
+---
+
+## File layout
 
 ```
 VKS3D/
+├── .github/workflows/build.yml     ← CI: builds x64 + x86, creates release ZIP
 ├── CMakeLists.txt
-├── stereo_icd.map.in          ← linker version script (exports 3 symbols only)
 ├── include/
-│   └── stereo_icd.h           ← all types, structs, dispatch tables
+│   ├── platform.h                  ← OS abstraction (LoadLibrary/dlopen, CRITICAL_SECTION/pthread, GetEnvironmentVariable/getenv)
+│   └── stereo_icd.h                ← types, dispatch tables, object wrappers
 ├── src/
-│   ├── icd_main.c             ← vk_icdNegotiateLoaderICDInterfaceVersion
-│   │                             vk_icdGetInstanceProcAddr
-│   │                             vk_icdGetPhysicalDeviceProcAddr
-│   ├── stereo.c               ← config, global object registry, dispatch init
-│   ├── instance.c             ← vkCreateInstance / DestroyInstance / Enumerate
-│   ├── device.c               ← vkCreateDevice / DestroyDevice / stereo UBO
-│   ├── render_pass.c          ← multiview injection into every render pass
-│   ├── shader.c               ← SPIR-V binary patcher for vertex eye offset
-│   ├── swapchain.c            ← SBS swapchain (2× width) + stereo image alloc
-│   └── present.c             ← SBS composite blit at QueuePresentKHR
+│   ├── VKS3D.def                   ← Windows DLL export definition (3 ICD symbols)
+│   ├── VKS3D.rc                    ← Windows version/metadata resource
+│   ├── icd_main.c                  ← vk_icdNegotiateLoaderICDInterfaceVersion, vk_icdGetInstanceProcAddr
+│   ├── stereo.c                    ← config, object registry, LoadLibrary/registry ICD loader, DllMain
+│   ├── instance.c                  ← vkCreateInstance / DestroyInstance
+│   ├── device.c                    ← vkCreateDevice (multiview injection + stereo UBO)
+│   ├── render_pass.c               ← multiview render pass injection
+│   ├── shader.c                    ← SPIR-V binary patcher (no external tools)
+│   ├── swapchain.c                 ← SBS swapchain (2× width)
+│   └── present.c                   ← SBS blit composite at QueuePresent
 ├── shaders/
-│   ├── composite.vert.glsl    ← full-screen triangle vertex shader
-│   └── composite.frag.glsl    ← SBS sample-from-layer fragment shader
+│   ├── composite.vert.glsl
+│   └── composite.frag.glsl
 ├── manifest/
-│   └── stereo_vk_icd.json     ← Vulkan loader ICD manifest
+│   ├── VKS3D_x64.json              ← Vulkan loader manifest (64-bit)
+│   └── VKS3D_x86.json              ← Vulkan loader manifest (32-bit)
+├── scripts/
+│   ├── install.bat                 ← Registry installer (run as Admin)
+│   ├── uninstall.bat               ← Registry uninstaller
+│   └── Install-VKS3D.ps1          ← PowerShell installer/uninstaller
 └── tests/
-    ├── CMakeLists.txt
-    ├── demo.c                 ← headless integration demo
-    ├── test_spirv_patch.c     ← SPIR-V patcher unit tests
-    └── test_stereo_math.c     ← stereo math unit tests
+    ├── demo.c                      ← headless integration demo
+    ├── test_spirv_patch.c          ← SPIR-V patcher unit tests
+    └── test_stereo_math.c          ← stereo math unit tests
 ```
 
 ---
 
-## ICD Interface
+## ICD interface
 
-VKS3D implements **Loader/ICD Interface Version 5**:
+VKS3D implements **Vulkan Loader/ICD Interface Version 5**.
 
-| Symbol exported | Purpose |
+The `.def` file (`src/VKS3D.def`) exports exactly three symbols — guaranteeing
+correct undecorated names on both x64 and x86 (where `__stdcall` would
+otherwise mangle them):
+
+| Exported symbol | Purpose |
 |---|---|
-| `vk_icdNegotiateLoaderICDInterfaceVersion` | ABI version handshake |
+| `vk_icdNegotiateLoaderICDInterfaceVersion` | ABI handshake with loader |
 | `vk_icdGetInstanceProcAddr` | All function pointer lookups |
 | `vk_icdGetPhysicalDeviceProcAddr` | Physical device function lookups |
+| `vks3d_internal_marker` | Self-detection guard (prevents loading ourselves) |
 
-All other symbols are hidden via the linker version script.
+---
+
+## Verify installation
+
+```powershell
+# List all registered Vulkan ICDs and check VKS3D is present:
+vulkaninfo 2>&1 | Select-String -Pattern "VKS3D|icd"
+
+# Or check the registry directly:
+Get-ItemProperty "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers"
+Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers"
+```
 
 ---
 
-## Limitations & Known Issues
+## Known limitations
 
-- **Push constant collision**: The SPIR-V patcher currently reads the stereo
-  offset from constants baked at shader-load time, not from a runtime UBO.
-  Applications using large push constant ranges may see incorrect offsets
-  if the patcher's offset (124 bytes) collides with app data. A future
-  version will use a dedicated descriptor set.
-
-- **Geometry / tessellation shaders**: Multiview broadcast works with
-  geometry and tessellation shaders if `multiviewGeometryShader` /
-  `multiviewTessellationShader` features are present. VKS3D requests these
-  as `VK_FALSE` by default; enable them manually for complex pipelines.
-
-- **Composite synchronisation**: The current composite pass submits a
-  command buffer and waits synchronously. A semaphore-based pipeline is
-  planned to remove the CPU stall at present time.
-
-- **Dynamic rendering** (`VK_KHR_dynamic_rendering`): Not yet intercepted.
-  Applications using dynamic rendering will need multiview set at pipeline
-  creation time.
-
-- **Ray tracing** (`VK_KHR_ray_tracing_pipeline`): Out of scope; stereo
-  for ray tracing requires per-eye ray generation which must be handled
-  by the application.
-
----
+- **Dynamic rendering** (`VK_KHR_dynamic_rendering`) not yet intercepted. Apps
+  using it need multiview set at pipeline creation time.
+- **SPIR-V patcher** is a minimal binary rewriter; it does not use spirv-tools.
+  Complex shaders with unusual variable layouts may need the external tool path.
+- **Composite synchronisation** uses a synchronous fence wait at present time.
+  A semaphore-based pipeline is planned to remove the CPU stall.
+- **32-bit apps on 64-bit Windows** use `VKS3D_x86.dll` automatically via the
+  `WOW6432Node` registry key — no user action needed.
 
 ## License
 
-GPLv3 — see LICENSE file.
+GPLv3 — see [LICENSE](LICENSE)
