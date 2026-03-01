@@ -1,0 +1,17 @@
+# stereo_icd.map.in — Linker version script
+#
+# Only the three ICD entry points are exported from the shared library.
+# All internal symbols remain hidden, preventing symbol conflicts with
+# other Vulkan ICDs loaded in the same process.
+#
+# The Vulkan loader discovers our ICD via the manifest JSON and calls
+# these three functions directly (not via dlsym with version suffix).
+
+{
+global:
+    vk_icdNegotiateLoaderICDInterfaceVersion;
+    vk_icdGetInstanceProcAddr;
+    vk_icdGetPhysicalDeviceProcAddr;
+local:
+    *;
+};
