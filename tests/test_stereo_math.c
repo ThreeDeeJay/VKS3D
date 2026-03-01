@@ -14,6 +14,29 @@
 #include <assert.h>
 #include "stereo_icd.h"
 
+/* ── Portable env helpers (setenv/unsetenv are POSIX-only) ───────────────── */
+#ifdef _WIN32
+static void test_setenv(const char *name, const char *value)
+{
+    SetEnvironmentVariableA(name, value);
+}
+static void test_unsetenv(const char *name)
+{
+    SetEnvironmentVariableA(name, NULL);  /* NULL removes the variable */
+}
+#else
+static void test_setenv(const char *name, const char *value)
+{
+    setenv(name, value, 1);
+}
+static void test_unsetenv(const char *name)
+{
+    unsetenv(name);
+}
+#endif
+
+
+
 static int tests_run    = 0;
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -35,9 +58,9 @@ static void test_default_separation(void)
 {
     TEST("Default separation is 65mm (0.065)");
     /* Unset env var */
-    unsetenv("STEREO_SEPARATION");
-    unsetenv("STEREO_CONVERGENCE");
-    unsetenv("STEREO_ENABLED");
+    test_unsetenv("STEREO_SEPARATION");
+    test_unsetenv("STEREO_CONVERGENCE");
+    test_unsetenv("STEREO_ENABLED");
 
     StereoConfig cfg;
     stereo_config_init(&cfg);
@@ -65,7 +88,7 @@ static void test_default_convergence(void)
 static void test_default_enabled(void)
 {
     TEST("Default stereo is enabled");
-    unsetenv("STEREO_ENABLED");
+    test_unsetenv("STEREO_ENABLED");
     StereoConfig cfg;
     stereo_config_init(&cfg);
 
@@ -79,10 +102,10 @@ static void test_default_enabled(void)
 static void test_env_separation(void)
 {
     TEST("STEREO_SEPARATION env var sets separation");
-    setenv("STEREO_SEPARATION", "0.100", 1);
+    test_setenv("STEREO_SEPARATION", "0.100");
     StereoConfig cfg;
     stereo_config_init(&cfg);
-    unsetenv("STEREO_SEPARATION");
+    test_unsetenv("STEREO_SEPARATION");
 
     if (!approx_eq(cfg.separation, 0.100f, 1e-4f)) {
         FAIL("separation not read from env");
@@ -94,10 +117,10 @@ static void test_env_separation(void)
 static void test_env_convergence(void)
 {
     TEST("STEREO_CONVERGENCE env var sets convergence");
-    setenv("STEREO_CONVERGENCE", "0.050", 1);
+    test_setenv("STEREO_CONVERGENCE", "0.050");
     StereoConfig cfg;
     stereo_config_init(&cfg);
-    unsetenv("STEREO_CONVERGENCE");
+    test_unsetenv("STEREO_CONVERGENCE");
 
     if (!approx_eq(cfg.convergence, 0.050f, 1e-4f)) {
         FAIL("convergence not read from env");
@@ -109,10 +132,10 @@ static void test_env_convergence(void)
 static void test_env_disabled(void)
 {
     TEST("STEREO_ENABLED=0 disables stereo");
-    setenv("STEREO_ENABLED", "0", 1);
+    test_setenv("STEREO_ENABLED", "0");
     StereoConfig cfg;
     stereo_config_init(&cfg);
-    unsetenv("STEREO_ENABLED");
+    test_unsetenv("STEREO_ENABLED");
 
     if (cfg.enabled) {
         FAIL("stereo should be disabled");
