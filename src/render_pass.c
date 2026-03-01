@@ -114,6 +114,159 @@ stereo_CreateRenderPass(
 }
 
 /* ── vkCreateRenderPass2KHR ─────────────────────────────────────────────── */
+/*
+ * VK_KHR_create_renderpass2 is NOT in Vulkan 1.1 core (promoted only in 1.2).
+ * If the real driver does not support it (sd->real.CreateRenderPass2KHR == NULL)
+ * we downgrade the call to vkCreateRenderPass by converting the
+ * VkRenderPassCreateInfo2 subpasses into VkSubpassDescription structs and
+ * prepending a VkRenderPassMultiviewCreateInfo.  This preserves stereo on
+ * drivers that only support Vulkan 1.1 (e.g. NVIDIA 1.1.117).
+ */
+
+/* Convert VkRenderPassCreateInfo2 → VkRenderPassCreateInfo + multiview chain */
+static VkResult create_rp2_via_rp1(
+    StereoDevice                    *sd,
+    const VkRenderPassCreateInfo2   *ci2,
+    const VkAllocationCallbacks     *pAllocator,
+    VkRenderPass                    *pRenderPass)
+{
+    uint32_t sc = ci2->subpassCount;
+    uint32_t ac = ci2->attachmentCount;
+    uint32_t dc = ci2->dependencyCount;
+
+    /* Convert attachments */
+    VkAttachmentDescription *atts = malloc(ac * sizeof(VkAttachmentDescription));
+    if (!atts) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    for (uint32_t i = 0; i < ac; i++) {
+        const VkAttachmentDescription2 *a2 = &ci2->pAttachments[i];
+        atts[i] = (VkAttachmentDescription){
+            .flags          = a2->flags,
+            .format         = a2->format,
+            .samples        = a2->samples,
+            .loadOp         = a2->loadOp,
+            .storeOp        = a2->storeOp,
+            .stencilLoadOp  = a2->stencilLoadOp,
+            .stencilStoreOp = a2->stencilStoreOp,
+            .initialLayout  = a2->initialLayout,
+            .finalLayout    = a2->finalLayout,
+        };
+    }
+
+    /* Convert subpasses */
+    VkSubpassDescription *subs = malloc(sc * sizeof(VkSubpassDescription));
+    /* We also need storage for the attachment reference arrays */
+    VkAttachmentReference **input_refs  = calloc(sc, sizeof(VkAttachmentReference*));
+    VkAttachmentReference **color_refs  = calloc(sc, sizeof(VkAttachmentReference*));
+    VkAttachmentReference **resolve_refs= calloc(sc, sizeof(VkAttachmentReference*));
+    VkAttachmentReference  *depth_refs  = calloc(sc, sizeof(VkAttachmentReference));
+    if (!subs || !input_refs || !color_refs || !resolve_refs || !depth_refs) {
+        free(atts); free(subs);
+        free(input_refs); free(color_refs); free(resolve_refs); free(depth_refs);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+#define CONV_REFS(out, in2, count)     if (count) {         out = malloc((count) * sizeof(VkAttachmentReference));         if (!out) goto oom;         for (uint32_t _j = 0; _j < (count); _j++) {             out[_j].attachment = (in2)[_j].attachment;             out[_j].layout     = (in2)[_j].layout;         }     }
+
+    for (uint32_t i = 0; i < sc; i++) {
+        const VkSubpassDescription2 *s2 = &ci2->pSubpasses[i];
+        CONV_REFS(input_refs[i],   s2->pInputAttachments,    s2->inputAttachmentCount)
+        CONV_REFS(color_refs[i],   s2->pColorAttachments,    s2->colorAttachmentCount)
+        CONV_REFS(resolve_refs[i], s2->pResolveAttachments,  s2->colorAttachmentCount)
+        if (s2->pDepthStencilAttachment) {
+            depth_refs[i].attachment = s2->pDepthStencilAttachment->attachment;
+            depth_refs[i].layout     = s2->pDepthStencilAttachment->layout;
+        }
+        subs[i] = (VkSubpassDescription){
+            .flags                   = s2->flags,
+            .pipelineBindPoint       = s2->pipelineBindPoint,
+            .inputAttachmentCount    = s2->inputAttachmentCount,
+            .pInputAttachments       = input_refs[i],
+            .colorAttachmentCount    = s2->colorAttachmentCount,
+            .pColorAttachments       = color_refs[i],
+            .pResolveAttachments     = resolve_refs[i],
+            .pDepthStencilAttachment = s2->pDepthStencilAttachment
+                                           ? &depth_refs[i] : NULL,
+            .preserveAttachmentCount = s2->preserveAttachmentCount,
+            .pPreserveAttachments    = s2->pPreserveAttachments,
+        };
+    }
+#undef CONV_REFS
+
+    /* Convert dependencies */
+    VkSubpassDependency *deps = NULL;
+    if (dc) {
+        deps = malloc(dc * sizeof(VkSubpassDependency));
+        if (!deps) goto oom;
+        for (uint32_t i = 0; i < dc; i++) {
+            const VkSubpassDependency2 *d2 = &ci2->pDependencies[i];
+            deps[i] = (VkSubpassDependency){
+                .srcSubpass      = d2->srcSubpass,
+                .dstSubpass      = d2->dstSubpass,
+                .srcStageMask    = d2->srcStageMask,
+                .dstStageMask    = d2->dstStageMask,
+                .srcAccessMask   = d2->srcAccessMask,
+                .dstAccessMask   = d2->dstAccessMask,
+                .dependencyFlags = d2->dependencyFlags,
+            };
+        }
+    }
+
+    /* viewMasks come from each VkSubpassDescription2.viewMask in the original.
+     * Here we override with STEREO_VIEW_MASK (caller already set them). */
+    uint32_t *view_masks   = malloc(sc * sizeof(uint32_t));
+    uint32_t *corr_masks   = malloc(sc * sizeof(uint32_t));
+    if (!view_masks || !corr_masks) { free(view_masks); free(corr_masks); goto oom; }
+    for (uint32_t i = 0; i < sc; i++) {
+        view_masks[i] = STEREO_VIEW_MASK;
+        corr_masks[i] = STEREO_CORRELATION_MASK;
+    }
+
+    VkRenderPassMultiviewCreateInfo mv = {
+        .sType                = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
+        .pNext                = NULL,
+        .subpassCount         = sc,
+        .pViewMasks           = view_masks,
+        .dependencyCount      = 0,
+        .pViewOffsets         = NULL,
+        .correlationMaskCount = sc,
+        .pCorrelationMasks    = corr_masks,
+    };
+
+    VkRenderPassCreateInfo rp1 = {
+        .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext           = &mv,
+        .flags           = ci2->flags,
+        .attachmentCount = ac,
+        .pAttachments    = atts,
+        .subpassCount    = sc,
+        .pSubpasses      = subs,
+        .dependencyCount = dc,
+        .pDependencies   = deps,
+    };
+
+    VkResult res = sd->real.CreateRenderPass(sd->real_device, &rp1, pAllocator, pRenderPass);
+
+    free(view_masks); free(corr_masks);
+    free(deps);
+    for (uint32_t i = 0; i < sc; i++) {
+        free(input_refs[i]); free(color_refs[i]); free(resolve_refs[i]);
+    }
+    free(input_refs); free(color_refs); free(resolve_refs); free(depth_refs);
+    free(subs); free(atts);
+    return res;
+
+oom:
+    free(view_masks); free(corr_masks); free(deps);
+    for (uint32_t i = 0; i < sc; i++) {
+        if (input_refs)   free(input_refs[i]);
+        if (color_refs)   free(color_refs[i]);
+        if (resolve_refs) free(resolve_refs[i]);
+    }
+    free(input_refs); free(color_refs); free(resolve_refs); free(depth_refs);
+    free(subs); free(atts);
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateRenderPass2KHR(
     VkDevice                         device,
@@ -122,12 +275,19 @@ stereo_CreateRenderPass2KHR(
     VkRenderPass                    *pRenderPass)
 {
     StereoDevice *sd = stereo_device_from_handle(device);
-    if (!sd || !sd->real.CreateRenderPass2KHR)
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (!sd) return VK_ERROR_DEVICE_LOST;
+
+    /* If the real driver does not support VK_KHR_create_renderpass2 (common
+     * on Vulkan 1.1 drivers) fall back to vkCreateRenderPass with a
+     * VkRenderPassMultiviewCreateInfo chain. */
+    bool use_rp2 = (sd->real.CreateRenderPass2KHR != NULL);
 
     if (!sd->stereo.enabled) {
-        return sd->real.CreateRenderPass2KHR(
-            sd->real_device, pCreateInfo, pAllocator, pRenderPass);
+        if (use_rp2)
+            return sd->real.CreateRenderPass2KHR(
+                sd->real_device, pCreateInfo, pAllocator, pRenderPass);
+        /* Passthrough via downgrade: call rp1 without stereo injection */
+        return create_rp2_via_rp1(sd, pCreateInfo, pAllocator, pRenderPass);
     }
 
     uint32_t subpass_count = pCreateInfo->subpassCount;
@@ -158,8 +318,14 @@ stereo_CreateRenderPass2KHR(
     modified.correlatedViewMaskCount = subpass_count;
     modified.pCorrelatedViewMasks    = corr_masks;
 
-    VkResult res = sd->real.CreateRenderPass2KHR(
-        sd->real_device, &modified, pAllocator, pRenderPass);
+    VkResult res;
+    if (use_rp2) {
+        res = sd->real.CreateRenderPass2KHR(
+            sd->real_device, &modified, pAllocator, pRenderPass);
+    } else {
+        STEREO_LOG("RenderPass2: no native support, downgrading to RenderPass1+multiview");
+        res = create_rp2_via_rp1(sd, &modified, pAllocator, pRenderPass);
+    }
 
     free(subpasses);
     free(corr_masks);

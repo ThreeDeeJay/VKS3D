@@ -20,13 +20,97 @@ void          stereo_device_free(VkDevice h);
 void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst);
 extern StereoPhysicalDevice *stereo_physdev_from_handle(VkPhysicalDevice h);
 
-/* Extra device extensions we inject */
-static const char *STEREO_EXTRA_DEV_EXTS[] = {
+/*
+ * Candidate device extensions VKS3D wants to enable.
+ *
+ * On Vulkan 1.1+ devices VK_KHR_multiview and VK_KHR_maintenance2 are
+ * promoted to core — re-enabling them as explicit extensions is allowed by
+ * the spec and is harmless, but we skip them on 1.1+ to stay clean.
+ *
+ * VK_KHR_create_renderpass2 is NOT in Vulkan 1.1 core; it was promoted
+ * to core only in 1.2.  We add it conditionally if the physical device
+ * advertises it (checked at CreateDevice time).
+ */
+static const char *STEREO_CANDIDATE_EXTS[] = {
     "VK_KHR_multiview",
-    "VK_KHR_maintenance2",   /* needed by multiview on some drivers */
+    "VK_KHR_maintenance2",
+    "VK_KHR_create_renderpass2",
 };
-#define STEREO_EXTRA_DEV_EXT_COUNT \
-    (sizeof(STEREO_EXTRA_DEV_EXTS) / sizeof(STEREO_EXTRA_DEV_EXTS[0]))
+#define STEREO_CANDIDATE_EXT_COUNT \
+    (sizeof(STEREO_CANDIDATE_EXTS) / sizeof(STEREO_CANDIDATE_EXTS[0]))
+
+/*
+ * stereo_filter_extensions — from STEREO_CANDIDATE_EXTS keep only those
+ * that (a) are not already in the app's list, and (b) are either promoted
+ * to core for this apiVersion OR advertised by the physical device.
+ *
+ * Returns a heap-allocated merged list.  *out_count = total count.
+ * Caller must free() the returned pointer.
+ */
+static const char **stereo_filter_extensions(
+    VkPhysicalDevice               physDev,
+    PFN_vkEnumerateDeviceExtensionProperties enumDevExts,
+    uint32_t                       api_version,
+    const char * const            *app_exts,
+    uint32_t                       app_ext_count,
+    uint32_t                      *out_count)
+{
+    /* Fetch what the physical device actually supports */
+    uint32_t dev_count = 0;
+    enumDevExts(physDev, NULL, &dev_count, NULL);
+    VkExtensionProperties *dev_props = NULL;
+    if (dev_count) {
+        dev_props = malloc(dev_count * sizeof(VkExtensionProperties));
+        if (dev_props)
+            enumDevExts(physDev, NULL, &dev_count, dev_props);
+    }
+
+    /* Allocate worst-case output */
+    const char **merged = malloc(
+        (app_ext_count + STEREO_CANDIDATE_EXT_COUNT) * sizeof(char*));
+    uint32_t total = 0;
+
+    /* Copy app extensions */
+    for (uint32_t i = 0; i < app_ext_count; i++)
+        merged[total++] = app_exts[i];
+
+    for (uint32_t e = 0; e < STEREO_CANDIDATE_EXT_COUNT; e++) {
+        const char *ext = STEREO_CANDIDATE_EXTS[e];
+
+        /* Skip if app already enabled it */
+        bool app_has = false;
+        for (uint32_t i = 0; i < app_ext_count; i++) {
+            if (app_exts[i] && !strcmp(app_exts[i], ext)) { app_has = true; break; }
+        }
+        if (app_has) continue;
+
+        /* On Vulkan 1.1+ these two are core — skip adding as explicit ext */
+        if (api_version >= VK_API_VERSION_1_1 &&
+            (!strcmp(ext, "VK_KHR_multiview") ||
+             !strcmp(ext, "VK_KHR_maintenance2")))
+            continue;
+
+        /* VK_KHR_create_renderpass2: only add if device supports it */
+        if (!strcmp(ext, "VK_KHR_create_renderpass2")) {
+            bool supported = false;
+            for (uint32_t d = 0; d < dev_count && dev_props; d++) {
+                if (!strcmp(dev_props[d].extensionName, ext)) { supported = true; break; }
+            }
+            if (!supported) {
+                STEREO_LOG("VK_KHR_create_renderpass2 not supported by device — "
+                           "vkCreateRenderPass2KHR will not be available");
+                continue;
+            }
+        }
+
+        merged[total++] = ext;
+        STEREO_LOG("Injecting device extension: %s", ext);
+    }
+
+    free(dev_props);
+    *out_count = total;
+    return merged;
+}
 
 /* ── Allocate and bind stereo UBO ───────────────────────────────────────── */
 static VkResult create_stereo_ubo(StereoDevice *sd)
@@ -135,26 +219,27 @@ stereo_CreateDevice(
     if (!has_mv_feat)
         dci.pNext = &multiview_feat;
 
-    /* Inject extra extensions */
-    uint32_t orig_ext_count = dci.enabledExtensionCount;
-    const char **new_exts   = malloc((orig_ext_count + STEREO_EXTRA_DEV_EXT_COUNT)
-                                      * sizeof(char*));
+    /* Inject extensions — only those the device actually supports,
+     * respecting what is already core for the device's API version */
+    VkPhysicalDeviceProperties phys_props;
+    sp->instance->real.GetPhysicalDeviceProperties(sp->real, &phys_props);
+    uint32_t dev_api = phys_props.apiVersion;
+
+    PFN_vkEnumerateDeviceExtensionProperties enumDevExts =
+        (PFN_vkEnumerateDeviceExtensionProperties)(uintptr_t)
+        sp->instance->real_get_instance_proc_addr(
+            sp->instance->real_instance, "vkEnumerateDeviceExtensionProperties");
+
+    uint32_t total_exts = 0;
+    const char **new_exts = enumDevExts
+        ? stereo_filter_extensions(sp->real, enumDevExts, dev_api,
+                                    dci.ppEnabledExtensionNames,
+                                    dci.enabledExtensionCount,
+                                    &total_exts)
+        : NULL;
+
     if (!new_exts) return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-    for (uint32_t i = 0; i < orig_ext_count; i++)
-        new_exts[i] = dci.ppEnabledExtensionNames[i];
-
-    uint32_t total_exts = orig_ext_count;
-    for (uint32_t e = 0; e < STEREO_EXTRA_DEV_EXT_COUNT; e++) {
-        bool found = false;
-        for (uint32_t i = 0; i < orig_ext_count; i++) {
-            if (dci.ppEnabledExtensionNames[i] &&
-                !strcmp(dci.ppEnabledExtensionNames[i], STEREO_EXTRA_DEV_EXTS[e])) {
-                found = true; break;
-            }
-        }
-        if (!found) new_exts[total_exts++] = STEREO_EXTRA_DEV_EXTS[e];
-    }
     dci.enabledExtensionCount   = total_exts;
     dci.ppEnabledExtensionNames = (const char* const*)new_exts;
 
