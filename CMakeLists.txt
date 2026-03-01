@@ -64,22 +64,28 @@ if(GLSLC OR GLSLANG)
 
     set(SHADER_TARGETS "")
 
-    foreach(SHADER composite.vert composite.frag)
-        string(REPLACE "." "_" SHADER_VAR "${SHADER}")
+    # Each entry is "stage:basename" — glslc needs explicit -fshader-stage=
+    # because it does not infer the stage from a .glsl extension.
+    set(SHADERS "vert:composite.vert" "frag:composite.frag")
+
+    foreach(SHADER_ENTRY ${SHADERS})
+        string(REPLACE ":" ";" SHADER_PARTS "${SHADER_ENTRY}")
+        list(GET SHADER_PARTS 0 STAGE)
+        list(GET SHADER_PARTS 1 SHADER)
+
         set(GLSL_FILE  "${SHADER_DIR}/${SHADER}.glsl")
         set(SPIRV_FILE "${SPIRV_OUT}/${SHADER}.spv")
 
         if(GLSLC)
             add_custom_command(OUTPUT "${SPIRV_FILE}"
-                COMMAND "${GLSLC}" "${GLSL_FILE}" -o "${SPIRV_FILE}"
+                COMMAND "${GLSLC}" -fshader-stage=${STAGE} "${GLSL_FILE}" -o "${SPIRV_FILE}"
                 DEPENDS "${GLSL_FILE}"
-                COMMENT "Compiling ${SHADER}.glsl → ${SHADER}.spv")
+                COMMENT "Compiling ${SHADER}.glsl -> ${SHADER}.spv")
         else()
-            string(REGEX REPLACE "\\..*" "" STAGE "${SHADER}")
             add_custom_command(OUTPUT "${SPIRV_FILE}"
                 COMMAND "${GLSLANG}" -V -S "${STAGE}" "${GLSL_FILE}" -o "${SPIRV_FILE}"
                 DEPENDS "${GLSL_FILE}"
-                COMMENT "Compiling ${SHADER}.glsl → ${SHADER}.spv (glslangValidator)")
+                COMMENT "Compiling ${SHADER}.glsl -> ${SHADER}.spv (glslangValidator)")
         endif()
 
         list(APPEND SHADER_TARGETS "${SPIRV_FILE}")
