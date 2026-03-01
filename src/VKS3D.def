@@ -4,14 +4,15 @@
 ; Using a .def file guarantees undecorated export names on both x64 and
 ; x86 (32-bit __stdcall would otherwise mangle names as _name@N).
 ;
-; The loader looks up these names with GetProcAddress() after loading the
-; ICD DLL listed in the JSON manifest.
+; NOTE: The LIBRARY directive is intentionally omitted. Including it would
+; hardcode a DLL name that conflicts with the actual outputs VKS3D_x64.dll
+; and VKS3D_x86.dll, producing LNK4070. The linker uses the real output
+; filename when LIBRARY is absent.
 ;
 ; Additional export: vks3d_internal_marker
 ;   Used by the self-detection logic in stereo.c to prevent VKS3D from
 ;   accidentally loading itself as the "real" ICD.
 
-LIBRARY VKS3D
 EXPORTS
     vk_icdNegotiateLoaderICDInterfaceVersion
     vk_icdGetInstanceProcAddr
