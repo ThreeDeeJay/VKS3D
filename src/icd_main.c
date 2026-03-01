@@ -43,40 +43,42 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_EnumeratePhysicalDevices;
 
     /*
-     * Physical device / surface passthroughs.
+     * Physical device functions — return our own wrapper stubs (defined at the
+     * bottom of this file), NOT the real ICD's raw function pointers.
      *
-     * PASSTHROUGH_INST only returns the cached pointer when it is non-NULL.
-     * When the cached pointer is NULL (common for surface functions — many
-     * ICDs do not expose them via vk_icdGetInstanceProcAddr because the
-     * loader manages surface objects through terminators) we fall through
-     * to the dynamic lookup at the bottom of this function.
-     * Without this, returning NULL here causes the loader's stub to fire
-     * and return VK_ERROR_INITIALIZATION_FAILED to the application.
+     * We must not return the real ICD's pointer here: the loader will call it
+     * with VKS3D's StereoPhysicalDevice* handle (which is what we returned
+     * from vkEnumeratePhysicalDevices), not the real ICD's VkPhysicalDevice.
+     * The real ICD does not recognise our handle and returns errors.
+     * Our wrappers look up the real handle via stereo_physdev_from_handle()
+     * before forwarding to the real ICD.
      */
-#define PASSTHROUGH_INST(fn)     if (!strcmp(name, "vk"#fn)) {         if (si && si->real.fn)             return (PFN_vkVoidFunction)si->real.fn;         /* fall through to dynamic lookup */         goto dynamic_lookup;     }
+#define PD_FN(fn) if (!strcmp(name, "vk"#fn)) return (PFN_vkVoidFunction)stereo_##fn;
 
-    PASSTHROUGH_INST(GetPhysicalDeviceProperties)
-    PASSTHROUGH_INST(GetPhysicalDeviceProperties2)
-    PASSTHROUGH_INST(GetPhysicalDeviceFeatures)
-    PASSTHROUGH_INST(GetPhysicalDeviceFeatures2)
-    PASSTHROUGH_INST(GetPhysicalDeviceMemoryProperties)
-    PASSTHROUGH_INST(GetPhysicalDeviceMemoryProperties2)
-    PASSTHROUGH_INST(GetPhysicalDeviceQueueFamilyProperties)
-    PASSTHROUGH_INST(GetPhysicalDeviceQueueFamilyProperties2)
-    PASSTHROUGH_INST(GetPhysicalDeviceFormatProperties)
-    PASSTHROUGH_INST(GetPhysicalDeviceFormatProperties2)
-    PASSTHROUGH_INST(GetPhysicalDeviceImageFormatProperties)
-    PASSTHROUGH_INST(GetPhysicalDeviceSparseImageFormatProperties)
-    PASSTHROUGH_INST(EnumerateDeviceExtensionProperties)
-    PASSTHROUGH_INST(EnumerateDeviceLayerProperties)
-    PASSTHROUGH_INST(DestroySurfaceKHR)
-    PASSTHROUGH_INST(GetPhysicalDeviceSurfaceSupportKHR)
-    PASSTHROUGH_INST(GetPhysicalDeviceSurfaceCapabilitiesKHR)
-    PASSTHROUGH_INST(GetPhysicalDeviceSurfaceFormatsKHR)
-    PASSTHROUGH_INST(GetPhysicalDeviceSurfacePresentModesKHR)
-    PASSTHROUGH_INST(CreateDebugUtilsMessengerEXT)
-    PASSTHROUGH_INST(DestroyDebugUtilsMessengerEXT)
-#undef PASSTHROUGH_INST
+    PD_FN(GetPhysicalDeviceProperties)
+    PD_FN(GetPhysicalDeviceProperties2)
+    PD_FN(GetPhysicalDeviceFeatures)
+    PD_FN(GetPhysicalDeviceFeatures2)
+    PD_FN(GetPhysicalDeviceMemoryProperties)
+    PD_FN(GetPhysicalDeviceMemoryProperties2)
+    PD_FN(GetPhysicalDeviceQueueFamilyProperties)
+    PD_FN(GetPhysicalDeviceQueueFamilyProperties2)
+    PD_FN(GetPhysicalDeviceFormatProperties)
+    PD_FN(GetPhysicalDeviceFormatProperties2)
+    PD_FN(GetPhysicalDeviceImageFormatProperties)
+    PD_FN(GetPhysicalDeviceSparseImageFormatProperties)
+    PD_FN(EnumerateDeviceExtensionProperties)
+    PD_FN(EnumerateDeviceLayerProperties)
+    PD_FN(GetPhysicalDeviceSurfaceSupportKHR)
+    PD_FN(GetPhysicalDeviceSurfaceCapabilitiesKHR)
+    PD_FN(GetPhysicalDeviceSurfaceFormatsKHR)
+    PD_FN(GetPhysicalDeviceSurfacePresentModesKHR)
+#undef PD_FN
+    /* Instance-level surface/debug — forward dynamically */
+    if (!strcmp(name, "vkDestroySurfaceKHR") ||
+        !strcmp(name, "vkCreateDebugUtilsMessengerEXT") ||
+        !strcmp(name, "vkDestroyDebugUtilsMessengerEXT"))
+        goto dynamic_lookup;
 
     /* CreateDevice is wrapped */
     if (!strcmp(name, "vkCreateDevice"))

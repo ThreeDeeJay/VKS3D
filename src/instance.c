@@ -202,8 +202,12 @@ stereo_CreateInstance(
     stereo_config_init(&si->stereo);
     stereo_populate_instance_dispatch(si);
 
-    /* Return real handle — loader uses dispatch key at start of handle */
-    *pInstance = real_inst;
+    /* Return OUR wrapper handle (StereoInstance*) cast to VkInstance.
+     * The loader will write its own dispatch pointer into loader_data.loaderData.
+     * We must NOT return real_inst: if we did, the loader would overwrite the
+     * first bytes of NVIDIA's internal instance struct, corrupting its dispatch
+     * table and causing VK_ERROR_INITIALIZATION_FAILED on every subsequent call. */
+    *pInstance = (VkInstance)(uintptr_t)si;
 
     STEREO_LOG("Instance created: %p (stereo: %s)",
                (void*)real_inst, si->stereo.enabled ? "ON" : "OFF");
@@ -235,15 +239,23 @@ stereo_EnumeratePhysicalDevices(
         si->real_instance, pPhysicalDeviceCount, pPhysicalDevices);
 
     if (res == VK_SUCCESS && pPhysicalDevices) {
-        /* Register any new physical devices */
+        /* Wrap each real VkPhysicalDevice in a StereoPhysicalDevice and return
+         * OUR handle (StereoPhysicalDevice*) to the loader.
+         * We must not return the real ICD's handle: the loader would overwrite
+         * its first bytes, corrupting the real ICD's physical device struct. */
         for (uint32_t i = 0; i < *pPhysicalDeviceCount; i++) {
-            if (!stereo_physdev_from_handle(pPhysicalDevices[i])) {
-                StereoPhysicalDevice *sp = stereo_physdev_alloc();
+            VkPhysicalDevice real_pd = pPhysicalDevices[i];
+            /* Check if already wrapped (handles are stable across calls) */
+            StereoPhysicalDevice *sp = stereo_physdev_from_real(real_pd);
+            if (!sp) {
+                sp = stereo_physdev_alloc();
                 if (sp) {
-                    sp->real     = pPhysicalDevices[i];
+                    sp->real     = real_pd;
                     sp->instance = si;
                 }
             }
+            /* Return our wrapper pointer as the VkPhysicalDevice handle */
+            pPhysicalDevices[i] = sp ? (VkPhysicalDevice)(uintptr_t)sp : real_pd;
         }
     }
 

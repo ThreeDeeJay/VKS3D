@@ -218,6 +218,11 @@ typedef struct RealDeviceDispatch {
 /* ── Object wrappers ─────────────────────────────────────────────────────── */
 
 typedef struct StereoInstance {
+    /* VK_LOADER_DATA MUST be the very first field of every dispatchable handle
+     * returned by an ICD.  The loader writes its dispatch pointer here.
+     * Without it the loader corrupts whatever comes first (e.g. real_instance),
+     * which makes the real ICD reject its own handle with INITIALIZATION_FAILED. */
+    VK_LOADER_DATA            loader_data;
     VkInstance                real_instance;
     RealInstanceDispatch      real;
     StereoConfig              stereo;
@@ -225,6 +230,8 @@ typedef struct StereoInstance {
 } StereoInstance;
 
 typedef struct StereoPhysicalDevice {
+    /* VK_LOADER_DATA first — same requirement as StereoInstance */
+    VK_LOADER_DATA     loader_data;
     VkPhysicalDevice   real;
     StereoInstance    *instance;
 } StereoPhysicalDevice;
@@ -287,6 +294,7 @@ typedef struct StereoUBO {
 /* ── Object lookup helpers ────────────────────────────────────────────────── */
 StereoInstance         *stereo_instance_from_handle(VkInstance h);
 StereoPhysicalDevice   *stereo_physdev_from_handle(VkPhysicalDevice h);
+StereoPhysicalDevice   *stereo_physdev_from_real(VkPhysicalDevice real);
 StereoDevice           *stereo_device_from_handle(VkDevice h);
 StereoSwapchain        *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc);
 StereoRenderPassInfo   *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp);
@@ -297,6 +305,25 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(
 VKAPI_ATTR void VKAPI_CALL stereo_DestroyInstance(VkInstance, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumeratePhysicalDevices(
     VkInstance, uint32_t*, VkPhysicalDevice*);
+/* Physical device wrappers (physdev.c) — translate StereoPhysicalDevice* → real handle */
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceProperties(VkPhysicalDevice, VkPhysicalDeviceProperties*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceProperties2(VkPhysicalDevice, VkPhysicalDeviceProperties2*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceFeatures(VkPhysicalDevice, VkPhysicalDeviceFeatures*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceFeatures2(VkPhysicalDevice, VkPhysicalDeviceFeatures2*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceMemoryProperties2(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties2*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice, uint32_t*, VkQueueFamilyProperties*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice, uint32_t*, VkQueueFamilyProperties2*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceFormatProperties(VkPhysicalDevice, VkFormat, VkFormatProperties*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice, VkFormat, VkFormatProperties2*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice, VkFormat, VkImageType, VkImageTiling, VkImageUsageFlags, VkImageCreateFlags, VkImageFormatProperties*);
+VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice, VkFormat, VkImageType, VkSampleCountFlagBits, VkImageUsageFlags, VkImageTiling, uint32_t*, VkSparseImageFormatProperties*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateDeviceExtensionProperties(VkPhysicalDevice, const char*, uint32_t*, VkExtensionProperties*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateDeviceLayerProperties(VkPhysicalDevice, uint32_t*, VkLayerProperties*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice, uint32_t, VkSurfaceKHR, VkBool32*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice, VkSurfaceKHR, VkSurfaceCapabilitiesKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice, VkSurfaceKHR, uint32_t*, VkSurfaceFormatKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice, VkSurfaceKHR, uint32_t*, VkPresentModeKHR*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateInstanceExtensionProperties(
     const char*, uint32_t*, VkExtensionProperties*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateInstanceVersion(uint32_t*);

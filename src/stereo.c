@@ -224,19 +224,31 @@ StereoInstance *stereo_instance_alloc(void) {
     }
     StereoInstance *si = &g_instances[g_instance_count++];
     memset(si, 0, sizeof(*si));
+    SET_LOADER_MAGIC_VALUE(si);  /* required: loader reads this field for dispatch */
     stereo_mutex_unlock(&g_registry_lock);
     return si;
 }
 StereoInstance *stereo_instance_from_handle(VkInstance h) {
-    ensure_registry_init();
-    stereo_mutex_lock(&g_registry_lock);
-    for (uint32_t i = 0; i < g_instance_count; i++) {
-        if (g_instances[i].real_instance == h) {
-            stereo_mutex_unlock(&g_registry_lock); return &g_instances[i];
+    /* h is the StereoInstance* we returned from stereo_CreateInstance,
+     * cast to VkInstance.  Just cast back — no scan needed. */
+    if (!h) return NULL;
+    StereoInstance *si = (StereoInstance *)(uintptr_t)h;
+    /* Sanity check: loader_magic must still be ICD_LOADER_MAGIC */
+    if (si->loader_data.loaderMagic != ICD_LOADER_MAGIC) {
+        /* Stale or foreign handle — fall back to linear scan */
+        ensure_registry_init();
+        stereo_mutex_lock(&g_registry_lock);
+        for (uint32_t i = 0; i < g_instance_count; i++) {
+            if (&g_instances[i] == si ||
+                g_instances[i].real_instance == (VkInstance)(uintptr_t)h) {
+                stereo_mutex_unlock(&g_registry_lock);
+                return &g_instances[i];
+            }
         }
+        stereo_mutex_unlock(&g_registry_lock);
+        return NULL;
     }
-    stereo_mutex_unlock(&g_registry_lock);
-    return NULL;
+    return si;
 }
 void stereo_instance_free(VkInstance h) {
     ensure_registry_init();
@@ -259,10 +271,29 @@ StereoPhysicalDevice *stereo_physdev_alloc(void) {
     }
     StereoPhysicalDevice *sp = &g_physdevs[g_physdev_count++];
     memset(sp, 0, sizeof(*sp));
+    SET_LOADER_MAGIC_VALUE(sp);  /* required for dispatchable handle */
     stereo_mutex_unlock(&g_registry_lock);
     return sp;
 }
+StereoPhysicalDevice *stereo_physdev_from_real(VkPhysicalDevice real) {
+    /* Scan by real ICD handle — used during EnumeratePhysicalDevices wrapping */
+    ensure_registry_init();
+    stereo_mutex_lock(&g_registry_lock);
+    for (uint32_t i = 0; i < g_physdev_count; i++) {
+        if (g_physdevs[i].real == real) {
+            stereo_mutex_unlock(&g_registry_lock); return &g_physdevs[i];
+        }
+    }
+    stereo_mutex_unlock(&g_registry_lock);
+    return NULL;
+}
+
 StereoPhysicalDevice *stereo_physdev_from_handle(VkPhysicalDevice h) {
+    if (!h) return NULL;
+    StereoPhysicalDevice *sp = (StereoPhysicalDevice *)(uintptr_t)h;
+    if (sp->loader_data.loaderMagic == ICD_LOADER_MAGIC)
+        return sp;
+    /* Fallback: scan by real handle (handles passed directly from real ICD) */
     ensure_registry_init();
     stereo_mutex_lock(&g_registry_lock);
     for (uint32_t i = 0; i < g_physdev_count; i++) {
