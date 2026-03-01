@@ -281,4 +281,4 @@ All other symbols are hidden via the linker version script.
 
 ## License
 
-MIT — see LICENSE file.
+GPLv3 — see LICENSE file.
