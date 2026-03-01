@@ -56,6 +56,10 @@ static void ensure_registry_init(void) { pthread_once(&g_registry_once, registry
 /* ── Real ICD state ──────────────────────────────────────────────────────── */
 static stereo_dl_t               g_real_icd_handle = STEREO_DL_NULL;
 static PFN_vkGetInstanceProcAddr g_real_giPA        = NULL;
+/* vk_icdGetPhysicalDeviceProcAddr — many ICDs (including NVIDIA) only expose
+ * physical-device-level functions (surface support, format queries, etc.)
+ * through this entry point, not through vk_icdGetInstanceProcAddr. */
+static PFN_vkGetInstanceProcAddr g_real_pdPA        = NULL;
 
 /* ── Stereo config ───────────────────────────────────────────────────────── */
 
@@ -117,6 +121,9 @@ static bool try_load_icd(const char *path)
     if (!giPA) { stereo_dl_close(h); return false; }
     g_real_icd_handle = h;
     g_real_giPA       = giPA;
+    /* Load vk_icdGetPhysicalDeviceProcAddr if the ICD exposes it */
+    g_real_pdPA = (PFN_vkGetInstanceProcAddr)(uintptr_t)
+        stereo_dl_sym(h, "vk_icdGetPhysicalDeviceProcAddr");
     STEREO_LOG("Loaded real ICD: %s", path);
     return true;
 }
@@ -205,6 +212,7 @@ bool stereo_load_real_icd(void)
 #endif
 
 PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void) { return g_real_giPA; }
+PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void) { return g_real_pdPA; }
 
 /* ── Instance registry ───────────────────────────────────────────────────── */
 
@@ -346,6 +354,16 @@ void stereo_populate_instance_dispatch(StereoInstance *si)
     LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfaceCapabilitiesKHR);
     LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfaceFormatsKHR);
     LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfacePresentModesKHR);
+    /* Many ICDs (NVIDIA, AMD) only expose physical-device surface functions
+     * via vk_icdGetPhysicalDeviceProcAddr, not vk_icdGetInstanceProcAddr.
+     * Fall back to pdPA for any surface function that is still NULL. */
+#define LOAD_PHYS(table, ri, fn)     if (!(table)->fn && g_real_pdPA)         (table)->fn = (PFN_vk##fn)(g_real_pdPA)((ri), "vk"#fn)
+    LOAD_PHYS(&si->real, ri, DestroySurfaceKHR);
+    LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceSupportKHR);
+    LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceCapabilitiesKHR);
+    LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceFormatsKHR);
+    LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfacePresentModesKHR);
+#undef LOAD_PHYS
     si->real.CreateDebugUtilsMessengerEXT  = (PFN_vkCreateDebugUtilsMessengerEXT)
         g_real_giPA(ri, "vkCreateDebugUtilsMessengerEXT");
     si->real.DestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)

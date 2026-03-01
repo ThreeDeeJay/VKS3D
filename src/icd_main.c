@@ -16,6 +16,8 @@
 
 /* ── Global real-ICD get-instance-proc-addr ─────────────────────────────── */
 /* Set during CreateInstance from the loaded real ICD */
+/* Forward declarations for real-ICD proc-addr getters (stereo.c) */
+PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
 
 /* ── Helper: map function name → our wrapped pointer ─────────────────────── */
 static PFN_vkVoidFunction get_instance_proc_addr_internal(
@@ -40,10 +42,18 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     if (!strcmp(name, "vkEnumeratePhysicalDevices"))
         return (PFN_vkVoidFunction)stereo_EnumeratePhysicalDevices;
 
-    /* Physical device getters — pass through directly */
-#define PASSTHROUGH_INST(fn) \
-    if (!strcmp(name, "vk"#fn)) \
-        return (PFN_vkVoidFunction)(si ? si->real.fn : NULL);
+    /*
+     * Physical device / surface passthroughs.
+     *
+     * PASSTHROUGH_INST only returns the cached pointer when it is non-NULL.
+     * When the cached pointer is NULL (common for surface functions — many
+     * ICDs do not expose them via vk_icdGetInstanceProcAddr because the
+     * loader manages surface objects through terminators) we fall through
+     * to the dynamic lookup at the bottom of this function.
+     * Without this, returning NULL here causes the loader's stub to fire
+     * and return VK_ERROR_INITIALIZATION_FAILED to the application.
+     */
+#define PASSTHROUGH_INST(fn)     if (!strcmp(name, "vk"#fn)) {         if (si && si->real.fn)             return (PFN_vkVoidFunction)si->real.fn;         /* fall through to dynamic lookup */         goto dynamic_lookup;     }
 
     PASSTHROUGH_INST(GetPhysicalDeviceProperties)
     PASSTHROUGH_INST(GetPhysicalDeviceProperties2)
@@ -97,10 +107,23 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     if (!strcmp(name, "vkQueuePresentKHR"))
         return (PFN_vkVoidFunction)stereo_QueuePresentKHR;
 
-    /* Everything else: forward to real ICD */
-    if (si)
-        return si->real_get_instance_proc_addr(si->real_instance, name);
-
+    /* Everything else (and fallthrough from PASSTHROUGH_INST when cached
+     * pointer is NULL): forward to real ICD via dynamic lookup.
+     * This handles surface functions that many ICDs only expose through
+     * the loader-facing vkGetInstanceProcAddr, not vk_icdGetInstanceProcAddr. */
+dynamic_lookup:
+    if (si) {
+        /* Try vk_icdGetInstanceProcAddr first */
+        PFN_vkVoidFunction fn =
+            si->real_get_instance_proc_addr(si->real_instance, name);
+        if (fn) return fn;
+        /* Many ICDs return NULL from vk_icdGetInstanceProcAddr for physical
+         * device functions (surface support, format queries, etc.) and only
+         * expose them via vk_icdGetPhysicalDeviceProcAddr. Try that next. */
+        PFN_vkGetInstanceProcAddr pdPA = stereo_get_real_pdPA();
+        if (pdPA)
+            return pdPA(si->real_instance, name);
+    }
     return NULL;
 }
 
