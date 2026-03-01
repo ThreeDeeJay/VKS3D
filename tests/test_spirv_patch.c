@@ -189,36 +189,67 @@ static void test_output_larger_than_input(void)
     /* Use a more complete shader with a recognized Position variable */
     /* This test is structural — we can only verify sizing with a real shader */
     /* For the unit test we just verify patcher doesn't shrink a valid shader */
+    /* Minimal but valid SPIR-V vertex shader word stream.
+     *
+     * Opcode encoding: word = (wordcount << 16) | opcode
+     *
+     *   OpCapability    = 17  = 0x11
+     *   OpMemoryModel   = 14  = 0x0E
+     *   OpEntryPoint    = 15  = 0x0F
+     *   OpDecorate      = 71  = 0x47
+     *   OpTypeVoid      = 19  = 0x13
+     *   OpTypeFunction  = 33  = 0x21
+     *   OpTypeFloat     = 22  = 0x16
+     *   OpTypeVector    = 23  = 0x17
+     *   OpTypePointer   = 32  = 0x20
+     *   OpVariable      = 59  = 0x3B
+     *   OpConstant      = 43  = 0x2B   (NOT 0x29 = OpConstantTrue)
+     *   OpConstantComposite = 44 = 0x2C
+     *   OpFunction      = 54  = 0x36
+     *   OpLabel         = 248 = 0xF8   (NOT 0x39 = OpFunctionCall)
+     *   OpStore         = 62  = 0x3E   (NOT 0x40 = OpCopyMemorySized)
+     *   OpReturn        = 253 = 0xFD
+     *   OpFunctionEnd   = 56  = 0x38
+     */
     const uint32_t dummy_vert[] = {
+        /* Header: magic, version, generator, bound=32, schema */
         SPIRV_MAGIC, 0x00010300, 0x00000000, 0x00000020, 0x00000000,
-        /* Capability Shader */
+        /* OpCapability Shader */
         0x00020011, 0x00000001,
-        /* MemoryModel */
+        /* OpMemoryModel Logical GLSL450 */
         0x0003000E, 0x00000000, 0x00000001,
-        /* EntryPoint Vertex "main" */
+        /* OpEntryPoint Vertex %1 "main" %2 */
         0x0006000F, 0x00000000, 0x00000001, 0x6E69616D, 0x00000000, 0x00000002,
-        /* Decorate id=2 BuiltIn Position */
+        /* OpDecorate %2 BuiltIn Position */
         0x00040047, 0x00000002, 0x0000000B, 0x00000000,
-        /* TypeVoid TypeFunction TypeFloat TypeVector TypePointer */
+        /* OpTypeVoid %5 */
         0x00020013, 0x00000005,
+        /* OpTypeFunction %6 %5 */
         0x00030021, 0x00000006, 0x00000005,
+        /* OpTypeFloat %7 32 */
         0x00030016, 0x00000007, 0x00000020,
+        /* OpTypeVector %8 %7 4 */
         0x00040017, 0x00000008, 0x00000007, 0x00000004,
-        0x00040020, 0x00000009, 0x00000003, 0x00000008,  /* TypePointer Output v4 */
-        /* Variable id=2 Output */
+        /* OpTypePointer %9 Output %8 */
+        0x00040020, 0x00000009, 0x00000003, 0x00000008,
+        /* OpVariable %9 %2 Output */
         0x0004003B, 0x00000009, 0x00000002, 0x00000003,
-        /* Constant float 0 and 1 */
-        0x00040029, 0x00000007, 0x0000000A, 0x00000000,
-        0x00040029, 0x00000007, 0x0000000B, 0x3F800000,
-        /* ConstantComposite vec4(0,0,0,1) */
-        0x00070029, 0x00000008, 0x0000000C,
+        /* OpConstant %7 %10 = 0.0f  (0x2B = 43 = OpConstant) */
+        0x0004002B, 0x00000007, 0x0000000A, 0x00000000,
+        /* OpConstant %7 %11 = 1.0f */
+        0x0004002B, 0x00000007, 0x0000000B, 0x3F800000,
+        /* OpConstantComposite %8 %12 = {%10,%10,%10,%11}  (0x2C = 44) */
+        0x0007002C, 0x00000008, 0x0000000C,
                     0x0000000A, 0x0000000A, 0x0000000A, 0x0000000B,
-        /* Function main */
+        /* OpFunction %5 %1 None %6 */
         0x00050036, 0x00000005, 0x00000001, 0x00000000, 0x00000006,
-        0x00020039, 0x00000010,
-        /* OpStore id=2 <- vec4(0,0,0,1) */
-        0x00030040, 0x00000002, 0x0000000C,  /* OpStore ptr value */
+        /* OpLabel %16  (0xF8 = 248 = OpLabel, NOT 0x39 = OpFunctionCall) */
+        0x000200F8, 0x00000010,
+        /* OpStore %2 %12  (0x3E = 62 = OpStore, NOT 0x40 = OpCopyMemorySized) */
+        0x0003003E, 0x00000002, 0x0000000C,
+        /* OpReturn */
         0x000100FD,
+        /* OpFunctionEnd */
         0x00010038,
     };
 
@@ -230,10 +261,7 @@ static void test_output_larger_than_input(void)
         dummy_vert, in_c, &out, &out_c, -0.032f, 0.032f, 0.015f);
 
     if (!ok) {
-        /* Patcher may refuse if OpStore opcode not matching (0x3E vs 0x40) */
-        /* In that case just mark test as expected */
-        printf("SKIP (patcher declined — OpStore opcode variant)\n");
-        tests_passed++;
+        FAIL("spirv_patch_stereo_vertex returned false on valid vertex shader");
         return;
     }
 

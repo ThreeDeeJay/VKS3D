@@ -581,7 +581,15 @@ bool spirv_patch_stereo_vertex(
             insert_body_after = in_count;
     }
 
-    /* Pass 2: Copy original + splice in extras */
+    /* Pass 2: Copy original + splice in extras
+     *
+     * IMPORTANT: The SPIR-V header is 5 raw words (magic, version, generator,
+     * bound, schema) -- they are NOT instructions and have no wcount/opcode
+     * encoding.  The instruction loop must start at word index 5.  Starting
+     * at 0 interprets the magic number 0x07230203 as an instruction whose
+     * wcount = 0x0723 = 1827, which immediately fails the bounds check and
+     * breaks with 0 words output.
+     */
     SpvBuf out;
     if (!spvbuf_init(&out, in_count + type_extras.count + body_extras.count + 16)) {
         spvbuf_free(&type_extras);
@@ -589,19 +597,23 @@ bool spirv_patch_stereo_vertex(
         return false;
     }
 
-    for (size_t i = 0; i < in_count; ) {
-        /* Inject type extras just before first function */
+    /* Copy the 5-word header first and update the ID bound word */
+    spvbuf_push_n(&out, in_words, 5);
+    out.words[3] = next_id;
+
+    /* Walk instructions starting at word 5 (skip the header) */
+    for (size_t i = 5; i < in_count; ) {
+        /* Inject type extras just before first OpFunction */
         if (i == insert_type_after && type_extras.count > 0) {
             spvbuf_push_n(&out, type_extras.words, type_extras.count);
-            type_extras.count = 0; /* don't inject again */
+            type_extras.count = 0;
         }
-        /* Inject body extras after target store */
+        /* Inject body extras at target position */
         if (i == insert_body_after && body_extras.count > 0) {
             spvbuf_push_n(&out, body_extras.words, body_extras.count);
             body_extras.count = 0;
         }
 
-        uint32_t op     = in_words[i] & 0xffff;
         uint32_t wcount = in_words[i] >> 16;
         if (!wcount || i + wcount > in_count) break;
 
@@ -609,9 +621,11 @@ bool spirv_patch_stereo_vertex(
         i += wcount;
     }
 
-    /* Update SPIR-V ID bound in output header word[3] */
-    if (out.count >= 4)
-        out.words[3] = next_id;
+    /* Append any extras whose insertion point was == in_count */
+    if (type_extras.count > 0)
+        spvbuf_push_n(&out, type_extras.words, type_extras.count);
+    if (body_extras.count > 0)
+        spvbuf_push_n(&out, body_extras.words, body_extras.count);
 
     spvbuf_free(&type_extras);
     spvbuf_free(&body_extras);
@@ -619,7 +633,7 @@ bool spirv_patch_stereo_vertex(
     *out_words = out.words;
     *out_count = out.count;
 
-    STEREO_LOG("SPIR-V patched: %zu → %zu words, new bound=%u",
+    STEREO_LOG("SPIR-V patched: %zu -> %zu words, new bound=%u",
                in_count, out.count, next_id);
     return true;
 }
