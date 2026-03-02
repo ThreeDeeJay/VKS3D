@@ -287,12 +287,133 @@ stereo_EnumeratePhysicalDevices(
             }
             /* Return our wrapper pointer as the VkPhysicalDevice handle */
             pPhysicalDevices[i] = sp ? (VkPhysicalDevice)(uintptr_t)sp : real_pd;
-            STEREO_LOG("stereo_EnumeratePhysicalDevices: pd[%u] real=%p -> wrapper=%p loaderMagic=0x%llx",
-                       i, (void*)real_pd, (void*)pPhysicalDevices[i],
-                       sp ? (unsigned long long)(*(uintptr_t*)(void*)sp) : 0ULL);
         }
     }
 
-    STEREO_LOG("stereo_EnumeratePhysicalDevices: returning %d", res);
     return res;
+}
+
+/* ── Instance-level surface / debug wrappers ─────────────────────────────── */
+/*
+ * These all take VkInstance as their first argument.  Since VKS3D returns
+ * its own StereoInstance* as the VkInstance handle from vkCreateInstance,
+ * the loader passes that wrapper to each ICD when dispatching.  We must
+ * therefore extract si->real_instance and call through to the real ICD.
+ *
+ * Previously these fell through to "dynamic_lookup" in icd_main.c, which
+ * returned raw NVIDIA function pointers.  The loader then called NVIDIA
+ * with our StereoInstance* wrapper, which NVIDIA does not recognise.
+ */
+#define LOOKUP_SI(inst) \
+    StereoInstance *si = stereo_instance_from_handle(inst); \
+    if (!si) return
+
+#define LOOKUP_SI_R(inst, err) \
+    StereoInstance *si = stereo_instance_from_handle(inst); \
+    if (!si) return (err)
+
+/* ── vkDestroySurfaceKHR ────────────────────────────────────────────────── */
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroySurfaceKHR(
+    VkInstance instance, VkSurfaceKHR surface,
+    const VkAllocationCallbacks *pAllocator)
+{
+    LOOKUP_SI(instance);
+    if (si->real.DestroySurfaceKHR)
+        si->real.DestroySurfaceKHR(si->real_instance, surface, pAllocator);
+}
+
+/* ── vkCreateWin32SurfaceKHR ─────────────────────────────────────────────── */
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateWin32SurfaceKHR(
+    VkInstance instance,
+    const VkWin32SurfaceCreateInfoKHR *pCreateInfo,
+    const VkAllocationCallbacks       *pAllocator,
+    VkSurfaceKHR                      *pSurface)
+{
+    LOOKUP_SI_R(instance, VK_ERROR_INITIALIZATION_FAILED);
+    if (!si->real.CreateWin32SurfaceKHR)
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return si->real.CreateWin32SurfaceKHR(
+        si->real_instance, pCreateInfo, pAllocator, pSurface);
+}
+
+/* ── vkCreateDebugReportCallbackEXT ─────────────────────────────────────── */
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateDebugReportCallbackEXT(
+    VkInstance instance,
+    const VkDebugReportCallbackCreateInfoEXT *pCreateInfo,
+    const VkAllocationCallbacks              *pAllocator,
+    VkDebugReportCallbackEXT                 *pCallback)
+{
+    LOOKUP_SI_R(instance, VK_ERROR_INITIALIZATION_FAILED);
+    if (!si->real.CreateDebugReportCallbackEXT)
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return si->real.CreateDebugReportCallbackEXT(
+        si->real_instance, pCreateInfo, pAllocator, pCallback);
+}
+
+/* ── vkDestroyDebugReportCallbackEXT ────────────────────────────────────── */
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyDebugReportCallbackEXT(
+    VkInstance instance, VkDebugReportCallbackEXT callback,
+    const VkAllocationCallbacks *pAllocator)
+{
+    LOOKUP_SI(instance);
+    if (si->real.DestroyDebugReportCallbackEXT)
+        si->real.DestroyDebugReportCallbackEXT(si->real_instance, callback, pAllocator);
+}
+
+/* ── vkDebugReportMessageEXT ─────────────────────────────────────────────── */
+VKAPI_ATTR void VKAPI_CALL
+stereo_DebugReportMessageEXT(
+    VkInstance instance, VkDebugReportFlagsEXT flags,
+    VkDebugReportObjectTypeEXT objectType, uint64_t object,
+    size_t location, int32_t messageCode,
+    const char *pLayerPrefix, const char *pMessage)
+{
+    LOOKUP_SI(instance);
+    if (si->real.DebugReportMessageEXT)
+        si->real.DebugReportMessageEXT(si->real_instance, flags, objectType,
+            object, location, messageCode, pLayerPrefix, pMessage);
+}
+
+/* ── vkCreateDebugUtilsMessengerEXT ─────────────────────────────────────── */
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateDebugUtilsMessengerEXT(
+    VkInstance instance,
+    const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+    const VkAllocationCallbacks              *pAllocator,
+    VkDebugUtilsMessengerEXT                 *pMessenger)
+{
+    LOOKUP_SI_R(instance, VK_ERROR_INITIALIZATION_FAILED);
+    if (!si->real.CreateDebugUtilsMessengerEXT)
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return si->real.CreateDebugUtilsMessengerEXT(
+        si->real_instance, pCreateInfo, pAllocator, pMessenger);
+}
+
+/* ── vkDestroyDebugUtilsMessengerEXT ────────────────────────────────────── */
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyDebugUtilsMessengerEXT(
+    VkInstance instance, VkDebugUtilsMessengerEXT messenger,
+    const VkAllocationCallbacks *pAllocator)
+{
+    LOOKUP_SI(instance);
+    if (si->real.DestroyDebugUtilsMessengerEXT)
+        si->real.DestroyDebugUtilsMessengerEXT(si->real_instance, messenger, pAllocator);
+}
+
+/* ── vkSubmitDebugUtilsMessageEXT ───────────────────────────────────────── */
+VKAPI_ATTR void VKAPI_CALL
+stereo_SubmitDebugUtilsMessageEXT(
+    VkInstance instance,
+    VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
+    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData)
+{
+    LOOKUP_SI(instance);
+    if (si->real.SubmitDebugUtilsMessageEXT)
+        si->real.SubmitDebugUtilsMessageEXT(
+            si->real_instance, messageSeverity, messageTypes, pCallbackData);
 }
