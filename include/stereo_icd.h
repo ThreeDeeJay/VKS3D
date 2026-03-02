@@ -29,23 +29,14 @@
 #include <vulkan/vk_icd.h>
 
 /*
- * Older Vulkan SDK releases (including those bundled with some 1.1.x
- * Windows driver packages) do not define ICD_LOADER_MAGIC or
- * SET_LOADER_MAGIC_VALUE in vk_icd.h.  Provide self-contained fallbacks
- * so we never depend on the SDK version for these fundamentals.
+ * Older Vulkan SDK releases do not define ICD_LOADER_MAGIC or
+ * SET_LOADER_MAGIC_VALUE in vk_icd.h (VK_LOADER_DATA itself is present
+ * in all SDK versions we care about, so we do NOT redefine that type).
  *
- * The values and layout are part of the stable Vulkan loader ABI and have
- * not changed since Vulkan 1.0.
+ * The values are part of the stable Vulkan loader ABI since Vulkan 1.0.
  */
 #ifndef ICD_LOADER_MAGIC
 #  define ICD_LOADER_MAGIC 0xCD1CDABA1DABADABULL
-#endif
-
-#ifndef VK_LOADER_DATA
-typedef union {
-    uintptr_t loaderMagic;
-    void     *loaderData;
-} VK_LOADER_DATA;
 #endif
 
 #ifndef SET_LOADER_MAGIC_VALUE
