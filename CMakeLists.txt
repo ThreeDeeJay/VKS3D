@@ -46,7 +46,6 @@ set(STEREO_SOURCES
     src/instance.c
     src/device.c
     src/physdev.c
-    src/physdev_ext.c
     src/render_pass.c
     src/shader.c
     src/swapchain.c
