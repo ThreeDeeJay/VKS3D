@@ -342,4 +342,4 @@ Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers"
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+GPLv3 — see [LICENSE](LICENSE)
