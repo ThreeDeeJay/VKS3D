@@ -479,10 +479,38 @@ void stereo_populate_instance_dispatch(StereoInstance *si)
     LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceFormatsKHR);
     LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfacePresentModesKHR);
 #undef LOAD_PHYS
-    si->real.CreateDebugUtilsMessengerEXT  = (PFN_vkCreateDebugUtilsMessengerEXT)
-        g_real_giPA(ri, "vkCreateDebugUtilsMessengerEXT");
-    si->real.DestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
-        g_real_giPA(ri, "vkDestroyDebugUtilsMessengerEXT");
+    /* ── Vulkan 1.1 physdev functions ────────────────────────────────────── */
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceImageFormatProperties2);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceSparseImageFormatProperties2);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceExternalBufferProperties);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceExternalFenceProperties);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceExternalSemaphoreProperties);
+    LOAD_INST(&si->real, ri, EnumeratePhysicalDeviceGroups);
+    /* ── KHR surface extensions ──────────────────────────────────────────── */
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfaceCapabilities2KHR);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfaceFormats2KHR);
+    LOAD_INST(&si->real, ri, GetPhysicalDevicePresentRectanglesKHR);
+    /* ── Win32 ───────────────────────────────────────────────────────────── */
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceWin32PresentationSupportKHR);
+    /* ── EXT extensions ──────────────────────────────────────────────────── */
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfacePresentModes2EXT);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceCalibrateableTimeDomainsEXT);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceMultisamplePropertiesEXT);
+    /* ── NV extensions ───────────────────────────────────────────────────── */
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceExternalImageFormatPropertiesNV);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceCooperativeMatrixPropertiesNV);
+    LOAD_INST(&si->real, ri, GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV);
+    /* NVX stored as PFN_vkVoidFunction — safe because we cast at call site */
+    si->real.GetPhysicalDeviceGeneratedCommandsPropertiesNVX =
+        g_real_giPA(ri, "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX");
+    /* ── Instance-level functions ─────────────────────────────────────────── */
+    LOAD_INST(&si->real, ri, CreateWin32SurfaceKHR);
+    LOAD_INST(&si->real, ri, CreateDebugReportCallbackEXT);
+    LOAD_INST(&si->real, ri, DestroyDebugReportCallbackEXT);
+    LOAD_INST(&si->real, ri, DebugReportMessageEXT);
+    LOAD_INST(&si->real, ri, CreateDebugUtilsMessengerEXT);
+    LOAD_INST(&si->real, ri, DestroyDebugUtilsMessengerEXT);
+    LOAD_INST(&si->real, ri, SubmitDebugUtilsMessageEXT);
     STEREO_LOG("stereo_populate_instance_dispatch: complete");
 }
 
