@@ -206,11 +206,107 @@ static inline char *stereo_json_read_library_path(const char *json_path)
     return result;
 }
 
-/* ── Console colour for log output ─────────────────────────────────────────── */
+/* ── Logging ─────────────────────────────────────────────────────────────── */
+/*
+ * Logging is opt-in via the environment variable STEREO_LOGFILE_PATH.
+ *
+ * If STEREO_LOGFILE_PATH is NOT set  →  all STEREO_LOG / STEREO_ERR calls
+ *                                        compile to no-ops (zero overhead).
+ *
+ * If STEREO_LOGFILE_PATH is set to a file path  →  every log line is written
+ *   to that file AND to OutputDebugStringA (visible in Sysinternals DebugView
+ *   and the VS debugger output window).
+ *
+ * Special values for STEREO_LOGFILE_PATH:
+ *   "debugview"  →  OutputDebugStringA only, no file
+ *   any path     →  file (truncated on each DLL load) + OutputDebugStringA
+ *
+ * vks3d_log_write() is safe to call from DllMain:
+ *   - no heap allocation
+ *   - stack buffers only
+ *   - WriteFile is atomic for small writes (no extra lock needed)
+ */
+
+static HANDLE g_vks3d_log_handle  = INVALID_HANDLE_VALUE;
+static int    g_vks3d_log_enabled = 0;   /* 0 until vks3d_log_open() confirms */
+
+/*
+ * vks3d_log_open — must be called from DllMain DLL_PROCESS_ATTACH.
+ * Reads STEREO_LOGFILE_PATH WITHOUT using the CRT getenv() (which may not
+ * be ready) and WITHOUT heap allocation.
+ */
+static inline void vks3d_log_open(void)
+{
+    /* Already initialised? */
+    if (g_vks3d_log_enabled) return;
+
+    /* Read STEREO_LOGFILE_PATH using the Win32 API directly */
+    char path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableA("STEREO_LOGFILE_PATH", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) {
+        /* Variable not set (or too long) — logging disabled */
+        g_vks3d_log_enabled = 0;
+        return;
+    }
+
+    /* Mark as enabled regardless of whether the file opens — we still
+     * want OutputDebugStringA output even if the file path is bad. */
+    g_vks3d_log_enabled = 1;
+
+    /* Special value "debugview": OutputDebugStringA only, no file */
+    if (lstrcmpiA(path, "debugview") == 0) {
+        g_vks3d_log_handle = INVALID_HANDLE_VALUE;
+        return;
+    }
+
+    g_vks3d_log_handle = CreateFileA(
+        path,
+        GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        CREATE_ALWAYS,           /* truncate on each new DLL load */
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
+        NULL);
+    /* If CreateFileA fails, OutputDebugStringA still works */
+}
+
+static inline void vks3d_log_write(const char *msg)
+{
+    OutputDebugStringA(msg);
+    if (g_vks3d_log_handle != INVALID_HANDLE_VALUE) {
+        DWORD written;
+        WriteFile(g_vks3d_log_handle, msg, (DWORD)lstrlenA(msg), &written, NULL);
+    }
+}
+
+#  include <stdarg.h>
+
+/* vks3d_logf — printf-style, stack-only, safe from DllMain */
+static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
+{
+    char buf[2048];
+    char msg[2048 + 64];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = _vsnprintf(buf, sizeof(buf) - 1, fmt, ap);
+    va_end(ap);
+    if (n < 0 || n >= (int)(sizeof(buf) - 1))
+        n = (int)(sizeof(buf) - 2);
+    buf[n] = '\0';
+    _snprintf(msg, sizeof(msg) - 1, "%s%s\n", prefix, buf);
+    msg[sizeof(msg) - 1] = '\0';
+    vks3d_log_write(msg);
+}
+
+/* STEREO_LOG / STEREO_ERR: no-ops when logging is disabled */
 #  define STEREO_LOG(fmt, ...) \
-    fprintf(stderr, "[VKS3D " STEREO_ARCH_STR "] " fmt "\n", ##__VA_ARGS__)
+    do { if (g_vks3d_log_enabled) \
+        vks3d_logf("[VKS3D " STEREO_ARCH_STR "] ", fmt, ##__VA_ARGS__); \
+    } while (0)
 #  define STEREO_ERR(fmt, ...) \
-    fprintf(stderr, "[VKS3D " STEREO_ARCH_STR " ERROR] " fmt "\n", ##__VA_ARGS__)
+    do { if (g_vks3d_log_enabled) \
+        vks3d_logf("[VKS3D " STEREO_ARCH_STR " ERROR] ", fmt, ##__VA_ARGS__); \
+    } while (0)
 
 #else
 /* ── Linux / macOS ────────────────────────────────────────────────────────── */

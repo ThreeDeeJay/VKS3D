@@ -32,16 +32,24 @@ StereoPhysicalDevice *stereo_physdev_alloc(void);
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_EnumerateInstanceVersion(uint32_t *pApiVersion)
 {
+    STEREO_LOG("stereo_EnumerateInstanceVersion: called");
     if (!stereo_load_real_icd()) {
+        STEREO_LOG("stereo_EnumerateInstanceVersion: no real ICD, returning 1.1");
         *pApiVersion = VK_API_VERSION_1_1;
         return VK_SUCCESS;
     }
     PFN_vkGetInstanceProcAddr giPA = stereo_get_real_giPA();
+    STEREO_LOG("stereo_EnumerateInstanceVersion: giPA=%p", (void*)(uintptr_t)giPA);
     PFN_vkEnumerateInstanceVersion eiv =
         (PFN_vkEnumerateInstanceVersion)(uintptr_t)giPA(VK_NULL_HANDLE, "vkEnumerateInstanceVersion");
-    if (eiv)
-        return eiv(pApiVersion);
+    STEREO_LOG("stereo_EnumerateInstanceVersion: real eiv=%p", (void*)(uintptr_t)eiv);
+    if (eiv) {
+        VkResult r = eiv(pApiVersion);
+        STEREO_LOG("stereo_EnumerateInstanceVersion: result=%d version=0x%x", r, *pApiVersion);
+        return r;
+    }
     *pApiVersion = VK_API_VERSION_1_0;
+    STEREO_LOG("stereo_EnumerateInstanceVersion: no eiv, returning 1.0");
     return VK_SUCCESS;
 }
 
@@ -52,8 +60,12 @@ stereo_EnumerateInstanceExtensionProperties(
     uint32_t            *pPropertyCount,
     VkExtensionProperties *pProperties)
 {
-    if (!stereo_load_real_icd())
+    STEREO_LOG("stereo_EnumerateInstanceExtensionProperties: called layer=%s",
+               pLayerName ? pLayerName : "(null)");
+    if (!stereo_load_real_icd()) {
+        STEREO_ERR("stereo_EnumerateInstanceExtensionProperties: no real ICD");
         return VK_ERROR_INITIALIZATION_FAILED;
+    }
 
     PFN_vkGetInstanceProcAddr giPA = stereo_get_real_giPA();
     PFN_vkEnumerateInstanceExtensionProperties eiep =
@@ -129,8 +141,11 @@ stereo_CreateInstance(
     const VkAllocationCallbacks   *pAllocator,
     VkInstance                    *pInstance)
 {
-    if (!stereo_load_real_icd())
+    STEREO_LOG("stereo_CreateInstance: called pCreateInfo=%p", (void*)pCreateInfo);
+    if (!stereo_load_real_icd()) {
+        STEREO_ERR("stereo_CreateInstance: no real ICD");
         return VK_ERROR_INITIALIZATION_FAILED;
+    }
 
     PFN_vkGetInstanceProcAddr giPA = stereo_get_real_giPA();
     PFN_vkCreateInstance real_ci =
@@ -180,14 +195,23 @@ stereo_CreateInstance(
         app_info.apiVersion = VK_API_VERSION_1_1;
     ci.pApplicationInfo = &app_info;
 
+    STEREO_LOG("stereo_CreateInstance: calling real vkCreateInstance, apiVersion=0x%x extCount=%u",
+               ci.pApplicationInfo ? ci.pApplicationInfo->apiVersion : 0,
+               ci.enabledExtensionCount);
+    for (uint32_t _i = 0; _i < ci.enabledExtensionCount; _i++)
+        STEREO_LOG("stereo_CreateInstance:   ext[%u]='%s'", _i,
+                   ci.ppEnabledExtensionNames[_i] ? ci.ppEnabledExtensionNames[_i] : "(null)");
     VkInstance real_inst = VK_NULL_HANDLE;
     VkResult res = real_ci(&ci, pAllocator, &real_inst);
     free(new_exts);
+    STEREO_LOG("stereo_CreateInstance: real vkCreateInstance returned %d, real_inst=%p",
+               res, (void*)real_inst);
 
     if (res != VK_SUCCESS)
         return res;
 
     /* Allocate our wrapper */
+    STEREO_LOG("stereo_CreateInstance: allocating StereoInstance wrapper");
     StereoInstance *si = stereo_instance_alloc();
     if (!si) {
         /* Clean up real instance */
@@ -202,13 +226,16 @@ stereo_CreateInstance(
     stereo_config_init(&si->stereo);
     stereo_populate_instance_dispatch(si);
 
+    STEREO_LOG("stereo_CreateInstance: si=%p stereo=%s", (void*)si,
+               si->stereo.enabled ? "ON" : "OFF");
     /* Return OUR wrapper handle (StereoInstance*) cast to VkInstance.
      * The loader will write its own dispatch pointer into loader_data.loaderData.
      * We must NOT return real_inst: if we did, the loader would overwrite the
      * first bytes of NVIDIA's internal instance struct, corrupting its dispatch
      * table and causing VK_ERROR_INITIALIZATION_FAILED on every subsequent call. */
     *pInstance = (VkInstance)(uintptr_t)si;
-
+    STEREO_LOG("stereo_CreateInstance: returning handle=%p (wrapper for real=%p)",
+               (void*)*pInstance, (void*)real_inst);
     STEREO_LOG("Instance created: %p (stereo: %s)",
                (void*)real_inst, si->stereo.enabled ? "ON" : "OFF");
     return VK_SUCCESS;
@@ -232,9 +259,13 @@ stereo_EnumeratePhysicalDevices(
     uint32_t          *pPhysicalDeviceCount,
     VkPhysicalDevice  *pPhysicalDevices)
 {
+    STEREO_LOG("stereo_EnumeratePhysicalDevices: called instance=%p", (void*)instance);
     StereoInstance *si = stereo_instance_from_handle(instance);
-    if (!si) return VK_ERROR_INITIALIZATION_FAILED;
-
+    if (!si) {
+        STEREO_ERR("stereo_EnumeratePhysicalDevices: unknown instance handle %p", (void*)instance);
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    STEREO_LOG("stereo_EnumeratePhysicalDevices: real_instance=%p", (void*)si->real_instance);
     VkResult res = si->real.EnumeratePhysicalDevices(
         si->real_instance, pPhysicalDeviceCount, pPhysicalDevices);
 

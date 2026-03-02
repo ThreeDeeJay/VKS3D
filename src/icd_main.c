@@ -133,15 +133,18 @@ dynamic_lookup:
 VKAPI_ATTR VkResult VKAPI_CALL
 vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pVersion)
 {
-    if (!pVersion)
+    STEREO_LOG("vk_icdNegotiateLoaderICDInterfaceVersion: called, pVersion=%p",
+               (void*)pVersion);
+    if (!pVersion) {
+        STEREO_ERR("vk_icdNegotiateLoaderICDInterfaceVersion: pVersion is NULL");
         return VK_ERROR_INITIALIZATION_FAILED;
+    }
 
     uint32_t requested = *pVersion;
-    /* We support up to interface version 5 */
     if (requested > STEREO_ICD_INTERFACE_VERSION)
         *pVersion = STEREO_ICD_INTERFACE_VERSION;
 
-    STEREO_LOG("Loader requested ICD interface v%u, negotiated v%u",
+    STEREO_LOG("vk_icdNegotiateLoaderICDInterfaceVersion: requested=%u negotiated=%u",
                requested, *pVersion);
     return VK_SUCCESS;
 }
@@ -152,13 +155,22 @@ vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName)
 {
     if (!pName)
         return NULL;
-    return get_instance_proc_addr_internal(instance, pName);
+    STEREO_LOG("vk_icdGetInstanceProcAddr: instance=%p name='%s'",
+               (void*)instance, pName);
+    PFN_vkVoidFunction fn = get_instance_proc_addr_internal(instance, pName);
+    STEREO_LOG("vk_icdGetInstanceProcAddr: '%s' -> %p", pName, (void*)(uintptr_t)fn);
+    return fn;
 }
 
 /* ── Physical device proc addr (ICD interface v4+) ───────────────────────── */
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 vk_icdGetPhysicalDeviceProcAddr(VkInstance instance, const char *pName)
 {
-    /* Physical device commands are dispatched through instance proc addr */
-    return get_instance_proc_addr_internal(instance, pName);
+    if (!pName)
+        return NULL;
+    STEREO_LOG("vk_icdGetPhysicalDeviceProcAddr: instance=%p name='%s'",
+               (void*)instance, pName);
+    PFN_vkVoidFunction fn = get_instance_proc_addr_internal(instance, pName);
+    STEREO_LOG("vk_icdGetPhysicalDeviceProcAddr: '%s' -> %p", pName, (void*)(uintptr_t)fn);
+    return fn;
 }

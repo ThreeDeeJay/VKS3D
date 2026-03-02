@@ -182,8 +182,13 @@ stereo_CreateDevice(
     const VkAllocationCallbacks  *pAllocator,
     VkDevice                     *pDevice)
 {
+    STEREO_LOG("stereo_CreateDevice: called physicalDevice=%p", (void*)physicalDevice);
     StereoPhysicalDevice *sp = stereo_physdev_from_handle(physicalDevice);
-    if (!sp) return VK_ERROR_INITIALIZATION_FAILED;
+    if (!sp) {
+        STEREO_ERR("stereo_CreateDevice: unknown physical device handle %p", (void*)physicalDevice);
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    STEREO_LOG("stereo_CreateDevice: sp=%p real_pd=%p", (void*)sp, (void*)sp->real);
 
     /* ── Inject VkPhysicalDeviceMultiviewFeatures ─────────────────────── */
     VkPhysicalDeviceMultiviewFeatures multiview_feat = {

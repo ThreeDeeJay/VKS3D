@@ -104,27 +104,45 @@ void stereo_config_compute_offsets(StereoConfig *cfg)
 
 static bool try_load_icd(const char *path)
 {
-    if (!path || !path[0]) return false;
+    if (!path || !path[0]) {
+        STEREO_LOG("try_load_icd: empty path, skipping");
+        return false;
+    }
+    STEREO_LOG("try_load_icd: attempting '%s'", path);
     stereo_dl_t h = stereo_dl_open(path);
-    if (!h) return false;
+    if (!h) {
+        STEREO_ERR("try_load_icd: LoadLibraryA failed for '%s': %s",
+                   path, stereo_dl_error());
+        return false;
+    }
+    STEREO_LOG("try_load_icd: loaded OK, handle=%p", (void*)h);
     /* Reject ourselves */
     if (stereo_dl_sym(h, "vks3d_internal_marker")) {
+        STEREO_LOG("try_load_icd: '%s' is VKS3D itself — skipping", path);
         stereo_dl_close(h);
         return false;
     }
     PFN_vkGetInstanceProcAddr giPA =
         (PFN_vkGetInstanceProcAddr)(uintptr_t)
         stereo_dl_sym(h, "vk_icdGetInstanceProcAddr");
-    if (!giPA)
+    if (!giPA) {
+        STEREO_LOG("try_load_icd: no vk_icdGetInstanceProcAddr, trying vkGetInstanceProcAddr");
         giPA = (PFN_vkGetInstanceProcAddr)(uintptr_t)
                stereo_dl_sym(h, "vkGetInstanceProcAddr");
-    if (!giPA) { stereo_dl_close(h); return false; }
+    }
+    if (!giPA) {
+        STEREO_ERR("try_load_icd: '%s' has no usable GetInstanceProcAddr — skipping", path);
+        stereo_dl_close(h);
+        return false;
+    }
+    STEREO_LOG("try_load_icd: giPA=%p", (void*)(uintptr_t)giPA);
     g_real_icd_handle = h;
     g_real_giPA       = giPA;
     /* Load vk_icdGetPhysicalDeviceProcAddr if the ICD exposes it */
     g_real_pdPA = (PFN_vkGetInstanceProcAddr)(uintptr_t)
         stereo_dl_sym(h, "vk_icdGetPhysicalDeviceProcAddr");
-    STEREO_LOG("Loaded real ICD: %s", path);
+    STEREO_LOG("try_load_icd: pdPA=%p", (void*)(uintptr_t)g_real_pdPA);
+    STEREO_LOG("try_load_icd: SUCCESS — real ICD is '%s'", path);
     return true;
 }
 
@@ -150,16 +168,24 @@ bool stereo_load_real_icd(void)
 {
     if (g_real_icd_handle) return true;
 
+    STEREO_LOG("stereo_load_real_icd: starting ICD search");
+
     /* 1. Explicit env var */
     const char *explicit_path = stereo_getenv("STEREO_REAL_ICD");
-    if (explicit_path && try_load_icd(explicit_path)) return true;
+    if (explicit_path) {
+        STEREO_LOG("stereo_load_real_icd: STEREO_REAL_ICD='%s'", explicit_path);
+        if (try_load_icd(explicit_path)) return true;
+    }
 
     /* 2. Registry enumeration */
+    STEREO_LOG("stereo_load_real_icd: enumerating registry ICDs");
     char **json_paths = stereo_registry_enum_icd_jsons();
     if (json_paths) {
         for (int i = 0; json_paths[i]; i++) {
+            STEREO_LOG("stereo_load_real_icd: JSON[%d]='%s'", i, json_paths[i]);
             char *dll_path = stereo_json_read_library_path(json_paths[i]);
             if (dll_path) {
+                STEREO_LOG("stereo_load_real_icd: library_path='%s'", dll_path);
                 bool ok = try_load_icd(dll_path);
                 free(dll_path);
                 if (ok) {
@@ -167,13 +193,18 @@ bool stereo_load_real_icd(void)
                     free(json_paths);
                     return true;
                 }
+            } else {
+                STEREO_LOG("stereo_load_real_icd: no library_path in JSON");
             }
             free(json_paths[i]);
         }
         free(json_paths);
+    } else {
+        STEREO_LOG("stereo_load_real_icd: no registry ICDs found");
     }
 
     /* 3. Hard-coded fallbacks */
+    STEREO_LOG("stereo_load_real_icd: trying hard-coded fallbacks");
 #ifdef _WIN64
     const char **fb = WIN_FALLBACKS_X64;
 #else
@@ -225,6 +256,9 @@ StereoInstance *stereo_instance_alloc(void) {
     StereoInstance *si = &g_instances[g_instance_count++];
     memset(si, 0, sizeof(*si));
     SET_LOADER_MAGIC_VALUE(si);  /* required: loader reads this field for dispatch */
+    STEREO_LOG("stereo_instance_alloc: allocated si=%p (slot %u), loaderMagic=0x%llx",
+               (void*)si, g_instance_count - 1,
+               (unsigned long long)si->loader_data.loaderMagic);
     stereo_mutex_unlock(&g_registry_lock);
     return si;
 }
@@ -272,6 +306,9 @@ StereoPhysicalDevice *stereo_physdev_alloc(void) {
     StereoPhysicalDevice *sp = &g_physdevs[g_physdev_count++];
     memset(sp, 0, sizeof(*sp));
     SET_LOADER_MAGIC_VALUE(sp);  /* required for dispatchable handle */
+    STEREO_LOG("stereo_physdev_alloc: allocated sp=%p (slot %u), loaderMagic=0x%llx",
+               (void*)sp, g_physdev_count - 1,
+               (unsigned long long)sp->loader_data.loaderMagic);
     stereo_mutex_unlock(&g_registry_lock);
     return sp;
 }
@@ -460,8 +497,31 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     (void)lpvReserved;
-    if (fdwReason == DLL_PROCESS_ATTACH)
+    if (fdwReason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hinstDLL);
+        /* Open the log file as the very first thing so every subsequent
+         * STEREO_LOG/STEREO_ERR call goes to the file.  This must happen
+         * before any other initialisation because a crash in init would
+         * otherwise leave us with no diagnostic output. */
+        vks3d_log_open();
+        STEREO_LOG("===== VKS3D DLL_PROCESS_ATTACH =====");
+        STEREO_LOG("DllMain: hinstDLL=%p", (void*)hinstDLL);
+        /* Log our own path so the user can confirm which binary loaded */
+        {
+            char dll_path[MAX_PATH] = "<unknown>";
+            GetModuleFileNameA(hinstDLL, dll_path, MAX_PATH);
+            STEREO_LOG("DllMain: DLL path = %s", dll_path);
+        }
+        /* Log the host process so we know which app is loading us */
+        {
+            char exe_path[MAX_PATH] = "<unknown>";
+            GetModuleFileNameA(NULL, exe_path, MAX_PATH);
+            STEREO_LOG("DllMain: host process = %s", exe_path);
+        }
+        STEREO_LOG("DllMain: complete, returning TRUE");
+    } else if (fdwReason == DLL_PROCESS_DETACH) {
+        STEREO_LOG("===== VKS3D DLL_PROCESS_DETACH =====");
+    }
     return TRUE;
 }
 

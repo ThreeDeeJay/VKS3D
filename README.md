@@ -13,6 +13,47 @@ with no source changes required.
 App → Vulkan Loader → VKS3D_x64.dll → Real GPU ICD (nvoglv64.dll / amdvlk64.dll …)
 ```
 
+## Diagnostics / Verbose Logging
+
+Logging is **opt-in** via the `STEREO_LOGFILE_PATH` environment variable.
+When the variable is **not set**, all logging compiles to no-ops and there
+is zero runtime overhead.
+
+### Enabling logging
+
+| Value | Effect |
+|---|---|
+| `C:\path\to\vks3d.log` (or any file path) | Write log to that file + `OutputDebugStringA` |
+| `debugview` | `OutputDebugStringA` only — no file written |
+
+The log file is **truncated on each DLL load**, so the last run's log is always current.
+Every write is flushed immediately (`FILE_FLAG_WRITE_THROUGH`), so the file is
+intact even if the process crashes.
+
+**Example** (PowerShell, before running vulkaninfo):
+```powershell
+$env:STEREO_LOGFILE_PATH = "$env:TEMP\vks3d.log"
+vulkaninfo
+notepad $env:TEMP\vks3d.log
+```
+
+**DebugView** (Sysinternals): set `STEREO_LOGFILE_PATH=debugview` and filter on `[VKS3D`.
+
+### What's logged
+
+Every major step is traced — a crash can be pinpointed by looking at the
+**last line** in the log before it ends:
+
+| Stage | Logged information |
+|---|---|
+| `DllMain` | Host process path, VKS3D DLL path |
+| `vk_icdNegotiateLoaderICDInterfaceVersion` | Requested vs negotiated version |
+| `vk_icdGetInstanceProcAddr` | Every function name queried + pointer returned |
+| `stereo_load_real_icd` | Each registry JSON, `library_path`, `LoadLibraryA` result |
+| `stereo_CreateInstance` | Extension list, real `vkCreateInstance` return code, wrapper handle |
+| `stereo_EnumeratePhysicalDevices` | Instance handle lookup |
+| `stereo_CreateDevice` | Physical device handle lookup, real pd pointer |
+
 ## How it works
 
 | Step | What VKS3D does |
@@ -301,4 +342,4 @@ Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers"
 
 ## License
 
-GPLv3 — see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE)
