@@ -1,5 +1,8 @@
 name: Build
 
+env:
+  GITHUB_TOKEN: ${{github.token}}
+
 on:
   push:
     branches: [ main, master ]
