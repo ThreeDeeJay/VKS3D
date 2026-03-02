@@ -121,4 +121,5 @@ jobs:
       - name: Upload release asset
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: latest
           files: VKS3D-${{ github.ref_name }}-windows.zip
