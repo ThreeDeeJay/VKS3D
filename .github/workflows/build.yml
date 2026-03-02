@@ -89,7 +89,7 @@ jobs:
     name: Package release
     runs-on: windows-latest
     needs: [ build-windows-x64, build-windows-x86 ]
-    if: github.event_name == 'release'
+#    if: github.event_name == 'release'
     steps:
       - uses: actions/checkout@v4
 
