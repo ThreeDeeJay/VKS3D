@@ -287,8 +287,12 @@ stereo_EnumeratePhysicalDevices(
             }
             /* Return our wrapper pointer as the VkPhysicalDevice handle */
             pPhysicalDevices[i] = sp ? (VkPhysicalDevice)(uintptr_t)sp : real_pd;
+            STEREO_LOG("stereo_EnumeratePhysicalDevices: pd[%u] real=%p -> wrapper=%p loaderMagic=0x%llx",
+                       i, (void*)real_pd, (void*)pPhysicalDevices[i],
+                       sp ? (unsigned long long)(*(uintptr_t*)(void*)sp) : 0ULL);
         }
     }
 
+    STEREO_LOG("stereo_EnumeratePhysicalDevices: returning %d", res);
     return res;
 }

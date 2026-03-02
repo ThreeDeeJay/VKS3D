@@ -29,23 +29,31 @@
 #include <vulkan/vk_icd.h>
 
 /*
- * Older Vulkan SDK releases do not define ICD_LOADER_MAGIC or
- * SET_LOADER_MAGIC_VALUE in vk_icd.h (VK_LOADER_DATA itself is present
- * in all SDK versions we care about, so we do NOT redefine that type).
+ * ICD_LOADER_MAGIC and SET_LOADER_MAGIC_VALUE
  *
- * The values are part of the stable Vulkan loader ABI since Vulkan 1.0.
+ * The magic value changed between early Vulkan 1.0 SDK releases:
+ *   OLD (pre-2017 SDK): 0x01CDC0DE   ← some installed SDKs still define this
+ *   NEW (all loaders since ~1.0.39):  0xCD1CDABA1DABADAB
+ *
+ * We MUST use the value the installed loader binary was compiled with.
+ * All modern loaders (including the one shipping with NVIDIA 1.1.x drivers)
+ * use 0xCD1CDABA1DABADAB.  If the SDK on the build machine defines the old
+ * value (0x01CDC0DE) our #ifndef guard would preserve the wrong value,
+ * causing the loader to reject our handles and crash immediately.
+ *
+ * Solution: unconditionally #undef and redefine to the correct modern value.
+ * We also bypass VK_LOADER_DATA entirely and write directly via uintptr_t*
+ * so we are immune to struct layout differences across SDK versions.
  */
-#ifndef ICD_LOADER_MAGIC
-#  define ICD_LOADER_MAGIC 0xCD1CDABA1DABADABULL
-#endif
+#undef  ICD_LOADER_MAGIC
+#define ICD_LOADER_MAGIC 0xCD1CDABA1DABADABULL
 
-#ifndef SET_LOADER_MAGIC_VALUE
-#  define SET_LOADER_MAGIC_VALUE(obj) \
+#undef  SET_LOADER_MAGIC_VALUE
+#define SET_LOADER_MAGIC_VALUE(obj) \
     do { \
-        VK_LOADER_DATA *_ld = (VK_LOADER_DATA *)(void *)(obj); \
-        _ld->loaderMagic = ICD_LOADER_MAGIC; \
+        uintptr_t *_magic = (uintptr_t *)(void *)(obj); \
+        *_magic = (uintptr_t)ICD_LOADER_MAGIC; \
     } while (0)
-#endif
 #include <stdint.h>
 #include <stdbool.h>
 

@@ -227,8 +227,17 @@ static inline char *stereo_json_read_library_path(const char *json_path)
  *   - WriteFile is atomic for small writes (no extra lock needed)
  */
 
-static HANDLE g_vks3d_log_handle  = INVALID_HANDLE_VALUE;
-static int    g_vks3d_log_enabled = 0;   /* 0 until vks3d_log_open() confirms */
+/* Defined once in stereo.c — extern so all translation units share the
+ * same state.  (Declaring them static here would give each .c file its own
+ * copy, so DllMain's vks3d_log_open() would only enable logging in stereo.c
+ * while every other file's g_vks3d_log_enabled remained 0.) */
+#ifdef STEREO_LOG_DEFINE_GLOBALS
+HANDLE g_vks3d_log_handle  = INVALID_HANDLE_VALUE;
+int    g_vks3d_log_enabled = 0;
+#else
+extern HANDLE g_vks3d_log_handle;
+extern int    g_vks3d_log_enabled;
+#endif
 
 /*
  * vks3d_log_open — must be called from DllMain DLL_PROCESS_ATTACH.

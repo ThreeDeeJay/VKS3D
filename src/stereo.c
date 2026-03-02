@@ -16,6 +16,10 @@
  * direct path to the real ICD DLL (e.g. C:\Windows\System32\nvoglv64.dll)
  */
 
+/* Define the logging globals here — all other TUs get extern references.
+ * Must appear before the first #include that pulls in platform.h. */
+#define STEREO_LOG_DEFINE_GLOBALS
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -263,26 +267,35 @@ StereoInstance *stereo_instance_alloc(void) {
     return si;
 }
 StereoInstance *stereo_instance_from_handle(VkInstance h) {
-    /* h is the StereoInstance* we returned from stereo_CreateInstance,
-     * cast to VkInstance.  Just cast back — no scan needed. */
+    /*
+     * h is the (StereoInstance *) we returned from stereo_CreateInstance,
+     * cast to VkInstance.  Cast it back and validate by checking that the
+     * pointer falls within our static g_instances[] array.
+     *
+     * We CANNOT rely on loader_data.loaderMagic: the Vulkan loader
+     * overwrites that field with its own dispatch pointer after our
+     * vkCreateInstance returns, so the magic is gone on the very next call.
+     *
+     * We also CANNOT fall back to comparing g_instances[i].real_instance == h:
+     * h is our wrapper pointer, not the real ICD handle — those are different
+     * values and the comparison would never match.
+     *
+     * Address-range check: O(1), correct, immune to the loader clobbering
+     * loader_data.
+     */
     if (!h) return NULL;
     StereoInstance *si = (StereoInstance *)(uintptr_t)h;
-    /* Sanity check: loader_magic must still be ICD_LOADER_MAGIC */
-    if (si->loader_data.loaderMagic != ICD_LOADER_MAGIC) {
-        /* Stale or foreign handle — fall back to linear scan */
-        ensure_registry_init();
-        stereo_mutex_lock(&g_registry_lock);
-        for (uint32_t i = 0; i < g_instance_count; i++) {
-            if (&g_instances[i] == si ||
-                g_instances[i].real_instance == (VkInstance)(uintptr_t)h) {
-                stereo_mutex_unlock(&g_registry_lock);
-                return &g_instances[i];
-            }
-        }
-        stereo_mutex_unlock(&g_registry_lock);
-        return NULL;
+    if (si >= g_instances && si < g_instances + g_instance_count) {
+        STEREO_LOG("stereo_instance_from_handle: h=%p -> slot %u (magic=0x%llx)",
+                   (void*)h, (uint32_t)(si - g_instances),
+                   (unsigned long long)si->loader_data.loaderMagic);
+        return si;
     }
-    return si;
+    STEREO_ERR("stereo_instance_from_handle: unknown handle %p "
+               "(array=[%p,%p), count=%u)",
+               (void*)h, (void*)g_instances,
+               (void*)(g_instances + g_instance_count), g_instance_count);
+    return NULL;
 }
 void stereo_instance_free(VkInstance h) {
     ensure_registry_init();
@@ -326,19 +339,42 @@ StereoPhysicalDevice *stereo_physdev_from_real(VkPhysicalDevice real) {
 }
 
 StereoPhysicalDevice *stereo_physdev_from_handle(VkPhysicalDevice h) {
+    /*
+     * h is the StereoPhysicalDevice* we returned from
+     * stereo_EnumeratePhysicalDevices, cast to VkPhysicalDevice.
+     *
+     * After we return a physdev handle, the loader (ICD interface v5)
+     * writes its own dispatch pointer into sp->loader_data.loaderData.
+     * This overwrites loaderMagic, so we cannot use the magic value to
+     * validate the handle after the first dispatch setup.
+     *
+     * The correct fallback is to compare the POINTER ADDRESS of the
+     * cast result against each slot in our static array.  Since we
+     * always return &g_physdevs[i] cast to VkPhysicalDevice, the cast
+     * back always gives us the original pointer — regardless of whether
+     * the loader has since written dispatch into loader_data.
+     *
+     * DO NOT compare g_physdevs[i].real == h here: .real is the NVIDIA
+     * handle, but h is our OWN wrapper pointer (different value entirely).
+     */
     if (!h) return NULL;
     StereoPhysicalDevice *sp = (StereoPhysicalDevice *)(uintptr_t)h;
+
+    /* Fast path: magic still intact (first call, before loader writes dispatch) */
     if (sp->loader_data.loaderMagic == ICD_LOADER_MAGIC)
         return sp;
-    /* Fallback: scan by real handle (handles passed directly from real ICD) */
+
+    /* Slow path: loader overwrote loaderMagic — validate by address range */
     ensure_registry_init();
     stereo_mutex_lock(&g_registry_lock);
     for (uint32_t i = 0; i < g_physdev_count; i++) {
-        if (g_physdevs[i].real == h) {
-            stereo_mutex_unlock(&g_registry_lock); return &g_physdevs[i];
+        if (&g_physdevs[i] == sp) {          /* address match, not .real match */
+            stereo_mutex_unlock(&g_registry_lock);
+            return &g_physdevs[i];
         }
     }
     stereo_mutex_unlock(&g_registry_lock);
+    STEREO_ERR("stereo_physdev_from_handle: unknown handle %p (not in our array)", (void*)h);
     return NULL;
 }
 
@@ -395,10 +431,15 @@ StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp) {
 /* ── Dispatch table population ──────────────────────────────────────────── */
 
 #define LOAD_INST(table, inst, fn) \
-    (table)->fn = (PFN_vk##fn)(g_real_giPA)((inst), "vk"#fn)
+    do { \
+        (table)->fn = (PFN_vk##fn)(g_real_giPA)((inst), "vk"#fn); \
+        STEREO_LOG("  LOAD_INST " #fn " = %p", (void*)(uintptr_t)(table)->fn); \
+    } while (0)
 
 void stereo_populate_instance_dispatch(StereoInstance *si)
 {
+    STEREO_LOG("stereo_populate_instance_dispatch: si=%p real_inst=%p",
+               (void*)si, (void*)si->real_instance);
     VkInstance ri = si->real_instance;
     LOAD_INST(&si->real, ri, DestroyInstance);
     LOAD_INST(&si->real, ri, EnumeratePhysicalDevices);
@@ -425,7 +466,13 @@ void stereo_populate_instance_dispatch(StereoInstance *si)
     /* Many ICDs (NVIDIA, AMD) only expose physical-device surface functions
      * via vk_icdGetPhysicalDeviceProcAddr, not vk_icdGetInstanceProcAddr.
      * Fall back to pdPA for any surface function that is still NULL. */
-#define LOAD_PHYS(table, ri, fn)     if (!(table)->fn && g_real_pdPA)         (table)->fn = (PFN_vk##fn)(g_real_pdPA)((ri), "vk"#fn)
+#define LOAD_PHYS(table, ri, fn) \
+    do { \
+        if (!(table)->fn && g_real_pdPA) { \
+            (table)->fn = (PFN_vk##fn)(g_real_pdPA)((ri), "vk"#fn); \
+            STEREO_LOG("  LOAD_PHYS " #fn " = %p", (void*)(uintptr_t)(table)->fn); \
+        } \
+    } while (0)
     LOAD_PHYS(&si->real, ri, DestroySurfaceKHR);
     LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceSupportKHR);
     LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceCapabilitiesKHR);
@@ -436,6 +483,7 @@ void stereo_populate_instance_dispatch(StereoInstance *si)
         g_real_giPA(ri, "vkCreateDebugUtilsMessengerEXT");
     si->real.DestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
         g_real_giPA(ri, "vkDestroyDebugUtilsMessengerEXT");
+    STEREO_LOG("stereo_populate_instance_dispatch: complete");
 }
 
 void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)

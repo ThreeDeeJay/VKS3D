@@ -20,15 +20,27 @@
 /* Convenience macro: look up real physdev, bail on unknown handle */
 #define LOOKUP_PD(pd) \
     StereoPhysicalDevice *_sp = stereo_physdev_from_handle(pd); \
-    if (!_sp) return; \
+    if (!_sp) { \
+        STEREO_ERR("%s: physdev_from_handle(%p) = NULL (handle not in registry)", \
+                   __func__, (void*)(uintptr_t)(pd)); \
+        return; \
+    } \
     StereoInstance *_si = _sp->instance; \
-    VkPhysicalDevice _real = _sp->real
+    VkPhysicalDevice _real = _sp->real; \
+    STEREO_LOG("%s: pd=%p -> sp=%p real=%p", __func__, \
+               (void*)(uintptr_t)(pd), (void*)_sp, (void*)_real)
 
 #define LOOKUP_PD_R(pd, err) \
     StereoPhysicalDevice *_sp = stereo_physdev_from_handle(pd); \
-    if (!_sp) return (err); \
+    if (!_sp) { \
+        STEREO_ERR("%s: physdev_from_handle(%p) = NULL (handle not in registry)", \
+                   __func__, (void*)(uintptr_t)(pd)); \
+        return (err); \
+    } \
     StereoInstance *_si = _sp->instance; \
-    VkPhysicalDevice _real = _sp->real
+    VkPhysicalDevice _real = _sp->real; \
+    STEREO_LOG("%s: pd=%p -> sp=%p real=%p", __func__, \
+               (void*)(uintptr_t)(pd), (void*)_sp, (void*)_real)
 
 /* ── Properties ─────────────────────────────────────────────────────────── */
 
@@ -37,6 +49,7 @@ stereo_GetPhysicalDeviceProperties(
     VkPhysicalDevice pd, VkPhysicalDeviceProperties *p)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceProperties: pd=%p -> real=%p", (void*)pd, (void*)_real);
     _si->real.GetPhysicalDeviceProperties(_real, p);
 }
 
@@ -45,6 +58,7 @@ stereo_GetPhysicalDeviceProperties2(
     VkPhysicalDevice pd, VkPhysicalDeviceProperties2 *p)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceProperties2: pd=%p -> real=%p", (void*)pd, (void*)_real);
     if (_si->real.GetPhysicalDeviceProperties2)
         _si->real.GetPhysicalDeviceProperties2(_real, p);
 }
@@ -54,6 +68,7 @@ stereo_GetPhysicalDeviceFeatures(
     VkPhysicalDevice pd, VkPhysicalDeviceFeatures *f)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceFeatures: pd=%p -> real=%p", (void*)pd, (void*)_real);
     _si->real.GetPhysicalDeviceFeatures(_real, f);
 }
 
@@ -62,6 +77,7 @@ stereo_GetPhysicalDeviceFeatures2(
     VkPhysicalDevice pd, VkPhysicalDeviceFeatures2 *f)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceFeatures2: pd=%p -> real=%p", (void*)pd, (void*)_real);
     if (_si->real.GetPhysicalDeviceFeatures2)
         _si->real.GetPhysicalDeviceFeatures2(_real, f);
 }
@@ -71,6 +87,7 @@ stereo_GetPhysicalDeviceMemoryProperties(
     VkPhysicalDevice pd, VkPhysicalDeviceMemoryProperties *p)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceMemoryProperties: pd=%p -> real=%p", (void*)pd, (void*)_real);
     _si->real.GetPhysicalDeviceMemoryProperties(_real, p);
 }
 
@@ -79,6 +96,7 @@ stereo_GetPhysicalDeviceMemoryProperties2(
     VkPhysicalDevice pd, VkPhysicalDeviceMemoryProperties2 *p)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceMemoryProperties2: pd=%p -> real=%p", (void*)pd, (void*)_real);
     if (_si->real.GetPhysicalDeviceMemoryProperties2)
         _si->real.GetPhysicalDeviceMemoryProperties2(_real, p);
 }
@@ -92,6 +110,7 @@ stereo_GetPhysicalDeviceQueueFamilyProperties(
     VkQueueFamilyProperties *pProps)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceQueueFamilyProperties: pd=%p -> real=%p", (void*)pd, (void*)_real);
     _si->real.GetPhysicalDeviceQueueFamilyProperties(_real, pCount, pProps);
 }
 
@@ -102,6 +121,7 @@ stereo_GetPhysicalDeviceQueueFamilyProperties2(
     VkQueueFamilyProperties2 *pProps)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceQueueFamilyProperties2: pd=%p -> real=%p", (void*)pd, (void*)_real);
     if (_si->real.GetPhysicalDeviceQueueFamilyProperties2)
         _si->real.GetPhysicalDeviceQueueFamilyProperties2(_real, pCount, pProps);
 }
@@ -113,6 +133,7 @@ stereo_GetPhysicalDeviceFormatProperties(
     VkPhysicalDevice pd, VkFormat fmt, VkFormatProperties *p)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceFormatProperties: pd=%p -> real=%p fmt=%d", (void*)pd, (void*)_real, (int)fmt);
     _si->real.GetPhysicalDeviceFormatProperties(_real, fmt, p);
 }
 
@@ -121,6 +142,7 @@ stereo_GetPhysicalDeviceFormatProperties2(
     VkPhysicalDevice pd, VkFormat fmt, VkFormatProperties2 *p)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceFormatProperties2: pd=%p -> real=%p", (void*)pd, (void*)_real);
     if (_si->real.GetPhysicalDeviceFormatProperties2)
         _si->real.GetPhysicalDeviceFormatProperties2(_real, fmt, p);
 }
@@ -132,6 +154,7 @@ stereo_GetPhysicalDeviceImageFormatProperties(
     VkImageCreateFlags flags, VkImageFormatProperties *p)
 {
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_GetPhysicalDeviceImageFormatProperties: pd=%p -> real=%p", (void*)pd, (void*)_real);
     return _si->real.GetPhysicalDeviceImageFormatProperties(
         _real, fmt, type, tiling, usage, flags, p);
 }
@@ -144,6 +167,7 @@ stereo_GetPhysicalDeviceSparseImageFormatProperties(
     VkSparseImageFormatProperties *pProps)
 {
     LOOKUP_PD(pd);
+    STEREO_LOG("stereo_GetPhysicalDeviceSparseImageFormatProperties: pd=%p -> real=%p", (void*)pd, (void*)_real);
     _si->real.GetPhysicalDeviceSparseImageFormatProperties(
         _real, fmt, type, samples, usage, tiling, pCount, pProps);
 }
@@ -156,6 +180,7 @@ stereo_EnumerateDeviceExtensionProperties(
     uint32_t *pCount, VkExtensionProperties *pProps)
 {
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_EnumerateDeviceExtensionProperties: pd=%p -> real=%p layer=%s", (void*)pd, (void*)_real, pLayerName ? pLayerName : "(null)");
     return _si->real.EnumerateDeviceExtensionProperties(_real, pLayerName, pCount, pProps);
 }
 
@@ -164,6 +189,7 @@ stereo_EnumerateDeviceLayerProperties(
     VkPhysicalDevice pd, uint32_t *pCount, VkLayerProperties *pProps)
 {
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_EnumerateDeviceLayerProperties: pd=%p -> real=%p", (void*)pd, (void*)_real);
     return _si->real.EnumerateDeviceLayerProperties(_real, pCount, pProps);
 }
 
@@ -182,6 +208,7 @@ stereo_GetPhysicalDeviceSurfaceSupportKHR(
     VkBool32        *pSupported)
 {
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceSupportKHR: pd=%p -> real=%p qfam=%u surf=%p", (void*)pd, (void*)_real, queueFamilyIndex, (void*)surface);
     if (!_si->real.GetPhysicalDeviceSurfaceSupportKHR)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     return _si->real.GetPhysicalDeviceSurfaceSupportKHR(
@@ -195,6 +222,7 @@ stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkSurfaceCapabilitiesKHR  *pCaps)
 {
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: pd=%p -> real=%p surf=%p", (void*)pd, (void*)_real, (void*)surface);
     if (!_si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     return _si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR(_real, surface, pCaps);
@@ -208,6 +236,7 @@ stereo_GetPhysicalDeviceSurfaceFormatsKHR(
     VkSurfaceFormatKHR *pFormats)
 {
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceFormatsKHR: pd=%p -> real=%p surf=%p", (void*)pd, (void*)_real, (void*)surface);
     if (!_si->real.GetPhysicalDeviceSurfaceFormatsKHR)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     return _si->real.GetPhysicalDeviceSurfaceFormatsKHR(_real, surface, pCount, pFormats);
@@ -221,6 +250,7 @@ stereo_GetPhysicalDeviceSurfacePresentModesKHR(
     VkPresentModeKHR *pModes)
 {
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfacePresentModesKHR: pd=%p -> real=%p surf=%p", (void*)pd, (void*)_real, (void*)surface);
     if (!_si->real.GetPhysicalDeviceSurfacePresentModesKHR)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     return _si->real.GetPhysicalDeviceSurfacePresentModesKHR(_real, surface, pCount, pModes);
