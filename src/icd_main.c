@@ -175,8 +175,10 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_DestroyDevice;
     if (!strcmp(name, "vkCreateRenderPass"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass;
+#ifdef VK_KHR_create_renderpass2
     if (!strcmp(name, "vkCreateRenderPass2KHR"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass2KHR;
+#endif
     if (!strcmp(name, "vkCreateShaderModule"))
         return (PFN_vkVoidFunction)stereo_CreateShaderModule;
     if (!strcmp(name, "vkDestroyShaderModule"))

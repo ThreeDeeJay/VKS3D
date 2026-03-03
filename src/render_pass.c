@@ -124,6 +124,7 @@ stereo_CreateRenderPass(
  */
 
 /* Convert VkRenderPassCreateInfo2 → VkRenderPassCreateInfo + multiview chain */
+#ifdef VK_KHR_create_renderpass2
 static VkResult create_rp2_via_rp1(
     StereoDevice                    *sd,
     const VkRenderPassCreateInfo2   *ci2,
@@ -266,7 +267,10 @@ oom:
     free(subs); free(atts);
     return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
+#endif /* VK_KHR_create_renderpass2 */
 
+
+#ifdef VK_KHR_create_renderpass2
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateRenderPass2KHR(
     VkDevice                         device,
@@ -341,3 +345,5 @@ stereo_CreateRenderPass2KHR(
 
     return res;
 }
+#endif /* VK_KHR_create_renderpass2 */
+

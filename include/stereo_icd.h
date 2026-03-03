@@ -368,6 +368,13 @@ StereoPhysicalDevice   *stereo_physdev_from_real(VkPhysicalDevice real);
 StereoDevice           *stereo_device_from_handle(VkDevice h);
 StereoSwapchain        *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc);
 StereoRenderPassInfo   *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp);
+/* Real ICD accessor functions */
+PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void);
+PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
+/* Object lifecycle helpers */
+void                    stereo_instance_free(VkInstance h);
+StereoPhysicalDevice   *stereo_physdev_alloc(void);
+StereoDevice           *stereo_device_alloc(void);
 
 /* ── Forward declarations ────────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(
@@ -452,8 +459,10 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDevice(
 VKAPI_ATTR void VKAPI_CALL stereo_DestroyDevice(VkDevice, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(
     VkDevice, const VkRenderPassCreateInfo*, const VkAllocationCallbacks*, VkRenderPass*);
+#ifdef VK_KHR_create_renderpass2
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass2KHR(
     VkDevice, const VkRenderPassCreateInfo2*, const VkAllocationCallbacks*, VkRenderPass*);
+#endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(
     VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
 VKAPI_ATTR void VKAPI_CALL stereo_DestroyShaderModule(
