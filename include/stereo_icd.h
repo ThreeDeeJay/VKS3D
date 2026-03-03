@@ -426,6 +426,17 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfacePresentModes2EXT(V
 #endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice, VkSurfaceKHR, uint32_t*, VkRect2D*);
 #ifdef VK_KHR_win32_surface
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice, uint32_t*, VkDisplayPropertiesKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice, uint32_t*, VkDisplayPlanePropertiesKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice, uint32_t, uint32_t*, VkDisplayKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetDisplayModePropertiesKHR(VkPhysicalDevice, VkDisplayKHR, uint32_t*, VkDisplayModePropertiesKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDisplayModeKHR(VkPhysicalDevice, VkDisplayKHR, const VkDisplayModeCreateInfoKHR*, const VkAllocationCallbacks*, VkDisplayModeKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice, VkDisplayModeKHR, uint32_t, VkDisplayPlaneCapabilitiesKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice, uint32_t*, VkDisplayProperties2KHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceDisplayPlaneProperties2KHR(VkPhysicalDevice, uint32_t*, VkDisplayPlaneProperties2KHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetDisplayModeProperties2KHR(VkPhysicalDevice, VkDisplayKHR, uint32_t*, VkDisplayModeProperties2KHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetDisplayPlaneCapabilities2KHR(VkPhysicalDevice, const VkDisplayPlaneInfo2KHR*, VkDisplayPlaneCapabilities2KHR*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceCapabilities2EXT(VkPhysicalDevice, VkSurfaceKHR, VkSurfaceCapabilities2EXT*);
 VKAPI_ATTR VkBool32 VKAPI_CALL stereo_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice, uint32_t);
 #endif
 #ifdef VK_EXT_calibrated_timestamps

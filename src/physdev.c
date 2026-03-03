@@ -181,11 +181,16 @@ stereo_GetPhysicalDeviceSurfaceSupportKHR(
     VkSurfaceKHR     surface,
     VkBool32        *pSupported)
 {
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceSupportKHR: pd=%p surface=%p", (void*)pd, (void*)(uintptr_t)surface);
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
-    if (!_si->real.GetPhysicalDeviceSurfaceSupportKHR)
+    if (!_si->real.GetPhysicalDeviceSurfaceSupportKHR) {
+        STEREO_ERR("stereo_GetPhysicalDeviceSurfaceSupportKHR: real fn is NULL");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-    return _si->real.GetPhysicalDeviceSurfaceSupportKHR(
+    }
+    VkResult _r = _si->real.GetPhysicalDeviceSurfaceSupportKHR(
         _real, queueFamilyIndex, surface, pSupported);
+    if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfaceSupportKHR: real returned %d", (int)_r);
+    return _r;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -194,10 +199,15 @@ stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkSurfaceKHR               surface,
     VkSurfaceCapabilitiesKHR  *pCaps)
 {
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: pd=%p surface=%p", (void*)pd, (void*)(uintptr_t)surface);
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
-    if (!_si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR)
+    if (!_si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR) {
+        STEREO_ERR("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: real fn is NULL");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-    return _si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR(_real, surface, pCaps);
+    }
+    VkResult _r = _si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR(_real, surface, pCaps);
+    if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: real returned %d (pd=%p surf=%p real=%p)", (int)_r, (void*)pd, (void*)(uintptr_t)surface, (void*)_real);
+    return _r;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -207,10 +217,15 @@ stereo_GetPhysicalDeviceSurfaceFormatsKHR(
     uint32_t           *pCount,
     VkSurfaceFormatKHR *pFormats)
 {
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceFormatsKHR: pd=%p surface=%p", (void*)pd, (void*)(uintptr_t)surface);
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
-    if (!_si->real.GetPhysicalDeviceSurfaceFormatsKHR)
+    if (!_si->real.GetPhysicalDeviceSurfaceFormatsKHR) {
+        STEREO_ERR("stereo_GetPhysicalDeviceSurfaceFormatsKHR: real fn is NULL");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-    return _si->real.GetPhysicalDeviceSurfaceFormatsKHR(_real, surface, pCount, pFormats);
+    }
+    VkResult _r = _si->real.GetPhysicalDeviceSurfaceFormatsKHR(_real, surface, pCount, pFormats);
+    if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfaceFormatsKHR: real returned %d", (int)_r);
+    return _r;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -220,9 +235,14 @@ stereo_GetPhysicalDeviceSurfacePresentModesKHR(
     uint32_t         *pCount,
     VkPresentModeKHR *pModes)
 {
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfacePresentModesKHR: pd=%p surface=%p", (void*)pd, (void*)(uintptr_t)surface);
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
-    if (!_si->real.GetPhysicalDeviceSurfacePresentModesKHR)
+    if (!_si->real.GetPhysicalDeviceSurfacePresentModesKHR) {
+        STEREO_ERR("stereo_GetPhysicalDeviceSurfacePresentModesKHR: real fn is NULL");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-    return _si->real.GetPhysicalDeviceSurfacePresentModesKHR(_real, surface, pCount, pModes);
+    }
+    VkResult _r = _si->real.GetPhysicalDeviceSurfacePresentModesKHR(_real, surface, pCount, pModes);
+    if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfacePresentModesKHR: real returned %d", (int)_r);
+    return _r;
 }
 

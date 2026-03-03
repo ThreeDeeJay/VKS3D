@@ -318,6 +318,7 @@ stereo_DestroySurfaceKHR(
     VkInstance instance, VkSurfaceKHR surface,
     const VkAllocationCallbacks *pAllocator)
 {
+    STEREO_LOG("stereo_DestroySurfaceKHR: instance=%p surface=%p", (void*)instance, (void*)(uintptr_t)surface);
     LOOKUP_SI(instance);
     if (si->real.DestroySurfaceKHR)
         si->real.DestroySurfaceKHR(si->real_instance, surface, pAllocator);
@@ -332,11 +333,15 @@ stereo_CreateWin32SurfaceKHR(
     const VkAllocationCallbacks       *pAllocator,
     VkSurfaceKHR                      *pSurface)
 {
+    STEREO_LOG("stereo_CreateWin32SurfaceKHR: instance=%p hwnd=%p", (void*)instance, pCreateInfo ? (void*)pCreateInfo->hwnd : NULL);
     LOOKUP_SI_R(instance, VK_ERROR_INITIALIZATION_FAILED);
     if (!si->real.CreateWin32SurfaceKHR)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-    return si->real.CreateWin32SurfaceKHR(
+    VkResult _r = si->real.CreateWin32SurfaceKHR(
         si->real_instance, pCreateInfo, pAllocator, pSurface);
+    if (_r) STEREO_ERR("stereo_CreateWin32SurfaceKHR: real returned %d", (int)_r);
+    else STEREO_LOG("stereo_CreateWin32SurfaceKHR: surface=%p", pSurface ? (void*)(uintptr_t)*pSurface : NULL);
+    return _r;
 }
 #endif
 

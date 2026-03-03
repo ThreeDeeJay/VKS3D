@@ -262,6 +262,7 @@ stereo_GetPhysicalDeviceSurfaceFormats2KHR(
     uint32_t                              *pCount,
     VkSurfaceFormat2KHR                   *pFormats)
 {
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceFormats2KHR: pd=%p", (void*)pd);
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
     typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice,
         const VkPhysicalDeviceSurfaceInfo2KHR *, uint32_t *, VkSurfaceFormat2KHR *);
@@ -408,3 +409,148 @@ stereo_GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(
     return fn(_real, pCount, pCombinations);
 }
 #endif /* VK_NV_coverage_reduction_mode */
+
+/* ── VK_KHR_display / VK_EXT_display_surface_counter stubs ──────────────────
+ * These functions take VkPhysicalDevice as their first argument.  We must wrap
+ * them so the loader never passes our StereoPhysicalDevice* wrapper directly
+ * to NVIDIA.  The secondary args (VkDisplayKHR, VkDisplayModeKHR, etc.) are
+ * not wrapped by VKS3D and pass through unchanged.               */
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceDisplayPropertiesKHR(
+    VkPhysicalDevice pd, uint32_t *pCount, VkDisplayPropertiesKHR *pProps)
+{
+    STEREO_LOG("stereo_GetPhysicalDeviceDisplayPropertiesKHR: pd=%p", (void*)pd);
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t *, VkDisplayPropertiesKHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceDisplayPropertiesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceDisplayPlanePropertiesKHR(
+    VkPhysicalDevice pd, uint32_t *pCount, VkDisplayPlanePropertiesKHR *pProps)
+{
+    STEREO_LOG("stereo_GetPhysicalDeviceDisplayPlanePropertiesKHR: pd=%p", (void*)pd);
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t *, VkDisplayPlanePropertiesKHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceDisplayPlanePropertiesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetDisplayPlaneSupportedDisplaysKHR(
+    VkPhysicalDevice pd, uint32_t planeIndex, uint32_t *pCount, VkDisplayKHR *pDisplays)
+{
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t, uint32_t *, VkDisplayKHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetDisplayPlaneSupportedDisplaysKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, planeIndex, pCount, pDisplays);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetDisplayModePropertiesKHR(
+    VkPhysicalDevice pd, VkDisplayKHR display,
+    uint32_t *pCount, VkDisplayModePropertiesKHR *pProps)
+{
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, VkDisplayKHR, uint32_t *, VkDisplayModePropertiesKHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetDisplayModePropertiesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, display, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateDisplayModeKHR(
+    VkPhysicalDevice pd, VkDisplayKHR display,
+    const VkDisplayModeCreateInfoKHR *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator,
+    VkDisplayModeKHR *pMode)
+{
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, VkDisplayKHR,
+        const VkDisplayModeCreateInfoKHR *, const VkAllocationCallbacks *, VkDisplayModeKHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkCreateDisplayModeKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, display, pCreateInfo, pAllocator, pMode);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetDisplayPlaneCapabilitiesKHR(
+    VkPhysicalDevice pd, VkDisplayModeKHR mode,
+    uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR *pCaps)
+{
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, VkDisplayModeKHR, uint32_t,
+        VkDisplayPlaneCapabilitiesKHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetDisplayPlaneCapabilitiesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, mode, planeIndex, pCaps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceDisplayProperties2KHR(
+    VkPhysicalDevice pd, uint32_t *pCount, VkDisplayProperties2KHR *pProps)
+{
+    STEREO_LOG("stereo_GetPhysicalDeviceDisplayProperties2KHR: pd=%p", (void*)pd);
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t *, VkDisplayProperties2KHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceDisplayProperties2KHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceDisplayPlaneProperties2KHR(
+    VkPhysicalDevice pd, uint32_t *pCount, VkDisplayPlaneProperties2KHR *pProps)
+{
+    STEREO_LOG("stereo_GetPhysicalDeviceDisplayPlaneProperties2KHR: pd=%p", (void*)pd);
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t *, VkDisplayPlaneProperties2KHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceDisplayPlaneProperties2KHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetDisplayModeProperties2KHR(
+    VkPhysicalDevice pd, VkDisplayKHR display,
+    uint32_t *pCount, VkDisplayModeProperties2KHR *pProps)
+{
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, VkDisplayKHR,
+        uint32_t *, VkDisplayModeProperties2KHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetDisplayModeProperties2KHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, display, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetDisplayPlaneCapabilities2KHR(
+    VkPhysicalDevice pd,
+    const VkDisplayPlaneInfo2KHR *pDisplayPlaneInfo,
+    VkDisplayPlaneCapabilities2KHR *pCaps)
+{
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice,
+        const VkDisplayPlaneInfo2KHR *, VkDisplayPlaneCapabilities2KHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetDisplayPlaneCapabilities2KHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pDisplayPlaneInfo, pCaps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceSurfaceCapabilities2EXT(
+    VkPhysicalDevice pd, VkSurfaceKHR surface, VkSurfaceCapabilities2EXT *pSurfaceCaps)
+{
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceCapabilities2EXT: pd=%p surface=%p",
+               (void*)pd, (void*)(uintptr_t)surface);
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, VkSurfaceKHR, VkSurfaceCapabilities2EXT *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceSurfaceCapabilities2EXT");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, surface, pSurfaceCaps);
+}

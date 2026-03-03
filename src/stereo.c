@@ -291,10 +291,17 @@ StereoInstance *stereo_instance_from_handle(VkInstance h) {
                    (unsigned long long)si->loader_data.loaderMagic);
         return si;
     }
-    STEREO_ERR("stereo_instance_from_handle: unknown handle %p "
-               "(array=[%p,%p), count=%u)",
+    STEREO_ERR("stereo_instance_from_handle: FAILED to recognise handle %p "
+               "(our array=[%p,%p), count=%u)",
                (void*)h, (void*)g_instances,
                (void*)(g_instances + g_instance_count), g_instance_count);
+    /* Dump all known instances for comparison */
+    for (uint32_t _j = 0; _j < g_instance_count; _j++) {
+        STEREO_ERR("  g_instances[%u] = %p  (magic=0x%llx real=%p)",
+                   _j, (void*)&g_instances[_j],
+                   (unsigned long long)g_instances[_j].loader_data.loaderMagic,
+                   (void*)g_instances[_j].real_instance);
+    }
     return NULL;
 }
 void stereo_instance_free(VkInstance h) {
@@ -373,8 +380,32 @@ StereoPhysicalDevice *stereo_physdev_from_handle(VkPhysicalDevice h) {
             return &g_physdevs[i];
         }
     }
+    /* Dump diagnostics: the handle address, its first qword (loader magic / dispatch ptr),
+     * and every address we DO have so a mismatch is immediately visible in the log. */
+    uintptr_t magic_at_h = 0;
+    /* Safe read — if sp is a loader wrapper rather than our physdev, reading offset 0
+     * still gives us the dispatch/magic value which tells us what kind of object it is. */
+#ifdef _WIN32
+    __try {
+        magic_at_h = *(volatile uintptr_t *)(void *)sp;
+    } __except(1) {
+        magic_at_h = 0xDEADBEEFDEADBEEFull;
+    }
+#else
+    magic_at_h = *(uintptr_t *)(void *)sp;
+#endif
+    STEREO_ERR("stereo_physdev_from_handle: FAILED to recognise handle %p", (void*)h);
+    STEREO_ERR("  handle[0] (magic/dispatch) = 0x%llx  ICD_LOADER_MAGIC = 0x%llx",
+               (unsigned long long)magic_at_h,
+               (unsigned long long)ICD_LOADER_MAGIC);
+    STEREO_ERR("  g_physdev_count = %u", g_physdev_count);
+    for (uint32_t _i = 0; _i < g_physdev_count; _i++) {
+        STEREO_ERR("  g_physdevs[%u] = %p  (magic=0x%llx real=%p)",
+                   _i, (void*)&g_physdevs[_i],
+                   (unsigned long long)g_physdevs[_i].loader_data.loaderMagic,
+                   (void*)g_physdevs[_i].real);
+    }
     stereo_mutex_unlock(&g_registry_lock);
-    STEREO_ERR("stereo_physdev_from_handle: unknown handle %p (not in our array)", (void*)h);
     return NULL;
 }
 

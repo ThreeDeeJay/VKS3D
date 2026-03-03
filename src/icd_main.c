@@ -91,6 +91,17 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     PD_FN(GetPhysicalDeviceSurfaceCapabilities2KHR)
     PD_FN(GetPhysicalDeviceSurfaceFormats2KHR)
     PD_FN(GetPhysicalDevicePresentRectanglesKHR)
+    PD_FN(GetPhysicalDeviceDisplayPropertiesKHR)
+    PD_FN(GetPhysicalDeviceDisplayPlanePropertiesKHR)
+    PD_FN(GetDisplayPlaneSupportedDisplaysKHR)
+    PD_FN(GetDisplayModePropertiesKHR)
+    PD_FN(CreateDisplayModeKHR)
+    PD_FN(GetDisplayPlaneCapabilitiesKHR)
+    PD_FN(GetPhysicalDeviceDisplayProperties2KHR)
+    PD_FN(GetPhysicalDeviceDisplayPlaneProperties2KHR)
+    PD_FN(GetDisplayModeProperties2KHR)
+    PD_FN(GetDisplayPlaneCapabilities2KHR)
+    PD_FN(GetPhysicalDeviceSurfaceCapabilities2EXT)
     /* ── Win32 ── */
 #ifdef VK_KHR_win32_surface
     PD_FN(GetPhysicalDeviceWin32PresentationSupportKHR)
