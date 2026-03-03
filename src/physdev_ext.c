@@ -270,6 +270,7 @@ stereo_GetPhysicalDeviceSurfaceFormats2KHR(
     return fn(_real, pInfo, pCount, pFormats);
 }
 
+#ifdef VK_EXT_full_screen_exclusive
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDeviceSurfacePresentModes2EXT(
     VkPhysicalDevice                      pd,
@@ -284,6 +285,7 @@ stereo_GetPhysicalDeviceSurfacePresentModes2EXT(
     if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
     return fn(_real, pInfo, pCount, pModes);
 }
+#endif /* VK_EXT_full_screen_exclusive */
 
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDevicePresentRectanglesKHR(
@@ -315,6 +317,7 @@ stereo_GetPhysicalDeviceWin32PresentationSupportKHR(
 
 /* ── EXT extensions ──────────────────────────────────────────────────────── */
 
+#ifdef VK_EXT_calibrated_timestamps
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
     VkPhysicalDevice pd, uint32_t *pCount, VkTimeDomainEXT *pDomains)
@@ -325,6 +328,7 @@ stereo_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
     if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
     return fn(_real, pCount, pDomains);
 }
+#endif /* VK_EXT_calibrated_timestamps */
 
 VKAPI_ATTR void VKAPI_CALL
 stereo_GetPhysicalDeviceMultisamplePropertiesEXT(
@@ -373,6 +377,7 @@ stereo_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(
     if (fn) fn(_real, pFeatures, pLimits);
 }
 
+#ifdef VK_NV_cooperative_matrix
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDeviceCooperativeMatrixPropertiesNV(
     VkPhysicalDevice                 pd,
@@ -386,7 +391,9 @@ stereo_GetPhysicalDeviceCooperativeMatrixPropertiesNV(
     if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
     return fn(_real, pCount, pProps);
 }
+#endif /* VK_NV_cooperative_matrix */
 
+#ifdef VK_NV_coverage_reduction_mode
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(
     VkPhysicalDevice                       pd,
@@ -400,3 +407,4 @@ stereo_GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(
     if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
     return fn(_real, pCount, pCombinations);
 }
+#endif /* VK_NV_coverage_reduction_mode */

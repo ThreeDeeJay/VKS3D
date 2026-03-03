@@ -25,6 +25,15 @@
 /* platform.h must come first — defines stereo_mutex_t, STEREO_LOG, etc. */
 #include "platform.h"
 
+/* Pull in platform-specific Vulkan extensions (Win32 surface, etc.).
+ * This must be defined BEFORE vulkan.h so that vulkan.h includes
+ * vulkan_win32.h, making PFN_vkCreateWin32SurfaceKHR etc. available. */
+#ifdef _WIN32
+#  ifndef VK_USE_PLATFORM_WIN32_KHR
+#    define VK_USE_PLATFORM_WIN32_KHR
+#  endif
+#endif
+
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_icd.h>
 
@@ -116,20 +125,32 @@ typedef struct RealInstanceDispatch {
     PFN_vkGetPhysicalDeviceSurfaceFormats2KHR       GetPhysicalDeviceSurfaceFormats2KHR;
     PFN_vkGetPhysicalDevicePresentRectanglesKHR     GetPhysicalDevicePresentRectanglesKHR;
     /* ── Win32 ───────────────────────────────────────────────────────────── */
+#ifdef VK_KHR_win32_surface
     PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR GetPhysicalDeviceWin32PresentationSupportKHR;
+#endif
     /* ── EXT extensions ──────────────────────────────────────────────────── */
+#ifdef VK_EXT_full_screen_exclusive
     PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT  GetPhysicalDeviceSurfacePresentModes2EXT;
+#endif
+#ifdef VK_EXT_calibrated_timestamps
     PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT GetPhysicalDeviceCalibrateableTimeDomainsEXT;
+#endif
     PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT GetPhysicalDeviceMultisamplePropertiesEXT;
     /* ── NV extensions ───────────────────────────────────────────────────── */
     PFN_vkGetPhysicalDeviceExternalImageFormatPropertiesNV GetPhysicalDeviceExternalImageFormatPropertiesNV;
+#ifdef VK_NV_cooperative_matrix
     PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesNV GetPhysicalDeviceCooperativeMatrixPropertiesNV;
+#endif
+#ifdef VK_NV_coverage_reduction_mode
     PFN_vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV;
+#endif
     /* NVX: stored as void* because VkDeviceGeneratedCommands* structs were
      * removed from newer SDK versions; we cast at the call site.           */
     PFN_vkVoidFunction GetPhysicalDeviceGeneratedCommandsPropertiesNVX;
     /* ── Instance-level functions (VkInstance first arg) ─────────────────── */
+#ifdef VK_KHR_win32_surface
     PFN_vkCreateWin32SurfaceKHR                     CreateWin32SurfaceKHR;
+#endif
     PFN_vkCreateDebugReportCallbackEXT              CreateDebugReportCallbackEXT;
     PFN_vkDestroyDebugReportCallbackEXT             DestroyDebugReportCallbackEXT;
     PFN_vkDebugReportMessageEXT                     DebugReportMessageEXT;
@@ -393,21 +414,33 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumeratePhysicalDeviceGroups(VkInstance, 
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumeratePhysicalDeviceGroupsKHR(VkInstance, uint32_t*, VkPhysicalDeviceGroupProperties*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR*, VkSurfaceCapabilities2KHR*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR*, uint32_t*, VkSurfaceFormat2KHR*);
+#ifdef VK_EXT_full_screen_exclusive
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfacePresentModes2EXT(VkPhysicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR*, uint32_t*, VkPresentModeKHR*);
+#endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice, VkSurfaceKHR, uint32_t*, VkRect2D*);
+#ifdef VK_KHR_win32_surface
 VKAPI_ATTR VkBool32 VKAPI_CALL stereo_GetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice, uint32_t);
+#endif
+#ifdef VK_EXT_calibrated_timestamps
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceCalibrateableTimeDomainsEXT(VkPhysicalDevice, uint32_t*, VkTimeDomainEXT*);
+#endif
 VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceMultisamplePropertiesEXT(VkPhysicalDevice, VkSampleCountFlagBits, VkMultisamplePropertiesEXT*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice, VkFormat, VkImageType, VkImageTiling, VkImageUsageFlags, VkImageCreateFlags, VkExternalMemoryHandleTypeFlagsNV, VkExternalImageFormatPropertiesNV*);
 VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice, void*, void*);
+#ifdef VK_NV_cooperative_matrix
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceCooperativeMatrixPropertiesNV(VkPhysicalDevice, uint32_t*, VkCooperativeMatrixPropertiesNV*);
+#endif
+#ifdef VK_NV_coverage_reduction_mode
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(VkPhysicalDevice, uint32_t*, VkFramebufferMixedSamplesCombinationNV*);
+#endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateInstanceExtensionProperties(
     const char*, uint32_t*, VkExtensionProperties*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateInstanceVersion(uint32_t*);
 /* ── Instance-level surface / debug wrappers (translate VkInstance) ──── */
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroySurfaceKHR(VkInstance, VkSurfaceKHR, const VkAllocationCallbacks*);
+#ifdef VK_KHR_win32_surface
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateWin32SurfaceKHR(VkInstance, const VkWin32SurfaceCreateInfoKHR*, const VkAllocationCallbacks*, VkSurfaceKHR*);
+#endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDebugReportCallbackEXT(VkInstance, const VkDebugReportCallbackCreateInfoEXT*, const VkAllocationCallbacks*, VkDebugReportCallbackEXT*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyDebugReportCallbackEXT(VkInstance, VkDebugReportCallbackEXT, const VkAllocationCallbacks*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DebugReportMessageEXT(VkInstance, VkDebugReportFlagsEXT, VkDebugReportObjectTypeEXT, uint64_t, size_t, int32_t, const char*, const char*);

@@ -491,20 +491,32 @@ void stereo_populate_instance_dispatch(StereoInstance *si)
     LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfaceFormats2KHR);
     LOAD_INST(&si->real, ri, GetPhysicalDevicePresentRectanglesKHR);
     /* ── Win32 ───────────────────────────────────────────────────────────── */
+    #ifdef VK_KHR_win32_surface
     LOAD_INST(&si->real, ri, GetPhysicalDeviceWin32PresentationSupportKHR);
+#endif
     /* ── EXT extensions ──────────────────────────────────────────────────── */
+    #ifdef VK_EXT_full_screen_exclusive
     LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfacePresentModes2EXT);
+#endif
+    #ifdef VK_EXT_calibrated_timestamps
     LOAD_INST(&si->real, ri, GetPhysicalDeviceCalibrateableTimeDomainsEXT);
+#endif
     LOAD_INST(&si->real, ri, GetPhysicalDeviceMultisamplePropertiesEXT);
     /* ── NV extensions ───────────────────────────────────────────────────── */
     LOAD_INST(&si->real, ri, GetPhysicalDeviceExternalImageFormatPropertiesNV);
+    #ifdef VK_NV_cooperative_matrix
     LOAD_INST(&si->real, ri, GetPhysicalDeviceCooperativeMatrixPropertiesNV);
+#endif
+    #ifdef VK_NV_coverage_reduction_mode
     LOAD_INST(&si->real, ri, GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV);
+#endif
     /* NVX stored as PFN_vkVoidFunction — safe because we cast at call site */
     si->real.GetPhysicalDeviceGeneratedCommandsPropertiesNVX =
         g_real_giPA(ri, "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX");
     /* ── Instance-level functions ─────────────────────────────────────────── */
+    #ifdef VK_KHR_win32_surface
     LOAD_INST(&si->real, ri, CreateWin32SurfaceKHR);
+#endif
     LOAD_INST(&si->real, ri, CreateDebugReportCallbackEXT);
     LOAD_INST(&si->real, ri, DestroyDebugReportCallbackEXT);
     LOAD_INST(&si->real, ri, DebugReportMessageEXT);

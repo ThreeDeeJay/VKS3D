@@ -324,6 +324,7 @@ stereo_DestroySurfaceKHR(
 }
 
 /* ── vkCreateWin32SurfaceKHR ─────────────────────────────────────────────── */
+#ifdef VK_KHR_win32_surface
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateWin32SurfaceKHR(
     VkInstance instance,
@@ -337,6 +338,8 @@ stereo_CreateWin32SurfaceKHR(
     return si->real.CreateWin32SurfaceKHR(
         si->real_instance, pCreateInfo, pAllocator, pSurface);
 }
+#endif
+
 
 /* ── vkCreateDebugReportCallbackEXT ─────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL

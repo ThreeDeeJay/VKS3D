@@ -26,26 +26,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Vulkan SDK
-        uses: jakoch/install-vulkan-sdk-action@v1
-        with:
-          vulkan_version: 1.4.341.1
-          install_runtime: false
-          cache: true
-
-#      - name: Cache Vulkan SDK
-#        id: cache-vulkan-sdk
-#        uses: actions/cache@v5
-#        with:
-#          path: "C:\\VulkanSDK\\1.1.114.0"
-#          key: VulkanSDK
 #      - name: Install Vulkan SDK
-#        if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
-#        shell: powershell
-#        run: |
-#          echo "VULKAN_SDK=C:\VulkanSDK\1.1.114.0" >> $env:GITHUB_ENV
-#          Invoke-WebRequest -Method Get -Uri "https://github.com/ThreeDeeJay/VKQB3DV/releases/download/Dependencies/VulkanSDK-1.1.114-Installer.exe" -OutFile VulkanSDK.exe -UseBasicParsing
-#          Start-Process -Wait ./VulkanSDK.exe -ArgumentList "/S"
+#        uses: jakoch/install-vulkan-sdk-action@v1
+#        with:
+#          vulkan_version: 1.4.341.1
+#          install_runtime: false
+#          cache: true
+
+      - name: Cache Vulkan SDK
+        id: cache-vulkan-sdk
+        uses: actions/cache@v5
+        with:
+          path: "C:\\VulkanSDK\\1.1.130.0"
+          key: VulkanSDK
+      - name: Install Vulkan SDK
+        if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          echo "VULKAN_SDK=C:\VulkanSDK\1.1.130.0" >> $env:GITHUB_ENV
+          Invoke-WebRequest -Method Get -Uri "https://web.archive.org/web/20200412140548if_/https://sdk.lunarg.com/sdk/download/1.1.130.0/windows/VulkanSDK-1.1.130.0-Installer.exe" -OutFile VulkanSDK.exe -UseBasicParsing
+          Start-Process -Wait ./VulkanSDK.exe -ArgumentList "/S"
 
       - name: Configure (x64)
         run: |
@@ -79,26 +79,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Vulkan SDK
-        uses: jakoch/install-vulkan-sdk-action@v1
-        with:
-          vulkan_version: 1.4.341.1
-          install_runtime: false
-          cache: true
-
-#      - name: Cache Vulkan SDK
-#        id: cache-vulkan-sdk
-#        uses: actions/cache@v5
-#        with:
-#          path: "C:\\VulkanSDK\\1.1.114.0"
-#          key: VulkanSDK
 #      - name: Install Vulkan SDK
-#        if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
-#        shell: powershell
-#        run: |
-#          echo "VULKAN_SDK=C:\VulkanSDK\1.1.114.0" >> $env:GITHUB_ENV
-#          Invoke-WebRequest -Method Get -Uri "https://github.com/ThreeDeeJay/VKQB3DV/releases/download/Dependencies/VulkanSDK-1.1.114-Installer.exe" -OutFile VulkanSDK.exe -UseBasicParsing
-#          Start-Process -Wait ./VulkanSDK.exe -ArgumentList "/S"
+#        uses: jakoch/install-vulkan-sdk-action@v1
+#        with:
+#          vulkan_version: 1.4.341.1
+#          install_runtime: false
+#          cache: true
+
+      - name: Cache Vulkan SDK
+        id: cache-vulkan-sdk
+        uses: actions/cache@v5
+        with:
+          path: "C:\\VulkanSDK\\1.1.130.0"
+          key: VulkanSDK
+      - name: Install Vulkan SDK
+        if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          echo "VULKAN_SDK=C:\VulkanSDK\1.1.130.0" >> $env:GITHUB_ENV
+          Invoke-WebRequest -Method Get -Uri "https://web.archive.org/web/20200412140548if_/https://sdk.lunarg.com/sdk/download/1.1.130.0/windows/VulkanSDK-1.1.130.0-Installer.exe" -OutFile VulkanSDK.exe -UseBasicParsing
+          Start-Process -Wait ./VulkanSDK.exe -ArgumentList "/S"
 
       - name: Configure (x86)
         run: |

@@ -92,16 +92,26 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     PD_FN(GetPhysicalDeviceSurfaceFormats2KHR)
     PD_FN(GetPhysicalDevicePresentRectanglesKHR)
     /* ── Win32 ── */
+#ifdef VK_KHR_win32_surface
     PD_FN(GetPhysicalDeviceWin32PresentationSupportKHR)
+#endif
     /* ── EXT extensions ── */
+#ifdef VK_EXT_full_screen_exclusive
     PD_FN(GetPhysicalDeviceSurfacePresentModes2EXT)
+#endif
+#ifdef VK_EXT_calibrated_timestamps
     PD_FN(GetPhysicalDeviceCalibrateableTimeDomainsEXT)
+#endif
     PD_FN(GetPhysicalDeviceMultisamplePropertiesEXT)
     /* ── NV / NVX vendor extensions ── */
     PD_FN(GetPhysicalDeviceExternalImageFormatPropertiesNV)
     PD_FN(GetPhysicalDeviceGeneratedCommandsPropertiesNVX)
+#ifdef VK_NV_cooperative_matrix
     PD_FN(GetPhysicalDeviceCooperativeMatrixPropertiesNV)
+#endif
+#ifdef VK_NV_coverage_reduction_mode
     PD_FN(GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV)
+#endif
 #undef PD_FN
 
     /* ── KHR aliases — same underlying wrapper as the core 1.1 function ──── */
@@ -136,8 +146,10 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
      * receives si->real_instance, not our StereoInstance* wrapper. */
     if (!strcmp(name, "vkDestroySurfaceKHR"))
         return (PFN_vkVoidFunction)stereo_DestroySurfaceKHR;
+#ifdef VK_KHR_win32_surface
     if (!strcmp(name, "vkCreateWin32SurfaceKHR"))
         return (PFN_vkVoidFunction)stereo_CreateWin32SurfaceKHR;
+#endif
     if (!strcmp(name, "vkCreateDebugReportCallbackEXT"))
         return (PFN_vkVoidFunction)stereo_CreateDebugReportCallbackEXT;
     if (!strcmp(name, "vkDestroyDebugReportCallbackEXT"))

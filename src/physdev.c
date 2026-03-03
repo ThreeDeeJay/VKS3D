@@ -370,6 +370,7 @@ stereo_GetPhysicalDevicePresentRectanglesKHR(
 
 /* ── Win32 ───────────────────────────────────────────────────────────────── */
 
+#ifdef VK_KHR_win32_surface
 VKAPI_ATTR VkBool32 VKAPI_CALL
 stereo_GetPhysicalDeviceWin32PresentationSupportKHR(
     VkPhysicalDevice pd,
@@ -380,9 +381,12 @@ stereo_GetPhysicalDeviceWin32PresentationSupportKHR(
         return VK_FALSE;
     return _si->real.GetPhysicalDeviceWin32PresentationSupportKHR(_real, queueFamilyIndex);
 }
+#endif
+
 
 /* ── EXT extensions ──────────────────────────────────────────────────────── */
 
+#ifdef VK_EXT_full_screen_exclusive
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDeviceSurfacePresentModes2EXT(
     VkPhysicalDevice pd,
@@ -395,7 +399,10 @@ stereo_GetPhysicalDeviceSurfacePresentModes2EXT(
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     return _si->real.GetPhysicalDeviceSurfacePresentModes2EXT(_real, pSurfaceInfo, pCount, pModes);
 }
+#endif
 
+
+#ifdef VK_EXT_calibrated_timestamps
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
     VkPhysicalDevice pd,
@@ -407,6 +414,8 @@ stereo_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     return _si->real.GetPhysicalDeviceCalibrateableTimeDomainsEXT(_real, pCount, pDomains);
 }
+#endif
+
 
 VKAPI_ATTR void VKAPI_CALL
 stereo_GetPhysicalDeviceMultisamplePropertiesEXT(
@@ -436,6 +445,7 @@ stereo_GetPhysicalDeviceExternalImageFormatPropertiesNV(
         _real, fmt, type, tiling, usage, flags, externalHandleType, pProps);
 }
 
+#ifdef VK_NV_cooperative_matrix
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDeviceCooperativeMatrixPropertiesNV(
     VkPhysicalDevice pd,
@@ -447,7 +457,10 @@ stereo_GetPhysicalDeviceCooperativeMatrixPropertiesNV(
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     return _si->real.GetPhysicalDeviceCooperativeMatrixPropertiesNV(_real, pCount, pProps);
 }
+#endif
 
+
+#ifdef VK_NV_coverage_reduction_mode
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(
     VkPhysicalDevice pd,
@@ -460,6 +473,8 @@ stereo_GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(
     return _si->real.GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(
         _real, pCount, pCombinations);
 }
+#endif
+
 
 /* NVX: stored as PFN_vkVoidFunction because struct types were removed from
  * newer SDK versions.  Cast to a raw function pointer at call site.        */
