@@ -205,14 +205,7 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     if (!strcmp(name, "vkQueuePresentKHR"))
         return (PFN_vkVoidFunction)stereo_QueuePresentKHR;
 
-    /* Everything else: forward instance-level functions dynamically.
-     *
-     * SAFETY GUARD: if any vkGetPhysicalDevice* or vkEnumerateDevice* function
-     * slipped through the PD_FN table above, we must NOT forward it to the
-     * real ICD — that would leak a raw pointer that gets called with our
-     * we return real handles so the loader can initialise them properly.
-     * Return NULL instead; the loader will report the function as unsupported. */
-dynamic_lookup:
+    /* Everything else: forward instance-level functions dynamically. */
     if (si && name) {
         if (strncmp(name, "vkGetPhysicalDevice",           19) == 0 ||
             strncmp(name, "vkEnumerateDevice",             17) == 0 ||

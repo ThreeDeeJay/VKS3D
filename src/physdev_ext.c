@@ -219,7 +219,7 @@ stereo_EnumeratePhysicalDeviceGroups(
         for (uint32_t g = 0; g < *pCount; g++) {
             VkPhysicalDeviceGroupProperties *grp = &pProps[g];
             for (uint32_t p = 0; p < grp->physicalDeviceCount; p++)
-                stereo_physdev_register(grp->physicalDevices[p], _si);
+                stereo_physdev_register(grp->physicalDevices[p], si);
             /* physicalDevices[p] already holds the real handle — leave unchanged */
         }
     }
