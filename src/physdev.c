@@ -1,34 +1,30 @@
 /*
  * physdev.c — Physical device wrapper stubs
  *
- * VKS3D returns StereoPhysicalDevice* (cast to VkPhysicalDevice) to the
- * loader from vkEnumeratePhysicalDevices.  Every function whose first
- * argument is VkPhysicalDevice must therefore:
- *   1. Look up the real VkPhysicalDevice via stereo_physdev_from_handle()
- *   2. Forward the call to the real ICD using the real handle
+ * Real VkPhysicalDevice handles from the underlying ICD are returned directly
+ * to the Vulkan loader so the loader can properly initialize their dispatch
+ * tables (writing its dispatch pointer into handle[0]).  This is required
+ * for the NVIDIA driver to accept the handles in surface / swapchain queries.
  *
- * These are all thin stubs — no stereo logic lives here.  We cannot use
- * PASSTHROUGH_INST / raw real-ICD function pointers for these because the
- * loader would call the real ICD with VKS3D's handle, which the real ICD
- * does not recognise.
+ * We track the physdev→StereoInstance association in stereo.c via a flat map.
+ * LOOKUP_PD_R(pd) looks up _si from that map; _real = pd (the handle IS real).
  */
 
 #include <string.h>
 #include <stdlib.h>
 #include "stereo_icd.h"
 
-/* Convenience macro: look up real physdev, bail on unknown handle */
+/* Real physdevs are returned directly to the loader — pd IS the real handle.
+ * We just need to look up which StereoInstance owns this physdev. */
 #define LOOKUP_PD(pd) \
-    StereoPhysicalDevice *_sp = stereo_physdev_from_handle(pd); \
-    if (!_sp) return; \
-    StereoInstance *_si = _sp->instance; \
-    VkPhysicalDevice _real = _sp->real
+    StereoInstance *_si = stereo_si_from_physdev(pd); \
+    if (!_si) return; \
+    VkPhysicalDevice _real = (pd)
 
 #define LOOKUP_PD_R(pd, err) \
-    StereoPhysicalDevice *_sp = stereo_physdev_from_handle(pd); \
-    if (!_sp) return (err); \
-    StereoInstance *_si = _sp->instance; \
-    VkPhysicalDevice _real = _sp->real
+    StereoInstance *_si = stereo_si_from_physdev(pd); \
+    if (!_si) return (err); \
+    VkPhysicalDevice _real = (pd)
 
 /* ── Properties ─────────────────────────────────────────────────────────── */
 
@@ -183,13 +179,19 @@ stereo_GetPhysicalDeviceSurfaceSupportKHR(
 {
     STEREO_LOG("stereo_GetPhysicalDeviceSurfaceSupportKHR: pd=%p surface=%p", (void*)pd, (void*)(uintptr_t)surface);
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceSupportKHR: _real=%p _si=%p real_inst=%p",
+               (void*)_real, (void*)_si, (void*)_si->real_instance);
     if (!_si->real.GetPhysicalDeviceSurfaceSupportKHR) {
         STEREO_ERR("stereo_GetPhysicalDeviceSurfaceSupportKHR: real fn is NULL");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
     VkResult _r = _si->real.GetPhysicalDeviceSurfaceSupportKHR(
         _real, queueFamilyIndex, surface, pSupported);
-    if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfaceSupportKHR: real returned %d", (int)_r);
+    if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfaceSupportKHR: real returned %d"
+                       " (real_pd=%p surf=%p inst=%p fn=%p)",
+                       (int)_r, (void*)_real, (void*)(uintptr_t)surface,
+                       (void*)_si->real_instance,
+                       (void*)(uintptr_t)(uintptr_t)_si->real.GetPhysicalDeviceSurfaceSupportKHR);
     return _r;
 }
 
@@ -201,12 +203,17 @@ stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR(
 {
     STEREO_LOG("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: pd=%p surface=%p", (void*)pd, (void*)(uintptr_t)surface);
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    STEREO_LOG("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: _real=%p real_inst=%p",
+               (void*)_real, (void*)_si->real_instance);
     if (!_si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR) {
         STEREO_ERR("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: real fn is NULL");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
     VkResult _r = _si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR(_real, surface, pCaps);
-    if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: real returned %d (pd=%p surf=%p real=%p)", (int)_r, (void*)pd, (void*)(uintptr_t)surface, (void*)_real);
+    if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR: real returned %d"
+                       " (real_pd=%p surf=%p inst=%p)",
+                       (int)_r, (void*)_real, (void*)(uintptr_t)surface,
+                       (void*)_si->real_instance);
     return _r;
 }
 

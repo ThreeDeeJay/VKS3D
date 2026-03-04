@@ -30,8 +30,10 @@
 static StereoInstance        g_instances[MAX_INSTANCES];
 uint32_t                     g_instance_count = 0;
 
-static StereoPhysicalDevice  g_physdevs[MAX_PHYSICAL_DEVICES];
-static uint32_t              g_physdev_count = 0;
+/* Flat physdev→instance map (no wrapper structs — real physdevs returned to loader) */
+typedef struct { VkPhysicalDevice pd; StereoInstance *si; } PhysdevMapEntry;
+static PhysdevMapEntry  g_physdev_map[MAX_PHYSICAL_DEVICES];
+static uint32_t         g_physdev_count = 0;
 
 StereoDevice                 g_devices[MAX_DEVICES];
 uint32_t                     g_device_count = 0;
@@ -317,97 +319,59 @@ void stereo_instance_free(VkInstance h) {
 
 /* ── Physical device registry ────────────────────────────────────────────── */
 
-StereoPhysicalDevice *stereo_physdev_alloc(void) {
+/* ── Physical device registry ───────────────────────────────────────────────
+ *
+ * Real physdevs are returned directly to the loader so the loader can write
+ * its dispatch table into them.  We track the pd→StereoInstance association
+ * in a flat array.  Our physdev wrapper functions receive the real physdev
+ * handle from the loader and look up _si here; _real = pd (the handle itself).
+ */
+
+void stereo_physdev_register(VkPhysicalDevice pd, StereoInstance *si)
+{
     ensure_registry_init();
     stereo_mutex_lock(&g_registry_lock);
-    if (g_physdev_count >= MAX_PHYSICAL_DEVICES) {
-        stereo_mutex_unlock(&g_registry_lock); return NULL;
-    }
-    StereoPhysicalDevice *sp = &g_physdevs[g_physdev_count++];
-    memset(sp, 0, sizeof(*sp));
-    SET_LOADER_MAGIC_VALUE(sp);  /* required for dispatchable handle */
-    STEREO_LOG("stereo_physdev_alloc: allocated sp=%p (slot %u), loaderMagic=0x%llx",
-               (void*)sp, g_physdev_count - 1,
-               (unsigned long long)sp->loader_data.loaderMagic);
-    stereo_mutex_unlock(&g_registry_lock);
-    return sp;
-}
-StereoPhysicalDevice *stereo_physdev_from_real(VkPhysicalDevice real) {
-    /* Scan by real ICD handle — used during EnumeratePhysicalDevices wrapping */
-    ensure_registry_init();
-    stereo_mutex_lock(&g_registry_lock);
+    /* Update existing entry if already present */
     for (uint32_t i = 0; i < g_physdev_count; i++) {
-        if (g_physdevs[i].real == real) {
-            stereo_mutex_unlock(&g_registry_lock); return &g_physdevs[i];
-        }
-    }
-    stereo_mutex_unlock(&g_registry_lock);
-    return NULL;
-}
-
-StereoPhysicalDevice *stereo_physdev_from_handle(VkPhysicalDevice h) {
-    /*
-     * h is the StereoPhysicalDevice* we returned from
-     * stereo_EnumeratePhysicalDevices, cast to VkPhysicalDevice.
-     *
-     * After we return a physdev handle, the loader (ICD interface v5)
-     * writes its own dispatch pointer into sp->loader_data.loaderData.
-     * This overwrites loaderMagic, so we cannot use the magic value to
-     * validate the handle after the first dispatch setup.
-     *
-     * The correct fallback is to compare the POINTER ADDRESS of the
-     * cast result against each slot in our static array.  Since we
-     * always return &g_physdevs[i] cast to VkPhysicalDevice, the cast
-     * back always gives us the original pointer — regardless of whether
-     * the loader has since written dispatch into loader_data.
-     *
-     * DO NOT compare g_physdevs[i].real == h here: .real is the NVIDIA
-     * handle, but h is our OWN wrapper pointer (different value entirely).
-     */
-    if (!h) return NULL;
-    StereoPhysicalDevice *sp = (StereoPhysicalDevice *)(uintptr_t)h;
-
-    /* Fast path: magic still intact (first call, before loader writes dispatch) */
-    if (sp->loader_data.loaderMagic == ICD_LOADER_MAGIC)
-        return sp;
-
-    /* Slow path: loader overwrote loaderMagic — validate by address range */
-    ensure_registry_init();
-    stereo_mutex_lock(&g_registry_lock);
-    for (uint32_t i = 0; i < g_physdev_count; i++) {
-        if (&g_physdevs[i] == sp) {          /* address match, not .real match */
+        if (g_physdev_map[i].pd == pd) {
+            g_physdev_map[i].si = si;
             stereo_mutex_unlock(&g_registry_lock);
-            return &g_physdevs[i];
+            STEREO_LOG("stereo_physdev_register: updated pd=%p si=%p", (void*)pd, (void*)si);
+            return;
         }
     }
-    /* Dump diagnostics: the handle address, its first qword (loader magic / dispatch ptr),
-     * and every address we DO have so a mismatch is immediately visible in the log. */
-    uintptr_t magic_at_h = 0;
-    /* Safe read — if sp is a loader wrapper rather than our physdev, reading offset 0
-     * still gives us the dispatch/magic value which tells us what kind of object it is. */
-#ifdef _WIN32
-    __try {
-        magic_at_h = *(volatile uintptr_t *)(void *)sp;
-    } __except(1) {
-        magic_at_h = 0xDEADBEEFDEADBEEFull;
+    if (g_physdev_count >= MAX_PHYSICAL_DEVICES) {
+        STEREO_ERR("stereo_physdev_register: map full (%u entries)", g_physdev_count);
+        stereo_mutex_unlock(&g_registry_lock);
+        return;
     }
-#else
-    magic_at_h = *(uintptr_t *)(void *)sp;
-#endif
-    STEREO_ERR("stereo_physdev_from_handle: FAILED to recognise handle %p", (void*)h);
-    STEREO_ERR("  handle[0] (magic/dispatch) = 0x%llx  ICD_LOADER_MAGIC = 0x%llx",
-               (unsigned long long)magic_at_h,
-               (unsigned long long)ICD_LOADER_MAGIC);
-    STEREO_ERR("  g_physdev_count = %u", g_physdev_count);
-    for (uint32_t _i = 0; _i < g_physdev_count; _i++) {
-        STEREO_ERR("  g_physdevs[%u] = %p  (magic=0x%llx real=%p)",
-                   _i, (void*)&g_physdevs[_i],
-                   (unsigned long long)g_physdevs[_i].loader_data.loaderMagic,
-                   (void*)g_physdevs[_i].real);
+    g_physdev_map[g_physdev_count].pd = pd;
+    g_physdev_map[g_physdev_count].si = si;
+    g_physdev_count++;
+    stereo_mutex_unlock(&g_registry_lock);
+    STEREO_LOG("stereo_physdev_register: registered pd=%p si=%p (slot %u)",
+               (void*)pd, (void*)si, g_physdev_count - 1);
+}
+
+StereoInstance *stereo_si_from_physdev(VkPhysicalDevice pd)
+{
+    if (!pd) return NULL;
+    ensure_registry_init();
+    stereo_mutex_lock(&g_registry_lock);
+    for (uint32_t i = 0; i < g_physdev_count; i++) {
+        if (g_physdev_map[i].pd == pd) {
+            StereoInstance *si = g_physdev_map[i].si;
+            stereo_mutex_unlock(&g_registry_lock);
+            return si;
+        }
     }
     stereo_mutex_unlock(&g_registry_lock);
+    STEREO_ERR("stereo_si_from_physdev: FAILED to find pd=%p (count=%u)", (void*)pd, g_physdev_count);
+    for (uint32_t i = 0; i < g_physdev_count; i++)
+        STEREO_ERR("  map[%u] pd=%p si=%p", i, (void*)g_physdev_map[i].pd, (void*)g_physdev_map[i].si);
     return NULL;
 }
+
 
 /* ── Device registry ─────────────────────────────────────────────────────── */
 

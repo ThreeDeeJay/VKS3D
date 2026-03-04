@@ -55,7 +55,7 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
      */
 /* PD_FN: return our wrapper stub for any function whose first argument is
  * VkPhysicalDevice.  We MUST NOT return the real ICD's raw pointer here:
- * the loader calls it with our StereoPhysicalDevice* wrapper handle, not
+ * the loader calls it with the real physdev handle — this is fine because
  * the real ICD's VkPhysicalDevice.  The real ICD would dereference our
  * wrapper as its own internal struct, corrupt heap state, and crash.      */
 #define PD_FN(fn) if (!strcmp(name, "vk"#fn)) return (PFN_vkVoidFunction)stereo_##fn;
@@ -210,7 +210,7 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
      * SAFETY GUARD: if any vkGetPhysicalDevice* or vkEnumerateDevice* function
      * slipped through the PD_FN table above, we must NOT forward it to the
      * real ICD — that would leak a raw pointer that gets called with our
-     * StereoPhysicalDevice* wrapper handle, corrupting the real ICD's state.
+     * we return real handles so the loader can initialise them properly.
      * Return NULL instead; the loader will report the function as unsupported. */
 dynamic_lookup:
     if (si && name) {

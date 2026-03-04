@@ -18,7 +18,6 @@
 StereoDevice *stereo_device_alloc(void);
 void          stereo_device_free(VkDevice h);
 void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst);
-extern StereoPhysicalDevice *stereo_physdev_from_handle(VkPhysicalDevice h);
 
 /*
  * Candidate device extensions VKS3D wants to enable.
@@ -129,8 +128,7 @@ static VkResult create_stereo_ubo(StereoDevice *sd)
 
     /* Find HOST_VISIBLE | HOST_COHERENT memory type */
     VkPhysicalDeviceMemoryProperties mp;
-    sd->phys_dev->instance->real.GetPhysicalDeviceMemoryProperties(
-        sd->phys_dev->real, &mp);
+    sd->si->real.GetPhysicalDeviceMemoryProperties(sd->real_physdev, &mp);
 
     uint32_t mem_type = UINT32_MAX;
     VkMemoryPropertyFlags needed =
@@ -183,12 +181,12 @@ stereo_CreateDevice(
     VkDevice                     *pDevice)
 {
     STEREO_LOG("stereo_CreateDevice: called physicalDevice=%p", (void*)physicalDevice);
-    StereoPhysicalDevice *sp = stereo_physdev_from_handle(physicalDevice);
-    if (!sp) {
-        STEREO_ERR("stereo_CreateDevice: unknown physical device handle %p", (void*)physicalDevice);
+    StereoInstance *sp_si = stereo_si_from_physdev(physicalDevice);
+    if (!sp_si) {
+        STEREO_ERR("stereo_CreateDevice: unknown physdev handle %p", (void*)physicalDevice);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    STEREO_LOG("stereo_CreateDevice: sp=%p real_pd=%p", (void*)sp, (void*)sp->real);
+    STEREO_LOG("stereo_CreateDevice: physicalDevice=%p si=%p", (void*)physicalDevice, (void*)sp_si);
 
     /* ── Inject VkPhysicalDeviceMultiviewFeatures ─────────────────────── */
     VkPhysicalDeviceMultiviewFeatures multiview_feat = {
@@ -227,17 +225,17 @@ stereo_CreateDevice(
     /* Inject extensions — only those the device actually supports,
      * respecting what is already core for the device's API version */
     VkPhysicalDeviceProperties phys_props;
-    sp->instance->real.GetPhysicalDeviceProperties(sp->real, &phys_props);
+    sp_si->real.GetPhysicalDeviceProperties(physicalDevice, &phys_props);
     uint32_t dev_api = phys_props.apiVersion;
 
     PFN_vkEnumerateDeviceExtensionProperties enumDevExts =
         (PFN_vkEnumerateDeviceExtensionProperties)(uintptr_t)
-        sp->instance->real_get_instance_proc_addr(
-            sp->instance->real_instance, "vkEnumerateDeviceExtensionProperties");
+        sp_si->real_get_instance_proc_addr(
+            sp_si->real_instance, "vkEnumerateDeviceExtensionProperties");
 
     uint32_t total_exts = 0;
     const char **new_exts = enumDevExts
-        ? stereo_filter_extensions(sp->real, enumDevExts, dev_api,
+        ? stereo_filter_extensions(physicalDevice, enumDevExts, dev_api,
                                     dci.ppEnabledExtensionNames,
                                     dci.enabledExtensionCount,
                                     &total_exts)
@@ -250,8 +248,8 @@ stereo_CreateDevice(
 
     /* ── Create real device ──────────────────────────────────────────── */
     VkDevice real_dev = VK_NULL_HANDLE;
-    VkResult res = sp->instance->real.CreateDevice(
-        sp->real, &dci, pAllocator, &real_dev);
+    VkResult res = sp_si->real.CreateDevice(
+        physicalDevice, &dci, pAllocator, &real_dev);
     free(new_exts);
 
     if (res != VK_SUCCESS) {
@@ -267,10 +265,11 @@ stereo_CreateDevice(
     }
 
     sd->real_device = real_dev;
-    sd->phys_dev    = sp;
-    sd->stereo      = sp->instance->stereo;
+    sd->si          = sp_si;
+    sd->real_physdev = physicalDevice;
+    sd->stereo      = sp_si->stereo;
 
-    stereo_populate_device_dispatch(sd, sp->instance->real_instance);
+    stereo_populate_device_dispatch(sd, sp_si->real_instance);
 
     /* Allocate stereo UBO */
     if (sd->stereo.enabled) {

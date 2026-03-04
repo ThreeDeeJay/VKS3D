@@ -26,7 +26,6 @@ bool stereo_load_real_icd(void);
 PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void);
 StereoInstance *stereo_instance_alloc(void);
 void stereo_populate_instance_dispatch(StereoInstance *si);
-StereoPhysicalDevice *stereo_physdev_alloc(void);
 
 /* ── vkEnumerateInstanceVersion ─────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -270,23 +269,16 @@ stereo_EnumeratePhysicalDevices(
         si->real_instance, pPhysicalDeviceCount, pPhysicalDevices);
 
     if (res == VK_SUCCESS && pPhysicalDevices) {
-        /* Wrap each real VkPhysicalDevice in a StereoPhysicalDevice and return
-         * OUR handle (StereoPhysicalDevice*) to the loader.
-         * We must not return the real ICD's handle: the loader would overwrite
-         * its first bytes, corrupting the real ICD's physical device struct. */
+        /* Register each real physdev in our pd→si map and return it DIRECTLY
+         * to the loader.  The loader will write its own dispatch table into
+         * the physdev's first 8 bytes (VK_LOADER_DATA), which is exactly what
+         * the Vulkan ICD spec requires and what the driver expects before
+         * accepting the handle in surface / swapchain queries. */
         for (uint32_t i = 0; i < *pPhysicalDeviceCount; i++) {
-            VkPhysicalDevice real_pd = pPhysicalDevices[i];
-            /* Check if already wrapped (handles are stable across calls) */
-            StereoPhysicalDevice *sp = stereo_physdev_from_real(real_pd);
-            if (!sp) {
-                sp = stereo_physdev_alloc();
-                if (sp) {
-                    sp->real     = real_pd;
-                    sp->instance = si;
-                }
-            }
-            /* Return our wrapper pointer as the VkPhysicalDevice handle */
-            pPhysicalDevices[i] = sp ? (VkPhysicalDevice)(uintptr_t)sp : real_pd;
+            STEREO_LOG("stereo_EnumeratePhysicalDevices: physdev[%u] = %p (registering → si=%p)",
+                       i, (void*)pPhysicalDevices[i], (void*)si);
+            stereo_physdev_register(pPhysicalDevices[i], si);
+            /* pPhysicalDevices[i] is unchanged — real handle passed to loader */
         }
     }
 

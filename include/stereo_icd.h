@@ -299,12 +299,9 @@ typedef struct StereoInstance {
     PFN_vkGetInstanceProcAddr real_get_instance_proc_addr;
 } StereoInstance;
 
-typedef struct StereoPhysicalDevice {
-    /* VK_LOADER_DATA first — same requirement as StereoInstance */
-    VK_LOADER_DATA     loader_data;
-    VkPhysicalDevice   real;
-    StereoInstance    *instance;
-} StereoPhysicalDevice;
+/* No StereoPhysicalDevice wrapper — real physdevs are returned directly to the
+ * loader so the loader can properly initialize their dispatch tables.  The
+ * association physdev→StereoInstance is tracked in stereo.c via a flat map. */
 
 typedef struct StereoSwapchain {
     VkSwapchainKHR    real_swapchain;
@@ -341,7 +338,8 @@ typedef struct StereoRenderPassInfo {
 
 typedef struct StereoDevice {
     VkDevice               real_device;
-    StereoPhysicalDevice  *phys_dev;
+    StereoInstance        *si;           /* owning instance (replaces phys_dev->instance) */
+    VkPhysicalDevice       real_physdev; /* raw ICD physdev handle */
     RealDeviceDispatch     real;
     StereoConfig           stereo;
     VkBuffer               stereo_ubo;
@@ -363,8 +361,7 @@ typedef struct StereoUBO {
 
 /* ── Object lookup helpers ────────────────────────────────────────────────── */
 StereoInstance         *stereo_instance_from_handle(VkInstance h);
-StereoPhysicalDevice   *stereo_physdev_from_handle(VkPhysicalDevice h);
-StereoPhysicalDevice   *stereo_physdev_from_real(VkPhysicalDevice real);
+StereoInstance         *stereo_si_from_physdev(VkPhysicalDevice pd);
 StereoDevice           *stereo_device_from_handle(VkDevice h);
 StereoSwapchain        *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc);
 StereoRenderPassInfo   *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp);
@@ -373,7 +370,7 @@ PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void);
 PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
 /* Object lifecycle helpers */
 void                    stereo_instance_free(VkInstance h);
-StereoPhysicalDevice   *stereo_physdev_alloc(void);
+void                    stereo_physdev_register(VkPhysicalDevice pd, StereoInstance *si);
 StereoDevice           *stereo_device_alloc(void);
 
 /* ── Forward declarations ────────────────────────────────────────────────── */

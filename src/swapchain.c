@@ -101,8 +101,8 @@ static uint32_t find_memory_type(
     VkMemoryPropertyFlags props)
 {
     VkPhysicalDeviceMemoryProperties mp;
-    sd->phys_dev->instance->real.GetPhysicalDeviceMemoryProperties(
-        sd->phys_dev->real, &mp);
+    sd->si->real.GetPhysicalDeviceMemoryProperties(
+        sd->real_physdev, &mp);
     for (uint32_t i = 0; i < mp.memoryTypeCount; i++) {
         if ((type_bits & (1u << i)) &&
             (mp.memoryTypes[i].propertyFlags & props) == props)

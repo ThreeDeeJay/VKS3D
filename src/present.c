@@ -31,15 +31,15 @@ static VkResult ensure_composite_resources(StereoDevice *sd, StereoSwapchain *sc
     /* ── Command pool ────────────────────────────────────────────── */
     /* Find a queue family with graphics or transfer capability */
     uint32_t qf_count = 0;
-    sd->phys_dev->instance->real.GetPhysicalDeviceQueueFamilyProperties(
-        sd->phys_dev->real, &qf_count, NULL);
+    sd->si->real.GetPhysicalDeviceQueueFamilyProperties(
+        sd->real_physdev, &qf_count, NULL);
 
     VkQueueFamilyProperties *qfps =
         malloc(qf_count * sizeof(VkQueueFamilyProperties));
     if (!qfps) return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-    sd->phys_dev->instance->real.GetPhysicalDeviceQueueFamilyProperties(
-        sd->phys_dev->real, &qf_count, qfps);
+    sd->si->real.GetPhysicalDeviceQueueFamilyProperties(
+        sd->real_physdev, &qf_count, qfps);
 
     uint32_t qf_idx = 0;
     for (uint32_t i = 0; i < qf_count; i++) {

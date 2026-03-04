@@ -57,17 +57,16 @@ static inline PFN_vkVoidFunction ext_fn(StereoInstance *si, const char *name)
     return fn;
 }
 
+/* Real physdevs passed through to loader — pd IS the real handle */
 #define LOOKUP_PD(pd) \
-    StereoPhysicalDevice *_sp = stereo_physdev_from_handle(pd); \
-    if (!_sp) return; \
-    StereoInstance  *_si   = _sp->instance; \
-    VkPhysicalDevice _real = _sp->real
+    StereoInstance  *_si   = stereo_si_from_physdev(pd); \
+    if (!_si) return; \
+    VkPhysicalDevice _real = (pd)
 
 #define LOOKUP_PD_R(pd, err) \
-    StereoPhysicalDevice *_sp = stereo_physdev_from_handle(pd); \
-    if (!_sp) return (err); \
-    StereoInstance  *_si   = _sp->instance; \
-    VkPhysicalDevice _real = _sp->real
+    StereoInstance  *_si   = stereo_si_from_physdev(pd); \
+    if (!_si) return (err); \
+    VkPhysicalDevice _real = (pd)
 
 /* ── Vulkan 1.1 KHR aliases (same ABI as core — just delegate) ──────────── */
 
@@ -215,20 +214,13 @@ stereo_EnumeratePhysicalDeviceGroups(
 
     VkResult res = fn(si->real_instance, pCount, pProps);
 
-    /* Replace real physdev handles with our wrapper handles */
+    /* Register any new physdevs found in the groups, then return real handles */
     if (res == VK_SUCCESS && pProps) {
         for (uint32_t g = 0; g < *pCount; g++) {
             VkPhysicalDeviceGroupProperties *grp = &pProps[g];
-            for (uint32_t p = 0; p < grp->physicalDeviceCount; p++) {
-                VkPhysicalDevice real_pd = grp->physicalDevices[p];
-                StereoPhysicalDevice *sp = stereo_physdev_from_real(real_pd);
-                if (!sp) {
-                    sp = stereo_physdev_alloc();
-                    if (sp) { sp->real = real_pd; sp->instance = si; }
-                }
-                if (sp)
-                    grp->physicalDevices[p] = (VkPhysicalDevice)(uintptr_t)sp;
-            }
+            for (uint32_t p = 0; p < grp->physicalDeviceCount; p++)
+                stereo_physdev_register(grp->physicalDevices[p], _si);
+            /* physicalDevices[p] already holds the real handle — leave unchanged */
         }
     }
     return res;
