@@ -36,7 +36,7 @@ jobs:
     steps:
 
     - name: Clone repo and submodules
-      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules #--depth 1 - Fetches entire commit history but breaks commit count
+      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules
 
     - name: Get current date, commit hash and count
       run: |
@@ -80,7 +80,7 @@ jobs:
           build/tests/${{matrix.Configuration}}/test_spirv_patch.exe
 
   Release:
-    name: Package release
+    name: Release
     runs-on: windows-latest
     needs: Build
     steps:
@@ -108,10 +108,7 @@ jobs:
           name: ${{env.Title}}-Win64-Release
           path: Artifacts/
 
-      - name: List files
-        run: ls -R
-
-      - name: Copy manifests and scripts
+      - name: Deploy
         run: |
           mkdir "Release"
           cp "Artifacts\Release\VKS3D_x86.dll" "Release/VKS3D_x86.dll"
