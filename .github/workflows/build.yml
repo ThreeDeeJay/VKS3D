@@ -16,7 +16,7 @@ on:
 
 jobs:
   Windows:
-    name: ${{matrix.Settings.Name}}
+    name: ${{matrix.Settings.Name}}-${{matrix.Configuration}}
     runs-on: windows-2022
     strategy:
       matrix:
