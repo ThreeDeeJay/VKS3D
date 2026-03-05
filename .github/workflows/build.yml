@@ -4,8 +4,6 @@ name: Build
 env:
   GH_TOKEN: ${{github.token}}
   Branch: ${{github.ref_name}}
-  Platform: Win32, x64
-  Configuration: Release, Debug
   Artifacts: build
   Title: ${{github.event.repository.name}}
   Executable: ${{github.event.repository.name}}.exe # *
@@ -40,8 +38,21 @@ jobs:
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
         echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
 
+    - name: Install Vulkan SDK
+      uses: jakoch/install-vulkan-sdk-action@v1
+      with:
+        vulkan_version: 1.4.341.1
+        install_runtime: false
+        cache: true
+
     - name: Configure
-      run: cmake -A "${{matrix.Platform}}" -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.Configuration}} #-DCMAKE_PREFIX_PATH=vcpkg\installed\x64-windows
+      run: >
+        cmake -A "${{matrix.Platform}}"
+        -B ${{github.workspace}}/build 
+        -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
+        -DVKS3D_BUILD_TESTS=ON
+        -DVKS3D_BUILD_DEMO=OFF
+        -DSTEREO_BUILD_DEMO=ON
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{matrix.Configuration}}
@@ -49,36 +60,18 @@ jobs:
     - name: List files
       run: ls -R
 
-    - name: Upload artifacts to GitHub
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: "${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}"
-        path: "${{github.workspace}}/${{env.Artifacts}}/"
-
-    - name: Compress artifacts
-      if: github.event_name == 'push'
-      run: |
-        mkdir ${{matrix.Configuration}}
-        7z a "${{matrix.Configuration}}/${{env.Title}}.zip" "${{github.workspace}}/${{env.Artifacts}}/*" -mx=9
-        cp "${{matrix.Configuration}}/${{env.Title}}.zip" "${{matrix.Configuration}}/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
-
-    - name: Purge tag - latest-${{env.Branch}}
-      if: github.event_name == 'push'
-      run: |
-        gh release delete latest-${{env.Branch}} --repo ${{github.repository}} --cleanup-tag --yes || true
-
-    - name: ${{matrix.Configuration}} - archive-${{env.Branch}}
-      if: github.event_name == 'push'
-      run: |
-        gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
-        Build logs: https://github.com/${{github.repository}}/actions" || true
-        gh release edit archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
-        Build logs: https://github.com/${{github.repository}}/actions" || true
-        gh release upload archive-${{env.Branch}} --repo ${{github.repository}} --clobber "${{matrix.Configuration}}/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
-
-    - name: ${{matrix.Configuration}} - latest-${{env.Branch}}
-      if: github.event_name == 'push'
-      run: |
-        gh release create latest-${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --generate-notes --latest=true --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
-        Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
-        gh release upload latest-${{env.Branch}} --repo ${{github.repository}} --clobber "${{matrix.Configuration}}/${{env.Title}}.zip"
+        name: ${{env.Title}}-${{matrix.Platform}}-${{matrix.Configuration}}
+        path: |
+          build/${{matrix.Configuration}}/VKS3D_x86.dll
+          build/${{matrix.Configuration}}/VKS3D_x64.dll
+          build/${{matrix.Configuration}}/vks3d_diag.exe
+          build/${{matrix.Configuration}}/test_stereo_math.exe
+          build/${{matrix.Configuration}}/test_spirv_patch.exe
+          manifest/VKS3D_x86.json
+          manifest/VKS3D_x64.json
+          scripts/install.bat
+          scripts/uninstall.bat
+          scripts/Install-VKS3D.ps1
