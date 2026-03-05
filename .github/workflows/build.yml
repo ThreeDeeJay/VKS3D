@@ -76,8 +76,8 @@ jobs:
         path: |
           build/${{matrix.Configuration}}/VKS3D_${{matrix.Settings.Architecture}}.dll
           build/${{matrix.Configuration}}/vks3d_diag.exe
-          build/tests/test_stereo_math.exe
-          build/tests/test_spirv_patch.exe
+          build/tests/${{matrix.Configuration}}/test_stereo_math.exe
+          build/tests/${{matrix.Configuration}}/test_spirv_patch.exe
 
   Release:
     name: Package release
