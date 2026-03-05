@@ -52,6 +52,7 @@ jobs:
         vulkan_version: 1.3.296.0
         install_runtime: false
         cache: true
+        optional_components: com.lunarg.vulkan.32bit
 
     - name: Configure
       run: >
