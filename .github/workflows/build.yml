@@ -52,7 +52,7 @@ jobs:
           cmake -B build_x64 -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DVKS3D_BUILD_TESTS=ON `
-            -DVKS3D_BUILD_DEMO=ON `
+            -DVKS3D_BUILD_DEMO=OFF `
             -DSTEREO_BUILD_DEMO=ON
 
       - name: Build (x64)
@@ -69,6 +69,8 @@ jobs:
           path: |
             build_x64/Release/VKS3D_x64.dll
             build_x64/Release/vks3d_diag.exe
+            build_x64/Release/test_stereo_math.exe
+            build_x64/Release/test_spirv_patch.exe
             manifest/VKS3D_x64.json
             scripts/install.bat
             scripts/uninstall.bat
@@ -107,7 +109,7 @@ jobs:
           cmake -B build_x86 -A Win32 `
             -DCMAKE_BUILD_TYPE=Release `
             -DVKS3D_BUILD_TESTS=ON `
-            -DVKS3D_BUILD_DEMO=ON `
+            -DVKS3D_BUILD_DEMO=OFF `
             -DSTEREO_BUILD_DEMO=ON
 
       - name: Build (x86)
@@ -161,6 +163,8 @@ jobs:
           Copy-Item artifacts\build_x86\Release\VKS3D_x86.dll dist\
           Copy-Item artifacts\build_x64\Release\VKS3D_x64.dll dist\
           Copy-Item artifacts\build_x64\Release\vks3d_diag.exe dist\
+          Copy-Item artifacts\build_x64\Release\test_stereo_math.exe dist\
+          Copy-Item artifacts\build_x64\Release\test_spirv_patch.exe dist\
           Copy-Item manifest\VKS3D_x64.json dist\
           Copy-Item manifest\VKS3D_x86.json dist\
           Copy-Item scripts\install.bat      dist\
