@@ -77,19 +77,23 @@ endif()
 #   - Registry ICD discovery
 #   - Render pass intercept verification
 # Built unconditionally alongside the DLL (no separate option needed).
+# vks3d_diag loads Vulkan at runtime via LoadLibrary/dlopen -- no import lib.
+# We only need Vulkan headers (for type definitions), not the link library.
+# This avoids the x64-only Lib/vulkan-1.lib vs x86 Lib32/vulkan-1.lib problem.
 add_executable(vks3d_diag vks3d_diag.c)
 target_include_directories(vks3d_diag PRIVATE ${TEST_INCLUDE_DIRS})
 target_compile_definitions(vks3d_diag PRIVATE ${TEST_COMPILE_DEFS})
 if(WIN32)
-    target_link_libraries(vks3d_diag PRIVATE Vulkan::Vulkan advapi32)
+    # advapi32 for registry access; no vulkan-1.lib (dynamic loading)
+    target_link_libraries(vks3d_diag PRIVATE advapi32)
     if(MSVC)
-        target_compile_options(vks3d_diag PRIVATE /std:c11 /W3 /wd4996)
+        target_compile_options(vks3d_diag PRIVATE /std:c11 /W3 /wd4996 /wd4005)
     endif()
-    # Place the diag tool next to the DLL in the output directory
     set_target_properties(vks3d_diag PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
 else()
-    target_link_libraries(vks3d_diag PRIVATE Vulkan::Vulkan dl pthread)
+    # dl for dlopen/dlsym; no -lvulkan (dynamic loading)
+    target_link_libraries(vks3d_diag PRIVATE dl)
     target_compile_options(vks3d_diag PRIVATE -Wall -Wno-unused-parameter)
 endif()

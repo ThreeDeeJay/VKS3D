@@ -13,7 +13,6 @@
  */
 
 #version 450
-#extension GL_KHR_vulkan_glsl : enable
 
 /*
  * The stereo render target — a 2D array image with 2 layers.
