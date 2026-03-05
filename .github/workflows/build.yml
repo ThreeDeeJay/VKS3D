@@ -1,211 +1,84 @@
+#Based on template from: https://github.com/ThreeDeeJay/GitHub-Actions-build-templates/blob/main/Windows-CMake.yml
 name: Build
 
 env:
-  GITHUB_TOKEN: ${{github.token}}
   GH_TOKEN: ${{github.token}}
   Branch: ${{github.ref_name}}
-  Platform: Any CPU
-  Configuration: Release
-  Artifacts: dist
+  Platform: Win32, x64
+  Configuration: Release, Debug
+  Artifacts: build
   Title: ${{github.event.repository.name}}
+  Executable: ${{github.event.repository.name}}.exe # *
+#  DXSDK_DIR: C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\
+#  VULKAN_VERSION: 1.1.130.0
 
 on:
   push:
-    branches: main
+    Branches: $Branch
   pull_request:
-    branches: main
-  release:
-    types: created
-  workflow_dispatch: 
+    Branches: $Branch
+  workflow_dispatch:
 
 jobs:
-  # ── Windows MSVC x64 ───────────────────────────────────────────────────────
-  build-windows-x64:
-    name: Windows x64 (MSVC)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+  ${{env.Platform}}-${{env.Configuration}}:
+    strategy:
+      matrix:
+        Platform: [${{env.Platform}}]
+        Configuration: [${{env.Configuration}}]
 
-      - name: Install Vulkan SDK
-        uses: jakoch/install-vulkan-sdk-action@v1
-        with:
-          vulkan_version: 1.4.341.1
-          install_runtime: false
-          cache: true
-
-#      - name: Cache Vulkan SDK
-#        id: cache-vulkan-sdk
-#        uses: actions/cache@v5
-#        with:
-#          path: "C:\\VulkanSDK\\1.1.130.0"
-#          key: VulkanSDK
-#      - name: Install Vulkan SDK
-#        if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
-#        shell: powershell
-#        run: |
-#          echo "VULKAN_SDK=C:\VulkanSDK\1.1.130.0" >> $env:GITHUB_ENV
-#          Invoke-WebRequest -Method Get -Uri "https://web.archive.org/web/20200412140548if_/https://sdk.lunarg.com/sdk/download/1.1.130.0/windows/VulkanSDK-1.1.130.0-Installer.exe" -OutFile VulkanSDK.exe -UseBasicParsing
-#          Start-Process -Wait ./VulkanSDK.exe -ArgumentList "/S"
-
-      - name: Configure (x64)
-        run: |
-          cmake -B build_x64 -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DVKS3D_BUILD_TESTS=ON `
-            -DVKS3D_BUILD_DEMO=OFF `
-            -DSTEREO_BUILD_DEMO=ON
-
-      - name: Build (x64)
-        run: cmake --build build_x64 --config Release --parallel
-
-      - name: Test (x64)
-        working-directory: build_x64
-        run: ctest -C Release --output-on-failure
-
-      - name: Upload x64 artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: VKS3D-windows-x64
-          path: |
-            build_x64/Release/VKS3D_x64.dll
-            build_x64/Release/vks3d_diag.exe
-            build_x64/Release/test_stereo_math.exe
-            build_x64/Release/test_spirv_patch.exe
-            manifest/VKS3D_x64.json
-            scripts/install.bat
-            scripts/uninstall.bat
-            scripts/Install-VKS3D.ps1
-
-  # ── Windows MSVC x86 ───────────────────────────────────────────────────────
-  build-windows-x86:
-    name: Windows x86 (MSVC)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Vulkan SDK
-        uses: jakoch/install-vulkan-sdk-action@v1
-        with:
-          vulkan_version: 1.4.341.1
-          install_runtime: false
-          cache: true
-
-#      - name: Cache Vulkan SDK
-#        id: cache-vulkan-sdk
-#        uses: actions/cache@v5
-#        with:
-#          path: "C:\\VulkanSDK\\1.1.130.0"
-#          key: VulkanSDK
-#      - name: Install Vulkan SDK
-#        if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
-#        shell: powershell
-#        run: |
-#          echo "VULKAN_SDK=C:\VulkanSDK\1.1.130.0" >> $env:GITHUB_ENV
-#          Invoke-WebRequest -Method Get -Uri "https://web.archive.org/web/20200412140548if_/https://sdk.lunarg.com/sdk/download/1.1.130.0/windows/VulkanSDK-1.1.130.0-Installer.exe" -OutFile VulkanSDK.exe -UseBasicParsing
-#          Start-Process -Wait ./VulkanSDK.exe -ArgumentList "/S"
-
-      - name: Configure (x86)
-        run: |
-          cmake -B build_x86 -A Win32 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DVKS3D_BUILD_TESTS=ON `
-            -DVKS3D_BUILD_DEMO=OFF `
-            -DSTEREO_BUILD_DEMO=ON
-
-      - name: Build (x86)
-        run: cmake --build build_x86 --config Release --parallel
-
-      - name: Test (x86)
-        working-directory: build_x86
-        run: ctest -C Release --output-on-failure
-
-      - name: Upload x86 artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: VKS3D-windows-x86
-          path: |
-            build_x86/Release/VKS3D_x86.dll
-            manifest/VKS3D_x86.json
-
-  # ── Package both into a single release ZIP ─────────────────────────────────
-  package:
-    name: Package release
-    runs-on: windows-latest
-    needs: [ build-windows-x64, build-windows-x86 ]
-#    if: github.event_name == 'release'
+    runs-on: windows-2022
     steps:
 
-      - name: Clone repo and submodules
-        run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules
+    - name: Clone repo and submodules
+      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules #--depth 1 - Fetches entire commit history but breaks commit count
 
-      - name: Get current date, commit hash and count
-        run: |
-          echo "FirstCommitHash=$(git rev-list --max-parents=0 HEAD --first-parent)" >> $env:GITHUB_ENV
-          echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
-          echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
-          echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
-          echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
+    - name: Get current date, commit hash and count
+      run: |
+        echo "FirstCommitHash=$(git rev-list --max-parents=0 HEAD --first-parent)" >> $env:GITHUB_ENV
+        echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
+        echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
+        echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+        echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
 
-      - name: Download x64
-        uses: actions/download-artifact@v4
-        with:
-          name: VKS3D-windows-x64
-          path: artifacts/
+    - name: Configure
+      run: cmake -A "${{matrix.Platform}}" -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.Configuration}} #-DCMAKE_PREFIX_PATH=vcpkg\installed\x64-windows
 
-      - name: Download x86
-        uses: actions/download-artifact@v4
-        with:
-          name: VKS3D-windows-x86
-          path: artifacts/
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{matrix.Configuration}}
 
-      - name: List files
-        run: ls -R
+    - name: List files
+      run: ls -R
 
-      - name: Copy manifests and scripts
-        run: |
-          Copy-Item artifacts\build_x64\Release\VKS3D_x64.dll dist\
-          Copy-Item artifacts\build_x86\Release\VKS3D_x86.dll dist\
-          Copy-Item artifacts\build_x64\Release\vks3d_diag.exe dist\
-          Copy-Item artifacts\build_x64\Release\test_stereo_math.exe dist\
-          Copy-Item artifacts\build_x64\Release\test_spirv_patch.exe dist\
-          Copy-Item manifest\VKS3D_x64.json dist\
-          Copy-Item manifest\VKS3D_x86.json dist\
-          Copy-Item scripts\install.bat      dist\
-          Copy-Item scripts\uninstall.bat    dist\
-          Copy-Item scripts\Install-VKS3D.ps1 dist\
-          Copy-Item LICENSE                  dist\
-          Copy-Item README.md                dist\
+    - name: Upload artifacts to GitHub
+      uses: actions/upload-artifact@v4
+      with:
+        name: "${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}"
+        path: "${{github.workspace}}/${{env.Artifacts}}/"
 
-      - name: Upload artifacts to GitHub
-        uses: actions/upload-artifact@v4
-        with:
-          name: "${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}"
-          path: "${{github.workspace}}/${{env.Artifacts}}/"
-  
-      - name: Compress artifacts
-        if: github.event_name == 'push'
-        run: |
-          mkdir Release
-          7z a "Release/${{env.Title}}.zip" "${{github.workspace}}/${{env.Artifacts}}/*" -mx=9
-          cp "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
-  
-      - name: Purge tag - latest-${{env.Branch}}
-        if: github.event_name == 'push'
-        run: |
-          gh release delete latest-${{env.Branch}} --repo ${{github.repository}} --cleanup-tag --yes || true
-  
-      - name: Release - archive-${{env.Branch}}
-        if: github.event_name == 'push'
-        run: |
-          gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
-          Build logs: https://github.com/${{github.repository}}/actions" || true
-          gh release edit archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
-          Build logs: https://github.com/${{github.repository}}/actions" || true
-          gh release upload archive-${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
-  
-      - name: Release - latest-${{env.Branch}}
-        if: github.event_name == 'push'
-        run: |
-          gh release create latest-${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --generate-notes --latest=true --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
-          Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
-          gh release upload latest-${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}.zip"
+    - name: Compress artifacts
+      if: github.event_name == 'push'
+      run: |
+        mkdir ${{matrix.Configuration}}
+        7z a "${{matrix.Configuration}}/${{env.Title}}.zip" "${{github.workspace}}/${{env.Artifacts}}/*" -mx=9
+        cp "${{matrix.Configuration}}/${{env.Title}}.zip" "${{matrix.Configuration}}/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
+
+    - name: Purge tag - latest-${{env.Branch}}
+      if: github.event_name == 'push'
+      run: |
+        gh release delete latest-${{env.Branch}} --repo ${{github.repository}} --cleanup-tag --yes || true
+
+    - name: ${{matrix.Configuration}} - archive-${{env.Branch}}
+      if: github.event_name == 'push'
+      run: |
+        gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
+        Build logs: https://github.com/${{github.repository}}/actions" || true
+        gh release edit archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
+        Build logs: https://github.com/${{github.repository}}/actions" || true
+        gh release upload archive-${{env.Branch}} --repo ${{github.repository}} --clobber "${{matrix.Configuration}}/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
+
+    - name: ${{matrix.Configuration}} - latest-${{env.Branch}}
+      if: github.event_name == 'push'
+      run: |
+        gh release create latest-${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --generate-notes --latest=true --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
+        Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
+        gh release upload latest-${{env.Branch}} --repo ${{github.repository}} --clobber "${{matrix.Configuration}}/${{env.Title}}.zip"
