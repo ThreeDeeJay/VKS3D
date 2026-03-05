@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  Test:
+  Windows:
     strategy:
       matrix:
         Platform: [Win32, x64]
