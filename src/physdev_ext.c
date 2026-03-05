@@ -45,16 +45,18 @@
 #include "stereo_icd.h"
 
 /* Look up an extension fn via giPA then pdPA — never returns wrong-handle raw ptr */
+/* Look up an extension fn via pdPA first (raw ICD physdev-level impl),
+ * falling back to giPA.  For physdev-level surface/WSI functions on NVIDIA,
+ * giPA returns a loader-entry trampoline that fails when called directly;
+ * pdPA returns the actual implementation meant for direct ICD-to-ICD calls. */
 static inline PFN_vkVoidFunction ext_fn(StereoInstance *si, const char *name)
 {
-    PFN_vkVoidFunction fn =
-        (PFN_vkVoidFunction)si->real_get_instance_proc_addr(si->real_instance, name);
-    if (!fn) {
-        PFN_vkGetInstanceProcAddr pdPA = stereo_get_real_pdPA();
-        if (pdPA)
-            fn = (PFN_vkVoidFunction)pdPA(si->real_instance, name);
+    PFN_vkGetInstanceProcAddr pdPA = stereo_get_real_pdPA();
+    if (pdPA) {
+        PFN_vkVoidFunction fn = (PFN_vkVoidFunction)pdPA(si->real_instance, name);
+        if (fn) return fn;
     }
-    return fn;
+    return (PFN_vkVoidFunction)si->real_get_instance_proc_addr(si->real_instance, name);
 }
 
 /* Real physdevs passed through to loader — pd IS the real handle */

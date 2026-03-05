@@ -143,6 +143,22 @@ static bool try_load_icd(const char *path)
     }
     STEREO_LOG("try_load_icd: giPA=%p", (void*)(uintptr_t)giPA);
     g_real_icd_handle = h;
+    /* Negotiate loader–ICD interface with the real ICD.  Without this call
+     * the NVIDIA (and potentially other) ICD leaves its surface/WSI function
+     * table uninitialised, causing GetPhysicalDeviceSurfaceSupportKHR to
+     * return VK_ERROR_INITIALIZATION_FAILED (-3) or crash outright. */
+    typedef VkResult (VKAPI_PTR *PFN_Negotiate)(uint32_t *);
+    PFN_Negotiate real_negotiate = (PFN_Negotiate)(uintptr_t)
+        stereo_dl_sym(h, "vk_icdNegotiateLoaderICDInterfaceVersion");
+    if (real_negotiate) {
+        uint32_t ver = 5; /* request v5 — what VKS3D itself offers */
+        VkResult nr = real_negotiate(&ver);
+        STEREO_LOG("try_load_icd: vk_icdNegotiateLoaderICDInterfaceVersion"
+                   " → result=%d negotiated=%u", (int)nr, ver);
+    } else {
+        STEREO_LOG("try_load_icd: real ICD has no vk_icdNegotiateLoaderICDInterfaceVersion"
+                   " (old ICD — continuing)");
+    }
     g_real_giPA       = giPA;
     /* Load vk_icdGetPhysicalDeviceProcAddr if the ICD exposes it */
     g_real_pdPA = (PFN_vkGetInstanceProcAddr)(uintptr_t)
@@ -453,27 +469,31 @@ void stereo_populate_instance_dispatch(StereoInstance *si)
     LOAD_INST(&si->real, ri, EnumerateDeviceExtensionProperties);
     LOAD_INST(&si->real, ri, EnumerateDeviceLayerProperties);
     LOAD_INST(&si->real, ri, CreateDevice);
-    LOAD_INST(&si->real, ri, DestroySurfaceKHR);
-    LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfaceSupportKHR);
-    LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfaceCapabilitiesKHR);
-    LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfaceFormatsKHR);
-    LOAD_INST(&si->real, ri, GetPhysicalDeviceSurfacePresentModesKHR);
-    /* Many ICDs (NVIDIA, AMD) only expose physical-device surface functions
-     * via vk_icdGetPhysicalDeviceProcAddr, not vk_icdGetInstanceProcAddr.
-     * Fall back to pdPA for any surface function that is still NULL. */
-#define LOAD_PHYS(table, ri, fn) \
+    /* Surface/WSI queries are physdev-level functions.  NVIDIA (and other ICDs)
+     * expose TWO different pointers for these via giPA vs pdPA:
+     *   giPA("vkGetPhysicalDeviceSurface*") -> loader-entry trampoline,
+     *     intended to be called BY the loader through its dispatch chain.
+     *     Calling it directly skips the chain and returns -3 on NVIDIA 426+.
+     *   pdPA("vkGetPhysicalDeviceSurface*") -> raw ICD implementation,
+     *     meant to be called directly with the real physdev handle.
+     * Fix: ALWAYS prefer pdPA; fall back to giPA only if pdPA is absent. */
+#define LOAD_SURF(table, ri, fn) \
     do { \
-        if (!(table)->fn && g_real_pdPA) { \
-            (table)->fn = (PFN_vk##fn)(g_real_pdPA)((ri), "vk"#fn); \
-            STEREO_LOG("  LOAD_PHYS " #fn " = %p", (void*)(uintptr_t)(table)->fn); \
-        } \
+        PFN_vk##fn _p = NULL; \
+        if (g_real_pdPA) \
+            _p = (PFN_vk##fn)(g_real_pdPA)((ri), "vk"#fn); \
+        if (!_p) \
+            _p = (PFN_vk##fn)(g_real_giPA)((ri), "vk"#fn); \
+        (table)->fn = _p; \
+        STEREO_LOG("  LOAD_SURF " #fn " = %p%s", (void*)(uintptr_t)_p, \
+                   g_real_pdPA ? " (pdPA)" : " (giPA fallback)"); \
     } while (0)
-    LOAD_PHYS(&si->real, ri, DestroySurfaceKHR);
-    LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceSupportKHR);
-    LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceCapabilitiesKHR);
-    LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfaceFormatsKHR);
-    LOAD_PHYS(&si->real, ri, GetPhysicalDeviceSurfacePresentModesKHR);
-#undef LOAD_PHYS
+    LOAD_SURF(&si->real, ri, DestroySurfaceKHR);
+    LOAD_SURF(&si->real, ri, GetPhysicalDeviceSurfaceSupportKHR);
+    LOAD_SURF(&si->real, ri, GetPhysicalDeviceSurfaceCapabilitiesKHR);
+    LOAD_SURF(&si->real, ri, GetPhysicalDeviceSurfaceFormatsKHR);
+    LOAD_SURF(&si->real, ri, GetPhysicalDeviceSurfacePresentModesKHR);
+#undef LOAD_SURF
     /* ── Vulkan 1.1 physdev functions ────────────────────────────────────── */
     LOAD_INST(&si->real, ri, GetPhysicalDeviceImageFormatProperties2);
     LOAD_INST(&si->real, ri, GetPhysicalDeviceSparseImageFormatProperties2);
