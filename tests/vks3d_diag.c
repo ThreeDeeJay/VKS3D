@@ -402,7 +402,10 @@ int main(void)
     free(pds);
 
     /* ---- Intercept exports ------------------------------------------------ */
-    section("VKS3D Render Pass / Device Dispatch Intercept");
+    /* These functions are returned by vkGetDeviceProcAddr AND exported as
+     * named DLL symbols.  The named export is redundant from the Vulkan spec
+     * perspective but lets tools verify presence with a simple GetProcAddress. */
+    section("VKS3D Device-Level Intercept Exports");
 
 #ifdef _WIN32
     {
@@ -410,11 +413,14 @@ int main(void)
         if (!m) m = GetModuleHandleA("VKS3D_x86.dll");
         if (m) {
             struct { const char *sym; const char *note; int required; } chk[] = {
+                { "vkGetDeviceProcAddr",   "device dispatch gate",      1 },
                 { "vkCreateRenderPass",    "multiview v1 injection",    1 },
                 { "vkCreateRenderPass2KHR","multiview v2 injection",    0 },
-                { "vkGetDeviceProcAddr",   "device-level dispatch",     1 },
-                { "vkCreateSwapchainKHR",  "SBS swapchain doubling",    1 },
-                { "vkQueuePresentKHR",     "SBS composite blit",        1 },
+                { "vkCreateSwapchainKHR",  "SBS width doubling",        1 },
+                { "vkDestroySwapchainKHR", "swapchain cleanup",         1 },
+                { "vkGetSwapchainImagesKHR","stereo image redirect",    1 },
+                { "vkAcquireNextImageKHR", "real swapchain acquire",    1 },
+                { "vkQueuePresentKHR",     "SBS composite + present",   1 },
                 { NULL, NULL, 0 }
             };
             for (int i=0; chk[i].sym; i++) {

@@ -17,5 +17,21 @@ EXPORTS
     vk_icdNegotiateLoaderICDInterfaceVersion
     vk_icdGetInstanceProcAddr
     vk_icdGetPhysicalDeviceProcAddr
+    ; Public vkGetDeviceProcAddr — exported so the loader and tools can find
+    ; device-level functions directly without going through the ICD interface.
     vkGetDeviceProcAddr
+    ; Device-level intercept functions exported as named symbols.
+    ; The loader uses vk_icdGetInstanceProcAddr to get these, but exporting
+    ; them here ensures tools like vks3d_diag can verify they are present and
+    ; provides compatibility with loaders that use GetProcAddress fallback.
+    vkCreateSwapchainKHR
+    vkDestroySwapchainKHR
+    vkGetSwapchainImagesKHR
+    vkAcquireNextImageKHR
+    vkQueuePresentKHR
+    vkCreateRenderPass
+    vkCreateRenderPass2KHR
+    vkCreateShaderModule
+    vkDestroyShaderModule
+    ; Internal marker used by self-detection (prevents VKS3D loading itself)
     vks3d_internal_marker

@@ -177,6 +177,15 @@ stereo_CreateSwapchainKHR(
     uint32_t app_h = sci.imageExtent.height;
     sci.imageExtent.width = app_w * 2;  /* SBS requires 2× width */
 
+    /* The composite blit writes into the real SBS swapchain images via
+     * CmdBlitImage (dst).  The app typically only requests
+     * VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; without TRANSFER_DST_BIT the
+     * blit is illegal and causes VK_ERROR_DEVICE_LOST on the second submit
+     * (the first submit appears to succeed but the GPU state is corrupted).
+     * Similarly the stereo render target is a blit source so it needs
+     * TRANSFER_SRC_BIT — that is already set in alloc_stereo_image. */
+    sci.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
     STEREO_LOG("SBS swapchain: app %ux%u → real %ux%u",
                app_w, app_h, sci.imageExtent.width, app_h);
 

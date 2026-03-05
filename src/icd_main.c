@@ -345,3 +345,54 @@ vkGetDeviceProcAddr(VkDevice device, const char *pName)
 {
     return stereo_GetDeviceProcAddr(device, pName);
 }
+
+/* ── Named DLL exports for device-level intercept functions ─────────────────
+ * The loader uses vk_icdGetInstanceProcAddr to get these, but exporting them
+ * as named symbols allows tools (vks3d_diag, validation layers, debuggers)
+ * to verify presence via GetProcAddress, and provides a fallback for loaders
+ * that call GetProcAddress after failing vk_icdGetInstanceProcAddr.
+ *
+ * Each function simply forwards to the internal stereo_* implementation.
+ */
+VKAPI_ATTR VkResult VKAPI_CALL
+vkCreateSwapchainKHR(VkDevice d, const VkSwapchainCreateInfoKHR *c,
+                     const VkAllocationCallbacks *a, VkSwapchainKHR *s)
+{ return stereo_CreateSwapchainKHR(d, c, a, s); }
+
+VKAPI_ATTR void VKAPI_CALL
+vkDestroySwapchainKHR(VkDevice d, VkSwapchainKHR s, const VkAllocationCallbacks *a)
+{ stereo_DestroySwapchainKHR(d, s, a); }
+
+VKAPI_ATTR VkResult VKAPI_CALL
+vkGetSwapchainImagesKHR(VkDevice d, VkSwapchainKHR s, uint32_t *c, VkImage *i)
+{ return stereo_GetSwapchainImagesKHR(d, s, c, i); }
+
+VKAPI_ATTR VkResult VKAPI_CALL
+vkAcquireNextImageKHR(VkDevice d, VkSwapchainKHR s, uint64_t t,
+                      VkSemaphore sem, VkFence f, uint32_t *i)
+{ return stereo_AcquireNextImageKHR(d, s, t, sem, f, i); }
+
+VKAPI_ATTR VkResult VKAPI_CALL
+vkQueuePresentKHR(VkQueue q, const VkPresentInfoKHR *p)
+{ return stereo_QueuePresentKHR(q, p); }
+
+VKAPI_ATTR VkResult VKAPI_CALL
+vkCreateRenderPass(VkDevice d, const VkRenderPassCreateInfo *c,
+                   const VkAllocationCallbacks *a, VkRenderPass *r)
+{ return stereo_CreateRenderPass(d, c, a, r); }
+
+#ifdef VK_KHR_create_renderpass2
+VKAPI_ATTR VkResult VKAPI_CALL
+vkCreateRenderPass2KHR(VkDevice d, const VkRenderPassCreateInfo2 *c,
+                       const VkAllocationCallbacks *a, VkRenderPass *r)
+{ return stereo_CreateRenderPass2KHR(d, c, a, r); }
+#endif
+
+VKAPI_ATTR VkResult VKAPI_CALL
+vkCreateShaderModule(VkDevice d, const VkShaderModuleCreateInfo *c,
+                     const VkAllocationCallbacks *a, VkShaderModule *s)
+{ return stereo_CreateShaderModule(d, c, a, s); }
+
+VKAPI_ATTR void VKAPI_CALL
+vkDestroyShaderModule(VkDevice d, VkShaderModule s, const VkAllocationCallbacks *a)
+{ stereo_DestroyShaderModule(d, s, a); }
