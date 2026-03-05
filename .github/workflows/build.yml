@@ -102,7 +102,7 @@ jobs:
           name: ${{env.Title}}-Win32-Release
           path: Artifacts/
 
-      - name: Download x86
+      - name: Download Win64
         uses: actions/download-artifact@v4
         with:
           name: ${{env.Title}}-Win64-Release
@@ -113,11 +113,11 @@ jobs:
 
       - name: Copy manifests and scripts
         run: |
-          Copy-Item Artifacts\build\Release\VKS3D_x64.dll Release\
-          Copy-Item Artifacts\build\Release\VKS3D_x86.dll Release\
-          Copy-Item Artifacts\build\Release\vks3d_diag.exe Release\
-          Copy-Item Artifacts\build\Release\test_stereo_math.exe Release\
-          Copy-Item Artifacts\build\Release\test_spirv_patch.exe Release\
+          Copy-Item Artifacts\VKS3D_x64.dll Release\
+          Copy-Item Artifacts\VKS3D_x86.dll Release\
+          Copy-Item Artifacts\vks3d_diag.exe Release\
+          Copy-Item Artifacts\test_stereo_math.exe Release\
+          Copy-Item Artifacts\test_spirv_patch.exe Release\
           Copy-Item manifest\VKS3D_x64.json Release\
           Copy-Item manifest\VKS3D_x86.json Release\
           Copy-Item scripts\install.bat Release\
