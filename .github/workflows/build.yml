@@ -158,10 +158,13 @@ jobs:
           name: VKS3D-windows-x86
           path: artifacts/
 
+      - name: List files
+        run: ls -R
+
       - name: Copy manifests and scripts
         run: |
-          Copy-Item artifacts\build_x86\Release\VKS3D_x86.dll dist\
           Copy-Item artifacts\build_x64\Release\VKS3D_x64.dll dist\
+          Copy-Item artifacts\build_x86\Release\VKS3D_x86.dll dist\
           Copy-Item artifacts\build_x64\Release\vks3d_diag.exe dist\
           Copy-Item artifacts\build_x64\Release\test_stereo_math.exe dist\
           Copy-Item artifacts\build_x64\Release\test_spirv_patch.exe dist\
