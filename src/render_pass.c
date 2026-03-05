@@ -91,12 +91,37 @@ stereo_CreateRenderPass(
         .pCorrelationMasks    = corr_masks,
     };
 
+    /* ── Patch attachment finalLayouts ───────────────────────────────────
+     * The app uses finalLayout=PRESENT_SRC_KHR on swapchain attachments.
+     * Our stereo images are regular (non-swapchain) images; transitioning
+     * them to PRESENT_SRC_KHR is undefined and causes VK_ERROR_DEVICE_LOST.
+     * Remap PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL so the image ends
+     * in a layout our composite blit can validly transition from.
+     */
+    VkAttachmentDescription *patched_atts = NULL;
     VkRenderPassCreateInfo modified = *pCreateInfo;
     if (!already_has_mv)
         modified.pNext = &mv_info;
 
+    if (pCreateInfo->attachmentCount > 0) {
+        patched_atts = malloc(pCreateInfo->attachmentCount
+                              * sizeof(VkAttachmentDescription));
+        if (!patched_atts) {
+            free(view_masks); free(corr_masks); free(view_offsets);
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            patched_atts[i] = pCreateInfo->pAttachments[i];
+            if (patched_atts[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                patched_atts[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        }
+        modified.pAttachments = patched_atts;
+    }
+
     VkResult res = sd->real.CreateRenderPass(
         sd->real_device, &modified, pAllocator, pRenderPass);
+
+    free(patched_atts);
 
     free(view_masks);
     free(corr_masks);
@@ -309,8 +334,22 @@ stereo_CreateRenderPass2KHR(
         subpasses[i].viewMask = STEREO_VIEW_MASK;
     }
 
+    /* Patch attachment finalLayouts: PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL */
+    VkAttachmentDescription2 *patched_atts2 = NULL;
+    if (pCreateInfo->attachmentCount > 0) {
+        patched_atts2 = malloc(pCreateInfo->attachmentCount
+                               * sizeof(VkAttachmentDescription2));
+        if (!patched_atts2) { free(subpasses); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            patched_atts2[i] = pCreateInfo->pAttachments[i];
+            if (patched_atts2[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                patched_atts2[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        }
+    }
+
     VkRenderPassCreateInfo2 modified = *pCreateInfo;
-    modified.pSubpasses = subpasses;
+    modified.pSubpasses   = subpasses;
+    if (patched_atts2) modified.pAttachments = patched_atts2;
 
     /* Correlation masks via VkRenderPassMultiviewCreateInfo chain is not used
      * in RenderPass2; correlatedViewMasks are in VkSubpassDescription2 directly.
@@ -333,6 +372,7 @@ stereo_CreateRenderPass2KHR(
         res = create_rp2_via_rp1(sd, &modified, pAllocator, pRenderPass);
     }
 
+    free(patched_atts2);
     free(subpasses);
     free(corr_masks);
 

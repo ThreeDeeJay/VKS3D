@@ -494,4 +494,6 @@ bool spirv_patch_stereo_vertex(
 void spirv_patched_free(uint32_t *words);
 
 VkResult stereo_composite_to_sbs(
-    StereoDevice*, VkQueue, StereoSwapchain*, uint32_t image_index);
+    StereoDevice*, VkQueue, StereoSwapchain*, uint32_t image_index,
+    uint32_t wait_sem_count, const VkSemaphore *wait_sems,
+    VkSemaphore *out_signal_sem);

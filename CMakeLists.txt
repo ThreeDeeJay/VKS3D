@@ -179,10 +179,10 @@ endif()
 option(VKS3D_BUILD_TESTS "Build unit tests" ON)
 option(VKS3D_BUILD_DEMO  "Build integration demo" ON)
 
-if(VKS3D_BUILD_TESTS OR VKS3D_BUILD_DEMO)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
+# Diagnostics tool is always built — it checks all prerequisites for stereo
+# rendering and is useful even in release builds / installed alongside the DLL.
+enable_testing()
+add_subdirectory(tests)
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 message(STATUS "")

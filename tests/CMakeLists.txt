@@ -68,3 +68,28 @@ if(VKS3D_BUILD_DEMO)
         target_link_libraries(VKS3D_demo PRIVATE Vulkan::Vulkan dl pthread)
     endif()
 endif()
+
+# ── VKS3D Diagnostics Tool ─────────────────────────────────────────────────
+# Standalone executable that checks all prerequisites for stereo rendering:
+#   - Vulkan instance/device extensions
+#   - VK_KHR_multiview feature support
+#   - VKS3D DLL registration
+#   - Registry ICD discovery
+#   - Render pass intercept verification
+# Built unconditionally alongside the DLL (no separate option needed).
+add_executable(vks3d_diag vks3d_diag.c)
+target_include_directories(vks3d_diag PRIVATE ${TEST_INCLUDE_DIRS})
+target_compile_definitions(vks3d_diag PRIVATE ${TEST_COMPILE_DEFS})
+if(WIN32)
+    target_link_libraries(vks3d_diag PRIVATE Vulkan::Vulkan advapi32)
+    if(MSVC)
+        target_compile_options(vks3d_diag PRIVATE /std:c11 /W3 /wd4996)
+    endif()
+    # Place the diag tool next to the DLL in the output directory
+    set_target_properties(vks3d_diag PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+else()
+    target_link_libraries(vks3d_diag PRIVATE Vulkan::Vulkan dl pthread)
+    target_compile_options(vks3d_diag PRIVATE -Wall -Wno-unused-parameter)
+endif()

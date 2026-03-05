@@ -223,12 +223,28 @@ static VkResult record_composite_cmd(
 }
 
 /* ── Public: run composite pass and wait ─────────────────────────────────── */
+/*
+ * wait_sems / wait_stages: the app's pWaitSemaphores from QueuePresentKHR.
+ *   We must pass these to the composite submit so the GPU waits for the
+ *   app's rendering to finish before blitting the stereo images.
+ *   Without this, the composite races the app's render commands → device lost.
+ *
+ * signal_sem (output): a semaphore we create and signal when composite finishes.
+ *   The caller passes this to the real QueuePresentKHR as its wait semaphore,
+ *   ensuring the display engine doesn't scan out before composite is done.
+ *   Caller owns it and must destroy it after the real present returns.
+ */
 VkResult stereo_composite_to_sbs(
     StereoDevice    *sd,
     VkQueue          queue,
     StereoSwapchain *sc,
-    uint32_t         image_index)
+    uint32_t         image_index,
+    uint32_t         wait_sem_count,
+    const VkSemaphore *wait_sems,
+    VkSemaphore     *out_signal_sem)
 {
+    *out_signal_sem = VK_NULL_HANDLE;
+
     VkResult res = ensure_composite_resources(sd, sc);
     if (res != VK_SUCCESS) return res;
 
@@ -242,30 +258,61 @@ VkResult stereo_composite_to_sbs(
         return res;
     }
 
-    /* Submit the composite command buffer */
-    VkSubmitInfo si = {
+    /* Create the completion semaphore the caller will pass to the real present */
+    VkSemaphoreCreateInfo sci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+    VkSemaphore done_sem = VK_NULL_HANDLE;
+    res = sd->real.CreateSemaphore(sd->real_device, &sci, NULL, &done_sem);
+    if (res != VK_SUCCESS) return res;
+
+    /* Each wait semaphore needs a stage mask — we wait at TRANSFER for the blit */
+    VkPipelineStageFlags *stage_masks = NULL;
+    if (wait_sem_count > 0) {
+        stage_masks = malloc(wait_sem_count * sizeof(VkPipelineStageFlags));
+        if (!stage_masks) {
+            sd->real.DestroySemaphore(sd->real_device, done_sem, NULL);
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        for (uint32_t i = 0; i < wait_sem_count; i++)
+            stage_masks[i] = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+
+    /* Submit composite: wait for app rendering, signal done_sem when finished */
+    VkSubmitInfo submit = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount   = wait_sem_count,
+        .pWaitSemaphores      = wait_sems,
+        .pWaitDstStageMask    = stage_masks,
         .commandBufferCount   = 1,
         .pCommandBuffers      = &sc->composite_cmds[image_index],
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores    = &done_sem,
     };
 
-    /* Create a one-shot fence to wait on */
+    /* Create a fence so we can CPU-wait for the composite to finish */
     VkFenceCreateInfo fci = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
     VkFence fence = VK_NULL_HANDLE;
     res = sd->real.CreateFence(sd->real_device, &fci, NULL, &fence);
-    if (res != VK_SUCCESS) return res;
+    if (res != VK_SUCCESS) {
+        free(stage_masks);
+        sd->real.DestroySemaphore(sd->real_device, done_sem, NULL);
+        return res;
+    }
 
-    res = sd->real.QueueSubmit(queue, 1, &si, fence);
+    res = sd->real.QueueSubmit(queue, 1, &submit, fence);
     if (res == VK_SUCCESS) {
-        /* Wait for composite to finish before present */
         res = sd->real.WaitForFences(
             sd->real_device, 1, &fence, VK_TRUE, UINT64_MAX);
     }
 
+    free(stage_masks);
     sd->real.DestroyFence(sd->real_device, fence, NULL);
 
-    if (res != VK_SUCCESS)
+    if (res != VK_SUCCESS) {
         STEREO_ERR("Composite submit/wait failed: %d", res);
+        sd->real.DestroySemaphore(sd->real_device, done_sem, NULL);
+        return res;
+    }
 
-    return res;
+    *out_signal_sem = done_sem;
+    return VK_SUCCESS;
 }

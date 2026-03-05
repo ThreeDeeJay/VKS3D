@@ -425,25 +425,59 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         return fwd->real.QueuePresentKHR(queue, pPresentInfo);
     }
 
-    /* Run the SBS composite pass for each swapchain image being presented */
-    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
+    /* Run the SBS composite pass for each swapchain image being presented.
+     *
+     * Semaphore handoff:
+     *   - pPresentInfo->pWaitSemaphores = app's render-complete semaphores
+     *     These are passed to the composite submit so it waits for rendering.
+     *   - composite signals done_sems[i] when blit finishes
+     *   - done_sems[i] replaces pWaitSemaphores in the real QueuePresentKHR
+     *     so the display engine only scans out after composite is done.
+     */
+    uint32_t n = pPresentInfo->swapchainCount;
+    VkSemaphore *done_sems = calloc(n, sizeof(VkSemaphore));
+    if (!done_sems) return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+    for (uint32_t i = 0; i < n; i++) {
         uint32_t img_idx = pPresentInfo->pImageIndices[i];
-        VkResult composite_res = stereo_composite_to_sbs(sd, queue, sc, img_idx);
-        if (composite_res != VK_SUCCESS)
+        /* Only pass app wait semaphores to the first swapchain's composite;
+         * subsequent composites within the same present have no additional waits. */
+        uint32_t        wcount = (i == 0) ? pPresentInfo->waitSemaphoreCount : 0;
+        const VkSemaphore *wsems = (i == 0) ? pPresentInfo->pWaitSemaphores : NULL;
+        VkResult composite_res = stereo_composite_to_sbs(
+            sd, queue, sc, img_idx, wcount, wsems, &done_sems[i]);
+        if (composite_res != VK_SUCCESS) {
             STEREO_ERR("Composite pass failed for image %u: %d", img_idx, composite_res);
+            /* Fall through — present anyway, output may be wrong but avoid hang */
+        }
     }
 
-    /* Build modified present info pointing to real swapchain */
+    /* Build modified present info: real swapchain handles + composite semaphores */
     VkPresentInfoKHR pi = *pPresentInfo;
-    VkSwapchainKHR  *real_scs = malloc(pi.swapchainCount * sizeof(VkSwapchainKHR));
-    if (!real_scs) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    for (uint32_t i = 0; i < pi.swapchainCount; i++) {
+    VkSwapchainKHR  *real_scs = malloc(n * sizeof(VkSwapchainKHR));
+    if (!real_scs) { free(done_sems); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+    for (uint32_t i = 0; i < n; i++) {
         StereoSwapchain *sc_i = stereo_swapchain_lookup(sd, pi.pSwapchains[i]);
         real_scs[i] = sc_i ? sc_i->real_swapchain : pi.pSwapchains[i];
     }
     pi.pSwapchains = real_scs;
 
+    /* Replace wait semaphores with composite completion semaphores */
+    /* Filter out any NULL (composite failed) entries */
+    uint32_t valid = 0;
+    for (uint32_t i = 0; i < n; i++)
+        if (done_sems[i] != VK_NULL_HANDLE) done_sems[valid++] = done_sems[i];
+    if (valid > 0) {
+        pi.waitSemaphoreCount = valid;
+        pi.pWaitSemaphores    = done_sems;
+    }
+
     VkResult res = sd->real.QueuePresentKHR(queue, &pi);
     free(real_scs);
+
+    /* Destroy composite completion semaphores after present */
+    for (uint32_t i = 0; i < valid; i++)
+        sd->real.DestroySemaphore(sd->real_device, done_sems[i], NULL);
+    free(done_sems);
     return res;
 }
