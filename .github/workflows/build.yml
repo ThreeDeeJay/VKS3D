@@ -75,7 +75,6 @@ jobs:
         name: ${{matrix.Settings.Name}}-${{matrix.Configuration}}
         path: |
           build/${{matrix.Configuration}}/VKS3D_${{matrix.Settings.Architecture}}.dll
-          manifest/VKS3D_${{matrix.Settings.Architecture}}.json
           build/${{matrix.Configuration}}/vks3d_diag.exe
           build/${{matrix.Configuration}}/test_stereo_math.exe
           build/${{matrix.Configuration}}/test_spirv_patch.exe
@@ -114,13 +113,13 @@ jobs:
 
       - name: Copy manifests and scripts
         run: |
-          Copy-Item Artifacts\VKS3D_x64.dll Release\
-          Copy-Item Artifacts\VKS3D_x86.dll Release\
-          Copy-Item Artifacts\VKS3D_x64.json Release\
-          Copy-Item Artifacts\VKS3D_x86.json Release\
-          Copy-Item Artifacts\vks3d_diag.exe Release\
-          Copy-Item Artifacts\test_stereo_math.exe Release\
-          Copy-Item Artifacts\test_spirv_patch.exe Release\
+          Copy-Item Artifacts\build\Release\VKS3D_x64.dll Release\
+          Copy-Item Artifacts\build\Release\VKS3D_x86.dll Release\
+          Copy-Item Artifacts\build\Release\vks3d_diag.exe Release\
+          Copy-Item Artifacts\build\Release\test_stereo_math.exe Release\
+          Copy-Item Artifacts\build\Release\test_spirv_patch.exe Release\
+          Copy-Item manifest\VKS3D_x64.json Release\
+          Copy-Item manifest\VKS3D_x86.json Release\
           Copy-Item scripts\install.bat Release\
           Copy-Item scripts\uninstall.bat Release\
           Copy-Item scripts\Install-VKS3D.ps1 Release\
