@@ -23,8 +23,8 @@ jobs:
   ${{env.Platform}}-${{env.Configuration}}:
     strategy:
       matrix:
-        Platform: [${{env.Platform}}]
-        Configuration: [${{env.Configuration}}]
+        Platform: ${{env.Platform}}
+        Configuration: ${{env.Configuration}}
 
     runs-on: windows-2022
     steps:
