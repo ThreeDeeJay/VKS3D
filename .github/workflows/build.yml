@@ -23,7 +23,7 @@ jobs:
         Configuration: [Release, Debug]
         Settings:
         - {
-            Name: "${{matrix.Settings.Architecture}}-${{matrix.Settings.Configuration}}",
+            Name: "${{matrix.Settings.Architecture}}-${{matrix.Configuration}}",
             Architecture: "Win${{matrix.Settings.Bits}}",
             Bits: "32",
             Platform: "x86"
@@ -35,11 +35,10 @@ jobs:
             Platform: "x64"
           }
 
-
     steps:
 
     - name: Clone repo and submodules
-      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules #--depth 1 - Fetches entire commit history but breaks commit count
+      run: git clone ${{matrix.Settings.Architecture}} https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules #--depth 1 - Fetches entire commit history but breaks commit count
 
     - name: Get current date, commit hash and count
       run: |
