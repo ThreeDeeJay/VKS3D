@@ -63,6 +63,7 @@ jobs:
         -DVKS3D_BUILD_TESTS=ON
         -DVKS3D_BUILD_DEMO=ON
         -DSTEREO_BUILD_DEMO=ON
+        -DFIND_LIBRARY_USE_LIB32_PATHS=TRUE
 
     - name: Build
       run: cmake --build "${{github.workspace}}/build" --config "${{matrix.Configuration}}"
