@@ -46,109 +46,16 @@ jobs:
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
         echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
 
+    - name: Cache Vulkan SDK
+      id: cache-vulkan-sdk
+      uses: actions/cache@v5
+      with:
+        path: "C:\\VulkanSDK\\1.2.189.0"
+        key: VulkanSDK-1.2.189.0
     - name: Install Vulkan SDK
-      uses: jakoch/install-vulkan-sdk-action@v1
-      with:
-        vulkan_version: 1.3.296.0
-        install_runtime: false
-        cache: true
-        optional_components: com.lunarg.vulkan.32bit
-
-    - name: Configure
-      run: >
-        cmake
-        -A "${{matrix.Settings.Platform}}"
-        -B "${{github.workspace}}/build"
-        -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
-        -DVKS3D_BUILD_TESTS=ON
-        -DVKS3D_BUILD_DEMO=ON
-        -DSTEREO_BUILD_DEMO=ON
-        -CMAKE_LIBRARY_PATH=C:\VulkanSDK\1.3.296.0\Lib32
-
-    - name: Build
-      run: cmake --build "${{github.workspace}}/build" --config "${{matrix.Configuration}}"
-
-    - name: List files
-      run: ls -R
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{env.Title}}-${{matrix.Settings.Name}}-${{matrix.Configuration}}
-        path: |
-          build/${{matrix.Configuration}}/VKS3D_${{matrix.Settings.Architecture}}.dll
-          build/${{matrix.Configuration}}/vks3d_diag.exe
-          build/tests/${{matrix.Configuration}}/test_stereo_math.exe
-          build/tests/${{matrix.Configuration}}/test_spirv_patch.exe
-
-  Release:
-    name: Release
-    runs-on: windows-latest
-    needs: Build
-    steps:
-
-      - name: Clone repo and submodules
-        run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules
-
-      - name: Get current date, commit hash and count
-        run: |
-          echo "FirstCommitHash=$(git rev-list --max-parents=0 HEAD --first-parent)" >> $env:GITHUB_ENV
-          echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
-          echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
-          echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
-          echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
-
-      - name: Download Win32
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{env.Title}}-Win32-Release
-          path: Artifacts/
-
-      - name: Download Win64
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{env.Title}}-Win64-Release
-          path: Artifacts/
-
-      - name: Deploy
-        run: |
-          mkdir "Release"
-          cp "Artifacts\Release\VKS3D_x86.dll" "Release/VKS3D_x86.dll"
-          cp "Artifacts\Release\VKS3D_x64.dll" "Release/VKS3D_x64.dll"
-          cp "Artifacts\Release\vks3d_diag.exe" "Release/vks3d_diag.exe"
-          cp "Artifacts\tests\Release\test_stereo_math.exe" "Release/test_stereo_math.exe"
-          cp "Artifacts\tests\Release\test_spirv_patch.exe" "Release/test_spirv_patch.exe"
-          cp "manifest\VKS3D_x86.json" "Release/VKS3D_x86.json"
-          cp "manifest\VKS3D_x64.json" "Release/VKS3D_x64.json"
-          cp "scripts\install.bat" "Release/Install.bat"
-          cp "scripts\uninstall.bat" "Release/Uninstall.bat"
-          cp "scripts\Install-VKS3D.ps1" "Release/Install.ps1"
-          cp "LICENSE" "Release/License.txt"
-          cp "README.md" "Release/ReadMe.txt"
-  
-      - name: Compress artifacts
-        if: github.event_name == 'push'
-        run: |
-          7z a "Release/${{env.Title}}.zip" "${{github.workspace}}/${{env.Artifacts}}/*" -mx=9
-          cp "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
-  
-      - name: Purge tag - latest-${{env.Branch}}
-        if: github.event_name == 'push'
-        run: |
-          gh release delete latest-${{env.Branch}} --repo ${{github.repository}} --cleanup-tag --yes || true
-  
-      - name: Release - archive-${{env.Branch}}
-        if: github.event_name == 'push'
-        run: |
-          gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
-          Build logs: https://github.com/${{github.repository}}/actions" || true
-          gh release edit archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest-${{env.Branch}}
-          Build logs: https://github.com/${{github.repository}}/actions" || true
-          gh release upload archive-${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
-  
-      - name: Release - latest-${{env.Branch}}
-        if: github.event_name == 'push'
-        run: |
-          gh release create latest-${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --generate-notes --latest=true --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
-          Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
-          gh release upload latest-${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}.zip"
+      if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
+      shell: powershell
+      run: |
+        echo "VULKAN_SDK=C:\VulkanSDK\1.2.189.0" >> $env:GITHUB_ENV
+        Invoke-WebRequest -Method Get -Uri https://web.archive.org/web/20211204134012if_/https://sdk.lunarg.com/sdk/download/1.2.189.0/windows/VulkanSDK-1.2.189.0-Installer.exe -OutFile VulkanSDK.exe -UseBasicParsing
+        Start-Process -Wait ./VulkanSDK.exe -ArgumentList "/S", "--accept-licenses", "--default-answer", "--confirm-command install", "com.lunarg.vulkan.32bit"
