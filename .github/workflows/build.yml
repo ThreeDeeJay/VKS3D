@@ -130,7 +130,6 @@ jobs:
       - name: Compress artifacts
         if: github.event_name == 'push'
         run: |
-          mkdir Release
           7z a "Release/${{env.Title}}.zip" "${{github.workspace}}/${{env.Artifacts}}/*" -mx=9
           cp "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
   
