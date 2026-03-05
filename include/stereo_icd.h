@@ -160,6 +160,7 @@ typedef struct RealInstanceDispatch {
 } RealInstanceDispatch;
 
 typedef struct RealDeviceDispatch {
+    PFN_vkGetDeviceProcAddr                   GetDeviceProcAddr; /* must be first for forwarding */
     PFN_vkDestroyDevice                       DestroyDevice;
     PFN_vkGetDeviceQueue                      GetDeviceQueue;
     PFN_vkQueueSubmit                         QueueSubmit;
@@ -465,6 +466,7 @@ VKAPI_ATTR void     VKAPI_CALL stereo_SubmitDebugUtilsMessageEXT(VkInstance, VkD
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDevice(
     VkPhysicalDevice, const VkDeviceCreateInfo*, const VkAllocationCallbacks*, VkDevice*);
 VKAPI_ATTR void VKAPI_CALL stereo_DestroyDevice(VkDevice, const VkAllocationCallbacks*);
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL stereo_GetDeviceProcAddr(VkDevice, const char*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(
     VkDevice, const VkRenderPassCreateInfo*, const VkAllocationCallbacks*, VkRenderPass*);
 #ifdef VK_KHR_create_renderpass2

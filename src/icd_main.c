@@ -182,6 +182,8 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     /* For device commands, the loader uses vkGetDeviceProcAddr which maps to
      * our stereo_GetDeviceProcAddr below.  We still handle them here for
      * callers that go through vkGetInstanceProcAddr for device funcs. */
+    if (!strcmp(name, "vkGetDeviceProcAddr"))
+        return (PFN_vkVoidFunction)stereo_GetDeviceProcAddr;
     if (!strcmp(name, "vkDestroyDevice"))
         return (PFN_vkVoidFunction)stereo_DestroyDevice;
     if (!strcmp(name, "vkCreateRenderPass"))
@@ -222,6 +224,70 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
             return pdPA(si->real_instance, name);
     }
     return NULL;
+}
+
+
+/* ── Device-level proc addr ─────────────────────────────────────────────────
+ *
+ * The Vulkan loader calls vkGetDeviceProcAddr(device, name) to build the
+ * device dispatch table.  If we don't intercept this, the loader gets
+ * NVIDIA's real vkGetDeviceProcAddr which returns NVIDIA's own function
+ * pointers — bypassing ALL of VKS3D's device-level wrappers (swapchain,
+ * present, render pass injection).  This is why stereo was not working.
+ *
+ * We must intercept every device-level command VKS3D wraps, then forward
+ * everything else to the real device.
+ */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
+{
+    if (!pName) return NULL;
+
+    /* ── VKS3D-wrapped device commands ───────────────────────────────── */
+    if (!strcmp(pName, "vkGetDeviceProcAddr"))
+        return (PFN_vkVoidFunction)stereo_GetDeviceProcAddr;
+    if (!strcmp(pName, "vkDestroyDevice"))
+        return (PFN_vkVoidFunction)stereo_DestroyDevice;
+    if (!strcmp(pName, "vkCreateRenderPass"))
+        return (PFN_vkVoidFunction)stereo_CreateRenderPass;
+#ifdef VK_KHR_create_renderpass2
+    if (!strcmp(pName, "vkCreateRenderPass2KHR"))
+        return (PFN_vkVoidFunction)stereo_CreateRenderPass2KHR;
+    if (!strcmp(pName, "vkCreateRenderPass2"))
+        return (PFN_vkVoidFunction)stereo_CreateRenderPass2KHR;
+#endif
+    if (!strcmp(pName, "vkCreateShaderModule"))
+        return (PFN_vkVoidFunction)stereo_CreateShaderModule;
+    if (!strcmp(pName, "vkDestroyShaderModule"))
+        return (PFN_vkVoidFunction)stereo_DestroyShaderModule;
+    if (!strcmp(pName, "vkCreateSwapchainKHR"))
+        return (PFN_vkVoidFunction)stereo_CreateSwapchainKHR;
+    if (!strcmp(pName, "vkDestroySwapchainKHR"))
+        return (PFN_vkVoidFunction)stereo_DestroySwapchainKHR;
+    if (!strcmp(pName, "vkGetSwapchainImagesKHR"))
+        return (PFN_vkVoidFunction)stereo_GetSwapchainImagesKHR;
+    if (!strcmp(pName, "vkAcquireNextImageKHR"))
+        return (PFN_vkVoidFunction)stereo_AcquireNextImageKHR;
+    if (!strcmp(pName, "vkQueuePresentKHR"))
+        return (PFN_vkVoidFunction)stereo_QueuePresentKHR;
+
+    /* ── Forward everything else to the real device ──────────────────── */
+    /* Look up the real device from our registry to get its proc addr fn */
+    extern StereoDevice g_devices[];
+    extern uint32_t     g_device_count;
+    for (uint32_t i = 0; i < g_device_count; i++) {
+        if (g_devices[i].real_device == device ||
+            (VkDevice)(uintptr_t)&g_devices[i] == device) {
+            PFN_vkGetDeviceProcAddr real_gdpa =
+                (PFN_vkGetDeviceProcAddr)
+                g_devices[i].real.GetDeviceProcAddr;
+            if (real_gdpa)
+                return real_gdpa(g_devices[i].real_device, pName);
+            break;
+        }
+    }
+    /* Fallback: use instance-level lookup */
+    return get_instance_proc_addr_internal(VK_NULL_HANDLE, pName);
 }
 
 /* ── ICD negotiation ─────────────────────────────────────────────────────── */
@@ -268,4 +334,14 @@ vk_icdGetPhysicalDeviceProcAddr(VkInstance instance, const char *pName)
     PFN_vkVoidFunction fn = get_instance_proc_addr_internal(instance, pName);
     STEREO_LOG("vk_icdGetPhysicalDeviceProcAddr: '%s' -> %p", pName, (void*)(uintptr_t)fn);
     return fn;
+}
+
+/* ── Public export: vkGetDeviceProcAddr ─────────────────────────────────────
+ * Exported from the DLL so the loader can find it.  The loader queries this
+ * via GetProcAddress("vkGetDeviceProcAddr") or vk_icdGetInstanceProcAddr.
+ */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+vkGetDeviceProcAddr(VkDevice device, const char *pName)
+{
+    return stereo_GetDeviceProcAddr(device, pName);
 }

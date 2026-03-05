@@ -394,9 +394,9 @@ stereo_AcquireNextImageKHR(
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
+    STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
+               (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
     /* Find the device for this queue (scan all devices) */
-    /* NOTE: In a production ICD, queues are tracked per-device.
-     * Here we scan for the first device with a matching real swapchain. */
     StereoDevice *sd = NULL;
     StereoSwapchain *sc = NULL;
 

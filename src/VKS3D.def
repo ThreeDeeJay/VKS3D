@@ -17,4 +17,5 @@ EXPORTS
     vk_icdNegotiateLoaderICDInterfaceVersion
     vk_icdGetInstanceProcAddr
     vk_icdGetPhysicalDeviceProcAddr
+    vkGetDeviceProcAddr
     vks3d_internal_marker

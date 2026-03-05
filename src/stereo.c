@@ -199,8 +199,24 @@ bool stereo_load_real_icd(void)
         if (try_load_icd(explicit_path)) return true;
     }
 
-    /* 2. Registry enumeration */
-    STEREO_LOG("stereo_load_real_icd: enumerating registry ICDs");
+    /* 2. Windows OpenGL driver registry keys — these hold the ICD DLL directly.
+     *    On NVIDIA, nvoglv64.dll is both the OpenGL and Vulkan ICD.
+     *    Searched before the Khronos JSON path because it avoids JSON parsing
+     *    and gives us the actual DLL path in one step. */
+    STEREO_LOG("stereo_load_real_icd: searching OpenGL driver registry keys");
+    {
+        char *ogl_dll = stereo_find_opengl_driver_icd();
+        if (ogl_dll) {
+            STEREO_LOG("stereo_load_real_icd: OpenGL registry → '%s'", ogl_dll);
+            bool ok = try_load_icd(ogl_dll);
+            free(ogl_dll);
+            if (ok) return true;
+        } else {
+            STEREO_LOG("stereo_load_real_icd: no OpenGL driver DLL found in registry");
+        }
+    }
+
+    /* 3. Registry enumeration (Khronos Vulkan ICD JSON manifests) */
     char **json_paths = stereo_registry_enum_icd_jsons();
     if (json_paths) {
         for (int i = 0; json_paths[i]; i++) {
@@ -544,6 +560,7 @@ void stereo_populate_instance_dispatch(StereoInstance *si)
 void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
 {
 #define L(fn) sd->real.fn = (PFN_vk##fn)(g_real_giPA)((real_inst), "vk"#fn)
+    L(GetDeviceProcAddr); /* load first so we can use it as fallback */
     L(DestroyDevice); L(GetDeviceQueue); L(QueueSubmit); L(QueueWaitIdle);
     L(DeviceWaitIdle); L(AllocateMemory); L(FreeMemory); L(MapMemory);
     L(UnmapMemory); L(FlushMappedMemoryRanges); L(InvalidateMappedMemoryRanges);

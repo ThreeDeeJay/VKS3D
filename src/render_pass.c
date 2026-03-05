@@ -31,6 +31,8 @@ stereo_CreateRenderPass(
     const VkAllocationCallbacks    *pAllocator,
     VkRenderPass                   *pRenderPass)
 {
+    STEREO_LOG("stereo_CreateRenderPass: device=%p subpasses=%u",
+               (void*)device, pCreateInfo ? pCreateInfo->subpassCount : 0);
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 

@@ -206,6 +206,154 @@ static inline char *stereo_json_read_library_path(const char *json_path)
     return result;
 }
 
+/*
+ * stereo_find_opengl_driver_icd
+ * ─────────────────────────────
+ * Searches Windows registry keys that store the OpenGL ICD DLL path.
+ * On NVIDIA, the OpenGL driver DLL (nvoglv64.dll / nvoglv32.dll) is also
+ * the Vulkan ICD, so these keys reliably locate the correct DLL.
+ *
+ * Keys checked (64-bit build checks 64-bit values; 32-bit checks WoW keys):
+ *
+ *   HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL
+ *     → REG_SZ value "DLL"
+ *
+ *   HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\####
+ *     → REG_SZ value "OpenGLDriverName"  (64-bit)
+ *     → REG_SZ value "OpenGLDriverNameWoW"  (32-bit)
+ *
+ *   HKLM\SYSTEM\CurrentControlSet\Control\Video\{*}\####
+ *     → REG_SZ value "OpenGLDriverName"  (64-bit)
+ *     → REG_SZ value "OpenGLDriverNameWoW"  (32-bit)
+ *
+ *   Also ControlSet001, ControlSet002 as fallback.
+ *
+ * Returns a heap-allocated path to the first existing DLL found, or NULL.
+ * Caller must free() the result.
+ */
+static inline char *stereo_find_opengl_driver_icd(void)
+{
+#  ifdef _WIN64
+#    define OGLI_VALNAME   "OpenGLDriverName"
+#    define OGLI_SOFTKEY   "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\OpenGLDrivers\\MSOGL"
+#  else
+#    define OGLI_VALNAME   "OpenGLDriverNameWoW"
+#    define OGLI_SOFTKEY   "SOFTWARE\\WOW6432Node\\Microsoft\\Windows NT\\CurrentVersion\\OpenGLDrivers\\MSOGL"
+#  endif
+
+    /* Resolve a DLL name/path: if it has no backslash, look in System32 */
+    static char ogli_buf[MAX_PATH];
+    #define OGLI_TRY(dll) do { \
+        if (!(dll) || !(dll)[0]) break; \
+        const char *_d = (dll); \
+        if (strchr(_d, '\\') || strchr(_d, '/')) { \
+            if (GetFileAttributesA(_d) != INVALID_FILE_ATTRIBUTES) \
+                return _strdup(_d); \
+        } else { \
+            /* bare name — look in System32 */ \
+            snprintf(ogli_buf, sizeof(ogli_buf), \
+                     "C:\\Windows\\System32\\%s", _d); \
+            if (GetFileAttributesA(ogli_buf) != INVALID_FILE_ATTRIBUTES) \
+                return _strdup(ogli_buf); \
+        } \
+    } while (0)
+
+    /* Helper: read one REG_SZ value and try it */
+    #define OGLI_READ_SZ(hk, name) do { \
+        char _vbuf[MAX_PATH]; DWORD _vlen = sizeof(_vbuf), _vtype; \
+        if (RegQueryValueExA((hk), (name), NULL, &_vtype, \
+                             (LPBYTE)_vbuf, &_vlen) == ERROR_SUCCESS \
+            && _vtype == REG_SZ && _vlen > 1) { \
+            _vbuf[_vlen - 1] = '\0'; \
+            OGLI_TRY(_vbuf); \
+        } \
+    } while (0)
+
+    /* 1. MSOGL direct key */
+    {
+        HKEY hk = NULL;
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, OGLI_SOFTKEY,
+                          0, KEY_READ, &hk) == ERROR_SUCCESS) {
+            OGLI_READ_SZ(hk, "DLL");
+            RegCloseKey(hk);
+        }
+    }
+
+    /* 2. Display adapter class key + Video key, for each ControlSet */
+    static const char *s_csets[] = {
+        "CurrentControlSet", "ControlSet001", "ControlSet002", "ControlSet003", NULL
+    };
+    static const char *s_subtree[] = {
+        "Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}",
+        "Control\\Video",
+        NULL
+    };
+
+    for (int ci = 0; s_csets[ci]; ci++) {
+        for (int ti = 0; s_subtree[ti]; ti++) {
+            char base[256];
+            snprintf(base, sizeof(base), "SYSTEM\\%s\\%s",
+                     s_csets[ci], s_subtree[ti]);
+
+            HKEY hbase = NULL;
+            if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, base,
+                              0, KEY_READ | KEY_ENUMERATE_SUB_KEYS,
+                              &hbase) != ERROR_SUCCESS)
+                continue;
+
+            /* Enumerate immediate subkeys (adapter GUIDs or "0000","0001"...) */
+            DWORD si2 = 0;
+            char  sk1[256];
+            DWORD sk1_len;
+            while (1) {
+                sk1_len = (DWORD)sizeof(sk1);
+                if (RegEnumKeyExA(hbase, si2++, sk1, &sk1_len,
+                                  NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+                    break;
+
+                char sub1[512];
+                snprintf(sub1, sizeof(sub1), "%s\\%s", base, sk1);
+                HKEY h1 = NULL;
+                if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub1,
+                                  0, KEY_READ | KEY_ENUMERATE_SUB_KEYS,
+                                  &h1) != ERROR_SUCCESS)
+                    continue;
+
+                /* Try value directly on this key */
+                OGLI_READ_SZ(h1, OGLI_VALNAME);
+
+                /* Also enumerate one level deeper (for Video\{GUID}\0000 layout) */
+                DWORD si3 = 0;
+                char  sk2[64];
+                DWORD sk2_len;
+                while (1) {
+                    sk2_len = (DWORD)sizeof(sk2);
+                    if (RegEnumKeyExA(h1, si3++, sk2, &sk2_len,
+                                      NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+                        break;
+                    char sub2[640];
+                    snprintf(sub2, sizeof(sub2), "%s\\%s", sub1, sk2);
+                    HKEY h2 = NULL;
+                    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub2,
+                                      0, KEY_READ, &h2) == ERROR_SUCCESS) {
+                        OGLI_READ_SZ(h2, OGLI_VALNAME);
+                        RegCloseKey(h2);
+                    }
+                }
+                RegCloseKey(h1);
+            }
+            RegCloseKey(hbase);
+        }
+    }
+
+#  undef OGLI_TRY
+#  undef OGLI_READ_SZ
+#  undef OGLI_VALNAME
+#  undef OGLI_SOFTKEY
+
+    return NULL;  /* not found */
+}
+
 /* ── Logging ─────────────────────────────────────────────────────────────── */
 /*
  * Logging is opt-in via the environment variable STEREO_LOGFILE_PATH.
