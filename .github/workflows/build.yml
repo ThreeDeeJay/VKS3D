@@ -52,7 +52,8 @@ jobs:
           cmake -B build_x64 -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DVKS3D_BUILD_TESTS=ON `
-            -DVKS3D_BUILD_DEMO=OFF
+            -DVKS3D_BUILD_DEMO=ON `
+            -DSTEREO_BUILD_DEMO=ON
 
       - name: Build (x64)
         run: cmake --build build_x64 --config Release --parallel
@@ -67,6 +68,7 @@ jobs:
           name: VKS3D-windows-x64
           path: |
             build_x64/Release/VKS3D_x64.dll
+            build_x64/Release/vks3d_diag.exe
             manifest/VKS3D_x64.json
             scripts/install.bat
             scripts/uninstall.bat
@@ -105,7 +107,8 @@ jobs:
           cmake -B build_x86 -A Win32 `
             -DCMAKE_BUILD_TYPE=Release `
             -DVKS3D_BUILD_TESTS=ON `
-            -DVKS3D_BUILD_DEMO=OFF
+            -DVKS3D_BUILD_DEMO=ON `
+            -DSTEREO_BUILD_DEMO=ON
 
       - name: Build (x86)
         run: cmake --build build_x86 --config Release --parallel
@@ -145,16 +148,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: VKS3D-windows-x64
-          path: dist/
+          path: artifacts/
 
       - name: Download x86
         uses: actions/download-artifact@v4
         with:
           name: VKS3D-windows-x86
-          path: dist/
+          path: artifacts/
 
       - name: Copy manifests and scripts
         run: |
+          Copy-Item artifacts\build_x86\Release\VKS3D_x86.dll dist\
+          Copy-Item artifacts\build_x64\Release\VKS3D_x64.dll dist\
+          Copy-Item artifacts\build_x64\Release\vks3d_diag.exe dist\
           Copy-Item manifest\VKS3D_x64.json dist\
           Copy-Item manifest\VKS3D_x86.json dist\
           Copy-Item scripts\install.bat      dist\
