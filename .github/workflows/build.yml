@@ -6,9 +6,6 @@ env:
   Branch: ${{github.ref_name}}
   Artifacts: build
   Title: ${{github.event.repository.name}}
-  Executable: ${{github.event.repository.name}}.exe # *
-#  DXSDK_DIR: C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\
-#  VULKAN_VERSION: 1.1.130.0
 
 on:
   push:
@@ -19,12 +16,26 @@ on:
 
 jobs:
   Windows:
+    name: ${{matrix.Settings.Name}}
+    runs-on: windows-2022
     strategy:
       matrix:
-        Platform: [Win32, x64]
         Configuration: [Release, Debug]
+        Settings:
+        - {
+            Name: "${{matrix.Settings.Architecture}}-${{matrix.Settings.Configuration}}",
+            Architecture: "Win${{matrix.Settings.Bits}}",
+            Bits: "32",
+            Platform: "x86"
+          }
+        - {
+            Name: "${{matrix.Settings.Architecture}}-${{matrix.Settings.Configuration}}",
+            Architecture: "Win${{matrix.Settings.Bits}}",
+            Bits: "64",
+            Platform: "x64"
+          }
 
-    runs-on: windows-2022
+
     steps:
 
     - name: Clone repo and submodules
@@ -47,7 +58,7 @@ jobs:
 
     - name: Configure
       run: >
-        cmake -A "${{matrix.Platform}}"
+        cmake -A "${{matrix.Settings.Platform}}"
         -B ${{github.workspace}}/build 
         -DCMAKE_BUILD_TYPE=${{matrix.Configuration}}
         -DVKS3D_BUILD_TESTS=ON
@@ -63,15 +74,13 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{env.Title}}-${{matrix.Platform}}-${{matrix.Configuration}}
+        name: ${{matrix.Settings.Architecture}}-${{matrix.Configuration}}
         path: |
-          build/${{matrix.Configuration}}/VKS3D_x86.dll
-          build/${{matrix.Configuration}}/VKS3D_x64.dll
+          build/${{matrix.Configuration}}/VKS3D_${{matrix.Settings.Platform}}.dll
           build/${{matrix.Configuration}}/vks3d_diag.exe
           build/${{matrix.Configuration}}/test_stereo_math.exe
           build/${{matrix.Configuration}}/test_spirv_patch.exe
-          manifest/VKS3D_x86.json
-          manifest/VKS3D_x64.json
+          manifest/VKS3D_${{matrix.Settings.Platform}}.json
           scripts/install.bat
           scripts/uninstall.bat
           scripts/Install-VKS3D.ps1
