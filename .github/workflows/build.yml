@@ -20,11 +20,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  ${{env.Platform}}-${{env.Configuration}}:
+  Test:
     strategy:
       matrix:
-        Platform: ${{env.Platform}}
-        Configuration: ${{env.Configuration}}
+        Platform: [Win32, x64]
+        Configuration: [Release, Debug]
 
     runs-on: windows-2022
     steps:
