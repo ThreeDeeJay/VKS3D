@@ -55,9 +55,7 @@ jobs:
             -DVKS3D_BUILD_DEMO=OFF
 
       - name: Build (x64)
-        run: |
-          cmake --build build_x64 --config Release --parallel
-          cl /W3 /O2 tests\vks3d_diag.c /link /out:dist\vks3d_diag.exe vulkan-1.lib
+        run: cmake --build build_x64 --config Release --parallel
 
       - name: Test (x64)
         working-directory: build_x64
@@ -110,9 +108,7 @@ jobs:
             -DVKS3D_BUILD_DEMO=OFF
 
       - name: Build (x86)
-        run: |
-          cmake --build build_x86 --config Release --parallel
-          cl /W3 /O2 tests\vks3d_diag.c /link /out:dist\vks3d_diag.exe vulkan-1.lib
+        run: cmake --build build_x86 --config Release --parallel
 
       - name: Test (x86)
         working-directory: build_x86
