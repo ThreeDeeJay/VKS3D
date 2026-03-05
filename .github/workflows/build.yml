@@ -76,8 +76,8 @@ jobs:
         path: |
           build/${{matrix.Configuration}}/VKS3D_${{matrix.Settings.Architecture}}.dll
           build/${{matrix.Configuration}}/vks3d_diag.exe
-          build/${{matrix.Configuration}}/test_stereo_math.exe
-          build/${{matrix.Configuration}}/test_spirv_patch.exe
+          build/tests/test_stereo_math.exe
+          build/tests/test_spirv_patch.exe
 
   Release:
     name: Package release
@@ -113,18 +113,19 @@ jobs:
 
       - name: Copy manifests and scripts
         run: |
-          Copy-Item Artifacts\VKS3D_x64.dll Release\
-          Copy-Item Artifacts\VKS3D_x86.dll Release\
-          Copy-Item Artifacts\vks3d_diag.exe Release\
-          Copy-Item Artifacts\test_stereo_math.exe Release\
-          Copy-Item Artifacts\test_spirv_patch.exe Release\
-          Copy-Item manifest\VKS3D_x64.json Release\
-          Copy-Item manifest\VKS3D_x86.json Release\
-          Copy-Item scripts\install.bat Release\
-          Copy-Item scripts\uninstall.bat Release\
-          Copy-Item scripts\Install-VKS3D.ps1 Release\
-          Copy-Item LICENSE Release\
-          Copy-Item README.md Release\
+          mkdir "Release"
+          cp "Artifacts\VKS3D_x86.dll" "Release/VKS3D_x86.dll"
+          cp "Artifacts\VKS3D_x64.dll" "Release/VKS3D_x64.dll"
+          cp "Artifacts\vks3d_diag.exe" "Release/vks3d_diag.exe"
+          cp "Artifacts\test_stereo_math.exe" "Release/test_stereo_math.exe"
+          cp "Artifacts\test_spirv_patch.exe" "Release/test_spirv_patch.exe"
+          cp "manifest\VKS3D_x86.json" "Release/VKS3D_x86.json"
+          cp "manifest\VKS3D_x64.json" "Release/VKS3D_x64.json"
+          cp "scripts\install.bat" "Release/install.bat"
+          cp "scripts\uninstall.bat" "Release/uninstall.bat"
+          cp "scripts\Install-VKS3D.ps1" "Release/Install-VKS3D.ps1"
+          cp "LICENSE" "Release/License.txt"
+          cp "README.md" "Release/ReadMe.txt"
   
       - name: Compress artifacts
         if: github.event_name == 'push'
