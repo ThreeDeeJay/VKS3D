@@ -311,6 +311,7 @@ typedef struct StereoSwapchain {
     uint32_t          app_height;
     uint32_t          sbs_width;
     VkFormat          format;
+    bool              stereo_active;  /* false if stereo alloc failed → passthrough */
     VkImage          *sbs_images;
     uint32_t          image_count;
     VkImage          *stereo_images;
@@ -467,6 +468,8 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDevice(
     VkPhysicalDevice, const VkDeviceCreateInfo*, const VkAllocationCallbacks*, VkDevice*);
 VKAPI_ATTR void VKAPI_CALL stereo_DestroyDevice(VkDevice, const VkAllocationCallbacks*);
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL stereo_GetDeviceProcAddr(VkDevice, const char*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImageView(
+    VkDevice, const VkImageViewCreateInfo*, const VkAllocationCallbacks*, VkImageView*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(
     VkDevice, const VkRenderPassCreateInfo*, const VkAllocationCallbacks*, VkRenderPass*);
 #ifdef VK_KHR_create_renderpass2

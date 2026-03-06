@@ -245,6 +245,13 @@ VkResult stereo_composite_to_sbs(
 {
     *out_signal_sem = VK_NULL_HANDLE;
 
+    /* Skip composite if stereo target allocation failed for this swapchain */
+    if (!sc->stereo_active) {
+        STEREO_LOG("stereo_composite_to_sbs: skipping (stereo_active=false)");
+        *out_signal_sem = VK_NULL_HANDLE;
+        return VK_SUCCESS;
+    }
+
     VkResult res = ensure_composite_resources(sd, sc);
     if (res != VK_SUCCESS) return res;
 

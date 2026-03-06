@@ -186,6 +186,8 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_GetDeviceProcAddr;
     if (!strcmp(name, "vkDestroyDevice"))
         return (PFN_vkVoidFunction)stereo_DestroyDevice;
+    if (!strcmp(name, "vkCreateImageView"))
+        return (PFN_vkVoidFunction)stereo_CreateImageView;
     if (!strcmp(name, "vkCreateRenderPass"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass;
 #ifdef VK_KHR_create_renderpass2
@@ -248,6 +250,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
         return (PFN_vkVoidFunction)stereo_GetDeviceProcAddr;
     if (!strcmp(pName, "vkDestroyDevice"))
         return (PFN_vkVoidFunction)stereo_DestroyDevice;
+    if (!strcmp(pName, "vkCreateImageView"))
+        return (PFN_vkVoidFunction)stereo_CreateImageView;
     if (!strcmp(pName, "vkCreateRenderPass"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass;
 #ifdef VK_KHR_create_renderpass2
@@ -396,3 +400,9 @@ vkCreateShaderModule(VkDevice d, const VkShaderModuleCreateInfo *c,
 VKAPI_ATTR void VKAPI_CALL
 vkDestroyShaderModule(VkDevice d, VkShaderModule s, const VkAllocationCallbacks *a)
 { stereo_DestroyShaderModule(d, s, a); }
+
+/* Named export: vkCreateImageView */
+VKAPI_ATTR VkResult VKAPI_CALL
+vkCreateImageView(VkDevice d, const VkImageViewCreateInfo *c,
+                  const VkAllocationCallbacks *a, VkImageView *v)
+{ return stereo_CreateImageView(d, c, a, v); }

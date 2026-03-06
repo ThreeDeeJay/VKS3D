@@ -232,8 +232,22 @@ stereo_CreateSwapchainKHR(
         res = alloc_stereo_image(sd, app_w, app_h, sc->format,
                                   &sc->stereo_images[i], &sc->stereo_memory[i]);
         if (res != VK_SUCCESS) {
-            STEREO_ERR("Failed to allocate stereo image %u: %d", i, res);
-            return res;
+            STEREO_ERR("Failed to allocate stereo image %u: %d -- "
+                       "falling back to passthrough (no stereo for this swapchain)", i, res);
+            /* Zero out partial allocation so GetSwapchainImagesKHR falls back
+             * to returning the real SBS images rather than null handles, which
+             * would cause an access violation in the app. */
+            sc->stereo_active = false;
+            for (uint32_t j = 0; j < i; j++) {
+                if (sc->stereo_images[j])
+                    sd->real.DestroyImage(sd->real_device, sc->stereo_images[j], NULL);
+                if (sc->stereo_memory[j])
+                    sd->real.FreeMemory(sd->real_device, sc->stereo_memory[j], NULL);
+                sc->stereo_images[j] = VK_NULL_HANDLE;
+                sc->stereo_memory[j] = VK_NULL_HANDLE;
+            }
+            /* Swapchain still usable in passthrough mode */
+            return VK_SUCCESS;
         }
 
         /* Array view (for use as framebuffer attachment in multiview render pass) */
@@ -269,6 +283,7 @@ stereo_CreateSwapchainKHR(
         if (res != VK_SUCCESS) return res;
     }
 
+    sc->stereo_active = true;
     STEREO_LOG("Swapchain %p: %u images, stereo targets allocated",
                (void*)*pSwapchain, sc->image_count);
     return VK_SUCCESS;
@@ -369,7 +384,8 @@ stereo_GetSwapchainImagesKHR(
     uint32_t copy = (*pSwapchainImageCount < sc->image_count)
                   ? *pSwapchainImageCount : sc->image_count;
     for (uint32_t i = 0; i < copy; i++)
-        pSwapchainImages[i] = sc->stereo_images[i];
+        /* Return stereo render target if active, else real SBS image */
+        pSwapchainImages[i] = sc->stereo_active ? sc->stereo_images[i] : sc->sbs_images[i];
     *pSwapchainImageCount = copy;
 
     return (copy < sc->image_count) ? VK_INCOMPLETE : VK_SUCCESS;
