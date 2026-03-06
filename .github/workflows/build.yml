@@ -56,9 +56,15 @@ jobs:
       if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
       shell: powershell
       run: |
-        echo "VULKAN_SDK=C:\VulkanSDK\1.2.189.0" >> $env:GITHUB_ENV
         Invoke-WebRequest -Method Get -Uri https://web.archive.org/web/20211204134012if_/https://sdk.lunarg.com/sdk/download/1.2.189.0/windows/VulkanSDK-1.2.189.0-Installer.exe -OutFile VulkanSDK.exe -UseBasicParsing
         Start-Process -Wait ./VulkanSDK.exe -ArgumentList "/S", "--accept-licenses", "--default-answer", "--confirm-command install", "com.lunarg.vulkan.32bit"
+    - name: Set VULKAN_SDK
+      shell: powershell
+      run: |
+        echo "VULKAN_SDK=C:\VulkanSDK\1.2.189.0" >> $env:GITHUB_ENV
+
+    - name: List files
+      run: dir "${{env.VULKAN_SDK}}\Lib32"
 
     - name: Configure
       run: >
