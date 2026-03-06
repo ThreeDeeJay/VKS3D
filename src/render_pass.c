@@ -50,6 +50,38 @@ stereo_CreateRenderPass(
         return res;
     }
 
+    /* ── Determine whether this is a swapchain (stereo) render pass ──────
+     * Only render passes that contain an attachment with
+     * finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR are swapchain output
+     * passes.  Offscreen passes (cubemap faces, shadow maps, G-buffers, …)
+     * never have PRESENT_SRC_KHR and must NOT get multiview: their
+     * framebuffer attachments are single-layer images, so injecting
+     * viewMask=0x3 causes the GPU to write to layer 1 which does not exist
+     * → VK_ERROR_DEVICE_LOST on the first frame.
+     */
+    bool is_swapchain_pass = false;
+    for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+        if (pCreateInfo->pAttachments[i].finalLayout
+                == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+            is_swapchain_pass = true;
+            break;
+        }
+    }
+
+    if (!is_swapchain_pass) {
+        /* Passthrough — not the swapchain output pass, do not inject multiview */
+        VkResult res = sd->real.CreateRenderPass(
+            sd->real_device, pCreateInfo, pAllocator, pRenderPass);
+        if (res == VK_SUCCESS && sd->render_pass_count < MAX_RENDER_PASSES) {
+            StereoRenderPassInfo *rpi = &sd->render_passes[sd->render_pass_count++];
+            rpi->handle        = *pRenderPass;
+            rpi->has_multiview = false;
+            rpi->view_mask     = 0;
+            rpi->subpass_count = pCreateInfo->subpassCount;
+        }
+        return res;
+    }
+
     /* ── Check if multiview already present ──────────────────────────── */
     const VkBaseInStructure *node = (const VkBaseInStructure*)pCreateInfo->pNext;
     bool already_has_mv = false;
@@ -122,7 +154,6 @@ stereo_CreateRenderPass(
         sd->real_device, &modified, pAllocator, pRenderPass);
 
     free(patched_atts);
-
     free(view_masks);
     free(corr_masks);
     free(view_offsets);
@@ -319,6 +350,24 @@ stereo_CreateRenderPass2KHR(
                 sd->real_device, pCreateInfo, pAllocator, pRenderPass);
         /* Passthrough via downgrade: call rp1 without stereo injection */
         return create_rp2_via_rp1(sd, pCreateInfo, pAllocator, pRenderPass);
+    }
+
+    /* Only inject multiview for the swapchain output pass (PRESENT_SRC_KHR) */
+    {
+        bool is_sc = false;
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            if (pCreateInfo->pAttachments[i].finalLayout
+                    == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+                is_sc = true;
+                break;
+            }
+        }
+        if (!is_sc) {
+            if (use_rp2)
+                return sd->real.CreateRenderPass2KHR(
+                    sd->real_device, pCreateInfo, pAllocator, pRenderPass);
+            return create_rp2_via_rp1(sd, pCreateInfo, pAllocator, pRenderPass);
+        }
     }
 
     uint32_t subpass_count = pCreateInfo->subpassCount;
