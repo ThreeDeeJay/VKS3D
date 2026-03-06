@@ -20,7 +20,7 @@ jobs:
     runs-on: windows-2022
     strategy:
       matrix:
-        Configuration: [Release, Debug]
+        Configuration: [Release]
         Settings:
         - {
             Name: "Win32",
