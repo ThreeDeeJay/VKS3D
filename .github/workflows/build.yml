@@ -134,7 +134,6 @@ jobs:
           cp "manifest\VKS3D_x64.json" "Release/VKS3D_x64.json"
           cp "scripts\install.bat" "Release/Install.bat"
           cp "scripts\uninstall.bat" "Release/Uninstall.bat"
-          cp "scripts\Install-VKS3D.ps1" "Release/Install.ps1"
           cp "LICENSE" "Release/License.txt"
           cp "README.md" "Release/ReadMe.txt"
   
