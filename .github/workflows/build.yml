@@ -75,7 +75,8 @@ jobs:
         -DVKS3D_BUILD_TESTS=ON
         -DVKS3D_BUILD_DEMO=ON
         -DSTEREO_BUILD_DEMO=ON
-        -CMAKE_LIBRARY_PATH=C:\VulkanSDK\1.3.296.0\Lib32\vulkan-1.lib
+
+#-CMAKE_LIBRARY_PATH=C:\VulkanSDK\1.3.296.0\Lib32\vulkan-1.lib
 
     - name: Build
       run: cmake --build "${{github.workspace}}/build" --config "${{matrix.Configuration}}"
