@@ -63,9 +63,6 @@ jobs:
       run: |
         echo "VULKAN_SDK=C:\VulkanSDK\1.2.189.0" >> $env:GITHUB_ENV
 
-    - name: List files
-      run: dir "${{env.VULKAN_SDK}}\Lib32"
-
     - name: Configure
       run: >
         cmake
@@ -93,6 +90,7 @@ jobs:
           build/${{matrix.Configuration}}/vks3d_diag.exe
           build/tests/${{matrix.Configuration}}/test_stereo_math.exe
           build/tests/${{matrix.Configuration}}/test_spirv_patch.exe
+          build/tests/${{matrix.Configuration}}/VKS3D_demo.exe
 
   Release:
     name: Release
@@ -115,22 +113,23 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{env.Title}}-Win32-Release
-          path: Artifacts/
+          path: Artifacts/Win32/
 
       - name: Download Win64
         uses: actions/download-artifact@v4
         with:
           name: ${{env.Title}}-Win64-Release
-          path: Artifacts/
+          path: Artifacts/Win64/
 
       - name: Deploy
         run: |
           mkdir "Release"
-          cp "Artifacts\Release\VKS3D_x86.dll" "Release/VKS3D_x86.dll"
-          cp "Artifacts\Release\VKS3D_x64.dll" "Release/VKS3D_x64.dll"
-          cp "Artifacts\Release\vks3d_diag.exe" "Release/vks3d_diag.exe"
-          cp "Artifacts\tests\Release\test_stereo_math.exe" "Release/test_stereo_math.exe"
-          cp "Artifacts\tests\Release\test_spirv_patch.exe" "Release/test_spirv_patch.exe"
+          cp "Artifacts\Win32\Release\VKS3D_x86.dll" "Release/VKS3D_x86.dll"
+          cp "Artifacts\Win64\Release\VKS3D_x64.dll" "Release/VKS3D_x64.dll"
+          cp "Artifacts\Win64\Release\vks3d_diag.exe" "Release/vks3d_diag.exe"
+          cp "Artifacts\Win64\tests\Release\test_stereo_math.exe" "Release/test_stereo_math.exe"
+          cp "Artifacts\Win64\tests\Release\test_spirv_patch.exe" "Release/test_spirv_patch.exe"
+          cp "Artifacts\Win64\tests\Release\VKS3D_demo.exe" "Release/VKS3D_demo.exe"
           cp "manifest\VKS3D_x86.json" "Release/VKS3D_x86.json"
           cp "manifest\VKS3D_x64.json" "Release/VKS3D_x64.json"
           cp "scripts\install.bat" "Release/Install.bat"
