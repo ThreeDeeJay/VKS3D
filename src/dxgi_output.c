@@ -263,10 +263,7 @@ bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc)
 
     /* QI chain: ID3D11Device → IDXGIDevice → GetAdapter → GetParent(IDXGIFactory2) */
     void *pDXGIDev = NULL;
-    HRESULT hr = COM_HR(pDev, 0, const GUID*, void**)(
-        pDev, &IID_IDXGIDevice, &pDXGIDev);
-    /* Manually write out the QI call since the macro doesn't work here */
-    hr = ((HRESULT(WINAPI*)(void*, const GUID*, void**))(*(void***)pDev)[0])
+    HRESULT hr = ((HRESULT(WINAPI*)(void*, const GUID*, void**))(*(void***)pDev)[0])
          (pDev, &IID_IDXGIDevice, &pDXGIDev);
     if (FAILED(hr) || !pDXGIDev) {
         STEREO_ERR("[DXGI] QI IDXGIDevice failed: 0x%x", (unsigned)hr);
