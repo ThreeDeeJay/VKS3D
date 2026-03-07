@@ -1,92 +1,44 @@
 /*
- * present.c — Side-By-Side composite blit pass
+ * present.c — DXGI 1.2 stereo composite + present
  *
- * Called at vkQueuePresentKHR time, before the real present.
+ * Called from swapchain.c::stereo_QueuePresentKHR for each frame.
  *
- * We blit:
- *   - stereo_images[idx] layer 0  →  sbs_images[idx] left  half  [0, W)
- *   - stereo_images[idx] layer 1  →  sbs_images[idx] right half  [W, 2W)
+ * Flow:
+ *   1. Record a staging command buffer:
+ *        a. Transition stereo_images[idx]: COLOR_ATTACHMENT → TRANSFER_SRC
+ *        b. vkCmdCopyImageToBuffer — layer 0 → buf[0 .. W*H*4)
+ *                                     layer 1 → buf[W*H*4 .. 2*W*H*4)
+ *        c. Transition back: TRANSFER_SRC → COLOR_ATTACHMENT
+ *   2. Submit staging CB: wait on app's render-complete semaphores,
+ *      signal stage_fences[idx] when done.
+ *   3. CPU WaitForFences(stage_fences[idx]) — blocks until pixels are in
+ *      stage_mapped[idx] (host-coherent, no explicit flush needed).
+ *   4. dxgi_present_frame() uploads left/right halves to D3D11 textures
+ *      and calls IDXGISwapChain::Present(1, 0).
  *
- * This uses vkCmdBlitImage inside a one-time command buffer allocated
- * from a persistent command pool per swapchain.
- *
- * Memory barriers correctly transition image layouts before/after the blit.
- *
- * At the end we submit the composite command buffer and WAIT for it before
- * returning to the caller.  A production implementation would pipeline this
- * with semaphores instead of blocking.
+ * NOTE: stage_fences[idx] is reset here (before submit) and was waited on
+ *       by AcquireNextImageKHR, so no double-wait hazard exists.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "stereo_icd.h"
-
-/* ── Ensure composite cmd pool exists ───────────────────────────────────── */
-static VkResult ensure_composite_resources(StereoDevice *sd, StereoSwapchain *sc)
-{
-    if (sc->composite_cmd_pool != VK_NULL_HANDLE)
-        return VK_SUCCESS;
-
-    /* ── Command pool ────────────────────────────────────────────── */
-    /* Find a queue family with graphics or transfer capability */
-    uint32_t qf_count = 0;
-    sd->si->real.GetPhysicalDeviceQueueFamilyProperties(
-        sd->real_physdev, &qf_count, NULL);
-
-    VkQueueFamilyProperties *qfps =
-        malloc(qf_count * sizeof(VkQueueFamilyProperties));
-    if (!qfps) return VK_ERROR_OUT_OF_HOST_MEMORY;
-
-    sd->si->real.GetPhysicalDeviceQueueFamilyProperties(
-        sd->real_physdev, &qf_count, qfps);
-
-    uint32_t qf_idx = 0;
-    for (uint32_t i = 0; i < qf_count; i++) {
-        if (qfps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            qf_idx = i;
-            break;
-        }
-    }
-    free(qfps);
-
-    VkCommandPoolCreateInfo cpci = {
-        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = qf_idx,
-    };
-    VkResult res = sd->real.CreateCommandPool(
-        sd->real_device, &cpci, NULL, &sc->composite_cmd_pool);
-    if (res != VK_SUCCESS) return res;
-
-    /* ── Allocate one command buffer per swapchain image ──────────── */
-    VkCommandBufferAllocateInfo cbai = {
-        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool        = sc->composite_cmd_pool,
-        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = sc->image_count,
-    };
-    res = sd->real.AllocateCommandBuffers(
-        sd->real_device, &cbai, sc->composite_cmds);
-    if (res != VK_SUCCESS) return res;
-
-    STEREO_LOG("Composite resources created for swapchain %p", (void*)sc->real_swapchain);
-    return VK_SUCCESS;
-}
+#include "dxgi_output.h"
 
 /* ── Image memory barrier helper ─────────────────────────────────────────── */
 static void cmd_barrier(
-    StereoDevice            *sd,
-    VkCommandBuffer          cmd,
-    VkImage                  image,
-    uint32_t                 old_layout,   /* VkImageLayout */
-    uint32_t                 new_layout,   /* VkImageLayout */
-    VkAccessFlags            src_access,
-    VkAccessFlags            dst_access,
-    VkPipelineStageFlags     src_stage,
-    VkPipelineStageFlags     dst_stage,
-    uint32_t                 base_layer,
-    uint32_t                 layer_count)
+    StereoDevice        *sd,
+    VkCommandBuffer      cmd,
+    VkImage              image,
+    VkImageLayout        old_layout,
+    VkImageLayout        new_layout,
+    VkAccessFlags        src_access,
+    VkAccessFlags        dst_access,
+    VkPipelineStageFlags src_stage,
+    VkPipelineStageFlags dst_stage,
+    uint32_t             base_layer,
+    uint32_t             layer_count)
 {
     VkImageMemoryBarrier imb = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -109,15 +61,16 @@ static void cmd_barrier(
         0, 0, NULL, 0, NULL, 1, &imb);
 }
 
-/* ── Record SBS blit command buffer for one swapchain image ──────────────── */
-static VkResult record_composite_cmd(
-    StereoDevice   *sd,
+/* ── Record staging command buffer for one swapchain image ──────────────── */
+static VkResult record_staging_cmd(
+    StereoDevice    *sd,
     StereoSwapchain *sc,
-    uint32_t        idx)
+    uint32_t         idx)
 {
-    VkCommandBuffer cmd = sc->composite_cmds[idx];
-    VkImage         src = sc->stereo_images[idx];   /* 2-layer W×H         */
-    VkImage         dst = sc->sbs_images[idx];      /* 1-layer (2W)×H      */
+    VkCommandBuffer  cmd = sc->stage_cmds[idx];
+    VkImage          src = sc->stereo_images[idx];
+    VkBuffer         dst = sc->stage_buf[idx];
+    VkDeviceSize eye_sz  = (VkDeviceSize)sc->app_width * sc->app_height * 4;
 
     VkCommandBufferBeginInfo begin = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -126,7 +79,7 @@ static VkResult record_composite_cmd(
     VkResult res = sd->real.BeginCommandBuffer(cmd, &begin);
     if (res != VK_SUCCESS) return res;
 
-    /* ── Barrier: stereo images color_attachment → transfer_src ──── */
+    /* ── Transition both layers: COLOR_ATTACHMENT → TRANSFER_SRC ──── */
     cmd_barrier(sd, cmd, src,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -134,82 +87,33 @@ static VkResult record_composite_cmd(
         VK_ACCESS_TRANSFER_READ_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0, 2);   /* both layers */
+        0, 2);
 
-    /* ── Barrier: SBS swapchain image undefined → transfer_dst ───── */
-    cmd_barrier(sd, cmd, dst,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        0,
-        VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0, 1);
+    /* ── Copy layer 0 (left eye) → buf[0 .. eye_sz) ─────────────────── */
+    VkBufferImageCopy copy0 = {
+        .bufferOffset      = 0,
+        .bufferRowLength   = 0,   /* tightly packed */
+        .bufferImageHeight = 0,
+        .imageSubresource  = {
+            .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel       = 0,
+            .baseArrayLayer = 0,  /* left eye */
+            .layerCount     = 1,
+        },
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {sc->app_width, sc->app_height, 1},
+    };
+    sd->real.CmdCopyImageToBuffer(cmd, src,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, 1, &copy0);
 
-    uint32_t W = sc->app_width;
-    uint32_t H = sc->app_height;
+    /* ── Copy layer 1 (right eye) → buf[eye_sz .. 2*eye_sz) ─────────── */
+    VkBufferImageCopy copy1 = copy0;
+    copy1.bufferOffset              = eye_sz;
+    copy1.imageSubresource.baseArrayLayer = 1;  /* right eye */
+    sd->real.CmdCopyImageToBuffer(cmd, src,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, 1, &copy1);
 
-    /* ── Blit layer 0 (left eye) → left half of SBS image ─────────── */
-    {
-        VkImageBlit blit = {
-            .srcSubresource = {
-                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-                .mipLevel       = 0,
-                .baseArrayLayer = 0,   /* left eye */
-                .layerCount     = 1,
-            },
-            .srcOffsets = { {0, 0, 0}, {(int32_t)W, (int32_t)H, 1} },
-            .dstSubresource = {
-                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-                .mipLevel       = 0,
-                .baseArrayLayer = 0,
-                .layerCount     = 1,
-            },
-            /* Left half of the SBS image */
-            .dstOffsets = { {0, 0, 0}, {(int32_t)W, (int32_t)H, 1} },
-        };
-        sd->real.CmdBlitImage(cmd,
-            src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &blit, VK_FILTER_NEAREST);
-    }
-
-    /* ── Blit layer 1 (right eye) → right half of SBS image ────────── */
-    {
-        VkImageBlit blit = {
-            .srcSubresource = {
-                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-                .mipLevel       = 0,
-                .baseArrayLayer = 1,   /* right eye */
-                .layerCount     = 1,
-            },
-            .srcOffsets = { {0, 0, 0}, {(int32_t)W, (int32_t)H, 1} },
-            .dstSubresource = {
-                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-                .mipLevel       = 0,
-                .baseArrayLayer = 0,
-                .layerCount     = 1,
-            },
-            /* Right half of the SBS image: x offset by W */
-            .dstOffsets = { {(int32_t)W, 0, 0}, {(int32_t)(W*2), (int32_t)H, 1} },
-        };
-        sd->real.CmdBlitImage(cmd,
-            src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &blit, VK_FILTER_NEAREST);
-    }
-
-    /* ── Barrier: SBS image transfer_dst → present_src ─────────────── */
-    cmd_barrier(sd, cmd, dst,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_ACCESS_TRANSFER_WRITE_BIT,
-        0,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        0, 1);
-
-    /* ── Barrier: stereo images transfer_src → color_attachment ──── */
+    /* ── Transition both layers back: TRANSFER_SRC → COLOR_ATTACHMENT ─ */
     cmd_barrier(sd, cmd, src,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -222,104 +126,70 @@ static VkResult record_composite_cmd(
     return sd->real.EndCommandBuffer(cmd);
 }
 
-/* ── Public: run composite pass and wait ─────────────────────────────────── */
-/*
- * wait_sems / wait_stages: the app's pWaitSemaphores from QueuePresentKHR.
- *   We must pass these to the composite submit so the GPU waits for the
- *   app's rendering to finish before blitting the stereo images.
- *   Without this, the composite races the app's render commands → device lost.
- *
- * signal_sem (output): a semaphore we create and signal when composite finishes.
- *   The caller passes this to the real QueuePresentKHR as its wait semaphore,
- *   ensuring the display engine doesn't scan out before composite is done.
- *   Caller owns it and must destroy it after the real present returns.
- */
-VkResult stereo_composite_to_sbs(
-    StereoDevice    *sd,
-    VkQueue          queue,
-    StereoSwapchain *sc,
-    uint32_t         image_index,
-    uint32_t         wait_sem_count,
-    const VkSemaphore *wait_sems,
-    VkSemaphore     *out_signal_sem)
+/* ── Public: run DXGI stereo present ─────────────────────────────────────── */
+VkResult stereo_dxgi_present(
+    StereoDevice       *sd,
+    VkQueue             queue,
+    StereoSwapchain    *sc,
+    uint32_t            image_index,
+    uint32_t            wait_sem_count,
+    const VkSemaphore  *wait_sems)
 {
-    *out_signal_sem = VK_NULL_HANDLE;
-
-    /* Skip composite if stereo target allocation failed for this swapchain */
-    if (!sc->stereo_active) {
-        STEREO_LOG("stereo_composite_to_sbs: skipping (stereo_active=false)");
-        *out_signal_sem = VK_NULL_HANDLE;
+    if (!sc->stereo_active || !sc->dxgi_mode)
         return VK_SUCCESS;
-    }
 
-    VkResult res = ensure_composite_resources(sd, sc);
+    /* ── Reset and record staging command buffer ──────────────────── */
+    VkResult res = sd->real.ResetCommandBuffer(sc->stage_cmds[image_index], 0);
     if (res != VK_SUCCESS) return res;
 
-    /* Re-record each frame (images change layout every frame) */
-    res = sd->real.ResetCommandBuffer(sc->composite_cmds[image_index], 0);
-    if (res != VK_SUCCESS) return res;
-
-    res = record_composite_cmd(sd, sc, image_index);
+    res = record_staging_cmd(sd, sc, image_index);
     if (res != VK_SUCCESS) {
-        STEREO_ERR("record_composite_cmd failed: %d", res);
+        STEREO_ERR("record_staging_cmd failed: %d", res);
         return res;
     }
 
-    /* Create the completion semaphore the caller will pass to the real present */
-    VkSemaphoreCreateInfo sci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    VkSemaphore done_sem = VK_NULL_HANDLE;
-    res = sd->real.CreateSemaphore(sd->real_device, &sci, NULL, &done_sem);
-    if (res != VK_SUCCESS) return res;
-
-    /* Each wait semaphore needs a stage mask — we wait at TRANSFER for the blit */
+    /* ── Build wait-stage mask array ─────────────────────────────── */
     VkPipelineStageFlags *stage_masks = NULL;
     if (wait_sem_count > 0) {
         stage_masks = malloc(wait_sem_count * sizeof(VkPipelineStageFlags));
-        if (!stage_masks) {
-            sd->real.DestroySemaphore(sd->real_device, done_sem, NULL);
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
+        if (!stage_masks) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        /* Wait at TRANSFER stage — we blit from the stereo images */
         for (uint32_t i = 0; i < wait_sem_count; i++)
             stage_masks[i] = VK_PIPELINE_STAGE_TRANSFER_BIT;
     }
 
-    /* Submit composite: wait for app rendering, signal done_sem when finished */
+    /* ── Reset the staging fence (must not be pending before submit) ── */
+    res = sd->real.ResetFences(sd->real_device, 1, &sc->stage_fences[image_index]);
+    if (res != VK_SUCCESS) { free(stage_masks); return res; }
+
+    /* ── Submit staging: wait on app render sems, signal fence ──────── */
     VkSubmitInfo submit = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount   = wait_sem_count,
         .pWaitSemaphores      = wait_sems,
         .pWaitDstStageMask    = stage_masks,
         .commandBufferCount   = 1,
-        .pCommandBuffers      = &sc->composite_cmds[image_index],
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores    = &done_sem,
+        .pCommandBuffers      = &sc->stage_cmds[image_index],
     };
-
-    /* Create a fence so we can CPU-wait for the composite to finish */
-    VkFenceCreateInfo fci = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-    VkFence fence = VK_NULL_HANDLE;
-    res = sd->real.CreateFence(sd->real_device, &fci, NULL, &fence);
-    if (res != VK_SUCCESS) {
-        free(stage_masks);
-        sd->real.DestroySemaphore(sd->real_device, done_sem, NULL);
-        return res;
-    }
-
-    res = sd->real.QueueSubmit(queue, 1, &submit, fence);
-    if (res == VK_SUCCESS) {
-        res = sd->real.WaitForFences(
-            sd->real_device, 1, &fence, VK_TRUE, UINT64_MAX);
-    }
-
+    res = sd->real.QueueSubmit(queue, 1, &submit, sc->stage_fences[image_index]);
     free(stage_masks);
-    sd->real.DestroyFence(sd->real_device, fence, NULL);
-
     if (res != VK_SUCCESS) {
-        STEREO_ERR("Composite submit/wait failed: %d", res);
-        sd->real.DestroySemaphore(sd->real_device, done_sem, NULL);
+        STEREO_ERR("Staging submit failed: %d", res);
         return res;
     }
 
-    *out_signal_sem = done_sem;
-    return VK_SUCCESS;
+    /* ── CPU wait: block until GPU→CPU copy is done ──────────────── */
+    res = sd->real.WaitForFences(
+        sd->real_device, 1, &sc->stage_fences[image_index], VK_TRUE, UINT64_MAX);
+    if (res != VK_SUCCESS) {
+        STEREO_ERR("Staging fence wait failed: %d", res);
+        return res;
+    }
+
+    /* ── Hand off to DXGI (pixels are now in stage_mapped[image_index]) */
+    VkDeviceSize eye_sz = (VkDeviceSize)sc->app_width * sc->app_height * 4;
+    const void *left_pixels  = sc->stage_mapped[image_index];
+    const void *right_pixels = (const uint8_t*)sc->stage_mapped[image_index] + eye_sz;
+
+    return dxgi_present_frame(sd, sc, left_pixels, right_pixels);
 }

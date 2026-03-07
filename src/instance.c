@@ -332,7 +332,16 @@ stereo_CreateWin32SurfaceKHR(
     VkResult _r = si->real.CreateWin32SurfaceKHR(
         si->real_instance, pCreateInfo, pAllocator, pSurface);
     if (_r) STEREO_ERR("stereo_CreateWin32SurfaceKHR: real returned %d", (int)_r);
-    else STEREO_LOG("stereo_CreateWin32SurfaceKHR: surface=%p", pSurface ? (void*)(uintptr_t)*pSurface : NULL);
+    else {
+        STEREO_LOG("stereo_CreateWin32SurfaceKHR: surface=%p", pSurface ? (void*)(uintptr_t)*pSurface : NULL);
+        /* Save surface → HWND mapping for use in CreateSwapchainKHR */
+        if (pSurface && pCreateInfo &&
+            si->surface_hwnd_count < MAX_SURFACES) {
+            si->surface_hwnd[si->surface_hwnd_count].surface = *pSurface;
+            si->surface_hwnd[si->surface_hwnd_count].hwnd    = pCreateInfo->hwnd;
+            si->surface_hwnd_count++;
+        }
+    }
     return _r;
 }
 #endif

@@ -51,6 +51,7 @@ set(STEREO_SOURCES
     src/shader.c
     src/swapchain.c
     src/present.c
+    src/dxgi_output.c
 )
 
 # ── Shader compilation ───────────────────────────────────────────────────────

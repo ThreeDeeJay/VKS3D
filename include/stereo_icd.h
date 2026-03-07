@@ -288,6 +288,13 @@ typedef struct RealDeviceDispatch {
 
 /* ── Object wrappers ─────────────────────────────────────────────────────── */
 
+/* Surface → HWND mapping (populated by stereo_CreateWin32SurfaceKHR) */
+#define MAX_SURFACES 16
+typedef struct StereoSurfaceHWND {
+    VkSurfaceKHR surface;
+    HWND         hwnd;
+} StereoSurfaceHWND;
+
 typedef struct StereoInstance {
     /* VK_LOADER_DATA MUST be the very first field of every dispatchable handle
      * returned by an ICD.  The loader writes its dispatch pointer here.
@@ -298,37 +305,64 @@ typedef struct StereoInstance {
     RealInstanceDispatch      real;
     StereoConfig              stereo;
     PFN_vkGetInstanceProcAddr real_get_instance_proc_addr;
+    /* Surface → HWND map, filled by stereo_CreateWin32SurfaceKHR */
+    StereoSurfaceHWND         surface_hwnd[MAX_SURFACES];
+    uint32_t                  surface_hwnd_count;
 } StereoInstance;
+
+/* Look up HWND for a surface (returns NULL if not found) */
+static inline HWND stereo_si_hwnd_for_surface(StereoInstance *si, VkSurfaceKHR surface)
+{
+    for (uint32_t i = 0; i < si->surface_hwnd_count; i++)
+        if (si->surface_hwnd[i].surface == surface)
+            return si->surface_hwnd[i].hwnd;
+    return NULL;
+}
 
 /* No StereoPhysicalDevice wrapper — real physdevs are returned directly to the
  * loader so the loader can properly initialize their dispatch tables.  The
  * association physdev→StereoInstance is tracked in stereo.c via a flat map. */
 
 typedef struct StereoSwapchain {
-    VkSwapchainKHR    real_swapchain;
+    /* ── Handle ─────────────────────────────────────────────────────── */
+    VkSwapchainKHR    real_swapchain;   /* VK_NULL_HANDLE in DXGI stereo mode */
+    VkSwapchainKHR    app_handle;       /* handle returned to app */
     VkDevice          device;
     uint32_t          app_width;
     uint32_t          app_height;
-    uint32_t          sbs_width;
     VkFormat          format;
-    bool              stereo_active;  /* false if stereo alloc failed → passthrough */
-    VkImage          *sbs_images;
+    bool              stereo_active;    /* false = passthrough to real_swapchain */
+    bool              dxgi_mode;        /* true = DXGI 1.2 stereo output */
+
+    /* ── Vulkan stereo render targets (app renders here via multiview) */
     uint32_t          image_count;
-    VkImage          *stereo_images;
+    VkImage          *stereo_images;    /* [image_count], arrayLayers=2, W×H */
     VkDeviceMemory   *stereo_memory;
-    VkImageView      *stereo_views_l;
-    VkImageView      *stereo_views_r;
-    VkImageView      *stereo_views_arr;
-    VkRenderPass      composite_renderpass;
-    VkFramebuffer    *composite_framebuffers;
-    VkPipeline        composite_pipeline;
-    VkPipelineLayout  composite_layout;
-    VkDescriptorSetLayout composite_dsl;
-    VkDescriptorPool  composite_pool;
-    VkDescriptorSet  *composite_desc_sets;
-    VkCommandPool     composite_cmd_pool;
-    VkCommandBuffer  *composite_cmds;
-    VkSampler         composite_sampler;
+    VkImageView      *stereo_views_arr; /* 2D_ARRAY views for framebuffer */
+
+    /* ── DXGI stereo output ──────────────────────────────────────────── */
+    HWND              hwnd;
+    void             *dxgi_sc;          /* IDXGISwapChain* */
+    void             *d3d11_left_tex;   /* ID3D11Texture2D* left eye  */
+    void             *d3d11_right_tex;  /* ID3D11Texture2D* right eye */
+
+    /* ── Staging buffers (GPU → CPU copy for D3D11 upload) ──────────── */
+    /* One staging buffer per swapchain image; 2 × W × H × 4 bytes each */
+    VkBuffer         *stage_buf;        /* [image_count] */
+    VkDeviceMemory   *stage_mem;        /* [image_count] */
+    void            **stage_mapped;     /* [image_count] persistently mapped */
+
+    /* ── Staging command pool + per-image sync ───────────────────────── */
+    VkCommandPool     stage_pool;
+    VkCommandBuffer  *stage_cmds;       /* [image_count] */
+    VkFence          *stage_fences;     /* [image_count] */
+
+    /* ── AcquireNextImageKHR round-robin ─────────────────────────────── */
+    uint32_t          acquire_idx;
+
+    /* ── Passthrough mode fields (when dxgi_mode = false) ───────────── */
+    VkImage          *sbs_images;       /* real swapchain images */
+    uint32_t          sbs_width;
 } StereoSwapchain;
 
 typedef struct StereoRenderPassInfo {
@@ -340,8 +374,8 @@ typedef struct StereoRenderPassInfo {
 
 typedef struct StereoDevice {
     VkDevice               real_device;
-    StereoInstance        *si;           /* owning instance (replaces phys_dev->instance) */
-    VkPhysicalDevice       real_physdev; /* raw ICD physdev handle */
+    StereoInstance        *si;           /* owning instance */
+    VkPhysicalDevice       real_physdev;
     RealDeviceDispatch     real;
     StereoConfig           stereo;
     VkBuffer               stereo_ubo;
@@ -352,6 +386,18 @@ typedef struct StereoDevice {
     StereoSwapchain        swapchains[MAX_SWAPCHAINS];
     uint32_t               swapchain_count;
     stereo_mutex_t         lock;
+
+    /* ── D3D11 / DXGI stereo output (lazily initialized) ─────────────── */
+    bool                   d3d11_ok;
+    void                  *d3d11_dev;    /* ID3D11Device*         */
+    void                  *d3d11_ctx;    /* ID3D11DeviceContext*  */
+    void                  *nvapi_stereo; /* NvStereoHandle        */
+    void                  *nvapi_lib;    /* HMODULE nvapi64.dll   */
+    void                  *d3d11_lib;    /* HMODULE d3d11.dll     */
+
+    /* ── Graphics queue (for AcquireNextImageKHR semaphore signaling) ── */
+    VkQueue                gfx_queue;
+    uint32_t               gfx_qf;      /* graphics queue family index */
 } StereoDevice;
 
 /* ── Stereo UBO layout (matches GLSL std140) ─────────────────────────────── */
@@ -496,7 +542,7 @@ bool spirv_patch_stereo_vertex(
     float left_offset, float right_offset, float convergence);
 void spirv_patched_free(uint32_t *words);
 
-VkResult stereo_composite_to_sbs(
+/* DXGI stereo present: stage GPU→CPU, upload to D3D11, DXGI Present */
+VkResult stereo_dxgi_present(
     StereoDevice*, VkQueue, StereoSwapchain*, uint32_t image_index,
-    uint32_t wait_sem_count, const VkSemaphore *wait_sems,
-    VkSemaphore *out_signal_sem);
+    uint32_t wait_sem_count, const VkSemaphore *wait_sems);

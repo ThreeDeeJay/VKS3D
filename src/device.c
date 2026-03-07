@@ -271,6 +271,24 @@ stereo_CreateDevice(
 
     stereo_populate_device_dispatch(sd, sp_si->real_instance);
 
+    /* ── Cache graphics queue for AcquireNextImageKHR semaphore signaling ── */
+    {
+        uint32_t qf_count = 0;
+        sp_si->real.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &qf_count, NULL);
+        VkQueueFamilyProperties *qfps = malloc(qf_count * sizeof(VkQueueFamilyProperties));
+        if (qfps) {
+            sp_si->real.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &qf_count, qfps);
+            for (uint32_t i = 0; i < qf_count; i++) {
+                if (qfps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                    sd->gfx_qf = i;
+                    sd->real.GetDeviceQueue(real_dev, i, 0, &sd->gfx_queue);
+                    break;
+                }
+            }
+            free(qfps);
+        }
+    }
+
     /* Allocate stereo UBO */
     if (sd->stereo.enabled) {
         res = create_stereo_ubo(sd);

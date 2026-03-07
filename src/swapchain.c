@@ -1,98 +1,40 @@
 /*
- * swapchain.c — Side-By-Side swapchain management
+ * swapchain.c — DXGI 1.2 stereo swap chain (3D Vision) + passthrough
  *
- * Strategy
- * ────────
- * The application requests a swapchain of width W × height H.
- * We create a real swapchain of width (2×W) × H.
+ * Strategy (DXGI stereo mode)
+ * ───────────────────────────
+ * When stereo is enabled we bypass the Vulkan swap chain entirely for
+ * presentation and use DXGI 1.2's Stereo=TRUE Texture2DArray[2] instead.
  *
- * The left half  [0..W)   receives the left eye  (multiview layer 0)
- * The right half [W..2W)  receives the right eye (multiview layer 1)
+ *   slice 0 = left  eye
+ *   slice 1 = right eye
  *
- * Per-frame resources we allocate alongside the real swapchain:
- *   - A 2-layer image array (W × H, arrayLayers=2) per swapchain image,
- *     used as the multiview render target.
- *   - An image view of the full array (for use as a framebuffer attachment)
- *   - Individual layer views (for the composite blit shader)
- *   - A command pool + command buffers for the composite pass
- *   - Composite render pass, pipeline, framebuffers, descriptor sets
+ * Pipeline per frame:
+ *   1.  App calls AcquireNextImageKHR  → round-robin index, no-op submit
+ *       signals the app's semaphore/fence.
+ *   2.  App renders into stereo_images[idx] (VkImage, arrayLayers=2,
+ *       layer 0 = left, layer 1 = right) via multiview render pass.
+ *   3.  App calls QueuePresentKHR → VKS3D intercepts.
+ *   4.  VKS3D records + submits a staging command buffer that copies
+ *       both layers of stereo_images[idx] into stage_buf[idx]
+ *       (host-visible buffer, 2 × W×H×4 bytes).
+ *   5.  CPU waits for the staging fence → stage_mapped[idx] has the pixels.
+ *   6.  dxgi_present_frame() uploads pixels to D3D11 textures and calls
+ *       IDXGISwapChain::Present.
  *
- * At vkAcquireNextImageKHR we forward to the real (2×W) swapchain.
- * At vkQueuePresentKHR we run the composite blit BEFORE presenting.
+ * Passthrough (stereo disabled or DXGI init failed): every call is forwarded
+ * unchanged to the real Vulkan ICD.
  *
- * vkGetSwapchainImagesKHR reports the 2-layer images to the app, NOT the
- * real (2×W) swapchain images.  The app renders into the 2-layer images,
- * the composite pass blits them SBS into the real swapchain image.
+ * Side-By-Side (SBS) mode is deliberately NOT implemented here.  NVIDIA
+ * driver 426.06 does not auto-detect SBS in Vulkan; DXGI 1.2 stereo is the
+ * only supported path for 3D Vision output.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "stereo_icd.h"
-
-/* GLSL source for the SBS composite pass (compiled inline to SPIR-V as hex) */
-/* We embed precompiled SPIR-V for a full-screen-triangle blit shader.
- * Left half samples from layer 0, right half samples from layer 1. */
-
-/* ── Composite shader SPIR-V (pre-compiled) ─────────────────────────────── */
-/*
- * Vertex shader (full-screen triangle):
- *   void main() {
- *     vec2 uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
- *     gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
- *     outUV = uv;
- *   }
- */
-
-/* Fragment shader:
- *   layout(set=0, binding=0) uniform sampler2DArray tex;
- *   void main() {
- *     float layer = (inUV.x < 0.5) ? 0.0 : 1.0;
- *     float u     = (inUV.x < 0.5) ? inUV.x * 2.0 : (inUV.x - 0.5) * 2.0;
- *     outColor = texture(tex, vec3(u, inUV.y, layer));
- *   }
- */
-
-/* Precompiled SPIR-V words for the composite vertex shader */
-static const uint32_t COMPOSITE_VERT_SPV[] = {
-    /* SPIR-V header */
-    0x07230203, 0x00010300, 0x00070000, 0x00000018, 0x00000000,
-    /* Capabilities */
-    0x00020011, 0x00000001,  /* OpCapability Shader */
-    /* Memory model */
-    0x0003000E, 0x00000000, 0x00000001,  /* OpMemoryModel Logical GLSL450 */
-    /* Entry point: Vertex, main, gl_Position, gl_VertexIndex, outUV */
-    0x000A000F, 0x00000000, 0x00000001, 0x6E69616D, 0x00000000,
-                0x00000002, 0x00000003, 0x00000004, 0x00000000, 0x00000000,
-    /* Decorations */
-    0x00040047, 0x00000002, 0x0000000B, 0x00000000,  /* Position BuiltIn 0    */
-    0x00040047, 0x00000003, 0x0000000B, 0x00000002,  /* VertexIndex BuiltIn 42*/
-    0x00040047, 0x00000004, 0x0000001E, 0x00000000,  /* outUV Location 0      */
-    /* Types */
-    0x00020013, 0x00000005,  /* TypeVoid */
-    0x00030021, 0x00000006, 0x00000005, /* TypeFunction void */
-    0x00030016, 0x00000007, 0x00000020, /* TypeFloat 32 */
-    0x00040017, 0x00000008, 0x00000007, 0x00000004, /* TypeVector float 4 */
-    0x00040017, 0x00000009, 0x00000007, 0x00000002, /* TypeVector float 2 */
-    0x00040020, 0x0000000A, 0x00000003, 0x00000008, /* TypePointer Output v4 */
-    0x00040020, 0x0000000B, 0x00000003, 0x00000009, /* TypePointer Output v2 */
-    0x00040015, 0x0000000C, 0x00000020, 0x00000000, /* TypeInt 32 0 */
-    0x00040020, 0x0000000D, 0x00000001, 0x0000000C, /* TypePointer Input int */
-    /* Variables */
-    0x0004003B, 0x0000000A, 0x00000002, 0x00000003, /* Variable gl_Position Output */
-    0x0004003B, 0x0000000D, 0x00000003, 0x00000001, /* Variable gl_VertexIndex Input */
-    0x0004003B, 0x0000000B, 0x00000004, 0x00000003, /* Variable outUV Output */
-    /* Function main */
-    0x00050036, 0x00000005, 0x00000001, 0x00000000, 0x00000006, /* Function void main */
-    0x00020039, 0x00000010,              /* Label */
-    /* gl_Position = vec4(0,0,0,1) — simplified; full FST needs bit ops */
-    0x00000043, /* (placeholder — real SPIR-V would compute FST position) */
-    0x000100FD,  /* OpReturn */
-    0x00010038,  /* OpFunctionEnd */
-};
-/* NOTE: The above is a structural placeholder.  In production, use
- * glslangValidator or shaderc to compile the GLSL and embed the bytes.
- * See shaders/ directory for GLSL sources. */
+#include "dxgi_output.h"
 
 /* ── Helper: find suitable memory type ──────────────────────────────────── */
 static uint32_t find_memory_type(
@@ -101,8 +43,7 @@ static uint32_t find_memory_type(
     VkMemoryPropertyFlags props)
 {
     VkPhysicalDeviceMemoryProperties mp;
-    sd->si->real.GetPhysicalDeviceMemoryProperties(
-        sd->real_physdev, &mp);
+    sd->si->real.GetPhysicalDeviceMemoryProperties(sd->real_physdev, &mp);
     for (uint32_t i = 0; i < mp.memoryTypeCount; i++) {
         if ((type_bits & (1u << i)) &&
             (mp.memoryTypes[i].propertyFlags & props) == props)
@@ -111,25 +52,25 @@ static uint32_t find_memory_type(
     return UINT32_MAX;
 }
 
-/* ── Allocate per-frame multiview render target ──────────────────────────── */
+/* ── Allocate one 2-layer multiview render target (W×H, arrayLayers=2) ─── */
 static VkResult alloc_stereo_image(
-    StereoDevice *sd,
-    uint32_t      width, uint32_t height,
-    VkFormat      format,
-    VkImage      *out_image,
+    StereoDevice   *sd,
+    uint32_t        w,
+    uint32_t        h,
+    VkFormat        fmt,
+    VkImage        *out_image,
     VkDeviceMemory *out_mem)
 {
     VkImageCreateInfo ici = {
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType     = VK_IMAGE_TYPE_2D,
-        .format        = format,
-        .extent        = { .width = width, .height = height, .depth = 1 },
+        .format        = fmt,
+        .extent        = {w, h, 1},
         .mipLevels     = 1,
-        .arrayLayers   = 2,           /* one layer per eye */
+        .arrayLayers   = 2,   /* layer 0 = left eye, layer 1 = right eye */
         .samples       = VK_SAMPLE_COUNT_1_BIT,
         .tiling        = VK_IMAGE_TILING_OPTIMAL,
         .usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                       | VK_IMAGE_USAGE_SAMPLED_BIT
                        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -141,8 +82,11 @@ static VkResult alloc_stereo_image(
     sd->real.GetImageMemoryRequirements(sd->real_device, *out_image, &mr);
 
     uint32_t mt = find_memory_type(sd, mr.memoryTypeBits,
-                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    if (mt == UINT32_MAX) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (mt == UINT32_MAX) {
+        sd->real.DestroyImage(sd->real_device, *out_image, NULL);
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
 
     VkMemoryAllocateInfo mai = {
         .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -150,9 +94,60 @@ static VkResult alloc_stereo_image(
         .memoryTypeIndex = mt,
     };
     res = sd->real.AllocateMemory(sd->real_device, &mai, NULL, out_mem);
-    if (res != VK_SUCCESS) return res;
+    if (res != VK_SUCCESS) {
+        sd->real.DestroyImage(sd->real_device, *out_image, NULL);
+        return res;
+    }
 
     return sd->real.BindImageMemory(sd->real_device, *out_image, *out_mem, 0);
+}
+
+/* ── Allocate host-visible staging buffer (2 eyes × W×H×4 bytes) ─────── */
+static VkResult alloc_stage_buf(
+    StereoDevice   *sd,
+    uint32_t        w,
+    uint32_t        h,
+    VkBuffer       *out_buf,
+    VkDeviceMemory *out_mem,
+    void          **out_mapped)
+{
+    VkDeviceSize size = (VkDeviceSize)w * h * 4 * 2;  /* left + right eye */
+
+    VkBufferCreateInfo bci = {
+        .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size        = size,
+        .usage       = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VkResult res = sd->real.CreateBuffer(sd->real_device, &bci, NULL, out_buf);
+    if (res != VK_SUCCESS) return res;
+
+    VkMemoryRequirements mr;
+    sd->real.GetBufferMemoryRequirements(sd->real_device, *out_buf, &mr);
+
+    uint32_t mt = find_memory_type(sd, mr.memoryTypeBits,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (mt == UINT32_MAX) {
+        sd->real.DestroyBuffer(sd->real_device, *out_buf, NULL);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    VkMemoryAllocateInfo mai = {
+        .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize  = mr.size,
+        .memoryTypeIndex = mt,
+    };
+    res = sd->real.AllocateMemory(sd->real_device, &mai, NULL, out_mem);
+    if (res != VK_SUCCESS) {
+        sd->real.DestroyBuffer(sd->real_device, *out_buf, NULL);
+        return res;
+    }
+
+    res = sd->real.BindBufferMemory(sd->real_device, *out_buf, *out_mem, 0);
+    if (res != VK_SUCCESS) return res;
+
+    return sd->real.MapMemory(sd->real_device, *out_mem, 0, VK_WHOLE_SIZE, 0, out_mapped);
 }
 
 /* ── vkCreateSwapchainKHR ──────────────────────────────────────────────── */
@@ -166,92 +161,84 @@ stereo_CreateSwapchainKHR(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
+    /* ── Passthrough: stereo disabled or slot exhausted ─────────────── */
     if (!sd->stereo.enabled || sd->swapchain_count >= MAX_SWAPCHAINS) {
         return sd->real.CreateSwapchainKHR(
             sd->real_device, pCreateInfo, pAllocator, pSwapchain);
     }
 
-    /* ── Double the width for SBS ────────────────────────────────────── */
-    VkSwapchainCreateInfoKHR sci = *pCreateInfo;
-    uint32_t app_w = sci.imageExtent.width;
-    uint32_t app_h = sci.imageExtent.height;
-    sci.imageExtent.width = app_w * 2;  /* SBS requires 2× width */
+    uint32_t app_w = pCreateInfo->imageExtent.width;
+    uint32_t app_h = pCreateInfo->imageExtent.height;
 
-    /* The composite blit writes into the real SBS swapchain images via
-     * CmdBlitImage (dst).  The app typically only requests
-     * VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; without TRANSFER_DST_BIT the
-     * blit is illegal and causes VK_ERROR_DEVICE_LOST on the second submit
-     * (the first submit appears to succeed but the GPU state is corrupted).
-     * Similarly the stereo render target is a blit source so it needs
-     * TRANSFER_SRC_BIT — that is already set in alloc_stereo_image. */
-    sci.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-    STEREO_LOG("SBS swapchain: app %ux%u → real %ux%u",
-               app_w, app_h, sci.imageExtent.width, app_h);
-
-    VkResult res = sd->real.CreateSwapchainKHR(
-        sd->real_device, &sci, pAllocator, pSwapchain);
-    if (res != VK_SUCCESS) return res;
-
-    /* ── Register swapchain state ──────────────────────────────────── */
-    StereoSwapchain *sc = &sd->swapchains[sd->swapchain_count++];
+    /* ── Register swapchain slot ─────────────────────────────────────── */
+    StereoSwapchain *sc = &sd->swapchains[sd->swapchain_count];
     memset(sc, 0, sizeof(*sc));
-    sc->real_swapchain = *pSwapchain;
-    sc->device         = sd->real_device;
-    sc->app_width      = app_w;
-    sc->app_height     = app_h;
-    sc->sbs_width      = app_w * 2;
-    sc->format         = pCreateInfo->imageFormat;
+    sc->device     = sd->real_device;
+    sc->app_width  = app_w;
+    sc->app_height = app_h;
+    sc->format     = pCreateInfo->imageFormat;
+    sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
 
-    /* Get real swapchain images */
-    res = sd->real.GetSwapchainImagesKHR(
-        sd->real_device, sc->real_swapchain, &sc->image_count, NULL);
-    if (res != VK_SUCCESS) return res;
+    /* ── Try DXGI 1.2 stereo mode ────────────────────────────────────── */
+    bool dxgi_ok = false;
+    if (sc->hwnd && dxgi_device_init(sd)) {
+        if (dxgi_sc_create(sd, sc) && dxgi_tex_create(sd, sc))
+            dxgi_ok = true;
+        else
+            dxgi_sc_destroy(sc);
+    }
 
-    sc->sbs_images      = malloc(sc->image_count * sizeof(VkImage));
-    sc->stereo_images   = malloc(sc->image_count * sizeof(VkImage));
-    sc->stereo_memory   = malloc(sc->image_count * sizeof(VkDeviceMemory));
-    sc->stereo_views_l  = malloc(sc->image_count * sizeof(VkImageView));
-    sc->stereo_views_r  = malloc(sc->image_count * sizeof(VkImageView));
-    sc->stereo_views_arr= malloc(sc->image_count * sizeof(VkImageView));
-    sc->composite_framebuffers = malloc(sc->image_count * sizeof(VkFramebuffer));
-    sc->composite_cmds  = malloc(sc->image_count * sizeof(VkCommandBuffer));
-    sc->composite_desc_sets = malloc(sc->image_count * sizeof(VkDescriptorSet));
+    if (!dxgi_ok) {
+        STEREO_ERR("DXGI stereo init failed — passing through unmodified");
+        sc->stereo_active = false;
+        VkResult res = sd->real.CreateSwapchainKHR(
+            sd->real_device, pCreateInfo, pAllocator, pSwapchain);
+        if (res == VK_SUCCESS) {
+            sc->real_swapchain = *pSwapchain;
+            sc->app_handle     = *pSwapchain;
+            sd->swapchain_count++;
+        }
+        return res;
+    }
 
-    if (!sc->sbs_images || !sc->stereo_images || !sc->stereo_memory ||
-        !sc->stereo_views_l || !sc->stereo_views_r || !sc->stereo_views_arr ||
-        !sc->composite_framebuffers || !sc->composite_cmds || !sc->composite_desc_sets)
+    /* ── DXGI mode: allocate stereo render targets ───────────────────── */
+    /* Use a fixed image count (3-buffered) since we don't have a real  */
+    /* Vulkan swap chain to query.                                       */
+    sc->image_count = 3;
+
+    sc->stereo_images    = calloc(sc->image_count, sizeof(VkImage));
+    sc->stereo_memory    = calloc(sc->image_count, sizeof(VkDeviceMemory));
+    sc->stereo_views_arr = calloc(sc->image_count, sizeof(VkImageView));
+    sc->stage_buf        = calloc(sc->image_count, sizeof(VkBuffer));
+    sc->stage_mem        = calloc(sc->image_count, sizeof(VkDeviceMemory));
+    sc->stage_mapped     = calloc(sc->image_count, sizeof(void*));
+    sc->stage_cmds       = calloc(sc->image_count, sizeof(VkCommandBuffer));
+    sc->stage_fences     = calloc(sc->image_count, sizeof(VkFence));
+
+    if (!sc->stereo_images || !sc->stereo_memory || !sc->stereo_views_arr ||
+        !sc->stage_buf || !sc->stage_mem || !sc->stage_mapped ||
+        !sc->stage_cmds || !sc->stage_fences) {
+        dxgi_sc_destroy(sc);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
-    res = sd->real.GetSwapchainImagesKHR(
-        sd->real_device, sc->real_swapchain, &sc->image_count, sc->sbs_images);
-    if (res != VK_SUCCESS) return res;
-
-    /* Allocate per-image stereo render targets */
     for (uint32_t i = 0; i < sc->image_count; i++) {
-        res = alloc_stereo_image(sd, app_w, app_h, sc->format,
-                                  &sc->stereo_images[i], &sc->stereo_memory[i]);
+        VkResult res = alloc_stereo_image(sd, app_w, app_h, sc->format,
+                                           &sc->stereo_images[i],
+                                           &sc->stereo_memory[i]);
         if (res != VK_SUCCESS) {
-            STEREO_ERR("Failed to allocate stereo image %u: %d -- "
-                       "falling back to passthrough (no stereo for this swapchain)", i, res);
-            /* Zero out partial allocation so GetSwapchainImagesKHR falls back
-             * to returning the real SBS images rather than null handles, which
-             * would cause an access violation in the app. */
-            sc->stereo_active = false;
+            STEREO_ERR("Failed to allocate stereo image %u: %d", i, res);
+            dxgi_sc_destroy(sc);
+            /* Free already-allocated images */
             for (uint32_t j = 0; j < i; j++) {
-                if (sc->stereo_images[j])
-                    sd->real.DestroyImage(sd->real_device, sc->stereo_images[j], NULL);
-                if (sc->stereo_memory[j])
-                    sd->real.FreeMemory(sd->real_device, sc->stereo_memory[j], NULL);
-                sc->stereo_images[j] = VK_NULL_HANDLE;
-                sc->stereo_memory[j] = VK_NULL_HANDLE;
+                sd->real.DestroyImage(sd->real_device, sc->stereo_images[j], NULL);
+                sd->real.FreeMemory(sd->real_device, sc->stereo_memory[j], NULL);
             }
-            /* Swapchain still usable in passthrough mode */
-            return VK_SUCCESS;
+            return res;
         }
 
-        /* Array view (for use as framebuffer attachment in multiview render pass) */
-        VkImageViewCreateInfo vci_arr = {
+        /* 2D_ARRAY view covering both eyes (used as multiview framebuffer attachment) */
+        VkImageViewCreateInfo vci = {
             .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image    = sc->stereo_images[i],
             .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
@@ -262,30 +249,60 @@ stereo_CreateSwapchainKHR(
                 .baseArrayLayer = 0, .layerCount = 2,
             },
         };
-        res = sd->real.CreateImageView(sd->real_device, &vci_arr, NULL,
+        res = sd->real.CreateImageView(sd->real_device, &vci, NULL,
                                         &sc->stereo_views_arr[i]);
         if (res != VK_SUCCESS) return res;
 
-        /* Left eye layer view */
-        VkImageViewCreateInfo vci_l = vci_arr;
-        vci_l.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        vci_l.subresourceRange.baseArrayLayer = 0;
-        vci_l.subresourceRange.layerCount     = 1;
-        res = sd->real.CreateImageView(sd->real_device, &vci_l, NULL,
-                                        &sc->stereo_views_l[i]);
-        if (res != VK_SUCCESS) return res;
+        /* Host-visible staging buffer for CPU readback */
+        res = alloc_stage_buf(sd, app_w, app_h,
+                               &sc->stage_buf[i], &sc->stage_mem[i],
+                               &sc->stage_mapped[i]);
+        if (res != VK_SUCCESS) {
+            STEREO_ERR("Failed to allocate staging buffer %u: %d", i, res);
+            return res;
+        }
+    }
 
-        /* Right eye layer view */
-        VkImageViewCreateInfo vci_r = vci_l;
-        vci_r.subresourceRange.baseArrayLayer = 1;
-        res = sd->real.CreateImageView(sd->real_device, &vci_r, NULL,
-                                        &sc->stereo_views_r[i]);
+    /* ── Command pool for staging submits ────────────────────────────── */
+    VkCommandPoolCreateInfo cpci = {
+        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = sd->gfx_qf,
+    };
+    VkResult res = sd->real.CreateCommandPool(
+        sd->real_device, &cpci, NULL, &sc->stage_pool);
+    if (res != VK_SUCCESS) return res;
+
+    VkCommandBufferAllocateInfo cbai = {
+        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool        = sc->stage_pool,
+        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = sc->image_count,
+    };
+    res = sd->real.AllocateCommandBuffers(sd->real_device, &cbai, sc->stage_cmds);
+    if (res != VK_SUCCESS) return res;
+
+    /* Create fences in SIGNALED state so the first AcquireNextImage
+     * doesn't stall waiting for a submit that never happened.         */
+    for (uint32_t i = 0; i < sc->image_count; i++) {
+        VkFenceCreateInfo fci = {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
+        res = sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->stage_fences[i]);
         if (res != VK_SUCCESS) return res;
     }
 
+    /* ── Set fake swapchain handle returned to app ───────────────────── */
+    sc->dxgi_mode    = true;
     sc->stereo_active = true;
-    STEREO_LOG("Swapchain %p: %u images, stereo targets allocated",
-               (void*)*pSwapchain, sc->image_count);
+    sc->real_swapchain = VK_NULL_HANDLE;  /* no Vulkan swap chain in DXGI mode */
+    sc->app_handle   = (VkSwapchainKHR)(uintptr_t)sc;
+    *pSwapchain      = sc->app_handle;
+
+    sd->swapchain_count++;
+    STEREO_LOG("DXGI stereo swapchain: %ux%u  %u images  handle=%p",
+               app_w, app_h, sc->image_count, (void*)*pSwapchain);
     return VK_SUCCESS;
 }
 
@@ -305,61 +322,53 @@ stereo_DestroySwapchainKHR(
         for (uint32_t i = 0; i < sc->image_count; i++) {
             if (sc->stereo_views_arr && sc->stereo_views_arr[i])
                 sd->real.DestroyImageView(sd->real_device, sc->stereo_views_arr[i], NULL);
-            if (sc->stereo_views_l && sc->stereo_views_l[i])
-                sd->real.DestroyImageView(sd->real_device, sc->stereo_views_l[i], NULL);
-            if (sc->stereo_views_r && sc->stereo_views_r[i])
-                sd->real.DestroyImageView(sd->real_device, sc->stereo_views_r[i], NULL);
             if (sc->stereo_images && sc->stereo_images[i])
                 sd->real.DestroyImage(sd->real_device, sc->stereo_images[i], NULL);
             if (sc->stereo_memory && sc->stereo_memory[i])
                 sd->real.FreeMemory(sd->real_device, sc->stereo_memory[i], NULL);
+
+            if (sc->stage_buf && sc->stage_buf[i]) {
+                if (sc->stage_mem && sc->stage_mem[i])
+                    sd->real.UnmapMemory(sd->real_device, sc->stage_mem[i]);
+                sd->real.DestroyBuffer(sd->real_device, sc->stage_buf[i], NULL);
+            }
+            if (sc->stage_mem && sc->stage_mem[i])
+                sd->real.FreeMemory(sd->real_device, sc->stage_mem[i], NULL);
+            if (sc->stage_fences && sc->stage_fences[i])
+                sd->real.DestroyFence(sd->real_device, sc->stage_fences[i], NULL);
         }
-        free(sc->sbs_images);
+        free(sc->stereo_views_arr);
         free(sc->stereo_images);
         free(sc->stereo_memory);
-        free(sc->stereo_views_l);
-        free(sc->stereo_views_r);
-        free(sc->stereo_views_arr);
-        free(sc->composite_framebuffers);
-        free(sc->composite_cmds);
-        free(sc->composite_desc_sets);
+        free(sc->stage_buf);
+        free(sc->stage_mem);
+        free(sc->stage_mapped);
+        free(sc->stage_cmds);
+        free(sc->stage_fences);
 
-        /* Destroy composite resources */
-        if (sc->composite_cmd_pool)
-            sd->real.DestroyCommandPool(sd->real_device, sc->composite_cmd_pool, NULL);
-        if (sc->composite_sampler)
-            sd->real.DestroySampler(sd->real_device, sc->composite_sampler, NULL);
-        if (sc->composite_pipeline)
-            sd->real.DestroyPipeline(sd->real_device, sc->composite_pipeline, NULL);
-        if (sc->composite_layout)
-            sd->real.DestroyPipelineLayout(sd->real_device, sc->composite_layout, NULL);
-        if (sc->composite_dsl)
-            sd->real.DestroyDescriptorSetLayout(sd->real_device, sc->composite_dsl, NULL);
-        if (sc->composite_pool)
-            sd->real.DestroyDescriptorPool(sd->real_device, sc->composite_pool, NULL);
-        if (sc->composite_renderpass)
-            sd->real.DestroyRenderPass(sd->real_device, sc->composite_renderpass, NULL);
+        if (sc->stage_pool)
+            sd->real.DestroyCommandPool(sd->real_device, sc->stage_pool, NULL);
 
-        /* Remove from list */
-        stereo_mutex_lock(&sd->lock);
-        for (uint32_t i = 0; i < sd->swapchain_count; i++) {
-            if (sd->swapchains[i].real_swapchain == swapchain) {
-                sd->swapchains[i] = sd->swapchains[--sd->swapchain_count];
-                break;
-            }
-        }
-        stereo_mutex_unlock(&sd->lock);
+        /* DXGI resources */
+        dxgi_sc_destroy(sc);
+
+        /* Vulkan real swapchain (passthrough mode only) */
+        if (sc->real_swapchain)
+            sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, pAllocator);
+
+        /* Remove from registry */
+        uint32_t idx = (uint32_t)(sc - sd->swapchains);
+        if (idx + 1 < sd->swapchain_count)
+            memmove(&sd->swapchains[idx], &sd->swapchains[idx + 1],
+                    (sd->swapchain_count - idx - 1) * sizeof(StereoSwapchain));
+        sd->swapchain_count--;
+    } else {
+        /* Not our swapchain — forward to real ICD */
+        sd->real.DestroySwapchainKHR(sd->real_device, swapchain, pAllocator);
     }
-
-    sd->real.DestroySwapchainKHR(sd->real_device, swapchain, pAllocator);
 }
 
-/* ── vkGetSwapchainImagesKHR ─────────────────────────────────────────────── */
-/*
- * Report our stereo render target images (not the real SBS swapchain images)
- * to the application.  The app will create framebuffers and render into these.
- * We then blit them SBS into the real swapchain image at present time.
- */
+/* ── vkGetSwapchainImagesKHR ────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetSwapchainImagesKHR(
     VkDevice        device,
@@ -371,23 +380,26 @@ stereo_GetSwapchainImagesKHR(
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
-    if (!sc) {
-        return sd->real.GetSwapchainImagesKHR(
-            sd->real_device, swapchain, pSwapchainImageCount, pSwapchainImages);
+    if (!sc || !sc->stereo_active || sc->dxgi_mode) {
+        if (!sc || !sc->stereo_active) {
+            /* Passthrough */
+            VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
+            return sd->real.GetSwapchainImagesKHR(
+                sd->real_device, real, pSwapchainImageCount, pSwapchainImages);
+        }
     }
 
+    /* DXGI mode: report our stereo render targets */
     if (!pSwapchainImages) {
         *pSwapchainImageCount = sc->image_count;
         return VK_SUCCESS;
     }
 
     uint32_t copy = (*pSwapchainImageCount < sc->image_count)
-                  ? *pSwapchainImageCount : sc->image_count;
+                    ? *pSwapchainImageCount : sc->image_count;
     for (uint32_t i = 0; i < copy; i++)
-        /* Return stereo render target if active, else real SBS image */
-        pSwapchainImages[i] = sc->stereo_active ? sc->stereo_images[i] : sc->sbs_images[i];
+        pSwapchainImages[i] = sc->stereo_images[i];
     *pSwapchainImageCount = copy;
-
     return (copy < sc->image_count) ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
@@ -405,14 +417,41 @@ stereo_AcquireNextImageKHR(
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
-    if (!sc) {
+    if (!sc || !sc->dxgi_mode) {
+        VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.AcquireNextImageKHR(
-            sd->real_device, swapchain, timeout, semaphore, fence, pImageIndex);
+            sd->real_device, real, timeout, semaphore, fence, pImageIndex);
     }
 
-    /* Forward to real (doubled-width) swapchain */
-    return sd->real.AcquireNextImageKHR(
-        sd->real_device, sc->real_swapchain, timeout, semaphore, fence, pImageIndex);
+    /* DXGI mode: round-robin image index.
+     * The stage_fences[idx] is signaled when the previous staging submit
+     * for this slot has completed (so stage_buf is safe to reuse).
+     * We wait here to enforce back-pressure.                            */
+    uint32_t idx = sc->acquire_idx % sc->image_count;
+    sc->acquire_idx++;
+
+    /* Wait for previous staging of this slot (CPU-side throttle) */
+    VkResult wres = sd->real.WaitForFences(
+        sd->real_device, 1, &sc->stage_fences[idx], VK_TRUE, timeout);
+    if (wres != VK_SUCCESS) return wres;  /* VK_TIMEOUT or error */
+
+    /* Signal the app's semaphore/fence via a no-op submit.
+     * commandBufferCount=0 is valid in Vulkan 1.1+.              */
+    if (semaphore != VK_NULL_HANDLE || fence != VK_NULL_HANDLE) {
+        VkSubmitInfo sig = {
+            .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .signalSemaphoreCount = (semaphore != VK_NULL_HANDLE) ? 1 : 0,
+            .pSignalSemaphores    = &semaphore,
+        };
+        /* If caller supplied a fence, it must not be currently pending.
+         * It is safe here because the app follows the acquire→present
+         * rule and won't reuse a fence before it's signaled.          */
+        VkResult sres = sd->real.QueueSubmit(sd->gfx_queue, 1, &sig, fence);
+        if (sres != VK_SUCCESS) return sres;
+    }
+
+    *pImageIndex = idx;
+    return VK_SUCCESS;
 }
 
 /* ── vkQueuePresentKHR ───────────────────────────────────────────────────── */
@@ -421,100 +460,66 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
     STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
                (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
-    /* Find the device for this queue (scan all devices) */
-    StereoDevice *sd = NULL;
-    StereoSwapchain *sc = NULL;
 
-    /* Walk all devices to find the one owning these swapchains */
-    /* (simplified: use global registry from stereo.c) */
+    /* ── Find the StereoDevice + StereoSwapchain ─────────────────────── */
     extern StereoDevice g_devices[];
     extern uint32_t     g_device_count;
+
+    StereoDevice    *sd = NULL;
+    StereoSwapchain *sc = NULL;
+
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
-        for (uint32_t s = 0; s < g_devices[d].swapchain_count; s++) {
-            /* Check if any of the present swapchains matches */
-            for (uint32_t p = 0; p < pPresentInfo->swapchainCount; p++) {
-                if (g_devices[d].swapchains[s].real_swapchain ==
-                    pPresentInfo->pSwapchains[p]) {
-                    sd = &g_devices[d];
-                    sc = &g_devices[d].swapchains[s];
-                    break;
-                }
+        for (uint32_t p = 0; p < pPresentInfo->swapchainCount; p++) {
+            StereoSwapchain *found = stereo_swapchain_lookup(
+                &g_devices[d], pPresentInfo->pSwapchains[p]);
+            if (found) {
+                sd = &g_devices[d];
+                sc = found;
+                break;
             }
         }
     }
 
-    if (!sd || !sc || !sd->stereo.enabled) {
-        /* Passthrough or stereo disabled */
+    /* ── Passthrough ─────────────────────────────────────────────────── */
+    if (!sd || !sc || !sd->stereo.enabled || !sc->dxgi_mode) {
         StereoDevice *fwd = sd ? sd : (g_device_count > 0 ? &g_devices[0] : NULL);
         if (!fwd) return VK_ERROR_DEVICE_LOST;
         return fwd->real.QueuePresentKHR(queue, pPresentInfo);
     }
 
-    /* Run the SBS composite pass for each swapchain image being presented.
-     *
-     * Semaphore handoff:
-     *   - pPresentInfo->pWaitSemaphores = app's render-complete semaphores
-     *     These are passed to the composite submit so it waits for rendering.
-     *   - composite signals done_sems[i] when blit finishes
-     *   - done_sems[i] replaces pWaitSemaphores in the real QueuePresentKHR
-     *     so the display engine only scans out after composite is done.
-     */
-    uint32_t n = pPresentInfo->swapchainCount;
-    VkSemaphore *done_sems = calloc(n, sizeof(VkSemaphore));
-    if (!done_sems) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    /* ── DXGI stereo present for each swapchain ──────────────────────── */
+    VkResult result = VK_SUCCESS;
+    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
+        StereoSwapchain *sc_i = stereo_swapchain_lookup(
+            sd, pPresentInfo->pSwapchains[i]);
+        if (!sc_i || !sc_i->dxgi_mode || !sc_i->stereo_active) {
+            /* Not our swap chain, or passthrough */
+            continue;
+        }
 
-    for (uint32_t i = 0; i < n; i++) {
         uint32_t img_idx = pPresentInfo->pImageIndices[i];
-        /* Only pass app wait semaphores to the first swapchain's composite;
-         * subsequent composites within the same present have no additional waits. */
-        uint32_t        wcount = (i == 0) ? pPresentInfo->waitSemaphoreCount : 0;
-        const VkSemaphore *wsems = (i == 0) ? pPresentInfo->pWaitSemaphores : NULL;
-        VkResult composite_res = stereo_composite_to_sbs(
-            sd, queue, sc, img_idx, wcount, wsems, &done_sems[i]);
-        if (composite_res != VK_SUCCESS) {
-            STEREO_ERR("Composite pass failed for image %u: %d", img_idx, composite_res);
-            /* Fall through — present anyway, output may be wrong but avoid hang */
+
+        /* Semaphores to wait on: app's render-complete sems for first SC */
+        uint32_t           wcount = (i == 0) ? pPresentInfo->waitSemaphoreCount : 0;
+        const VkSemaphore *wsems  = (i == 0) ? pPresentInfo->pWaitSemaphores    : NULL;
+
+        VkResult pr = stereo_dxgi_present(sd, queue, sc_i, img_idx, wcount, wsems);
+        if (pr != VK_SUCCESS) {
+            STEREO_ERR("DXGI present failed for swapchain %u: %d", i, pr);
+            result = pr;
         }
     }
-
-    /* Build modified present info: real swapchain handles + composite semaphores */
-    VkPresentInfoKHR pi = *pPresentInfo;
-    VkSwapchainKHR  *real_scs = malloc(n * sizeof(VkSwapchainKHR));
-    if (!real_scs) { free(done_sems); return VK_ERROR_OUT_OF_HOST_MEMORY; }
-    for (uint32_t i = 0; i < n; i++) {
-        StereoSwapchain *sc_i = stereo_swapchain_lookup(sd, pi.pSwapchains[i]);
-        real_scs[i] = sc_i ? sc_i->real_swapchain : pi.pSwapchains[i];
-    }
-    pi.pSwapchains = real_scs;
-
-    /* Replace wait semaphores with composite completion semaphores */
-    /* Filter out any NULL (composite failed) entries */
-    uint32_t valid = 0;
-    for (uint32_t i = 0; i < n; i++)
-        if (done_sems[i] != VK_NULL_HANDLE) done_sems[valid++] = done_sems[i];
-    if (valid > 0) {
-        pi.waitSemaphoreCount = valid;
-        pi.pWaitSemaphores    = done_sems;
-    }
-
-    VkResult res = sd->real.QueuePresentKHR(queue, &pi);
-    free(real_scs);
-
-    /* Destroy composite completion semaphores after present */
-    for (uint32_t i = 0; i < valid; i++)
-        sd->real.DestroySemaphore(sd->real_device, done_sems[i], NULL);
-    free(done_sems);
-    return res;
+    return result;
 }
 
 /* ============================================================================
- * vkCreateImageView intercept (see image_view.c header for full rationale)
+ * vkCreateImageView intercept
+ *
+ * When the app creates a VkImageView on one of our 2-layer stereo render
+ * targets with viewType=2D/layerCount=1 (standard swapchain pattern), we
+ * silently upgrade it to 2D_ARRAY/layerCount=2 so that the multiview render
+ * pass (viewMask=0x3) can write to both eye layers.
  * ============================================================================ */
-/* ---- helper: is this VkImage one of our stereo render targets? --------- */
-/*
- * Returns the swapchain that owns 'image', or NULL if it is not a stereo
- * render target.  Caller holds no lock (read-only scan of immutable arrays).
- */
 static StereoSwapchain *find_owning_swapchain(StereoDevice *sd, VkImage image)
 {
     for (uint32_t si = 0; si < sd->swapchain_count; si++) {
@@ -528,7 +533,6 @@ static StereoSwapchain *find_owning_swapchain(StereoDevice *sd, VkImage image)
     return NULL;
 }
 
-/* ---- vkCreateImageView ------------------------------------------------- */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateImageView(
     VkDevice                        device,
@@ -539,32 +543,16 @@ stereo_CreateImageView(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    /* Passthrough for non-stereo devices or disabled stereo */
     if (!sd->stereo.enabled) {
-        return sd->real.CreateImageView(sd->real_device, pCreateInfo,
-                                        pAllocator, pView);
+        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
     }
 
-    /* Is this image one of our stereo render targets? */
     StereoSwapchain *sc = find_owning_swapchain(sd, pCreateInfo->image);
-
     if (!sc) {
-        /* Not a stereo image -- pass through unchanged */
-        return sd->real.CreateImageView(sd->real_device, pCreateInfo,
-                                        pAllocator, pView);
+        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
     }
 
-    /*
-     * This is a stereo render target (2-layer array image).
-     * The app is creating a view for its framebuffer attachment.
-     * Upgrade to VK_IMAGE_VIEW_TYPE_2D_ARRAY covering both layers so
-     * the multiview render pass (viewMask=0x3) can write to both eyes.
-     *
-     * We accept whatever the app requested for baseArrayLayer (usually 0)
-     * and simply set layerCount=2 and viewType=2D_ARRAY.
-     */
     VkImageViewCreateInfo upgraded = *pCreateInfo;
-
     if (upgraded.viewType == VK_IMAGE_VIEW_TYPE_2D) {
         upgraded.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
         STEREO_LOG("CreateImageView: upgrading stereo image %p view: "
@@ -572,11 +560,8 @@ stereo_CreateImageView(
                    (void*)pCreateInfo->image,
                    pCreateInfo->subresourceRange.layerCount);
     }
-
-    /* Always ensure layerCount covers both eyes */
     if (upgraded.subresourceRange.layerCount < 2)
         upgraded.subresourceRange.layerCount = 2;
 
-    return sd->real.CreateImageView(sd->real_device, &upgraded,
-                                    pAllocator, pView);
+    return sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
 }

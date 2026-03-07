@@ -445,8 +445,12 @@ void stereo_device_free(VkDevice h) {
 /* ── Lookup helpers ─────────────────────────────────────────────────────── */
 
 StereoSwapchain *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc) {
-    for (uint32_t i = 0; i < dev->swapchain_count; i++)
+    for (uint32_t i = 0; i < dev->swapchain_count; i++) {
+        /* DXGI mode: app_handle is a pointer to the StereoSwapchain itself */
+        if (dev->swapchains[i].app_handle == sc)    return &dev->swapchains[i];
+        /* Passthrough mode: app_handle == real_swapchain */
         if (dev->swapchains[i].real_swapchain == sc) return &dev->swapchains[i];
+    }
     return NULL;
 }
 StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp) {
