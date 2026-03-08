@@ -52,7 +52,18 @@ static uint32_t find_memory_type(
     return UINT32_MAX;
 }
 
-/* ── Allocate one 2-layer multiview render target (W×H, arrayLayers=2) ─── */
+/* ── Allocate one single-layer render target (W×H) ───────────────────────
+ * NOTE: We do NOT use arrayLayers=2 + multiview here.  Multiview requires
+ * ALL framebuffer attachments (including depth/stencil) to be array images
+ * covering all views.  We do not intercept vkCreateImage, so the app's
+ * depth buffer remains a single-layer image.  Using viewMask=0x3 with a
+ * single-layer depth buffer causes an invalid GPU access → device lost.
+ *
+ * Instead we render once (mono), copy the result to BOTH DXGI eye slices.
+ * Both eyes see the same content — 3D Vision engages without stereo
+ * separation.  True per-eye rendering can be added later by also
+ * intercepting depth image creation.
+ * ───────────────────────────────────────────────────────────────────────── */
 static VkResult alloc_stereo_image(
     StereoDevice   *sd,
     uint32_t        w,
@@ -67,7 +78,7 @@ static VkResult alloc_stereo_image(
         .format        = fmt,
         .extent        = {w, h, 1},
         .mipLevels     = 1,
-        .arrayLayers   = 2,   /* layer 0 = left eye, layer 1 = right eye */
+        .arrayLayers   = 1,   /* single layer — mono render, copied to both eyes */
         .samples       = VK_SAMPLE_COUNT_1_BIT,
         .tiling        = VK_IMAGE_TILING_OPTIMAL,
         .usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
@@ -111,7 +122,7 @@ static VkResult alloc_stage_buf(
     VkDeviceMemory *out_mem,
     void          **out_mapped)
 {
-    VkDeviceSize size = (VkDeviceSize)w * h * 4 * 2;  /* left + right eye */
+    VkDeviceSize size = (VkDeviceSize)w * h * 4;  /* one frame, copied to both eyes */
 
     VkBufferCreateInfo bci = {
         .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -237,16 +248,16 @@ stereo_CreateSwapchainKHR(
             return res;
         }
 
-        /* 2D_ARRAY view covering both eyes (used as multiview framebuffer attachment) */
+        /* 2D view for single-layer render target */
         VkImageViewCreateInfo vci = {
             .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image    = sc->stereo_images[i],
-            .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format   = sc->format,
             .subresourceRange = {
                 .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
                 .baseMipLevel   = 0, .levelCount = 1,
-                .baseArrayLayer = 0, .layerCount = 2,
+                .baseArrayLayer = 0, .layerCount = 1,
             },
         };
         res = sd->real.CreateImageView(sd->real_device, &vci, NULL,
@@ -513,25 +524,8 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 }
 
 /* ============================================================================
- * vkCreateImageView intercept
- *
- * When the app creates a VkImageView on one of our 2-layer stereo render
- * targets with viewType=2D/layerCount=1 (standard swapchain pattern), we
- * silently upgrade it to 2D_ARRAY/layerCount=2 so that the multiview render
- * pass (viewMask=0x3) can write to both eye layers.
+ * vkCreateImageView intercept — pass-through (stereo images are single-layer)
  * ============================================================================ */
-static StereoSwapchain *find_owning_swapchain(StereoDevice *sd, VkImage image)
-{
-    for (uint32_t si = 0; si < sd->swapchain_count; si++) {
-        StereoSwapchain *sc = &sd->swapchains[si];
-        if (!sc->stereo_active || !sc->stereo_images) continue;
-        for (uint32_t ii = 0; ii < sc->image_count; ii++) {
-            if (sc->stereo_images[ii] == image)
-                return sc;
-        }
-    }
-    return NULL;
-}
 
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateImageView(
@@ -542,26 +536,6 @@ stereo_CreateImageView(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-
-    if (!sd->stereo.enabled) {
-        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
-    }
-
-    StereoSwapchain *sc = find_owning_swapchain(sd, pCreateInfo->image);
-    if (!sc) {
-        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
-    }
-
-    VkImageViewCreateInfo upgraded = *pCreateInfo;
-    if (upgraded.viewType == VK_IMAGE_VIEW_TYPE_2D) {
-        upgraded.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-        STEREO_LOG("CreateImageView: upgrading stereo image %p view: "
-                   "2D/layerCount=%u -> 2D_ARRAY/layerCount=2",
-                   (void*)pCreateInfo->image,
-                   pCreateInfo->subresourceRange.layerCount);
-    }
-    if (upgraded.subresourceRange.layerCount < 2)
-        upgraded.subresourceRange.layerCount = 2;
-
-    return sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
+    /* Pass through unchanged — stereo images are now single-layer, no upgrade needed */
+    return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
 }

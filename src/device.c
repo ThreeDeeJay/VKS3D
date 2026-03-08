@@ -2,11 +2,9 @@
  * device.c — vkCreateDevice / vkDestroyDevice
  *
  * We intercept device creation to:
- *   1. Enable VkPhysicalDeviceMultiviewFeatures (VK_KHR_multiview)
- *   2. Enable VK_KHR_multiview device extension
- *   3. Enable VK_KHR_swapchain for SBS output
- *   4. Allocate the per-device stereo UBO (eye offsets + convergence)
- *   5. Build real-ICD device dispatch table
+ *   1. Enable VK_KHR_swapchain (if not already present)
+ *   2. Build real-ICD device dispatch table
+ *   3. Record the graphics queue handle for staging submits
  */
 
 #include <stdio.h>
@@ -31,9 +29,7 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst);
  * advertises it (checked at CreateDevice time).
  */
 static const char *STEREO_CANDIDATE_EXTS[] = {
-    "VK_KHR_multiview",
-    "VK_KHR_maintenance2",
-    "VK_KHR_create_renderpass2",
+    "VK_KHR_swapchain",
 };
 #define STEREO_CANDIDATE_EXT_COUNT \
     (sizeof(STEREO_CANDIDATE_EXTS) / sizeof(STEREO_CANDIDATE_EXTS[0]))
@@ -83,24 +79,12 @@ static const char **stereo_filter_extensions(
         }
         if (app_has) continue;
 
-        /* On Vulkan 1.1+ these two are core — skip adding as explicit ext */
-        if (api_version >= VK_API_VERSION_1_1 &&
-            (!strcmp(ext, "VK_KHR_multiview") ||
-             !strcmp(ext, "VK_KHR_maintenance2")))
-            continue;
-
-        /* VK_KHR_create_renderpass2: only add if device supports it */
-        if (!strcmp(ext, "VK_KHR_create_renderpass2")) {
-            bool supported = false;
-            for (uint32_t d = 0; d < dev_count && dev_props; d++) {
-                if (!strcmp(dev_props[d].extensionName, ext)) { supported = true; break; }
-            }
-            if (!supported) {
-                STEREO_LOG("VK_KHR_create_renderpass2 not supported by device — "
-                           "vkCreateRenderPass2KHR will not be available");
-                continue;
-            }
+        /* Check device support */
+        bool supported = false;
+        for (uint32_t d = 0; d < dev_count && dev_props; d++) {
+            if (!strcmp(dev_props[d].extensionName, ext)) { supported = true; break; }
         }
+        if (!supported) continue;
 
         merged[total++] = ext;
         STEREO_LOG("Injecting device extension: %s", ext);
@@ -188,39 +172,8 @@ stereo_CreateDevice(
     }
     STEREO_LOG("stereo_CreateDevice: physicalDevice=%p si=%p", (void*)physicalDevice, (void*)sp_si);
 
-    /* ── Inject VkPhysicalDeviceMultiviewFeatures ─────────────────────── */
-    VkPhysicalDeviceMultiviewFeatures multiview_feat = {
-        .sType                         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES,
-        .pNext                         = NULL,
-        .multiview                     = VK_TRUE,
-        .multiviewGeometryShader       = VK_FALSE,
-        .multiviewTessellationShader   = VK_FALSE,
-    };
-
-    /* Walk existing pNext chain to check if multiview features already set */
-    void *next_head = (void*)pCreateInfo->pNext;
-    bool  has_mv_feat = false;
-    {
-        VkBaseOutStructure *node = (VkBaseOutStructure*)next_head;
-        while (node) {
-            if (node->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
-                /* App already set it — just ensure multiview=true */
-                ((VkPhysicalDeviceMultiviewFeatures*)node)->multiview = VK_TRUE;
-                has_mv_feat = true;
-                break;
-            }
-            node = node->pNext;
-        }
-    }
-    if (!has_mv_feat) {
-        /* Prepend our multiview features to the chain */
-        multiview_feat.pNext = (void*)pCreateInfo->pNext;
-    }
-
     /* ── Build modified VkDeviceCreateInfo ───────────────────────────── */
     VkDeviceCreateInfo dci = *pCreateInfo;
-    if (!has_mv_feat)
-        dci.pNext = &multiview_feat;
 
     /* Inject extensions — only those the device actually supports,
      * respecting what is already core for the device's API version */

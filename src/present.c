@@ -1,23 +1,22 @@
 /*
  * present.c — DXGI 1.2 stereo composite + present
  *
- * Called from swapchain.c::stereo_QueuePresentKHR for each frame.
+ * Mono rendering path (no multiview):
+ *   The app renders a single frame into stereo_images[idx] (W×H, single layer).
+ *   We copy that frame to BOTH DXGI eye slices so 3D Vision receives valid
+ *   content on both eyes.  Both eyes see the same image (no parallax).
  *
- * Flow:
- *   1. Record a staging command buffer:
+ * Flow per frame:
+ *   1. Record staging CB:
  *        a. Transition stereo_images[idx]: COLOR_ATTACHMENT → TRANSFER_SRC
- *        b. vkCmdCopyImageToBuffer — layer 0 → buf[0 .. W*H*4)
- *                                     layer 1 → buf[W*H*4 .. 2*W*H*4)
+ *        b. vkCmdCopyImageToBuffer: layer 0 → stage_buf[idx] (W×H×4 bytes)
  *        c. Transition back: TRANSFER_SRC → COLOR_ATTACHMENT
- *   2. Submit staging CB: wait on app's render-complete semaphores,
- *      signal stage_fences[idx] when done.
- *   3. CPU WaitForFences(stage_fences[idx]) — blocks until pixels are in
- *      stage_mapped[idx] (host-coherent, no explicit flush needed).
- *   4. dxgi_present_frame() uploads left/right halves to D3D11 textures
- *      and calls IDXGISwapChain::Present(1, 0).
- *
- * NOTE: stage_fences[idx] is reset here (before submit) and was waited on
- *       by AcquireNextImageKHR, so no double-wait hazard exists.
+ *   2. Submit: wait on app's render-complete semaphores, signal stage_fences[idx]
+ *   3. CPU WaitForFences → pixels available in stage_mapped[idx]
+ *   4. dxgi_present_frame(left=stage_mapped, right=stage_mapped)
+ *      ↳ UpdateSubresource both eye textures with same pixel data
+ *      ↳ CopySubresourceRegion → DXGI back-buffer slices 0 and 1
+ *      ↳ IDXGISwapChain::Present(1, 0)
  */
 
 #include <stdio.h>
@@ -36,9 +35,7 @@ static void cmd_barrier(
     VkAccessFlags        src_access,
     VkAccessFlags        dst_access,
     VkPipelineStageFlags src_stage,
-    VkPipelineStageFlags dst_stage,
-    uint32_t             base_layer,
-    uint32_t             layer_count)
+    VkPipelineStageFlags dst_stage)
 {
     VkImageMemoryBarrier imb = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -49,11 +46,10 @@ static void cmd_barrier(
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = image,
-        .subresourceRange = {
+        .subresourceRange    = {
             .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel   = 0, .levelCount   = 1,
-            .baseArrayLayer = base_layer,
-            .layerCount     = layer_count,
+            .baseArrayLayer = 0, .layerCount   = 1,  /* single-layer mono image */
         },
     };
     sd->real.CmdPipelineBarrier(cmd,
@@ -67,10 +63,9 @@ static VkResult record_staging_cmd(
     StereoSwapchain *sc,
     uint32_t         idx)
 {
-    VkCommandBuffer  cmd = sc->stage_cmds[idx];
-    VkImage          src = sc->stereo_images[idx];
-    VkBuffer         dst = sc->stage_buf[idx];
-    VkDeviceSize eye_sz  = (VkDeviceSize)sc->app_width * sc->app_height * 4;
+    VkCommandBuffer cmd = sc->stage_cmds[idx];
+    VkImage         src = sc->stereo_images[idx];
+    VkBuffer        dst = sc->stage_buf[idx];
 
     VkCommandBufferBeginInfo begin = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -79,49 +74,40 @@ static VkResult record_staging_cmd(
     VkResult res = sd->real.BeginCommandBuffer(cmd, &begin);
     if (res != VK_SUCCESS) return res;
 
-    /* ── Transition both layers: COLOR_ATTACHMENT → TRANSFER_SRC ──── */
+    /* Transition: COLOR_ATTACHMENT → TRANSFER_SRC */
     cmd_barrier(sd, cmd, src,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         VK_ACCESS_TRANSFER_READ_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0, 2);
+        VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    /* ── Copy layer 0 (left eye) → buf[0 .. eye_sz) ─────────────────── */
-    VkBufferImageCopy copy0 = {
+    /* Copy single layer → host buffer */
+    VkBufferImageCopy copy = {
         .bufferOffset      = 0,
-        .bufferRowLength   = 0,   /* tightly packed */
+        .bufferRowLength   = 0,
         .bufferImageHeight = 0,
         .imageSubresource  = {
             .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
             .mipLevel       = 0,
-            .baseArrayLayer = 0,  /* left eye */
+            .baseArrayLayer = 0,
             .layerCount     = 1,
         },
         .imageOffset = {0, 0, 0},
         .imageExtent = {sc->app_width, sc->app_height, 1},
     };
     sd->real.CmdCopyImageToBuffer(cmd, src,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, 1, &copy0);
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, 1, &copy);
 
-    /* ── Copy layer 1 (right eye) → buf[eye_sz .. 2*eye_sz) ─────────── */
-    VkBufferImageCopy copy1 = copy0;
-    copy1.bufferOffset              = eye_sz;
-    copy1.imageSubresource.baseArrayLayer = 1;  /* right eye */
-    sd->real.CmdCopyImageToBuffer(cmd, src,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, 1, &copy1);
-
-    /* ── Transition both layers back: TRANSFER_SRC → COLOR_ATTACHMENT ─ */
+    /* Transition back: TRANSFER_SRC → COLOR_ATTACHMENT */
     cmd_barrier(sd, cmd, src,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_ACCESS_TRANSFER_READ_BIT,
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        0, 2);
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     return sd->real.EndCommandBuffer(cmd);
 }
@@ -138,7 +124,7 @@ VkResult stereo_dxgi_present(
     if (!sc->stereo_active || !sc->dxgi_mode)
         return VK_SUCCESS;
 
-    /* ── Reset and record staging command buffer ──────────────────── */
+    /* Reset and record staging command buffer */
     VkResult res = sd->real.ResetCommandBuffer(sc->stage_cmds[image_index], 0);
     if (res != VK_SUCCESS) return res;
 
@@ -148,21 +134,20 @@ VkResult stereo_dxgi_present(
         return res;
     }
 
-    /* ── Build wait-stage mask array ─────────────────────────────── */
+    /* Build wait-stage mask array */
     VkPipelineStageFlags *stage_masks = NULL;
     if (wait_sem_count > 0) {
         stage_masks = malloc(wait_sem_count * sizeof(VkPipelineStageFlags));
         if (!stage_masks) return VK_ERROR_OUT_OF_HOST_MEMORY;
-        /* Wait at TRANSFER stage — we blit from the stereo images */
         for (uint32_t i = 0; i < wait_sem_count; i++)
             stage_masks[i] = VK_PIPELINE_STAGE_TRANSFER_BIT;
     }
 
-    /* ── Reset the staging fence (must not be pending before submit) ── */
+    /* Reset fence before submit */
     res = sd->real.ResetFences(sd->real_device, 1, &sc->stage_fences[image_index]);
     if (res != VK_SUCCESS) { free(stage_masks); return res; }
 
-    /* ── Submit staging: wait on app render sems, signal fence ──────── */
+    /* Submit staging: wait on app render sems, signal fence */
     VkSubmitInfo submit = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount   = wait_sem_count,
@@ -178,7 +163,7 @@ VkResult stereo_dxgi_present(
         return res;
     }
 
-    /* ── CPU wait: block until GPU→CPU copy is done ──────────────── */
+    /* CPU wait for GPU→CPU copy */
     res = sd->real.WaitForFences(
         sd->real_device, 1, &sc->stage_fences[image_index], VK_TRUE, UINT64_MAX);
     if (res != VK_SUCCESS) {
@@ -186,10 +171,7 @@ VkResult stereo_dxgi_present(
         return res;
     }
 
-    /* ── Hand off to DXGI (pixels are now in stage_mapped[image_index]) */
-    VkDeviceSize eye_sz = (VkDeviceSize)sc->app_width * sc->app_height * 4;
-    const void *left_pixels  = sc->stage_mapped[image_index];
-    const void *right_pixels = (const uint8_t*)sc->stage_mapped[image_index] + eye_sz;
-
-    return dxgi_present_frame(sd, sc, left_pixels, right_pixels);
+    /* Same mono frame → both DXGI eyes (left=right=stage_mapped) */
+    const void *pixels = sc->stage_mapped[image_index];
+    return dxgi_present_frame(sd, sc, pixels, pixels);
 }
