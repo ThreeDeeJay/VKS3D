@@ -250,6 +250,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
         return (PFN_vkVoidFunction)stereo_GetDeviceProcAddr;
     if (!strcmp(pName, "vkDestroyDevice"))
         return (PFN_vkVoidFunction)stereo_DestroyDevice;
+    if (!strcmp(pName, "vkCreateImage"))
+        return (PFN_vkVoidFunction)stereo_CreateImage;
     if (!strcmp(pName, "vkCreateImageView"))
         return (PFN_vkVoidFunction)stereo_CreateImageView;
     if (!strcmp(pName, "vkCreateRenderPass"))

@@ -2,9 +2,12 @@
  * device.c — vkCreateDevice / vkDestroyDevice
  *
  * We intercept device creation to:
- *   1. Enable VK_KHR_swapchain (if not already present)
- *   2. Build real-ICD device dispatch table
- *   3. Record the graphics queue handle for staging submits
+ *   1. Enable VK_KHR_multiview (for multiview render pass injection)
+ *   2. Enable VK_KHR_external_memory + VK_KHR_external_memory_win32
+ *      (for importing D3D11 shared NT-handle textures as VkImages)
+ *   3. Enable VK_KHR_create_renderpass2 (if available, for RP2 multiview)
+ *   4. Build real-ICD device dispatch table
+ *   5. Record the graphics queue handle for barrier submits
  */
 
 #include <stdio.h>
@@ -29,7 +32,16 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst);
  * advertises it (checked at CreateDevice time).
  */
 static const char *STEREO_CANDIDATE_EXTS[] = {
-    "VK_KHR_swapchain",
+    /* Multiview (promoted to Vulkan 1.1 core, but explicit ext is still harmless) */
+    "VK_KHR_multiview",
+    "VK_KHR_maintenance2",          /* required by VK_KHR_create_renderpass2 */
+    "VK_KHR_create_renderpass2",    /* for multiview via RP2 path */
+    /* NVIDIA Single Pass Stereo optimisation: pre-computed per-view clip
+     * positions in the vertex shader, halving geometry transform bandwidth */
+    "VK_NVX_multiview_per_view_attributes",
+    /* External memory — needed for D3D11 NT-handle import */
+    "VK_KHR_external_memory",
+    "VK_KHR_external_memory_win32",
 };
 #define STEREO_CANDIDATE_EXT_COUNT \
     (sizeof(STEREO_CANDIDATE_EXTS) / sizeof(STEREO_CANDIDATE_EXTS[0]))
@@ -172,11 +184,37 @@ stereo_CreateDevice(
     }
     STEREO_LOG("stereo_CreateDevice: physicalDevice=%p si=%p", (void*)physicalDevice, (void*)sp_si);
 
+    /* ── Inject VkPhysicalDeviceMultiviewFeatures ─────────────────────
+     * Multiview requires explicit feature enable even when the extension
+     * is promoted to core (Vulkan 1.1+).
+     * ─────────────────────────────────────────────────────────────────── */
+    VkPhysicalDeviceMultiviewFeatures multiview_feat = {
+        .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES,
+        .multiview = VK_TRUE,
+    };
+
+    /* Walk pNext chain to see if app already set multiview features */
+    bool has_mv_feat = false;
+    {
+        VkBaseOutStructure *node = (VkBaseOutStructure*)pCreateInfo->pNext;
+        while (node) {
+            if (node->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
+                ((VkPhysicalDeviceMultiviewFeatures*)node)->multiview = VK_TRUE;
+                has_mv_feat = true;
+                break;
+            }
+            node = node->pNext;
+        }
+    }
+    if (!has_mv_feat)
+        multiview_feat.pNext = (void*)pCreateInfo->pNext;
+
     /* ── Build modified VkDeviceCreateInfo ───────────────────────────── */
     VkDeviceCreateInfo dci = *pCreateInfo;
+    if (!has_mv_feat)
+        dci.pNext = &multiview_feat;
 
-    /* Inject extensions — only those the device actually supports,
-     * respecting what is already core for the device's API version */
+    /* Inject extensions — only those the device actually supports */
     VkPhysicalDeviceProperties phys_props;
     sp_si->real.GetPhysicalDeviceProperties(physicalDevice, &phys_props);
     uint32_t dev_api = phys_props.apiVersion;

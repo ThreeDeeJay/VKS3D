@@ -163,7 +163,27 @@ typedef struct SpvModule {
     uint32_t        bound;     /* current ID bound, we extend it */
     /* Parsed info */
     bool            is_vertex; /* has Vertex entry point              */
-    uint32_t        pos_var;   /* ID of gl_Position variable          */
+
+    /* gl_Position — two discovery paths:
+     *
+     * (A) Direct:  OpDecorate %var BuiltIn Position
+     *     pos_var = %var, pos_is_block = false
+     *     Load/store pos_var directly.
+     *
+     * (B) Block member (standard GLSL compilation):
+     *     OpMemberDecorate %struct member BuiltIn Position
+     *     OpTypePointer Output %struct  →  pos_ptr_type
+     *     OpVariable pos_ptr_type Output →  pos_var
+     *     pos_is_block = true
+     *     Access: OpAccessChain %ptr_v4 %pos_var %int_const_0 → chain
+     *             then OpLoad/OpStore chain.
+     */
+    uint32_t        pos_var;       /* variable ID (both paths)            */
+    bool            pos_is_block;  /* true = use AccessChain to member    */
+    uint32_t        pos_block_type;/* struct type ID (path B)             */
+    uint32_t        pos_member_idx;/* member index in struct (path B)     */
+    uint32_t        pos_ptr_type;  /* OpTypePointer Output struct (B)     */
+
     uint32_t        view_var;  /* ID of gl_ViewIndex variable         */
     uint32_t        float_type;/* ID of OpTypeFloat 32                */
     uint32_t        v4_type;   /* ID of OpTypeVector float 4          */
@@ -216,13 +236,50 @@ static void spirv_scan(SpvModule *m)
                 w[i+2] == SpvDecorationBuiltIn &&
                 w[i+3] == SpvBuiltInPosition)
             {
-                m->pos_var = w[i+1];   /* variable decorated as Position */
+                /* Path A: direct variable decoration */
+                if (!m->pos_is_block) {
+                    m->pos_var = w[i+1];
+                }
             }
             if (wcount >= 4 &&
                 w[i+2] == SpvDecorationBuiltIn &&
                 w[i+3] == SpvBuiltInViewIndex)
             {
                 m->view_var = w[i+1];
+            }
+            break;
+        case SpvOpMemberDecorate:
+            /* w[i+1]=struct_type, w[i+2]=member_idx, w[i+3]=Decoration, w[i+4]=value */
+            if (wcount >= 5 &&
+                w[i+3] == SpvDecorationBuiltIn &&
+                w[i+4] == SpvBuiltInPosition)
+            {
+                /* Path B: Position is a member of a block struct */
+                m->pos_block_type = w[i+1];
+                m->pos_member_idx = w[i+2];
+                m->pos_is_block   = true;
+                m->pos_var        = 0;   /* will be resolved via OpVariable */
+            }
+            break;
+        case SpvOpTypePointer:
+            /* w[i+1]=result_id, w[i+2]=StorageClass, w[i+3]=type */
+            if (wcount >= 4 &&
+                w[i+2] == SpvStorageClassOutput &&
+                m->pos_block_type &&
+                w[i+3] == m->pos_block_type)
+            {
+                m->pos_ptr_type = w[i+1];
+            }
+            break;
+        case SpvOpVariable:
+            /* w[i+1]=result_type, w[i+2]=result_id, w[i+3]=StorageClass */
+            if (wcount >= 4 &&
+                w[i+3] == SpvStorageClassOutput &&
+                m->pos_ptr_type &&
+                w[i+1] == m->pos_ptr_type)
+            {
+                /* Path B: this Output variable holds the gl_PerVertex block */
+                m->pos_var = w[i+2];
             }
             break;
         case SpvOpFunction:
@@ -262,27 +319,26 @@ static bool inject_stereo_code(
         return false;
 
     /* Allocate IDs */
-    uint32_t id_ptr_v4_out = (*next_id)++;   /* OpTypePointer Output v4  */
-    uint32_t id_ptr_v4_in  = (*next_id)++;   /* OpTypePointer Input  v4  (unused but allocated) */
-    uint32_t id_ptr_int_in = (*next_id)++;   /* OpTypePointer Input  int */
-    uint32_t id_load_pos   = (*next_id)++;   /* loaded gl_Position       */
-    uint32_t id_load_view  = (*next_id)++;   /* loaded gl_ViewIndex      */
-    uint32_t id_const_zero_i = (*next_id)++; /* constant int 0           */
-    uint32_t id_is_left    = (*next_id)++;   /* bool: viewIndex == 0     */
-    uint32_t id_const_l    = (*next_id)++;   /* constant float left_off  */
-    uint32_t id_const_r    = (*next_id)++;   /* constant float right_off */
-    uint32_t id_off_sel    = (*next_id)++;   /* selected offset          */
-    uint32_t id_pos_w      = (*next_id)++;   /* pos.w (component 3)      */
-    uint32_t id_delta      = (*next_id)++;   /* off * pos.w              */
-    uint32_t id_pos_x      = (*next_id)++;   /* pos.x (component 0)      */
-    uint32_t id_new_x      = (*next_id)++;   /* pos.x + delta            */
-    uint32_t id_new_pos    = (*next_id)++;   /* composite with new x     */
+    uint32_t id_ptr_v4_out   = (*next_id)++;   /* OpTypePointer Output v4  */
+    uint32_t id_ptr_int_in   = (*next_id)++;   /* OpTypePointer Input  int */
+    uint32_t id_chain        = (*next_id)++;   /* OpAccessChain result (path B) */
+    uint32_t id_load_pos     = (*next_id)++;   /* loaded gl_Position       */
+    uint32_t id_load_view    = (*next_id)++;   /* loaded gl_ViewIndex      */
+    uint32_t id_const_zero_i = (*next_id)++;   /* constant int 0           */
+    uint32_t id_is_left      = (*next_id)++;   /* bool: viewIndex == 0     */
+    uint32_t id_const_l      = (*next_id)++;   /* constant float left_off  */
+    uint32_t id_const_r      = (*next_id)++;   /* constant float right_off */
+    uint32_t id_off_sel      = (*next_id)++;   /* selected offset          */
+    uint32_t id_pos_w        = (*next_id)++;   /* pos.w (component 3)      */
+    uint32_t id_delta        = (*next_id)++;   /* off * pos.w              */
+    uint32_t id_pos_x        = (*next_id)++;   /* pos.x (component 0)      */
+    uint32_t id_new_x        = (*next_id)++;   /* pos.x + delta            */
+    uint32_t id_new_pos      = (*next_id)++;   /* composite with new x     */
 
     /* We'll need a pointer to gl_Position (Output vec4) */
     /* and a pointer to gl_ViewIndex (Input int if available) */
 
-    (void)id_ptr_v4_in;   /* may not need */
-    (void)id_ptr_int_in;  /* may not need */
+    (void)id_ptr_int_in;  /* may not need (only used if !int_type path) */
 
     /* ── Emit type declarations for new IDs ──────────────────────────
      * These must go in the type/decoration section BEFORE functions.
@@ -350,9 +406,31 @@ static bool inject_stereo_code(
     spvbuf_push_n(out, const_l_words, 4);
     spvbuf_push_n(out, const_r_words, 4);
 
-    /* ── Function body instructions (go after the last OpStore pos_var) ── */
-    /* OpLoad vec4 id_load_pos = *pos_var */
-    uint32_t load_pos[] = { spv_op(SpvOpLoad, 4), m->v4_type, id_load_pos, m->pos_var };
+    /* ── Function body instructions ────────────────────────────────────
+     * Path B (block member): emit OpAccessChain to reach Position, then Load.
+     * Path A (direct var):   emit OpLoad from pos_var directly.
+     */
+    uint32_t pos_ptr; /* the ID we Load from / Store to for Position */
+
+    if (m->pos_is_block) {
+        if (!int_type) {
+            STEREO_LOG("inject_stereo_code: no int type for AccessChain index");
+            return false;
+        }
+        /* OpAccessChain %ptr_v4_out %pos_var %const_zero_i  →  id_chain */
+        uint32_t ac[] = {
+            spv_op(SpvOpAccessChain, 5),
+            id_ptr_v4_out, id_chain, m->pos_var, id_const_zero_i
+        };
+        spvbuf_push_n(out, ac, 5);
+        pos_ptr = id_chain;
+    } else {
+        pos_ptr = m->pos_var;
+        (void)id_chain;
+    }
+
+    /* OpLoad vec4 id_load_pos = *pos_ptr */
+    uint32_t load_pos[] = { spv_op(SpvOpLoad, 4), m->v4_type, id_load_pos, pos_ptr };
     spvbuf_push_n(out, load_pos, 4);
 
     /* If we have view_var, load it; else default to left offset always */
@@ -438,10 +516,10 @@ static bool inject_stereo_code(
     };
     spvbuf_push_n(out, ins_x, 6);
 
-    /* OpStore *pos_var = id_new_pos */
+    /* OpStore *pos_ptr = id_new_pos  (via chain for block, direct for path A) */
     uint32_t store_pos[] = {
         spv_op(SpvOpStore, 3),
-        m->pos_var,
+        pos_ptr,
         id_new_pos
     };
     spvbuf_push_n(out, store_pos, 3);
@@ -540,7 +618,10 @@ bool spirv_patch_stereo_vertex(
     /* ── Two-pass rebuild ────────────────────────────────────────────── */
     /* Pass 1: find insertion points in the original stream.
      *   - Type section end: just before first OpFunction
-     *   - Body insertion point: after last OpStore to pos_var in each function */
+     *   - Body insertion point:
+     *     Path A (direct var): after last OpStore to pos_var
+     *     Path B (block member): before first OpReturn (AccessChain is emitted
+     *       by us; there is no raw OpStore to pos_var in the original stream) */
     size_t insert_type_after = 0; /* word index to insert type extras after */
     size_t insert_body_after = 0; /* word index to insert body extras after */
     {
@@ -553,7 +634,9 @@ bool spirv_patch_stereo_vertex(
             if (op == SpvOpFunction && insert_type_after == 0)
                 insert_type_after = i; /* insert type decls here */
 
-            if (op == SpvOpStore && wcount >= 3 && in_words[i+1] == m.pos_var)
+            /* Path A only: track the last store directly to pos_var */
+            if (!m.pos_is_block &&
+                op == SpvOpStore && wcount >= 3 && in_words[i+1] == m.pos_var)
                 insert_body_after = i + wcount; /* last OpStore to pos_var */
 
             i += wcount;
@@ -564,7 +647,13 @@ bool spirv_patch_stereo_vertex(
         insert_type_after = in_count; /* append at end */
 
     if (insert_body_after == 0) {
-        STEREO_LOG("No OpStore to gl_Position found; injecting before first OpReturn");
+        /* Path B (block member) or path A with no direct store found:
+         * inject our code immediately before the first OpReturn so it runs
+         * after the shader has written its final gl_Position value. */
+        if (m.pos_is_block)
+            STEREO_LOG("Block-member Position: injecting before first OpReturn");
+        else
+            STEREO_LOG("No direct OpStore to gl_Position; injecting before first OpReturn");
         /* Find first OpReturn */
         size_t i = 5;
         while (i < in_count) {

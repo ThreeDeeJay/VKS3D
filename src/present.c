@@ -1,22 +1,20 @@
 /*
- * present.c — DXGI 1.2 stereo composite + present
+ * present.c — DXGI stereo present (external-memory, no CPU staging)
  *
- * Mono rendering path (no multiview):
- *   The app renders a single frame into stereo_images[idx] (W×H, single layer).
- *   We copy that frame to BOTH DXGI eye slices so 3D Vision receives valid
- *   content on both eyes.  Both eyes see the same image (no parallax).
- *
- * Flow per frame:
- *   1. Record staging CB:
- *        a. Transition stereo_images[idx]: COLOR_ATTACHMENT → TRANSFER_SRC
- *        b. vkCmdCopyImageToBuffer: layer 0 → stage_buf[idx] (W×H×4 bytes)
- *        c. Transition back: TRANSFER_SRC → COLOR_ATTACHMENT
- *   2. Submit: wait on app's render-complete semaphores, signal stage_fences[idx]
- *   3. CPU WaitForFences → pixels available in stage_mapped[idx]
- *   4. dxgi_present_frame(left=stage_mapped, right=stage_mapped)
- *      ↳ UpdateSubresource both eye textures with same pixel data
- *      ↳ CopySubresourceRegion → DXGI back-buffer slices 0 and 1
- *      ↳ IDXGISwapChain::Present(1, 0)
+ * Flow per frame
+ * ──────────────
+ * 1. Record barrier CB:
+ *      a. Transition stereo_images[0]: COLOR_ATTACHMENT → GENERAL
+ *         (GENERAL is the cross-API handoff layout for external images)
+ *      b. Covers BOTH layers (baseArrayLayer=0, layerCount=2)
+ * 2. Submit: wait on app's render-complete semaphores, signal barrier_fence
+ * 3. CPU WaitForFences — waits only for render completion, not PCIe transfer
+ * 4. dxgi_copy_and_present:
+ *      GPU CopySubresourceRegion shared_tex[0] → DXGI back-buf[0]
+ *      GPU CopySubresourceRegion shared_tex[1] → DXGI back-buf[1]
+ *      IDXGISwapChain::Present(1, 0)
+ * 5. barrier_fence is reset here before the submit; AcquireNextImageKHR
+ *    waits on it again before the next render — this is the backpressure.
  */
 
 #include <stdio.h>
@@ -25,11 +23,12 @@
 #include "stereo_icd.h"
 #include "dxgi_output.h"
 
-/* ── Image memory barrier helper ─────────────────────────────────────────── */
-static void cmd_barrier(
+/* ── Image memory barrier helper ────────────────────────────────────────── */
+static void cmd_image_barrier(
     StereoDevice        *sd,
     VkCommandBuffer      cmd,
     VkImage              image,
+    uint32_t             layer_count,
     VkImageLayout        old_layout,
     VkImageLayout        new_layout,
     VkAccessFlags        src_access,
@@ -46,10 +45,10 @@ static void cmd_barrier(
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = image,
-        .subresourceRange    = {
+        .subresourceRange = {
             .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel   = 0, .levelCount   = 1,
-            .baseArrayLayer = 0, .layerCount   = 1,  /* single-layer mono image */
+            .baseArrayLayer = 0, .layerCount   = layer_count,
         },
     };
     sd->real.CmdPipelineBarrier(cmd,
@@ -57,15 +56,12 @@ static void cmd_barrier(
         0, 0, NULL, 0, NULL, 1, &imb);
 }
 
-/* ── Record staging command buffer for one swapchain image ──────────────── */
-static VkResult record_staging_cmd(
+/* ── Record the present-barrier command buffer ──────────────────────────── */
+static VkResult record_barrier_cmd(
     StereoDevice    *sd,
-    StereoSwapchain *sc,
-    uint32_t         idx)
+    StereoSwapchain *sc)
 {
-    VkCommandBuffer cmd = sc->stage_cmds[idx];
-    VkImage         src = sc->stereo_images[idx];
-    VkBuffer        dst = sc->stage_buf[idx];
+    VkCommandBuffer cmd = sc->barrier_cmds[0];
 
     VkCommandBufferBeginInfo begin = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -74,104 +70,82 @@ static VkResult record_staging_cmd(
     VkResult res = sd->real.BeginCommandBuffer(cmd, &begin);
     if (res != VK_SUCCESS) return res;
 
-    /* Transition: COLOR_ATTACHMENT → TRANSFER_SRC */
-    cmd_barrier(sd, cmd, src,
+    /* Transition: COLOR_ATTACHMENT_OPTIMAL → GENERAL (both eye layers).
+     * GENERAL is the cross-API handoff layout for external images;
+     * D3D11 will read the texture in its native tiled layout.         */
+    cmd_image_barrier(sd, cmd, sc->stereo_images[0],
+        2, /* both layers */
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL,
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_ACCESS_TRANSFER_READ_BIT,
+        VK_ACCESS_MEMORY_READ_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-    /* Copy single layer → host buffer */
-    VkBufferImageCopy copy = {
-        .bufferOffset      = 0,
-        .bufferRowLength   = 0,
-        .bufferImageHeight = 0,
-        .imageSubresource  = {
-            .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel       = 0,
-            .baseArrayLayer = 0,
-            .layerCount     = 1,
-        },
-        .imageOffset = {0, 0, 0},
-        .imageExtent = {sc->app_width, sc->app_height, 1},
-    };
-    sd->real.CmdCopyImageToBuffer(cmd, src,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, 1, &copy);
-
-    /* Transition back: TRANSFER_SRC → COLOR_ATTACHMENT */
-    cmd_barrier(sd, cmd, src,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_TRANSFER_READ_BIT,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
     return sd->real.EndCommandBuffer(cmd);
 }
 
-/* ── Public: run DXGI stereo present ─────────────────────────────────────── */
+/* ── Public: run DXGI stereo present (external memory path) ─────────────── */
 VkResult stereo_dxgi_present(
     StereoDevice       *sd,
     VkQueue             queue,
     StereoSwapchain    *sc,
-    uint32_t            image_index,
+    uint32_t            image_index,    /* always 0 in external-mem mode */
     uint32_t            wait_sem_count,
     const VkSemaphore  *wait_sems)
 {
+    (void)image_index; /* single image — always index 0 */
+
     if (!sc->stereo_active || !sc->dxgi_mode)
         return VK_SUCCESS;
 
-    /* Reset and record staging command buffer */
-    VkResult res = sd->real.ResetCommandBuffer(sc->stage_cmds[image_index], 0);
-    if (res != VK_SUCCESS) return res;
+    /* Reset + record barrier CB */
+    VkResult res = sd->real.ResetCommandBuffer(sc->barrier_cmds[0], 0);
+    if (res != VK_SUCCESS) { STEREO_ERR("ResetCommandBuffer failed: %d", res); return res; }
 
-    res = record_staging_cmd(sd, sc, image_index);
-    if (res != VK_SUCCESS) {
-        STEREO_ERR("record_staging_cmd failed: %d", res);
-        return res;
-    }
+    res = record_barrier_cmd(sd, sc);
+    if (res != VK_SUCCESS) { STEREO_ERR("record_barrier_cmd failed: %d", res); return res; }
 
-    /* Build wait-stage mask array */
+    /* Build wait-stage masks */
     VkPipelineStageFlags *stage_masks = NULL;
     if (wait_sem_count > 0) {
         stage_masks = malloc(wait_sem_count * sizeof(VkPipelineStageFlags));
         if (!stage_masks) return VK_ERROR_OUT_OF_HOST_MEMORY;
         for (uint32_t i = 0; i < wait_sem_count; i++)
-            stage_masks[i] = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            stage_masks[i] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
 
-    /* Reset fence before submit */
-    res = sd->real.ResetFences(sd->real_device, 1, &sc->stage_fences[image_index]);
+    /* Reset fence before submit (fence starts SIGNALED from init / prev frame) */
+    res = sd->real.ResetFences(sd->real_device, 1, &sc->barrier_fences[0]);
     if (res != VK_SUCCESS) { free(stage_masks); return res; }
 
-    /* Submit staging: wait on app render sems, signal fence */
+    /* Submit barrier: wait for app's render sems, signal fence */
     VkSubmitInfo submit = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount   = wait_sem_count,
         .pWaitSemaphores      = wait_sems,
         .pWaitDstStageMask    = stage_masks,
         .commandBufferCount   = 1,
-        .pCommandBuffers      = &sc->stage_cmds[image_index],
+        .pCommandBuffers      = &sc->barrier_cmds[0],
     };
-    res = sd->real.QueueSubmit(queue, 1, &submit, sc->stage_fences[image_index]);
+    res = sd->real.QueueSubmit(queue, 1, &submit, sc->barrier_fences[0]);
     free(stage_masks);
     if (res != VK_SUCCESS) {
-        STEREO_ERR("Staging submit failed: %d", res);
+        STEREO_ERR("Barrier submit failed: %d", res);
         return res;
     }
 
-    /* CPU wait for GPU→CPU copy */
+    /* Wait for render + barrier to complete (usually < 1ms at high FPS;
+     * this is just waiting for GPU render, NOT a PCIe data transfer)    */
     res = sd->real.WaitForFences(
-        sd->real_device, 1, &sc->stage_fences[image_index], VK_TRUE, UINT64_MAX);
+        sd->real_device, 1, &sc->barrier_fences[0], VK_TRUE, UINT64_MAX);
     if (res != VK_SUCCESS) {
-        STEREO_ERR("Staging fence wait failed: %d", res);
+        STEREO_ERR("Barrier fence wait failed: %d", res);
         return res;
     }
 
-    /* Same mono frame → both DXGI eyes (left=right=stage_mapped) */
-    const void *pixels = sc->stage_mapped[image_index];
-    return dxgi_present_frame(sd, sc, pixels, pixels);
+    /* GPU copy shared_tex → DXGI back buffer, then Present.
+     * The shared texture is now in GENERAL layout and render is complete.
+     * D3D11 reads the same physical GPU pages — no PCIe transfer.       */
+    return dxgi_copy_and_present(sd, sc);
 }

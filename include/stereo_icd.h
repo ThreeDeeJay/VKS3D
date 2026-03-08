@@ -284,6 +284,8 @@ typedef struct RealDeviceDispatch {
     PFN_vkGetSwapchainImagesKHR              GetSwapchainImagesKHR;
     PFN_vkAcquireNextImageKHR                AcquireNextImageKHR;
     PFN_vkQueuePresentKHR                    QueuePresentKHR;
+    /* VK_KHR_external_memory_win32 — may be NULL on non-Windows or old drivers */
+    PFN_vkGetMemoryWin32HandlePropertiesKHR  GetMemoryWin32HandlePropertiesKHR;
 } RealDeviceDispatch;
 
 /* ── Object wrappers ─────────────────────────────────────────────────────── */
@@ -343,19 +345,24 @@ typedef struct StereoSwapchain {
     /* ── DXGI stereo output ──────────────────────────────────────────── */
     HWND              hwnd;
     void             *dxgi_sc;          /* IDXGISwapChain* */
-    void             *d3d11_left_tex;   /* ID3D11Texture2D* left eye  */
-    void             *d3d11_right_tex;  /* ID3D11Texture2D* right eye */
 
-    /* ── Staging buffers (GPU → CPU copy for D3D11 upload) ──────────── */
-    /* One staging buffer per swapchain image; 2 × W × H × 4 bytes each */
-    VkBuffer         *stage_buf;        /* [image_count] */
-    VkDeviceMemory   *stage_mem;        /* [image_count] */
-    void            **stage_mapped;     /* [image_count] persistently mapped */
+    /* ── Shared D3D11 texture (Vulkan external memory import) ─────────
+     * shared_d3d11_tex: ID3D11Texture2D* Texture2DArray[2].
+     *   slice 0 = left eye, slice 1 = right eye.
+     * shared_nt_handle: NT HANDLE used for vkAllocateMemory import.
+     *   Ownership passes to Vulkan after successful AllocateMemory.
+     * ───────────────────────────────────────────────────────────────── */
+    void             *shared_d3d11_tex; /* ID3D11Texture2D* Texture2DArray[2] */
+    HANDLE            shared_nt_handle; /* NT HANDLE (consumed by Vulkan import) */
 
-    /* ── Staging command pool + per-image sync ───────────────────────── */
-    VkCommandPool     stage_pool;
-    VkCommandBuffer  *stage_cmds;       /* [image_count] */
-    VkFence          *stage_fences;     /* [image_count] */
+    /* ── Barrier command pool + per-image fence ──────────────────────
+     * A lightweight "present-prep" CB that transitions the shared image
+     * COLOR_ATTACHMENT → GENERAL and signals barrier_fences[i].
+     * The CPU waits on this fence before calling D3D11 CopySubresource.
+     * ───────────────────────────────────────────────────────────────── */
+    VkCommandPool     barrier_pool;
+    VkCommandBuffer  *barrier_cmds;     /* [image_count] */
+    VkFence          *barrier_fences;   /* [image_count] */
 
     /* ── AcquireNextImageKHR round-robin ─────────────────────────────── */
     uint32_t          acquire_idx;
@@ -385,6 +392,18 @@ typedef struct StereoDevice {
     uint32_t               render_pass_count;
     StereoSwapchain        swapchains[MAX_SWAPCHAINS];
     uint32_t               swapchain_count;
+
+    /* ── Intercepted depth/stencil images (upgraded to arrayLayers=2) ─── *
+     * When vkCreateImage is called for a depth/stencil image whose W×H     *
+     * matches an active DXGI swapchain, we force arrayLayers=2 so the      *
+     * multiview render pass can write depth for both eyes.  We track the   *
+     * resulting VkImage handles here so stereo_CreateImageView can upgrade  *
+     * their views to VK_IMAGE_VIEW_TYPE_2D_ARRAY / layerCount=2.           */
+#define MAX_DEPTH_IMAGES  256
+    VkImage                intercepted_depth[MAX_DEPTH_IMAGES];
+    uint32_t               intercepted_depth_count;
+    uint32_t               stereo_w;   /* active swapchain width  (set at CreateSwapchainKHR) */
+    uint32_t               stereo_h;   /* active swapchain height */
     stereo_mutex_t         lock;
 
     /* ── D3D11 / DXGI stereo output (lazily initialized) ─────────────── */
@@ -398,6 +417,19 @@ typedef struct StereoDevice {
     /* ── Graphics queue (for AcquireNextImageKHR semaphore signaling) ── */
     VkQueue                gfx_queue;
     uint32_t               gfx_qf;      /* graphics queue family index */
+
+    /* ── Depth image interception for multiview ─────────────────────── *
+     * When we intercept vkCreateImage and make a depth image 2-layer,
+     * we record it here so stereo_CreateImageView can upgrade its views
+     * to VK_IMAGE_VIEW_TYPE_2D_ARRAY / layerCount=2.
+     * ─────────────────────────────────────────────────────────────────── */
+#define MAX_PATCHED_DEPTH 128
+    VkImage                patched_depth[MAX_PATCHED_DEPTH];
+    uint32_t               patched_depth_count;
+
+    /* Swapchain dimensions used for depth matching (set on DXGI sc creation) */
+    uint32_t               stereo_w;
+    uint32_t               stereo_h;
 } StereoDevice;
 
 /* ── Stereo UBO layout (matches GLSL std140) ─────────────────────────────── */
@@ -516,6 +548,8 @@ VKAPI_ATTR void VKAPI_CALL stereo_DestroyDevice(VkDevice, const VkAllocationCall
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL stereo_GetDeviceProcAddr(VkDevice, const char*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImageView(
     VkDevice, const VkImageViewCreateInfo*, const VkAllocationCallbacks*, VkImageView*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImage(
+    VkDevice, const VkImageCreateInfo*, const VkAllocationCallbacks*, VkImage*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(
     VkDevice, const VkRenderPassCreateInfo*, const VkAllocationCallbacks*, VkRenderPass*);
 #ifdef VK_KHR_create_renderpass2

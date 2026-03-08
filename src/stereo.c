@@ -613,6 +613,10 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(GetSwapchainImagesKHR); L(AcquireNextImageKHR); L(QueuePresentKHR);
     sd->real.CreateRenderPass2KHR = (PFN_vkCreateRenderPass2KHR)
         g_real_giPA(real_inst, "vkCreateRenderPass2KHR");
+    /* VK_KHR_external_memory_win32 — optional, NULL if driver doesn't support */
+    sd->real.GetMemoryWin32HandlePropertiesKHR =
+        (PFN_vkGetMemoryWin32HandlePropertiesKHR)
+        g_real_giPA(real_inst, "vkGetMemoryWin32HandlePropertiesKHR");
 #undef L
 }
 
