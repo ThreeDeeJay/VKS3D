@@ -37,6 +37,58 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_icd.h>
 
+/* ── Self-contained fallbacks for external memory extensions ─────────────────
+ * Older Vulkan SDK releases do not ship all extension headers.  We define the
+ * minimal types we need, guarded by the extension feature-test macros so they
+ * don't clash when a newer SDK provides them.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* VK_KHR_external_memory ── VkExternalMemoryImageCreateInfo + handle types */
+#if !defined(VK_KHR_external_memory)
+#define VK_KHR_external_memory 1
+typedef struct VkExternalMemoryImageCreateInfo {
+    VkStructureType                       sType;
+    const void                           *pNext;
+    VkExternalMemoryHandleTypeFlags       handleTypes;
+} VkExternalMemoryImageCreateInfo;
+#define VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO ((VkStructureType)1000072001)
+#endif
+
+/* VK_KHR_external_memory_win32 ── import handle + Win32 memory properties */
+#if defined(_WIN32) && !defined(VK_KHR_external_memory_win32)
+#define VK_KHR_external_memory_win32 1
+#define VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME "VK_KHR_external_memory_win32"
+
+/* D3D11 texture handle type — value from Vulkan spec §44.2 */
+#ifndef VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT
+#define VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT \
+    ((VkExternalMemoryHandleTypeFlagBits)0x00000008)
+#endif
+
+typedef struct VkImportMemoryWin32HandleInfoKHR {
+    VkStructureType                          sType;
+    const void                              *pNext;
+    VkExternalMemoryHandleTypeFlagBits       handleType;
+    HANDLE                                   handle;
+    LPCWSTR                                  name;
+} VkImportMemoryWin32HandleInfoKHR;
+
+typedef struct VkMemoryWin32HandlePropertiesKHR {
+    VkStructureType    sType;
+    void              *pNext;
+    uint32_t           memoryTypeBits;
+} VkMemoryWin32HandlePropertiesKHR;
+
+#define VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR  ((VkStructureType)1000073000)
+#define VK_STRUCTURE_TYPE_MEMORY_WIN32_HANDLE_PROPERTIES_KHR   ((VkStructureType)1000073002)
+
+typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
+    VkDevice                              device,
+    VkExternalMemoryHandleTypeFlagBits    handleType,
+    HANDLE                                handle,
+    VkMemoryWin32HandlePropertiesKHR     *pMemoryWin32HandleProperties);
+#endif /* VK_KHR_external_memory_win32 */
+
 /*
  * Older Vulkan SDK releases do not define ICD_LOADER_MAGIC or
  * SET_LOADER_MAGIC_VALUE in vk_icd.h (VK_LOADER_DATA itself is present
@@ -417,19 +469,6 @@ typedef struct StereoDevice {
     /* ── Graphics queue (for AcquireNextImageKHR semaphore signaling) ── */
     VkQueue                gfx_queue;
     uint32_t               gfx_qf;      /* graphics queue family index */
-
-    /* ── Depth image interception for multiview ─────────────────────── *
-     * When we intercept vkCreateImage and make a depth image 2-layer,
-     * we record it here so stereo_CreateImageView can upgrade its views
-     * to VK_IMAGE_VIEW_TYPE_2D_ARRAY / layerCount=2.
-     * ─────────────────────────────────────────────────────────────────── */
-#define MAX_PATCHED_DEPTH 128
-    VkImage                patched_depth[MAX_PATCHED_DEPTH];
-    uint32_t               patched_depth_count;
-
-    /* Swapchain dimensions used for depth matching (set on DXGI sc creation) */
-    uint32_t               stereo_w;
-    uint32_t               stereo_h;
 } StereoDevice;
 
 /* ── Stereo UBO layout (matches GLSL std140) ─────────────────────────────── */
