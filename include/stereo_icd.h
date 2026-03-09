@@ -128,17 +128,45 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #define MAX_CMD_BUFFERS         65536
 
 /* ── Stereo configuration ─────────────────────────────────────────────────── */
+/* ── Stereo presentation mode ─────────────────────────────────────────────── */
+typedef enum StereoPresentMode {
+    STEREO_PRESENT_AUTO       = 0,  /* try DXGI → DX9 → SBS */
+    STEREO_PRESENT_DXGI       = 1,  /* DXGI 1.2 stereo swap chain (classic 3DV) */
+    STEREO_PRESENT_DX9        = 2,  /* NvAPI + D3D9Ex direct mode (3D Fix Manager) */
+    STEREO_PRESENT_SBS        = 3,  /* side-by-side half-width */
+    STEREO_PRESENT_TAB        = 4,  /* top-and-bottom half-height */
+    STEREO_PRESENT_INTERLACED = 5,  /* row-interleaved */
+    STEREO_PRESENT_MONO       = 6,  /* passthrough (no stereo, debug) */
+} StereoPresentMode;
+
 typedef struct StereoConfig {
-    bool    enabled;
-    float   separation;          /* clip-space IPD offset, half applied per eye */
-    float   convergence;         /* clip-space convergence correction            */
-    bool    flip_eyes;           /* swap left/right if display is mirrored       */
-    float   left_eye_offset;     /* applied to gl_Position.x for view 0         */
-    float   right_eye_offset;    /* applied to gl_Position.x for view 1         */
+    bool              enabled;
+    float             separation;          /* clip-space IPD offset, half applied per eye */
+    float             convergence;         /* clip-space convergence correction            */
+    bool              flip_eyes;           /* swap left/right if display is mirrored       */
+    float             left_eye_offset;     /* applied to gl_Position.x for view 0         */
+    float             right_eye_offset;    /* applied to gl_Position.x for view 1         */
+
+    /* ── Presentation ───────────────────────────────────── */
+    StereoPresentMode present_mode;        /* requested mode (may fall back at runtime)    */
+    uint32_t          override_width;      /* 0 = use app resolution                       */
+    uint32_t          override_height;
+    uint32_t          refresh_rate;        /* Hz, 0 = driver default; use 120 for 3D Vision*/
+    bool              half_fps;            /* cap to half rate (60fps for active shutter)  */
+
+    /* ── Hotkey step sizes ──────────────────────────────── */
+    float             step_separation;     /* per Ctrl+F3/F4 press                        */
+    float             step_convergence;    /* per Ctrl+F5/F6 press                        */
 } StereoConfig;
 
 void stereo_config_init(StereoConfig *cfg);
 void stereo_config_compute_offsets(StereoConfig *cfg);
+
+/* Global INI paths (set in DllMain, available to all TUs) */
+extern char g_dll_dir[512];
+extern char g_exe_dir[512];
+extern char g_global_ini[512];
+extern char g_local_ini[512];
 
 /* ── Dispatch tables ─────────────────────────────────────────────────────── */
 
@@ -422,6 +450,23 @@ typedef struct StereoSwapchain {
     /* ── Passthrough mode fields (when dxgi_mode = false) ───────────── */
     VkImage          *sbs_images;       /* real swapchain images */
     uint32_t          sbs_width;
+
+    /* ── Resolved presentation mode for this swapchain ──────────────── */
+    StereoPresentMode  present_mode;    /* effective mode (may differ from config) */
+
+    /* ── CPU staging (used by DX9 / SBS / TAB / Interlaced modes) ──── *
+     * A VkBuffer of size W×H×4×2 (layer 0 then layer 1, BGRA/RGBA),    *
+     * HOST_VISIBLE | HOST_COHERENT, persistently mapped.                 *
+     * A command buffer copies both layers → buffer, then restores layout.*
+     * ─────────────────────────────────────────────────────────────────── */
+    bool              cpu_ok;
+    VkCommandPool     cpu_pool;
+    VkCommandBuffer   cpu_cmd;
+    VkFence           cpu_fence;
+    VkBuffer          cpu_buf;
+    VkDeviceMemory    cpu_mem;
+    void             *cpu_map;         /* persistently mapped base pointer */
+    uint32_t          cpu_eye_bytes;   /* W × H × 4 (bytes per eye layer)  */
 } StereoSwapchain;
 
 typedef struct StereoRenderPassInfo {
@@ -469,6 +514,32 @@ typedef struct StereoDevice {
     /* ── Graphics queue (for AcquireNextImageKHR semaphore signaling) ── */
     VkQueue                gfx_queue;
     uint32_t               gfx_qf;      /* graphics queue family index */
+
+    /* ── INI file paths (set in DllMain, used by config + hotkeys) ──── */
+    char                   global_ini[512];  /* <dll_dir>/vks3d.ini        */
+    char                   local_ini[512];   /* <exe_dir>/vks3d.ini        */
+
+    /* ── Hotkey debounce state ──────────────────────────────────────── */
+    uint32_t               hotkey_prev;     /* bitmask of keys active last frame */
+
+    /* ── D3D9 direct-mode state (STEREO_PRESENT_DX9) ────────────────── *
+     * IDirect3D9Ex + device created on sc->hwnd in exclusive fullscreen.  *
+     * NvAPI stereo activated on dx9_dev.                                   */
+    bool                   dx9_ok;
+    void                  *dx9_lib;         /* HMODULE d3d9.dll              */
+    void                  *dx9_d3d;         /* IDirect3D9Ex*                 */
+    void                  *dx9_dev;         /* IDirect3DDevice9Ex*           */
+    void                  *dx9_surf;        /* IDirect3DSurface9* systemmem  */
+    void                  *dx9_nvstereo;    /* NvAPI StereoHandle for dx9    */
+
+    /* ── Compose swap chain state (SBS / TAB / Interlaced) ─────────── *
+     * A plain DXGI windowed swap chain on sc->hwnd.  The composed frame  *
+     * (CPU-built) is uploaded via ID3D11DeviceContext::UpdateSubresource. */
+    bool                   comp_ok;
+    void                  *comp_sc;         /* IDXGISwapChain1*              */
+    void                  *comp_composed;   /* malloc'd W×H×4 compose buffer */
+    uint32_t               comp_w;
+    uint32_t               comp_h;
 } StereoDevice;
 
 /* ── Stereo UBO layout (matches GLSL std140) ─────────────────────────────── */

@@ -33,6 +33,7 @@
 #include <string.h>
 #include "stereo_icd.h"
 #include "dxgi_output.h"
+#include "present_alt.h"
 
 /* ── Helper: find suitable memory type ──────────────────────────────────── */
 static uint32_t find_memory_type(
@@ -162,6 +163,68 @@ static VkResult alloc_external_stereo_image(
     return VK_SUCCESS;
 }
 
+/* ── Shared swapchain setup helpers ────────────────────────────────────── */
+
+/* Allocate the barrier command pool / CB / fence used by the DXGI path. */
+static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
+{
+    VkCommandPoolCreateInfo cpci = {
+        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = sd->gfx_qf,
+    };
+    if (sd->real.CreateCommandPool(sd->real_device, &cpci, NULL, &sc->barrier_pool) != VK_SUCCESS)
+        return false;
+
+    VkCommandBufferAllocateInfo cbai = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = sc->barrier_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    if (sd->real.AllocateCommandBuffers(sd->real_device, &cbai, sc->barrier_cmds) != VK_SUCCESS)
+        return false;
+
+    VkFenceCreateInfo fci = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    };
+    return sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[0]) == VK_SUCCESS;
+}
+
+/* Allocate a regular (non-external) 2-layer stereo swapchain image + view
+ * and CPU staging buffer.  Used by DX9, SBS, TAB, Interlaced modes.     */
+static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc)
+{
+    sc->image_count      = 1;
+    sc->stereo_images    = calloc(1, sizeof(VkImage));
+    sc->stereo_memory    = calloc(1, sizeof(VkDeviceMemory));
+    sc->stereo_views_arr = calloc(1, sizeof(VkImageView));
+    sc->barrier_cmds     = calloc(1, sizeof(VkCommandBuffer));
+    sc->barrier_fences   = calloc(1, sizeof(VkFence));
+
+    if (!sc->stereo_images || !sc->stereo_memory || !sc->stereo_views_arr ||
+        !sc->barrier_cmds  || !sc->barrier_fences)
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+    VkResult res = alt_alloc_stereo_image(sd, sc,
+                       &sc->stereo_images[0], &sc->stereo_memory[0]);
+    if (res != VK_SUCCESS) return res;
+
+    VkImageViewCreateInfo vci = {
+        .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image    = sc->stereo_images[0],
+        .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+        .format   = sc->format,
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2 },
+    };
+    res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
+    if (res != VK_SUCCESS) return res;
+
+    /* CPU staging: needed by both DX9 and compose modes */
+    return alt_cpu_staging_init(sd, sc);
+}
+
 /* ── vkCreateSwapchainKHR ──────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateSwapchainKHR(
@@ -188,111 +251,150 @@ stereo_CreateSwapchainKHR(
     sc->format     = pCreateInfo->imageFormat;
     sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
 
-    /* ── Try DXGI 1.2 + external memory ──────────────────────────────── */
-    bool dxgi_ok = false;
-    HANDLE nt_handle = NULL;
-    if (sc->hwnd && dxgi_device_init(sd)) {
-        if (dxgi_sc_create(sd, sc) && dxgi_shared_tex_create(sd, sc, &nt_handle))
-            dxgi_ok = true;
-        else
-            dxgi_sc_destroy(sc);
-    }
+    StereoPresentMode req = sd->stereo.present_mode;
 
-    if (!dxgi_ok) {
-        STEREO_ERR("DXGI stereo init failed — passing through unmodified");
-        sc->stereo_active = false;
-        VkResult res = sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
-        if (res == VK_SUCCESS) {
-            sc->real_swapchain = *pSwapchain;
-            sc->app_handle     = *pSwapchain;
-            sd->swapchain_count++;
+    /* ── Try DXGI 1.2 + external memory ───────────────────────────────
+     * For AUTO or DXGI mode: attempt the zero-copy external-memory path.  */
+    if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DXGI) {
+        bool dxgi_ok = false;
+        HANDLE nt_handle = NULL;
+        if (sc->hwnd && dxgi_device_init(sd)) {
+            if (dxgi_sc_create(sd, sc) && dxgi_shared_tex_create(sd, sc, &nt_handle))
+                dxgi_ok = true;
+            else
+                dxgi_sc_destroy(sc);
         }
-        return res;
+
+        if (dxgi_ok) {
+            /* Allocate single-image arrays */
+            sc->image_count      = 1;
+            sc->stereo_images    = calloc(1, sizeof(VkImage));
+            sc->stereo_memory    = calloc(1, sizeof(VkDeviceMemory));
+            sc->stereo_views_arr = calloc(1, sizeof(VkImageView));
+            sc->barrier_cmds     = calloc(1, sizeof(VkCommandBuffer));
+            sc->barrier_fences   = calloc(1, sizeof(VkFence));
+            if (!sc->stereo_images || !sc->stereo_memory || !sc->stereo_views_arr ||
+                !sc->barrier_cmds  || !sc->barrier_fences) {
+                dxgi_sc_destroy(sc);
+                if (req == STEREO_PRESENT_DXGI) goto passthrough;
+                goto try_dx9;
+            }
+            /* Import D3D11 shared memory → VkImage */
+            VkResult res = alloc_external_stereo_image(sd, sc,
+                &sc->stereo_images[0], &sc->stereo_memory[0]);
+            if (res != VK_SUCCESS) {
+                STEREO_ERR("External stereo image allocation failed: %d", res);
+                dxgi_sc_destroy(sc);
+                if (req == STEREO_PRESENT_DXGI) goto passthrough;
+                goto try_dx9;
+            }
+            /* 2D_ARRAY view covering both eye layers */
+            VkImageViewCreateInfo vci = {
+                .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .image    = sc->stereo_images[0],
+                .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+                .format   = sc->format,
+                .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2 },
+            };
+            res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
+            if (res != VK_SUCCESS) {
+                dxgi_sc_destroy(sc);
+                if (req == STEREO_PRESENT_DXGI) goto passthrough;
+                goto try_dx9;
+            }
+            if (!setup_barrier_resources(sd, sc)) {
+                dxgi_sc_destroy(sc);
+                if (req == STEREO_PRESENT_DXGI) goto passthrough;
+                goto try_dx9;
+            }
+            sc->present_mode  = STEREO_PRESENT_DXGI;
+            sc->dxgi_mode     = true;
+            sc->stereo_active = true;
+            sc->real_swapchain = VK_NULL_HANDLE;
+            sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
+            *pSwapchain       = sc->app_handle;
+            sd->stereo_w = app_w;
+            sd->stereo_h = app_h;
+            sd->swapchain_count++;
+            STEREO_LOG("DXGI stereo swapchain (external mem): %ux%u  handle=%p",
+                       app_w, app_h, (void*)*pSwapchain);
+            return VK_SUCCESS;
+        }
+
+        if (req == STEREO_PRESENT_DXGI) {
+            STEREO_ERR("DXGI mode forced but init failed");
+            goto passthrough;
+        }
+        /* AUTO: fall through to DX9 */
     }
 
-    /* ── Single shared image (no ring buffer needed — WaitForFences
-     *    in present.c provides backpressure before the app re-enters  */
-    sc->image_count   = 1;
-    sc->stereo_images = calloc(1, sizeof(VkImage));
-    sc->stereo_memory = calloc(1, sizeof(VkDeviceMemory));
-    sc->stereo_views_arr = calloc(1, sizeof(VkImageView));
-    sc->barrier_cmds  = calloc(1, sizeof(VkCommandBuffer));
-    sc->barrier_fences = calloc(1, sizeof(VkFence));
-
-    if (!sc->stereo_images || !sc->stereo_memory || !sc->stereo_views_arr ||
-        !sc->barrier_cmds || !sc->barrier_fences) {
-        dxgi_sc_destroy(sc);
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
+try_dx9:
+    /* ── DX9 direct mode ──────────────────────────────────────────────
+     * Uses NvAPI + IDirect3D9Ex exclusive fullscreen.
+     * Requires CPU staging for Vulkan→D3D9 pixel transfer.             */
+    if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DX9) {
+        /* Need D3D11/NvAPI already loaded for NvAPI QueryInterface */
+        if (!sd->d3d11_ok) dxgi_device_init(sd);
+        if (sc->hwnd && dx9_init(sd, sc)) {
+            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            if (res == VK_SUCCESS) {
+                sc->present_mode  = STEREO_PRESENT_DX9;
+                sc->dxgi_mode     = false;
+                sc->stereo_active = true;
+                sc->real_swapchain = VK_NULL_HANDLE;
+                sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
+                *pSwapchain       = sc->app_handle;
+                sd->stereo_w = app_w;
+                sd->stereo_h = app_h;
+                sd->swapchain_count++;
+                STEREO_LOG("DX9 stereo swapchain: %ux%u  handle=%p",
+                           app_w, app_h, (void*)*pSwapchain);
+                return VK_SUCCESS;
+            }
+        }
+        if (req == STEREO_PRESENT_DX9) {
+            STEREO_ERR("DX9 mode forced but init failed");
+            goto passthrough;
+        }
+        /* AUTO: fall through to SBS */
+        STEREO_LOG("DX9 init failed; falling back to SBS compose mode");
+        req = STEREO_PRESENT_SBS;
     }
 
-    /* Import D3D11 shared memory → VkImage */
-    VkResult res = alloc_external_stereo_image(sd, sc,
-        &sc->stereo_images[0], &sc->stereo_memory[0]);
-    if (res != VK_SUCCESS) {
-        STEREO_ERR("External stereo image allocation failed: %d", res);
-        dxgi_sc_destroy(sc);
-        return res;
+    /* ── Compose modes (SBS / TAB / Interlaced) ──────────────────────── */
+    if (req == STEREO_PRESENT_SBS  ||
+        req == STEREO_PRESENT_TAB  ||
+        req == STEREO_PRESENT_INTERLACED) {
+        if (!sd->d3d11_ok) dxgi_device_init(sd);
+        if (sc->hwnd && compose_init(sd, sc)) {
+            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            if (res == VK_SUCCESS) {
+                sc->present_mode  = req;
+                sc->dxgi_mode     = false;
+                sc->stereo_active = true;
+                sc->real_swapchain = VK_NULL_HANDLE;
+                sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
+                *pSwapchain       = sc->app_handle;
+                sd->stereo_w = app_w;
+                sd->stereo_h = app_h;
+                sd->swapchain_count++;
+                STEREO_LOG("Compose stereo swapchain (mode=%d): %ux%u  handle=%p",
+                           (int)req, app_w, app_h, (void*)*pSwapchain);
+                return VK_SUCCESS;
+            }
+        }
     }
 
-    /* 2D_ARRAY view covering both eye layers */
-    VkImageViewCreateInfo vci = {
-        .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image    = sc->stereo_images[0],
-        .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-        .format   = sc->format,
-        .subresourceRange = {
-            .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel   = 0, .levelCount   = 1,
-            .baseArrayLayer = 0, .layerCount   = 2,
-        },
-    };
-    res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
-    if (res != VK_SUCCESS) {
-        STEREO_ERR("CreateImageView(stereo 2D_ARRAY) failed: %d", res);
-        dxgi_sc_destroy(sc);
-        return res;
+passthrough:
+    STEREO_ERR("All stereo modes failed — falling back to passthrough");
+    sc->stereo_active = false;
+    VkResult res = sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
+    if (res == VK_SUCCESS) {
+        sc->real_swapchain = *pSwapchain;
+        sc->app_handle     = *pSwapchain;
+        sd->swapchain_count++;
     }
-
-    /* ── Barrier command pool + CB + fence ───────────────────────────── */
-    VkCommandPoolCreateInfo cpci = {
-        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = sd->gfx_qf,
-    };
-    res = sd->real.CreateCommandPool(sd->real_device, &cpci, NULL, &sc->barrier_pool);
-    if (res != VK_SUCCESS) return res;
-
-    VkCommandBufferAllocateInfo cbai = {
-        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool        = sc->barrier_pool,
-        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    res = sd->real.AllocateCommandBuffers(sd->real_device, &cbai, sc->barrier_cmds);
-    if (res != VK_SUCCESS) return res;
-
-    /* Fence starts SIGNALED so the very first AcquireNextImage doesn't hang */
-    VkFenceCreateInfo fci = {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-    };
-    res = sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[0]);
-    if (res != VK_SUCCESS) return res;
-
-    sc->dxgi_mode     = true;
-    sc->stereo_active = true;
-    sc->real_swapchain = VK_NULL_HANDLE;
-    sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
-    *pSwapchain       = sc->app_handle;
-
-    /* Record swapchain dimensions for depth image interception */
-    sd->stereo_w = app_w;
-    sd->stereo_h = app_h;
-
-    sd->swapchain_count++;
-    STEREO_LOG("DXGI stereo swapchain (external mem): %ux%u  1 image  handle=%p",
-               app_w, app_h, (void*)*pSwapchain);
-    return VK_SUCCESS;
+    return res;
 }
 
 /* ── vkDestroySwapchainKHR ──────────────────────────────────────────────── */
@@ -325,6 +427,9 @@ stereo_DestroySwapchainKHR(
 
         if (sc->barrier_pool)
             sd->real.DestroyCommandPool(sd->real_device, sc->barrier_pool, NULL);
+
+        /* Destroy CPU staging resources (used by DX9 / compose modes) */
+        alt_cpu_staging_destroy(sd, sc);
 
         dxgi_sc_destroy(sc);
 
@@ -428,23 +533,44 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         }
     }
 
-    if (!sd || !sc || !sd->stereo.enabled || !sc->dxgi_mode) {
+    if (!sd || !sc || !sd->stereo.enabled || !sc->stereo_active) {
         StereoDevice *fwd = sd ? sd : (g_device_count > 0 ? &g_devices[0] : NULL);
         if (!fwd) return VK_ERROR_DEVICE_LOST;
         return fwd->real.QueuePresentKHR(queue, pPresentInfo);
     }
 
+    /* Poll hotkeys once per present */
+    hotkeys_poll(sd);
+
     VkResult result = VK_SUCCESS;
     for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
         StereoSwapchain *sc_i = stereo_swapchain_lookup(sd, pPresentInfo->pSwapchains[i]);
-        if (!sc_i || !sc_i->dxgi_mode || !sc_i->stereo_active) continue;
+        if (!sc_i || !sc_i->stereo_active) continue;
 
         uint32_t           wcount = (i == 0) ? pPresentInfo->waitSemaphoreCount : 0;
         const VkSemaphore *wsems  = (i == 0) ? pPresentInfo->pWaitSemaphores    : NULL;
 
-        VkResult pr = stereo_dxgi_present(sd, queue, sc_i, 0, wcount, wsems);
+        VkResult pr;
+        switch (sc_i->present_mode) {
+        case STEREO_PRESENT_DXGI:
+            pr = stereo_dxgi_present(sd, queue, sc_i, 0, wcount, wsems);
+            break;
+        case STEREO_PRESENT_DX9:
+            pr = dx9_present(sd, sc_i, queue, wcount, wsems);
+            break;
+        case STEREO_PRESENT_SBS:
+        case STEREO_PRESENT_TAB:
+        case STEREO_PRESENT_INTERLACED:
+            pr = compose_present(sd, sc_i, queue, wcount, wsems, sc_i->present_mode);
+            break;
+        default:
+            /* MONO or passthrough — just signal fence so next frame can proceed */
+            pr = VK_SUCCESS;
+            break;
+        }
         if (pr != VK_SUCCESS) {
-            STEREO_ERR("DXGI present failed for swapchain %u: %d", i, pr);
+            STEREO_ERR("Present (mode=%d) failed for swapchain %u: %d",
+                       (int)sc_i->present_mode, i, pr);
             result = pr;
         }
     }

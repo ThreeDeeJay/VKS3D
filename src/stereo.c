@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stereo_icd.h"
+#include "ini.h"
 
 /* ── Global object registries (some exported for swapchain.c) ─────────────── */
 
@@ -69,28 +70,90 @@ static PFN_vkGetInstanceProcAddr g_real_pdPA        = NULL;
 
 /* ── Stereo config ───────────────────────────────────────────────────────── */
 
+/* Global paths set in DllMain — available before any device is created */
+char g_dll_dir[512];     /* directory containing VKS3D.dll    */
+char g_exe_dir[512];     /* directory containing host .exe    */
+char g_global_ini[512];  /* <dll_dir>/vks3d.ini               */
+char g_local_ini[512];   /* <exe_dir>/vks3d.ini               */
+
+/* Parse "presentation_mode" string → StereoPresentMode */
+static StereoPresentMode parse_present_mode(const char *s)
+{
+    if (!s || !*s)             return STEREO_PRESENT_AUTO;
+    if (!_stricmp(s, "auto"))  return STEREO_PRESENT_AUTO;
+    if (!_stricmp(s, "dxgi"))  return STEREO_PRESENT_DXGI;
+    if (!_stricmp(s, "dx9"))   return STEREO_PRESENT_DX9;
+    if (!_stricmp(s, "sbs"))   return STEREO_PRESENT_SBS;
+    if (!_stricmp(s, "tab"))   return STEREO_PRESENT_TAB;
+    if (!_stricmp(s, "interlaced")) return STEREO_PRESENT_INTERLACED;
+    if (!_stricmp(s, "mono"))  return STEREO_PRESENT_MONO;
+    return STEREO_PRESENT_AUTO;
+}
+
+/* Read one float from local INI, fall back to global INI, then env, then default */
+static float cfg_float(const char *key, float def)
+{
+    float v = ini_read_float(g_global_ini, "VKS3D", key, def);
+    v       = ini_read_float(g_local_ini,  "VKS3D", key, v);
+    /* Legacy env var override */
+    char env_name[64];
+    snprintf(env_name, sizeof(env_name), "STEREO_%s", key);
+    const char *e = stereo_getenv(env_name);
+    if (e) v = (float)atof(e);
+    return v;
+}
+
+static int cfg_int(const char *key, int def)
+{
+    int v = ini_read_int(g_global_ini, "VKS3D", key, def);
+    v     = ini_read_int(g_local_ini,  "VKS3D", key, v);
+    return v;
+}
+
+static bool cfg_bool(const char *key, bool def)
+{
+    bool v = ini_read_bool(g_global_ini, "VKS3D", key, def);
+    v      = ini_read_bool(g_local_ini,  "VKS3D", key, v);
+    return v;
+}
+
 void stereo_config_init(StereoConfig *cfg)
 {
-    const char *env;
-    cfg->enabled = true;
-    env = stereo_getenv("STEREO_ENABLED");
-    if (env && atoi(env) == 0) cfg->enabled = false;
+    /* ── enabled ── */
+    cfg->enabled = cfg_bool("enabled", true);
+    const char *env_en = stereo_getenv("STEREO_ENABLED");
+    if (env_en && atoi(env_en) == 0) cfg->enabled = false;
 
-    cfg->separation = 0.065f;
-    env = stereo_getenv("STEREO_SEPARATION");
-    if (env) cfg->separation = (float)atof(env);
+    /* ── stereo parameters ── */
+    cfg->separation  = cfg_float("separation",  0.065f);
+    cfg->convergence = cfg_float("convergence", 0.030f);
+    cfg->flip_eyes   = cfg_bool ("flip_eyes",   false);
 
-    cfg->convergence = 0.030f;
-    env = stereo_getenv("STEREO_CONVERGENCE");
-    if (env) cfg->convergence = (float)atof(env);
+    /* ── presentation mode ── */
+    char mode_str[32] = "auto";
+    ini_read_str(g_global_ini, "VKS3D", "presentation_mode", mode_str, sizeof(mode_str));
+    ini_read_str(g_local_ini,  "VKS3D", "presentation_mode", mode_str, sizeof(mode_str));
+    cfg->present_mode = parse_present_mode(mode_str);
 
-    cfg->flip_eyes = false;
-    env = stereo_getenv("STEREO_FLIP_EYES");
-    if (env && atoi(env) == 1) cfg->flip_eyes = true;
+    /* ── output resolution / refresh ── */
+    cfg->override_width  = (uint32_t)cfg_int("width",        0);
+    cfg->override_height = (uint32_t)cfg_int("height",       0);
+    cfg->refresh_rate    = (uint32_t)cfg_int("refresh_rate", 120);
+    cfg->half_fps        = cfg_bool("half_fps", false);
+
+    /* ── hotkey steps ── */
+    cfg->step_separation  = cfg_float("step_separation",  0.005f);
+    cfg->step_convergence = cfg_float("step_convergence", 0.005f);
 
     stereo_config_compute_offsets(cfg);
-    STEREO_LOG("Stereo: enabled=%d sep=%.4f conv=%.4f flip=%d",
-               cfg->enabled, cfg->separation, cfg->convergence, cfg->flip_eyes);
+    STEREO_LOG("Stereo config: enabled=%d sep=%.4f conv=%.4f flip=%d mode=%d",
+               cfg->enabled, cfg->separation, cfg->convergence,
+               cfg->flip_eyes, (int)cfg->present_mode);
+    STEREO_LOG("  override %ux%u @ %uHz  half_fps=%d  steps sep=%.4f conv=%.4f",
+               cfg->override_width, cfg->override_height, cfg->refresh_rate,
+               cfg->half_fps, cfg->step_separation, cfg->step_convergence);
+    STEREO_LOG("  global_ini=%s", g_global_ini);
+    STEREO_LOG("  local_ini=%s",  g_local_ini);
 }
 
 void stereo_config_compute_offsets(StereoConfig *cfg)
@@ -416,6 +479,9 @@ StereoDevice *stereo_device_alloc(void) {
     StereoDevice *sd = &g_devices[g_device_count++];
     memset(sd, 0, sizeof(*sd));
     stereo_mutex_init(&sd->lock);
+    /* Copy INI paths established in DllMain */
+    strncpy(sd->global_ini, g_global_ini, sizeof(sd->global_ini) - 1);
+    strncpy(sd->local_ini,  g_local_ini,  sizeof(sd->local_ini)  - 1);
     stereo_mutex_unlock(&g_registry_lock);
     return sd;
 }
@@ -621,31 +687,47 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
 }
 
 /* ── Windows DllMain + self-identification marker ───────────────────────── */
+
+/* Helper: strip filename to get directory (no trailing slash) */
+static void dir_of_path(const char *full, char *out, size_t out_size)
+{
+    size_t len = strlen(full);
+    const char *p = full + len;
+    while (p > full && *p != '\\' && *p != '/') p--;
+    size_t dlen = (size_t)(p - full);
+    if (dlen == 0) { out[0] = '.'; out[1] = '\0'; return; }
+    if (dlen >= out_size) dlen = out_size - 1;
+    memcpy(out, full, dlen);
+    out[dlen] = '\0';
+}
+
 #ifdef _WIN32
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     (void)lpvReserved;
     if (fdwReason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hinstDLL);
-        /* Open the log file as the very first thing so every subsequent
-         * STEREO_LOG/STEREO_ERR call goes to the file.  This must happen
-         * before any other initialisation because a crash in init would
-         * otherwise leave us with no diagnostic output. */
         vks3d_log_open();
         STEREO_LOG("===== VKS3D DLL_PROCESS_ATTACH =====");
         STEREO_LOG("DllMain: hinstDLL=%p", (void*)hinstDLL);
-        /* Log our own path so the user can confirm which binary loaded */
+
+        /* Store DLL and exe paths for INI file discovery */
         {
-            char dll_path[MAX_PATH] = "<unknown>";
-            GetModuleFileNameA(hinstDLL, dll_path, MAX_PATH);
+            char dll_path[512] = "<unknown>";
+            GetModuleFileNameA(hinstDLL, dll_path, sizeof(dll_path));
             STEREO_LOG("DllMain: DLL path = %s", dll_path);
+            dir_of_path(dll_path, g_dll_dir, sizeof(g_dll_dir));
+            snprintf(g_global_ini, sizeof(g_global_ini), "%s\\vks3d.ini", g_dll_dir);
         }
-        /* Log the host process so we know which app is loading us */
         {
-            char exe_path[MAX_PATH] = "<unknown>";
-            GetModuleFileNameA(NULL, exe_path, MAX_PATH);
+            char exe_path[512] = "<unknown>";
+            GetModuleFileNameA(NULL, exe_path, sizeof(exe_path));
             STEREO_LOG("DllMain: host process = %s", exe_path);
+            dir_of_path(exe_path, g_exe_dir, sizeof(g_exe_dir));
+            snprintf(g_local_ini, sizeof(g_local_ini), "%s\\vks3d.ini", g_exe_dir);
         }
+        STEREO_LOG("DllMain: global_ini=%s", g_global_ini);
+        STEREO_LOG("DllMain: local_ini=%s",  g_local_ini);
         STEREO_LOG("DllMain: complete, returning TRUE");
     } else if (fdwReason == DLL_PROCESS_DETACH) {
         STEREO_LOG("===== VKS3D DLL_PROCESS_DETACH =====");
