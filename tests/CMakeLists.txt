@@ -18,6 +18,7 @@ if(VKS3D_BUILD_TESTS)
         test_spirv_patch.c
         ${CMAKE_SOURCE_DIR}/src/shader.c
         ${CMAKE_SOURCE_DIR}/src/stereo.c
+        ${CMAKE_SOURCE_DIR}/src/ini.c
     )
     target_include_directories(test_spirv_patch PRIVATE ${TEST_INCLUDE_DIRS})
     target_compile_definitions(test_spirv_patch PRIVATE ${TEST_COMPILE_DEFS})
@@ -36,6 +37,7 @@ if(VKS3D_BUILD_TESTS)
     add_executable(test_stereo_math
         test_stereo_math.c
         ${CMAKE_SOURCE_DIR}/src/stereo.c
+        ${CMAKE_SOURCE_DIR}/src/ini.c
     )
     target_include_directories(test_stereo_math PRIVATE ${TEST_INCLUDE_DIRS})
     target_compile_definitions(test_stereo_math PRIVATE ${TEST_COMPILE_DEFS})
