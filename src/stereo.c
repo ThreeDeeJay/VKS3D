@@ -714,6 +714,63 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
 
 /* ── Windows DllMain + self-identification marker ───────────────────────── */
 
+/* ── dx9_nvapi_early_init ────────────────────────────────────────────────────
+ * Defined here (stereo.c / DllMain translation unit) so it is always linked,
+ * even in test builds that compile stereo.c in isolation without present_alt.c.
+ *
+ * Must be called at DLL_PROCESS_ATTACH before any Direct3DCreate9Ex.
+ * NvAPI_Stereo_SetDriverMode(DIRECT) only takes effect if called before the
+ * NVIDIA stereo driver inspects the process at D3D9 device creation time.
+ * ─────────────────────────────────────────────────────────────────────────── */
+#ifdef _WIN32
+static bool s_nvapi_early_done = false;
+void dx9_nvapi_early_init(void)
+{
+    if (s_nvapi_early_done) return;
+    s_nvapi_early_done = true;
+
+    typedef void* (*PFN_NvQI)(unsigned);
+    typedef int   (*PFN_NvFn)(int);
+    typedef int   (*PFN_NvInit)(void);
+
+#ifdef _WIN64
+    const char *nvapi_dll = "nvapi64.dll";
+#else
+    const char *nvapi_dll = "nvapi.dll";
+#endif
+    HMODULE hNvAPI = LoadLibraryA(nvapi_dll);
+    if (!hNvAPI) {
+        STEREO_LOG("[NvAPI-early] %s not found — DX9 3D Vision stereo won't work", nvapi_dll);
+        return;
+    }
+
+    PFN_NvQI fnQI = (PFN_NvQI)GetProcAddress(hNvAPI, "nvapi_QueryInterface");
+    if (!fnQI) {
+        STEREO_LOG("[NvAPI-early] nvapi_QueryInterface not found");
+        FreeLibrary(hNvAPI);
+        return;
+    }
+
+    /* NvAPI_Initialize (0x0150E828) */
+    PFN_NvInit fnInit = (PFN_NvInit)fnQI(0x0150E828u);
+    if (fnInit) {
+        int r = fnInit();
+        STEREO_LOG("[NvAPI-early] NvAPI_Initialize = %d", r);
+    }
+
+    /* NvAPI_Stereo_SetDriverMode(DIRECT=2) — 0x5E8F1974 */
+    PFN_NvFn fnMode = (PFN_NvFn)fnQI(0x5E8F1974u);
+    if (fnMode) {
+        int r = fnMode(2 /*DIRECT*/);
+        STEREO_LOG("[NvAPI-early] NvAPI_Stereo_SetDriverMode(DIRECT) = %d%s",
+                   r, r == 0 ? " OK" : " (non-zero — driver may ignore)");
+    } else {
+        STEREO_LOG("[NvAPI-early] NvID_StereoSetDriverMode not found in nvapi");
+    }
+    /* Keep hNvAPI loaded — FreeLibrary would invalidate the QI function pointer */
+}
+#endif /* _WIN32 */
+
 /* Helper: strip filename to get directory (no trailing slash) */
 static void dir_of_path(const char *full, char *out, size_t out_size)
 {

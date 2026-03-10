@@ -51,8 +51,6 @@ VkResult alt_alloc_stereo_image(StereoDevice *sd, StereoSwapchain *sc,
  * Must be called after dxgi_device_init (for NvAPI, which is already loaded).
  * Returns true on success; stores state in sd->dx9_*. */
 bool     dx9_init(StereoDevice *sd, StereoSwapchain *sc);
-/* Call at DLL_PROCESS_ATTACH — must precede any Direct3DCreate9Ex call */
-void     dx9_nvapi_early_init(void);
 void     dx9_destroy(StereoDevice *sd);
 VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
                      VkQueue queue,
