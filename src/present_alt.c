@@ -101,6 +101,61 @@ static inline void* nv_q(unsigned id)
 typedef int (*PFN_NvInt)(int);
 typedef int (*PFN_NvHandleEye)(void*, int);
 
+/* ── dx9_nvapi_early_init ─────────────────────────────────────────────────
+ * Must be called at DLL_PROCESS_ATTACH, before any D3D9 / Direct3D object
+ * is created.  NvAPI_Stereo_SetDriverMode(DIRECT) only takes effect when
+ * set before the NVIDIA stereo driver decides whether to activate.
+ * Calling it later (inside dx9_init) is too late — the driver has already
+ * examined the process and decided on 2D mode.
+ * ─────────────────────────────────────────────────────────────────────────*/
+static bool s_early_nvapi_done = false;
+
+void dx9_nvapi_early_init(void)
+{
+    if (s_early_nvapi_done) return;
+    s_early_nvapi_done = true;
+
+#ifdef _WIN64
+    const char *nvapi_dll = "nvapi64.dll";
+#else
+    const char *nvapi_dll = "nvapi.dll";
+#endif
+    HMODULE hNvAPI = LoadLibraryA(nvapi_dll);
+    if (!hNvAPI) {
+        STEREO_LOG("[NvAPI-early] %s not found — DX9 stereo won't work", nvapi_dll);
+        return;
+    }
+
+    PFN_NvQI_t fnQI = (PFN_NvQI_t)GetProcAddress(hNvAPI, "nvapi_QueryInterface");
+    if (!fnQI) {
+        STEREO_LOG("[NvAPI-early] nvapi_QueryInterface not found");
+        FreeLibrary(hNvAPI);
+        return;
+    }
+    /* Cache for later use by dx9_init */
+    s_nvQI_alt = fnQI;
+
+    /* NvAPI_Initialize — ID 0x150E828 */
+    typedef int (*PFN_NvVoid)(void);
+    PFN_NvVoid fnInit = (PFN_NvVoid)fnQI(0x0150E828u);
+    if (fnInit) {
+        int r = fnInit();
+        STEREO_LOG("[NvAPI-early] NvAPI_Initialize = %d", r);
+    }
+
+    /* NvAPI_Stereo_SetDriverMode(DIRECT=2) — must be before Direct3DCreate9Ex */
+    PFN_NvInt fnMode = (PFN_NvInt)fnQI(NvID_StereoSetDriverMode);
+    if (fnMode) {
+        int r = fnMode(NV_STEREO_MODE_DIRECT);
+        STEREO_LOG("[NvAPI-early] NvAPI_Stereo_SetDriverMode(DIRECT) = %d%s",
+                   r, r == 0 ? " OK" : " (non-zero — driver may ignore)");
+    } else {
+        STEREO_LOG("[NvAPI-early] NvID_StereoSetDriverMode not found in nvapi");
+    }
+    /* Keep hNvAPI loaded — FreeLibrary would invalidate function pointers */
+}
+
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * DXGI / D3D11 minimal definitions for compose mode
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -373,17 +428,14 @@ bool dx9_init(StereoDevice *sd, StereoSwapchain *sc)
         return false;
     }
 
-    /* NvAPI: set driver mode to DIRECT before device creation */
+    /* NvAPI: s_nvQI_alt already initialised by dx9_nvapi_early_init() at
+     * DLL_PROCESS_ATTACH.  SetDriverMode(DIRECT) was called there before any
+     * D3D9 object was created, which is the only timing that works.
+     * Just resolve it from sd->nvapi_lib as a fallback if early init didn't run. */
     if (!s_nvQI_alt && sd->nvapi_lib) {
         s_nvQI_alt = (PFN_NvQI_t)GetProcAddress((HMODULE)sd->nvapi_lib,
                                                    "nvapi_QueryInterface");
-    }
-    if (s_nvQI_alt) {
-        PFN_NvInt fnMode = (PFN_NvInt)nv_q(NvID_StereoSetDriverMode);
-        if (fnMode) {
-            int r = fnMode(NV_STEREO_MODE_DIRECT);
-            STEREO_LOG("[DX9] NvAPI_Stereo_SetDriverMode(DIRECT) = %d", r);
-        }
+        STEREO_LOG("[DX9] nvapi_QueryInterface from sd->nvapi_lib (early init missed)");
     }
 
     /* Create IDirect3D9Ex */
@@ -815,10 +867,11 @@ void hotkeys_poll(StereoDevice *sd)
     if (rise & (1u << HOT_SAVE)) {
         /* Write separation + convergence to local INI */
         const char *ini = sd->local_ini[0] ? sd->local_ini : sd->global_ini;
+        STEREO_LOG("[Hotkey] INI save: separation = %.6g -> %s",  cfg->separation,  ini);
         ini_write_float(ini, "VKS3D", "separation",  cfg->separation);
+        STEREO_LOG("[Hotkey] INI save: convergence = %.6g -> %s", cfg->convergence, ini);
         ini_write_float(ini, "VKS3D", "convergence", cfg->convergence);
-        STEREO_LOG("[Hotkey] Saved sep=%.4f conv=%.4f to %s",
-                   cfg->separation, cfg->convergence, ini);
+        STEREO_LOG("[Hotkey] INI save: complete");
         /* Brief visual feedback via a Windows beep */
         Beep(880, 80);
     }

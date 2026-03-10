@@ -93,29 +93,53 @@ static StereoPresentMode parse_present_mode(const char *s)
 /* Read one float from local INI, fall back to global INI, then env, then default */
 static float cfg_float(const char *key, float def)
 {
-    float v = ini_read_float(g_global_ini, "VKS3D", key, def);
-    v       = ini_read_float(g_local_ini,  "VKS3D", key, v);
-    /* Legacy env var override */
+    float v = def;
+    char buf[64];
+    if (ini_read_str(g_global_ini, "VKS3D", key, buf, sizeof(buf))) {
+        v = (float)atof(buf);
+        STEREO_LOG("INI load: [global] %s = %s", key, buf);
+    }
+    if (ini_read_str(g_local_ini, "VKS3D", key, buf, sizeof(buf))) {
+        v = (float)atof(buf);
+        STEREO_LOG("INI load: [local]  %s = %s", key, buf);
+    }
     char env_name[64];
     snprintf(env_name, sizeof(env_name), "STEREO_%s", key);
     const char *e = stereo_getenv(env_name);
-    if (e) v = (float)atof(e);
+    if (e) { v = (float)atof(e); STEREO_LOG("INI load: [env]    STEREO_%s = %s", key, e); }
     return v;
 }
 
 static int cfg_int(const char *key, int def)
 {
-    int v = ini_read_int(g_global_ini, "VKS3D", key, def);
-    v     = ini_read_int(g_local_ini,  "VKS3D", key, v);
+    int v = def;
+    char buf[32];
+    if (ini_read_str(g_global_ini, "VKS3D", key, buf, sizeof(buf))) {
+        v = atoi(buf);
+        STEREO_LOG("INI load: [global] %s = %s", key, buf);
+    }
+    if (ini_read_str(g_local_ini, "VKS3D", key, buf, sizeof(buf))) {
+        v = atoi(buf);
+        STEREO_LOG("INI load: [local]  %s = %s", key, buf);
+    }
     return v;
 }
 
 static bool cfg_bool(const char *key, bool def)
 {
-    bool v = ini_read_bool(g_global_ini, "VKS3D", key, def);
-    v      = ini_read_bool(g_local_ini,  "VKS3D", key, v);
+    bool v = def;
+    char buf[16];
+    if (ini_read_str(g_global_ini, "VKS3D", key, buf, sizeof(buf))) {
+        v = ini_read_bool(g_global_ini, "VKS3D", key, def);
+        STEREO_LOG("INI load: [global] %s = %s", key, buf);
+    }
+    if (ini_read_str(g_local_ini, "VKS3D", key, buf, sizeof(buf))) {
+        v = ini_read_bool(g_local_ini, "VKS3D", key, v);
+        STEREO_LOG("INI load: [local]  %s = %s", key, buf);
+    }
     return v;
 }
+
 
 void stereo_config_init(StereoConfig *cfg)
 {
@@ -131,8 +155,10 @@ void stereo_config_init(StereoConfig *cfg)
 
     /* ── presentation mode ── */
     char mode_str[32] = "auto";
-    ini_read_str(g_global_ini, "VKS3D", "presentation_mode", mode_str, sizeof(mode_str));
-    ini_read_str(g_local_ini,  "VKS3D", "presentation_mode", mode_str, sizeof(mode_str));
+    if (ini_read_str(g_global_ini, "VKS3D", "presentation_mode", mode_str, sizeof(mode_str)))
+        STEREO_LOG("INI load: [global] presentation_mode = %s", mode_str);
+    if (ini_read_str(g_local_ini,  "VKS3D", "presentation_mode", mode_str, sizeof(mode_str)))
+        STEREO_LOG("INI load: [local]  presentation_mode = %s", mode_str);
     cfg->present_mode = parse_present_mode(mode_str);
 
     /* ── output resolution / refresh ── */
@@ -728,6 +754,58 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         }
         STEREO_LOG("DllMain: global_ini=%s", g_global_ini);
         STEREO_LOG("DllMain: local_ini=%s",  g_local_ini);
+
+        /* ── Early NvAPI stereo driver mode ─────────────────────────────────
+         * SetDriverMode(DIRECT) MUST be called before Direct3DCreate9Ex.
+         * DLL_PROCESS_ATTACH is the earliest safe call point. */
+        dx9_nvapi_early_init();
+
+        /* ── Dual-ICD sanity check ───────────────────────────────────────────
+         * If another Vulkan ICD (e.g. nvoglv64's JSON) is also active in the
+         * registry alongside VKS3D, the loader will load it independently.
+         * The app can then pick the raw NVIDIA physdev and bypass VKS3D
+         * entirely.  Warn loudly so the user knows to run the installer's
+         * ICD-displacement step. */
+        {
+            const char *key64 = "SOFTWARE\\Khronos\\Vulkan\\Drivers";
+            const char *key32 = "SOFTWARE\\WOW6432Node\\Khronos\\Vulkan\\Drivers";
+            const char *icd_key =
+#ifdef _WIN64
+                key64;
+#else
+                key32;
+#endif
+            HKEY hk;
+            if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, icd_key, 0, KEY_READ, &hk) == ERROR_SUCCESS) {
+                int active = 0, vks3d_found = 0;
+                char val_name[512];
+                DWORD val_name_sz, val_type, val_data, val_data_sz, idx = 0;
+                while (1) {
+                    val_name_sz  = sizeof(val_name);
+                    val_data_sz  = sizeof(val_data);
+                    LONG r = RegEnumValueA(hk, idx++, val_name, &val_name_sz,
+                                           NULL, &val_type, (BYTE*)&val_data, &val_data_sz);
+                    if (r != ERROR_SUCCESS) break;
+                    if (val_type != REG_DWORD) continue;
+                    if (val_data != 0) continue; /* disabled */
+                    active++;
+                    /* Detect ourselves by looking for "VKS3D" in the path */
+                    if (strstr(val_name, "VKS3D") || strstr(val_name, "vks3d"))
+                        vks3d_found = 1;
+                    else
+                        STEREO_LOG("DllMain: WARNING: other active Vulkan ICD found: %s", val_name);
+                }
+                RegCloseKey(hk);
+                if (active > 1 || (active == 1 && !vks3d_found)) {
+                    STEREO_LOG("DllMain: WARNING: %d active ICD(s) alongside VKS3D!", active - vks3d_found);
+                    STEREO_LOG("DllMain: WARNING: the app may bypass VKS3D and render in 2D.");
+                    STEREO_LOG("DllMain: WARNING: Re-run the VKS3D installer to displace competing ICDs.");
+                } else {
+                    STEREO_LOG("DllMain: ICD check OK — VKS3D is the sole active ICD");
+                }
+            }
+        }
+
         STEREO_LOG("DllMain: complete, returning TRUE");
     } else if (fdwReason == DLL_PROCESS_DETACH) {
         STEREO_LOG("===== VKS3D DLL_PROCESS_DETACH =====");
