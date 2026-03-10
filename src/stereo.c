@@ -813,9 +813,32 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         STEREO_LOG("DllMain: local_ini=%s",  g_local_ini);
 
         /* ── Early NvAPI stereo driver mode ─────────────────────────────────
-         * SetDriverMode(DIRECT) MUST be called before Direct3DCreate9Ex.
-         * DLL_PROCESS_ATTACH is the earliest safe call point. */
-        dx9_nvapi_early_init();
+         * NvAPI_Stereo_SetDriverMode(DIRECT) MUST be called before
+         * Direct3DCreate9Ex — but ONLY when the user has configured DX9
+         * direct mode.  Calling it unconditionally puts the NVIDIA GPU into
+         * hardware stereo mode for ALL processes, which breaks normal Vulkan
+         * surface/swapchain creation for SBS, DXGI, and other modes.
+         *
+         * Read presentation_mode from the INI now (before any instance is
+         * created) so we can gate the NvAPI call on dx9 mode only. */
+        {
+            char pm_str[64] = "";
+            /* Prefer local (app-dir) INI over global (DLL-dir) INI */
+            ini_read_str(g_global_ini, "VKS3D", "presentation_mode", pm_str, sizeof(pm_str));
+            ini_read_str(g_local_ini,  "VKS3D", "presentation_mode", pm_str, sizeof(pm_str));
+            /* Also honour the env var */
+            {
+                char env_pm[64] = "";
+                DWORD n = GetEnvironmentVariableA("STEREO_PRESENTATION_MODE", env_pm, sizeof(env_pm));
+                if (n > 0 && n < sizeof(env_pm)) memcpy(pm_str, env_pm, n + 1);
+            }
+            if (_stricmp(pm_str, "dx9") == 0) {
+                STEREO_LOG("DllMain: presentation_mode=dx9 — calling NvAPI early init");
+                dx9_nvapi_early_init();
+            } else {
+                STEREO_LOG("DllMain: presentation_mode='%s' — skipping NvAPI early init (DX9 only)", pm_str);
+            }
+        }
 
         /* ── Dual-ICD sanity check ───────────────────────────────────────────
          * If another Vulkan ICD (e.g. nvoglv64's JSON) is also active in the

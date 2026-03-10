@@ -194,103 +194,129 @@ typedef struct SpvModule {
     size_t          header_end;          /* end of type/decoration section */
 } SpvModule;
 
-static void spirv_scan(SpvModule *m)
+/*
+ * spirv_scan — two-pass scanner for correctness.
+ *
+ * Problem: SPIR-V ordering guarantees that decorations (OpMemberDecorate)
+ * appear in the Annotation section BEFORE type declarations (OpTypePointer,
+ * OpVariable) in the Type-Declaration section.  In practice, glslangValidator
+ * and DXC reliably honour this.  However, some SPIR-V optimisers or
+ * hand-written shaders may reorder instructions within their allowed ranges,
+ * placing OpTypePointer before pos_block_type has been established.  A single
+ * forward pass then misses the pointer-type match and leaves pos_var == 0.
+ *
+ * Fix: two passes.
+ *   Pass 1 — collect everything except pos_ptr_type / pos_var which depend on
+ *             pos_block_type that may not yet be known.
+ *   Pass 2 — with pos_block_type known, resolve OpTypePointer → pos_ptr_type
+ *             and OpVariable → pos_var.
+ */
+static void spirv_scan_pass(SpvModule *m, bool second_pass)
 {
     const uint32_t *w = m->words;
-    size_t          i = 5; /* skip header */
-    m->bound = w[3];
+    size_t          i = 5;
 
     while (i < m->count) {
         uint32_t op_code = w[i] & 0xffff;
         uint32_t wcount  = w[i] >> 16;
         if (wcount == 0 || i + wcount > m->count) break;
 
-        switch (op_code) {
-        case SpvOpEntryPoint:
-            /* w[i+1]=ExecutionModel, w[i+2]=id, then name string */
-            if (wcount >= 2 && w[i+1] == SpvExecutionModelVertex)
-                m->is_vertex = true;
-            break;
-        case SpvOpTypeFloat:
-            /* w[i+1]=result_id, w[i+2]=width */
-            if (wcount == 3 && w[i+2] == 32)
-                m->float_type = w[i+1];
-            break;
-        case SpvOpTypeVector:
-            /* w[i+1]=result_id, w[i+2]=component_type, w[i+3]=count */
-            if (wcount == 4 && w[i+2] == m->float_type && w[i+3] == 4)
-                m->v4_type = w[i+1];
-            break;
-        case SpvOpTypeInt:
-            /* w[i+1]=result_id, w[i+2]=width, w[i+3]=signedness */
-            if (wcount == 4 && w[i+2] == 32)
-                m->int_type = w[i+1];
-            break;
-        case SpvOpTypeBool:
-            if (wcount == 2)
-                m->bool_type = w[i+1];
-            break;
-        case SpvOpDecorate:
-            /* w[i+1]=target, w[i+2]=Decoration, w[i+3...]=values */
-            if (wcount >= 4 &&
-                w[i+2] == SpvDecorationBuiltIn &&
-                w[i+3] == SpvBuiltInPosition)
-            {
-                /* Path A: direct variable decoration */
-                if (!m->pos_is_block) {
+        if (!second_pass) {
+            /* ── Pass 1 ─────────────────────────────────────────────────── */
+            switch (op_code) {
+            case SpvOpEntryPoint:
+                if (wcount >= 2 && w[i+1] == SpvExecutionModelVertex)
+                    m->is_vertex = true;
+                break;
+            case SpvOpTypeFloat:
+                if (wcount == 3 && w[i+2] == 32)
+                    m->float_type = w[i+1];
+                break;
+            case SpvOpTypeVector:
+                if (wcount == 4 && w[i+2] == m->float_type && w[i+3] == 4)
+                    m->v4_type = w[i+1];
+                break;
+            case SpvOpTypeInt:
+                if (wcount == 4 && w[i+2] == 32)
+                    m->int_type = w[i+1];
+                break;
+            case SpvOpTypeBool:
+                if (wcount == 2)
+                    m->bool_type = w[i+1];
+                break;
+            case SpvOpDecorate:
+                /* Path A: OpDecorate %var BuiltIn Position */
+                if (wcount >= 4 &&
+                    w[i+2] == SpvDecorationBuiltIn &&
+                    w[i+3] == SpvBuiltInPosition &&
+                    !m->pos_is_block)
+                {
                     m->pos_var = w[i+1];
                 }
+                /* gl_ViewIndex */
+                if (wcount >= 4 &&
+                    w[i+2] == SpvDecorationBuiltIn &&
+                    w[i+3] == SpvBuiltInViewIndex)
+                {
+                    m->view_var = w[i+1];
+                }
+                break;
+            case SpvOpMemberDecorate:
+                /* Path B: OpMemberDecorate %struct member BuiltIn Position */
+                if (wcount >= 5 &&
+                    w[i+3] == SpvDecorationBuiltIn &&
+                    w[i+4] == SpvBuiltInPosition)
+                {
+                    m->pos_block_type = w[i+1];
+                    m->pos_member_idx = w[i+2];
+                    m->pos_is_block   = true;
+                    m->pos_var        = 0;  /* resolved in pass 2 */
+                }
+                break;
+            case SpvOpFunction:
+                if (m->first_function_word == 0)
+                    m->first_function_word = i;
+                break;
+            default:
+                break;
             }
-            if (wcount >= 4 &&
-                w[i+2] == SpvDecorationBuiltIn &&
-                w[i+3] == SpvBuiltInViewIndex)
-            {
-                m->view_var = w[i+1];
+        } else {
+            /* ── Pass 2: pos_block_type is now known ─────────────────────── */
+            switch (op_code) {
+            case SpvOpTypePointer:
+                /* w[i+1]=result_id, w[i+2]=StorageClass, w[i+3]=pointed-type */
+                if (wcount >= 4 &&
+                    w[i+2] == SpvStorageClassOutput &&
+                    m->pos_block_type != 0 &&
+                    w[i+3] == m->pos_block_type)
+                {
+                    m->pos_ptr_type = w[i+1];
+                }
+                break;
+            case SpvOpVariable:
+                /* w[i+1]=result_type, w[i+2]=result_id, w[i+3]=StorageClass */
+                if (wcount >= 4 &&
+                    w[i+3] == SpvStorageClassOutput &&
+                    m->pos_ptr_type != 0 &&
+                    w[i+1] == m->pos_ptr_type)
+                {
+                    m->pos_var = w[i+2];
+                }
+                break;
+            default:
+                break;
             }
-            break;
-        case SpvOpMemberDecorate:
-            /* w[i+1]=struct_type, w[i+2]=member_idx, w[i+3]=Decoration, w[i+4]=value */
-            if (wcount >= 5 &&
-                w[i+3] == SpvDecorationBuiltIn &&
-                w[i+4] == SpvBuiltInPosition)
-            {
-                /* Path B: Position is a member of a block struct */
-                m->pos_block_type = w[i+1];
-                m->pos_member_idx = w[i+2];
-                m->pos_is_block   = true;
-                m->pos_var        = 0;   /* will be resolved via OpVariable */
-            }
-            break;
-        case SpvOpTypePointer:
-            /* w[i+1]=result_id, w[i+2]=StorageClass, w[i+3]=type */
-            if (wcount >= 4 &&
-                w[i+2] == SpvStorageClassOutput &&
-                m->pos_block_type &&
-                w[i+3] == m->pos_block_type)
-            {
-                m->pos_ptr_type = w[i+1];
-            }
-            break;
-        case SpvOpVariable:
-            /* w[i+1]=result_type, w[i+2]=result_id, w[i+3]=StorageClass */
-            if (wcount >= 4 &&
-                w[i+3] == SpvStorageClassOutput &&
-                m->pos_ptr_type &&
-                w[i+1] == m->pos_ptr_type)
-            {
-                /* Path B: this Output variable holds the gl_PerVertex block */
-                m->pos_var = w[i+2];
-            }
-            break;
-        case SpvOpFunction:
-            if (m->first_function_word == 0)
-                m->first_function_word = i;
-            break;
-        default:
-            break;
         }
         i += wcount;
     }
+}
+
+static void spirv_scan(SpvModule *m)
+{
+    m->bound = m->words[3];
+    spirv_scan_pass(m, false);   /* pass 1: collect types, decorations */
+    if (m->pos_is_block)
+        spirv_scan_pass(m, true); /* pass 2: resolve ptr_type and pos_var */
 }
 
 /* ── Inject stereo offset code after the last OpStore to pos_var ─────────── */
@@ -551,11 +577,19 @@ bool spirv_patch_stereo_vertex(
     spirv_scan(&m);
 
     if (!m.is_vertex) {
-        STEREO_LOG("Shader: not vertex, skipping patch");
+        STEREO_LOG("Shader scan: is_vertex=0, skipping patch");
         return false;
     }
+    /* Log full scan results to diagnose gl_Position detection failures */
+    STEREO_LOG("Shader scan: is_vertex=%d is_block=%d block_type=%u ptr_type=%u "
+               "pos_var=%u member=%u float_type=%u v4=%u bound=%u words=%zu",
+               (int)m.is_vertex, (int)m.pos_is_block,
+               m.pos_block_type, m.pos_ptr_type, m.pos_var, m.pos_member_idx,
+               m.float_type, m.v4_type, m.bound, (size_t)m.count);
     if (!m.pos_var) {
-        STEREO_LOG("Shader: no gl_Position found, skipping patch");
+        STEREO_LOG("Shader scan: gl_Position NOT found "
+                   "(block_type=%u ptr_type=%u) — skipping patch",
+                   m.pos_block_type, m.pos_ptr_type);
         return false;
     }
 
