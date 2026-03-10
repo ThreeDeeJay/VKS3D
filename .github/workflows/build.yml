@@ -132,6 +132,7 @@ jobs:
           cp "Artifacts\Win64\tests\Release\VKS3D_demo.exe" "Release/VKS3D_demo.exe"
           cp "manifest\VKS3D_x86.json" "Release/VKS3D_x86.json"
           cp "manifest\VKS3D_x64.json" "Release/VKS3D_x64.json"
+          cp "vks3d.ini" "Release/vks3d.ini"
           cp "scripts\install.bat" "Release/Install.bat"
           cp "scripts\uninstall.bat" "Release/Uninstall.bat"
           cp "LICENSE" "Release/License.txt"
