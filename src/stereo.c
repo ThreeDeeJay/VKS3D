@@ -20,6 +20,17 @@
  * Must appear before the first #include that pulls in platform.h. */
 #define STEREO_LOG_DEFINE_GLOBALS
 
+/* Version/commit baked in by CMake.  Fallbacks for manual builds. */
+#ifndef VKS3D_VERSION
+#  define VKS3D_VERSION   "1.0.0"
+#endif
+#ifndef VKS3D_GIT_COMMIT
+#  define VKS3D_GIT_COMMIT "unknown"
+#endif
+#ifndef VKS3D_BUILD_DATE
+#  define VKS3D_BUILD_DATE "unknown"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -825,6 +836,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         DisableThreadLibraryCalls(hinstDLL);
         vks3d_log_open();
         STEREO_LOG("===== VKS3D DLL_PROCESS_ATTACH =====");
+        STEREO_LOG("VKS3D version %s  commit %s  built %s  %s",
+                   VKS3D_VERSION, VKS3D_GIT_COMMIT, VKS3D_BUILD_DATE,
+                   STEREO_ARCH_STR);
         STEREO_LOG("DllMain: hinstDLL=%p", (void*)hinstDLL);
 
         /* Store DLL and exe paths for INI file discovery */

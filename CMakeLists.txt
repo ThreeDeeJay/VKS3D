@@ -116,6 +116,29 @@ target_include_directories(${TARGET_NAME} PRIVATE
     ${Vulkan_INCLUDE_DIRS}
 )
 
+# ── Version string: embed git commit hash + build date ───────────────────────
+# Baked in at configure time so it appears in the log without any runtime
+# calls to git.  Falls back to "unknown" when building outside a git repo.
+find_program(GIT_EXECUTABLE git)
+set(VKS3D_GIT_COMMIT "unknown")
+if(GIT_EXECUTABLE)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE VKS3D_GIT_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+endif()
+string(TIMESTAMP VKS3D_BUILD_DATE "%Y-%m-%d" UTC)
+message(STATUS "VKS3D: commit=${VKS3D_GIT_COMMIT}  date=${VKS3D_BUILD_DATE}")
+
+target_compile_definitions(${TARGET_NAME} PRIVATE
+    VKS3D_GIT_COMMIT="${VKS3D_GIT_COMMIT}"
+    VKS3D_BUILD_DATE="${VKS3D_BUILD_DATE}"
+    VKS3D_VERSION="${PROJECT_VERSION}"
+)
+
 # ── Windows-specific settings ────────────────────────────────────────────────
 if(WIN32)
     # .def file controls exports (correct on both x64 and x86 __stdcall)
