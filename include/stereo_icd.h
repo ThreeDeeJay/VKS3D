@@ -588,6 +588,9 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceSupportKHR(VkPhysi
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice, VkSurfaceKHR, VkSurfaceCapabilitiesKHR*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice, VkSurfaceKHR, uint32_t*, VkSurfaceFormatKHR*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice, VkSurfaceKHR, uint32_t*, VkPresentModeKHR*);
+/* Vulkan 1.3 core physdev — physdev.c */
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceToolProperties(VkPhysicalDevice, uint32_t*, VkPhysicalDeviceToolProperties*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceToolPropertiesEXT(VkPhysicalDevice, uint32_t*, VkPhysicalDeviceToolProperties*);
 /* physdev_ext.c — extension / KHR-alias wrappers */
 VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice, VkPhysicalDeviceFeatures2*);
 VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceProperties2KHR(VkPhysicalDevice, VkPhysicalDeviceProperties2*);

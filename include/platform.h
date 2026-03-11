@@ -190,12 +190,21 @@ static inline char *stereo_json_read_library_path(const char *json_path)
     char line[2048];
     char *result = NULL;
     while (fgets(line, sizeof(line), f)) {
-        /* Look for: "library_path" : "..." */
+        /* Look for: "library_path" : "value"
+         * key points to 'l' in library_path.
+         * key+12 points to the closing quote of the key name.
+         * We must skip past that quote, the colon, any spaces, then find
+         * the OPENING quote of the value before reading the value itself. */
         char *key = strstr(line, "library_path");
         if (!key) continue;
-        char *q1 = strchr(key + 12, '"');
+        /* Find the colon separator (skip closing quote of key name) */
+        char *colon = strchr(key + 12, ':');
+        if (!colon) continue;
+        /* Find opening quote of the value */
+        char *q1 = strchr(colon + 1, '"');
         if (!q1) continue;
-        q1++;
+        q1++; /* skip past the opening quote to start of value */
+        /* Find closing quote of the value */
         char *q2 = strchr(q1, '"');
         if (!q2) continue;
         *q2    = '\0';

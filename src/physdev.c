@@ -253,3 +253,40 @@ stereo_GetPhysicalDeviceSurfacePresentModesKHR(
     return _r;
 }
 
+/* ── Vulkan 1.3 core physdev functions ───────────────────────────────────── */
+
+/* vkGetPhysicalDeviceToolProperties (Vulkan 1.3 core, promoted from EXT).
+ * Required by Vulkan loader v7 when the ICD declares api_version >= 1.3.
+ * Pass through to the real ICD; if the driver is older than 1.3 and lacks the
+ * function, return VK_SUCCESS with zero tools — this is a valid response and
+ * the loader accepts it. */
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceToolProperties(
+    VkPhysicalDevice                    pd,
+    uint32_t                           *pToolCount,
+    VkPhysicalDeviceToolProperties     *pProperties)
+{
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    /* Try 1.3 core name first */
+    typedef VkResult (VKAPI_PTR *PFN_t)(VkPhysicalDevice, uint32_t*, VkPhysicalDeviceToolProperties*);
+    PFN_t fn = (PFN_t)(uintptr_t)_si->real_get_instance_proc_addr(
+        _si->real_instance, "vkGetPhysicalDeviceToolProperties");
+    if (!fn)
+        fn = (PFN_t)(uintptr_t)_si->real_get_instance_proc_addr(
+            _si->real_instance, "vkGetPhysicalDeviceToolPropertiesEXT");
+    if (fn)
+        return fn(_real, pToolCount, pProperties);
+    /* Driver predates 1.3 — no tools active */
+    if (pToolCount) *pToolCount = 0;
+    return VK_SUCCESS;
+}
+
+/* EXT alias — same implementation */
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceToolPropertiesEXT(
+    VkPhysicalDevice                    pd,
+    uint32_t                           *pToolCount,
+    VkPhysicalDeviceToolProperties     *pProperties)
+{
+    return stereo_GetPhysicalDeviceToolProperties(pd, pToolCount, pProperties);
+}

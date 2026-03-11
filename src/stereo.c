@@ -758,14 +758,47 @@ void dx9_nvapi_early_init(void)
         STEREO_LOG("[NvAPI-early] NvAPI_Initialize = %d", r);
     }
 
-    /* NvAPI_Stereo_SetDriverMode(DIRECT=2) — 0x5E8F1974 */
-    PFN_NvFn fnMode = (PFN_NvFn)fnQI(0x5E8F1974u);
-    if (fnMode) {
-        int r = fnMode(2 /*DIRECT*/);
-        STEREO_LOG("[NvAPI-early] NvAPI_Stereo_SetDriverMode(DIRECT) = %d%s",
-                   r, r == 0 ? " OK" : " (non-zero — driver may ignore)");
-    } else {
-        STEREO_LOG("[NvAPI-early] NvID_StereoSetDriverMode not found in nvapi");
+    /* NvAPI_Stereo_SetDriverMode(DIRECT=2).
+     * This function enables hardware-page-flip stereo ("Direct" mode) so the
+     * driver presents left/right eye frames alternately.  It must be called
+     * BEFORE any Direct3DCreate9Ex call.  The function ID varies across driver
+     * versions; try all known IDs.  Failure is non-fatal: if no ID works the
+     * driver stays in Automatic mode and NvAPI_Stereo_Activate may still work
+     * for software-interleaved stereo (older 3D Vision drivers). */
+    {
+        static const unsigned sdm_ids[] = {
+            0x5E8F1974u,  /* commonly cited in community sources          */
+            0xF423435Eu,  /* alternate — seen in some NVAPI SDK builds     */
+            0x3FC40AA5u,  /* another variant from reverse-engineering      */
+            0
+        };
+        bool sdm_ok = false;
+        for (int k = 0; sdm_ids[k] && !sdm_ok; k++) {
+            PFN_NvFn fnMode = (PFN_NvFn)fnQI(sdm_ids[k]);
+            if (fnMode) {
+                int r = fnMode(2 /*DIRECT*/);
+                STEREO_LOG("[NvAPI-early] NvAPI_Stereo_SetDriverMode(DIRECT) via"
+                           " id=0x%08X = %d%s",
+                           sdm_ids[k], r,
+                           r == 0 ? " OK" : " (non-zero)");
+                sdm_ok = true;
+            }
+        }
+        if (!sdm_ok)
+            STEREO_LOG("[NvAPI-early] NvAPI_Stereo_SetDriverMode not found"
+                       " (tried %d IDs) — driver may not support DIRECT mode;"
+                       " attempting NvAPI_Stereo_Enable as fallback",
+                       (int)(sizeof(sdm_ids)/sizeof(sdm_ids[0]) - 1));
+    }
+    /* NvAPI_Stereo_Enable (0x239C4545) — enables stereo without setting mode.
+     * Some older 3D Vision drivers (e.g. 426.06) use this instead of
+     * SetDriverMode to indicate stereo-aware application intent.            */
+    {
+        PFN_NvFn fnEnable = (PFN_NvFn)fnQI(0x239C4545u /*NvAPI_Stereo_Enable*/);
+        if (fnEnable) {
+            int r = fnEnable(0);
+            STEREO_LOG("[NvAPI-early] NvAPI_Stereo_Enable = %d", r);
+        }
     }
     /* Keep hNvAPI loaded — FreeLibrary would invalidate the QI function pointer */
 }

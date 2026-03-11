@@ -44,7 +44,29 @@ stereo_EnumerateInstanceVersion(uint32_t *pApiVersion)
     STEREO_LOG("stereo_EnumerateInstanceVersion: real eiv=%p", (void*)(uintptr_t)eiv);
     if (eiv) {
         VkResult r = eiv(pApiVersion);
-        STEREO_LOG("stereo_EnumerateInstanceVersion: result=%d version=0x%x", r, *pApiVersion);
+        if (r == VK_SUCCESS) {
+            /* Cap at Vulkan 1.3: VKS3D has stubs for all 1.0–1.3 core physdev
+             * functions.  Claiming a higher version (e.g. 1.4 when the real GPU
+             * driver supports it) causes the Vulkan loader v7 to require all
+             * 1.4 core functions to be non-NULL.  Since we don't yet have 1.4
+             * stubs, the loader would then refuse to dispatch vkCreateDevice and
+             * the application would see zero usable physical devices. */
+            const uint32_t MAX_VER =
+#ifdef VK_MAKE_API_VERSION
+                VK_MAKE_API_VERSION(0, 1, 3, 0);
+#else
+                VK_MAKE_VERSION(1, 3, 0);
+#endif
+            if (*pApiVersion > MAX_VER) {
+                STEREO_LOG("stereo_EnumerateInstanceVersion: real version=0x%x "
+                           "capped to 0x%x (1.3.0 — add 1.4 stubs to raise cap)",
+                           *pApiVersion, MAX_VER);
+                *pApiVersion = MAX_VER;
+            } else {
+                STEREO_LOG("stereo_EnumerateInstanceVersion: result=%d version=0x%x",
+                           r, *pApiVersion);
+            }
+        }
         return r;
     }
     *pApiVersion = VK_API_VERSION_1_0;

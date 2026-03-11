@@ -88,6 +88,9 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     PD_FN(GetPhysicalDeviceSurfaceCapabilitiesKHR)
     PD_FN(GetPhysicalDeviceSurfaceFormatsKHR)
     PD_FN(GetPhysicalDeviceSurfacePresentModesKHR)
+    /* Vulkan 1.3 core physdev */
+    PD_FN(GetPhysicalDeviceToolProperties)
+    PD_FN(GetPhysicalDeviceToolPropertiesEXT)
     PD_FN(GetPhysicalDeviceSurfaceCapabilities2KHR)
     PD_FN(GetPhysicalDeviceSurfaceFormats2KHR)
     PD_FN(GetPhysicalDevicePresentRectanglesKHR)
