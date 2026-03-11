@@ -89,6 +89,31 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
     VkMemoryWin32HandlePropertiesKHR     *pMemoryWin32HandleProperties);
 #endif /* VK_KHR_external_memory_win32 */
 
+/* VK_EXT_tooling_info / Vulkan 1.3 core ── VkPhysicalDeviceToolProperties
+ * Promoted to core in Vulkan 1.3.  Older SDK releases (pre-1.3) do not
+ * define this struct.  Guard on both the core promotion macro and the EXT
+ * feature macro so we don't clash with SDKs that do define it. */
+#if !defined(VK_VERSION_1_3) && !defined(VK_EXT_tooling_info)
+#define VK_EXT_tooling_info 1
+#ifndef VK_MAX_EXTENSION_NAME_SIZE
+#  define VK_MAX_EXTENSION_NAME_SIZE 256
+#endif
+#ifndef VK_MAX_DESCRIPTION_SIZE
+#  define VK_MAX_DESCRIPTION_SIZE    256
+#endif
+typedef VkFlags VkToolPurposeFlags;
+typedef struct VkPhysicalDeviceToolProperties {
+    VkStructureType    sType;
+    void              *pNext;
+    char               name[VK_MAX_EXTENSION_NAME_SIZE];
+    char               version[VK_MAX_EXTENSION_NAME_SIZE];
+    VkToolPurposeFlags purposes;
+    char               description[VK_MAX_DESCRIPTION_SIZE];
+    char               layer[VK_MAX_EXTENSION_NAME_SIZE];
+} VkPhysicalDeviceToolProperties;
+#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES ((VkStructureType)1000245000)
+#endif
+
 /*
  * Older Vulkan SDK releases do not define ICD_LOADER_MAGIC or
  * SET_LOADER_MAGIC_VALUE in vk_icd.h (VK_LOADER_DATA itself is present
