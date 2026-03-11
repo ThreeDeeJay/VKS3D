@@ -26,6 +26,7 @@ bool stereo_load_real_icd(void);
 PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void);
 StereoInstance *stereo_instance_alloc(void);
 void stereo_populate_instance_dispatch(StereoInstance *si);
+StereoPhysdev *stereo_physdev_get_or_create(VkPhysicalDevice real_pd, StereoInstance *si);
 
 /* ── vkEnumerateInstanceVersion ─────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -291,16 +292,28 @@ stereo_EnumeratePhysicalDevices(
         si->real_instance, pPhysicalDeviceCount, pPhysicalDevices);
 
     if (res == VK_SUCCESS && pPhysicalDevices) {
-        /* Register each real physdev in our pd→si map and return it DIRECTLY
-         * to the loader.  The loader will write its own dispatch table into
-         * the physdev's first 8 bytes (VK_LOADER_DATA), which is exactly what
-         * the Vulkan ICD spec requires and what the driver expects before
-         * accepting the handle in surface / swapchain queries. */
+        /* Wrap each real physdev in a StereoPhysdev and return the wrapper.
+         *
+         * WHY: The Vulkan loader dispatches vkCreateDevice (and all physdev-
+         * level functions) by reading VK_LOADER_DATA at offset 0 of the
+         * VkPhysicalDevice handle it received from EnumeratePhysicalDevices.
+         * If we returned the raw nvoglv64 handle, the loader would read
+         * nvoglv64's own dispatch table and call nvoglv64's vkCreateDevice —
+         * bypassing stereo_CreateDevice entirely.
+         *
+         * By returning OUR StereoPhysdev* the loader writes its dispatch ptr
+         * into wrapper->loader_data, and our function pointers (registered via
+         * vk_icdGetInstanceProcAddr) are what it dispatches through. */
         for (uint32_t i = 0; i < *pPhysicalDeviceCount; i++) {
-            STEREO_LOG("stereo_EnumeratePhysicalDevices: physdev[%u] = %p (registering → si=%p)",
-                       i, (void*)pPhysicalDevices[i], (void*)si);
-            stereo_physdev_register(pPhysicalDevices[i], si);
-            /* pPhysicalDevices[i] is unchanged — real handle passed to loader */
+            VkPhysicalDevice real_pd = pPhysicalDevices[i];
+            StereoPhysdev *spd = stereo_physdev_get_or_create(real_pd, si);
+            if (!spd) {
+                STEREO_ERR("stereo_EnumeratePhysicalDevices: wrapper alloc failed for physdev[%u]", i);
+                return VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            STEREO_LOG("stereo_EnumeratePhysicalDevices: physdev[%u] real=%p → wrapper=%p",
+                       i, (void*)real_pd, (void*)spd);
+            pPhysicalDevices[i] = (VkPhysicalDevice)(uintptr_t)spd;
         }
     }
 

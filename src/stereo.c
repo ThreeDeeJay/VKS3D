@@ -42,9 +42,8 @@
 static StereoInstance        g_instances[MAX_INSTANCES];
 uint32_t                     g_instance_count = 0;
 
-/* Flat physdev→instance map (no wrapper structs — real physdevs returned to loader) */
-typedef struct { VkPhysicalDevice pd; StereoInstance *si; } PhysdevMapEntry;
-static PhysdevMapEntry  g_physdev_map[MAX_PHYSICAL_DEVICES];
+/* Physdev wrappers — real handles wrapped so the loader dispatches through us */
+static StereoPhysdev    g_physdev_wrappers[MAX_PHYSICAL_DEVICES];
 static uint32_t         g_physdev_count = 0;
 
 StereoDevice                 g_devices[MAX_DEVICES];
@@ -459,48 +458,56 @@ void stereo_instance_free(VkInstance h) {
  * handle from the loader and look up _si here; _real = pd (the handle itself).
  */
 
-void stereo_physdev_register(VkPhysicalDevice pd, StereoInstance *si)
+/* ── Physdev wrapper registry ────────────────────────────────────────────── */
+
+/* Return an existing StereoPhysdev for real_pd, or allocate a new one.
+ * Each unique real nvoglv64 physdev handle gets exactly one wrapper so the
+ * loader always sees the same pointer (stable address = valid handle). */
+StereoPhysdev *stereo_physdev_get_or_create(VkPhysicalDevice real_pd, StereoInstance *si)
 {
+    if (!real_pd || !si) return NULL;
     ensure_registry_init();
     stereo_mutex_lock(&g_registry_lock);
-    /* Update existing entry if already present */
+
+    /* Reuse existing wrapper for this real_pd */
     for (uint32_t i = 0; i < g_physdev_count; i++) {
-        if (g_physdev_map[i].pd == pd) {
-            g_physdev_map[i].si = si;
+        if (g_physdev_wrappers[i].real_pd == real_pd) {
+            g_physdev_wrappers[i].si = si;   /* refresh si in case instance changed */
+            StereoPhysdev *spd = &g_physdev_wrappers[i];
             stereo_mutex_unlock(&g_registry_lock);
-            STEREO_LOG("stereo_physdev_register: updated pd=%p si=%p", (void*)pd, (void*)si);
-            return;
+            STEREO_LOG("stereo_physdev_get_or_create: reused wrapper %p for real_pd=%p",
+                       (void*)spd, (void*)real_pd);
+            return spd;
         }
     }
+
     if (g_physdev_count >= MAX_PHYSICAL_DEVICES) {
-        STEREO_ERR("stereo_physdev_register: map full (%u entries)", g_physdev_count);
+        STEREO_ERR("stereo_physdev_get_or_create: wrapper table full (%u)", g_physdev_count);
         stereo_mutex_unlock(&g_registry_lock);
-        return;
+        return NULL;
     }
-    g_physdev_map[g_physdev_count].pd = pd;
-    g_physdev_map[g_physdev_count].si = si;
-    g_physdev_count++;
+
+    StereoPhysdev *spd = &g_physdev_wrappers[g_physdev_count++];
+    memset(spd, 0, sizeof(*spd));
+    SET_LOADER_MAGIC_VALUE(spd);   /* loader will overwrite with its dispatch ptr */
+    spd->real_pd = real_pd;
+    spd->si      = si;
     stereo_mutex_unlock(&g_registry_lock);
-    STEREO_LOG("stereo_physdev_register: registered pd=%p si=%p (slot %u)",
-               (void*)pd, (void*)si, g_physdev_count - 1);
+    STEREO_LOG("stereo_physdev_get_or_create: new wrapper %p (slot %u) real_pd=%p si=%p",
+               (void*)spd, g_physdev_count - 1, (void*)real_pd, (void*)si);
+    return spd;
 }
 
+/* Validate that pd is one of our StereoPhysdev wrappers, then return its si. */
 StereoInstance *stereo_si_from_physdev(VkPhysicalDevice pd)
 {
     if (!pd) return NULL;
-    ensure_registry_init();
-    stereo_mutex_lock(&g_registry_lock);
-    for (uint32_t i = 0; i < g_physdev_count; i++) {
-        if (g_physdev_map[i].pd == pd) {
-            StereoInstance *si = g_physdev_map[i].si;
-            stereo_mutex_unlock(&g_registry_lock);
-            return si;
-        }
+    StereoPhysdev *spd = (StereoPhysdev *)(uintptr_t)pd;
+    /* Address-range check — same strategy as stereo_instance_from_handle */
+    if (spd >= g_physdev_wrappers && spd < g_physdev_wrappers + g_physdev_count) {
+        return spd->si;
     }
-    stereo_mutex_unlock(&g_registry_lock);
-    STEREO_ERR("stereo_si_from_physdev: FAILED to find pd=%p (count=%u)", (void*)pd, g_physdev_count);
-    for (uint32_t i = 0; i < g_physdev_count; i++)
-        STEREO_ERR("  map[%u] pd=%p si=%p", i, (void*)g_physdev_map[i].pd, (void*)g_physdev_map[i].si);
+    STEREO_ERR("stereo_si_from_physdev: unrecognised handle %p (not in wrapper array)", (void*)pd);
     return NULL;
 }
 

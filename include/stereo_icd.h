@@ -450,9 +450,27 @@ static inline HWND stereo_si_hwnd_for_surface(StereoInstance *si, VkSurfaceKHR s
     return NULL;
 }
 
-/* No StereoPhysicalDevice wrapper — real physdevs are returned directly to the
- * loader so the loader can properly initialize their dispatch tables.  The
- * association physdev→StereoInstance is tracked in stereo.c via a flat map. */
+/* ── StereoPhysdev ───────────────────────────────────────────────────────────
+ * Wrapper around the real GPU ICD's VkPhysicalDevice handle.
+ *
+ * WHY: The Vulkan loader dispatches vkCreateDevice (and all other physdev-level
+ * functions) by reading the dispatch table pointer stored at offset 0
+ * (VK_LOADER_DATA) of the VkPhysicalDevice handle.  If we return the raw
+ * nvoglv64 physdev handle from EnumeratePhysicalDevices, the loader reads
+ * nvoglv64's own dispatch table and calls nvoglv64's vkCreateDevice — bypassing
+ * stereo_CreateDevice entirely.
+ *
+ * FIX: Return OUR wrapper as the VkPhysicalDevice handle.  The loader writes
+ * its dispatch pointer into wrapper->loader_data.  Our function pointers are
+ * installed in that dispatch table (via vk_icdGetInstanceProcAddr), so all
+ * physdev-level calls and vkCreateDevice go through VKS3D. */
+typedef struct StereoPhysdev {
+    /* VK_LOADER_DATA MUST be the very first field.  The loader writes its
+     * own dispatch pointer here; SET_LOADER_MAGIC_VALUE initialises it. */
+    VK_LOADER_DATA   loader_data;
+    VkPhysicalDevice real_pd;    /* raw nvoglv64 handle                 */
+    StereoInstance  *si;         /* owning StereoInstance               */
+} StereoPhysdev;
 
 typedef struct StereoSwapchain {
     /* ── Handle ─────────────────────────────────────────────────────── */
@@ -601,6 +619,7 @@ typedef struct StereoUBO {
 /* ── Object lookup helpers ────────────────────────────────────────────────── */
 StereoInstance         *stereo_instance_from_handle(VkInstance h);
 StereoInstance         *stereo_si_from_physdev(VkPhysicalDevice pd);
+StereoPhysdev          *stereo_physdev_get_or_create(VkPhysicalDevice real_pd, StereoInstance *si);
 StereoDevice           *stereo_device_from_handle(VkDevice h);
 StereoSwapchain        *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc);
 StereoRenderPassInfo   *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp);
@@ -609,7 +628,6 @@ PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void);
 PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
 /* Object lifecycle helpers */
 void                    stereo_instance_free(VkInstance h);
-void                    stereo_physdev_register(VkPhysicalDevice pd, StereoInstance *si);
 StereoDevice           *stereo_device_alloc(void);
 
 /* ── Forward declarations ────────────────────────────────────────────────── */

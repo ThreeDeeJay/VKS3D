@@ -17,14 +17,16 @@
 /* Real physdevs are returned directly to the loader — pd IS the real handle.
  * We just need to look up which StereoInstance owns this physdev. */
 #define LOOKUP_PD(pd) \
-    StereoInstance *_si = stereo_si_from_physdev(pd); \
+    StereoPhysdev   *_spd  = (StereoPhysdev *)(uintptr_t)(pd); \
+    StereoInstance  *_si   = _spd->si; \
     if (!_si) return; \
-    VkPhysicalDevice _real = (pd)
+    VkPhysicalDevice _real = _spd->real_pd
 
 #define LOOKUP_PD_R(pd, err) \
-    StereoInstance *_si = stereo_si_from_physdev(pd); \
+    StereoPhysdev   *_spd  = (StereoPhysdev *)(uintptr_t)(pd); \
+    StereoInstance  *_si   = _spd->si; \
     if (!_si) return (err); \
-    VkPhysicalDevice _real = (pd)
+    VkPhysicalDevice _real = _spd->real_pd
 
 /* ── Properties ─────────────────────────────────────────────────────────── */
 

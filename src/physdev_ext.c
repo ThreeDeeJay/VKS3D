@@ -61,14 +61,16 @@ static inline PFN_vkVoidFunction ext_fn(StereoInstance *si, const char *name)
 
 /* Real physdevs passed through to loader — pd IS the real handle */
 #define LOOKUP_PD(pd) \
-    StereoInstance  *_si   = stereo_si_from_physdev(pd); \
+    StereoPhysdev   *_spd  = (StereoPhysdev *)(uintptr_t)(pd); \
+    StereoInstance  *_si   = _spd->si; \
     if (!_si) return; \
-    VkPhysicalDevice _real = (pd)
+    VkPhysicalDevice _real = _spd->real_pd
 
 #define LOOKUP_PD_R(pd, err) \
-    StereoInstance  *_si   = stereo_si_from_physdev(pd); \
+    StereoPhysdev   *_spd  = (StereoPhysdev *)(uintptr_t)(pd); \
+    StereoInstance  *_si   = _spd->si; \
     if (!_si) return (err); \
-    VkPhysicalDevice _real = (pd)
+    VkPhysicalDevice _real = _spd->real_pd
 
 /* ── Vulkan 1.1 KHR aliases (same ABI as core — just delegate) ──────────── */
 
@@ -216,13 +218,16 @@ stereo_EnumeratePhysicalDeviceGroups(
 
     VkResult res = fn(si->real_instance, pCount, pProps);
 
-    /* Register any new physdevs found in the groups, then return real handles */
+    /* Wrap any physdevs found in the groups (same as stereo_EnumeratePhysicalDevices) */
     if (res == VK_SUCCESS && pProps) {
         for (uint32_t g = 0; g < *pCount; g++) {
             VkPhysicalDeviceGroupProperties *grp = &pProps[g];
-            for (uint32_t p = 0; p < grp->physicalDeviceCount; p++)
-                stereo_physdev_register(grp->physicalDevices[p], si);
-            /* physicalDevices[p] already holds the real handle — leave unchanged */
+            for (uint32_t p = 0; p < grp->physicalDeviceCount; p++) {
+                VkPhysicalDevice real_pd = grp->physicalDevices[p];
+                StereoPhysdev *spd = stereo_physdev_get_or_create(real_pd, si);
+                if (spd)
+                    grp->physicalDevices[p] = (VkPhysicalDevice)(uintptr_t)spd;
+            }
         }
     }
     return res;
