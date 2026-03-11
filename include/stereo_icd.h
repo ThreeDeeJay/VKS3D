@@ -89,30 +89,54 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
     VkMemoryWin32HandlePropertiesKHR     *pMemoryWin32HandleProperties);
 #endif /* VK_KHR_external_memory_win32 */
 
-/* VK_EXT_tooling_info / Vulkan 1.3 core ── VkPhysicalDeviceToolProperties
- * Promoted to core in Vulkan 1.3.  Older SDK releases (pre-1.3) do not
- * define this struct.  Guard on both the core promotion macro and the EXT
- * feature macro so we don't clash with SDKs that do define it. */
-#if !defined(VK_VERSION_1_3) && !defined(VK_EXT_tooling_info)
-#define VK_EXT_tooling_info 1
+/* VkPhysicalDeviceToolProperties — three-way SDK compatibility shim
+ *
+ * VkPhysicalDeviceToolProperties was promoted to Vulkan 1.3 core from
+ * VK_EXT_tooling_info.  Three SDK states exist:
+ *
+ *  Case A — SDK >= 1.3 (VK_VERSION_1_3 defined):
+ *    vulkan_core.h defines the struct and the un-suffixed typedef.  Nothing
+ *    to do.
+ *
+ *  Case B — SDK has VK_EXT_tooling_info but NOT Vulkan 1.3 core:
+ *    The SDK defines VkPhysicalDeviceToolPropertiesEXT.  The 1.3 alias
+ *    VkPhysicalDeviceToolProperties does NOT exist.  We add it as a typedef.
+ *
+ *  Case C — SDK predates VK_EXT_tooling_info:
+ *    Nothing exists.  Define the struct from scratch.
+ *
+ * We distinguish cases with #if/#elif on macro sentinels only (never
+ * #ifndef on a typedef name, which is a non-starter in C). */
 #ifndef VK_MAX_EXTENSION_NAME_SIZE
 #  define VK_MAX_EXTENSION_NAME_SIZE 256
 #endif
 #ifndef VK_MAX_DESCRIPTION_SIZE
-#  define VK_MAX_DESCRIPTION_SIZE    256
+#  define VK_MAX_DESCRIPTION_SIZE 256
 #endif
-typedef VkFlags VkToolPurposeFlags;
-typedef struct VkPhysicalDeviceToolProperties {
-    VkStructureType    sType;
-    void              *pNext;
-    char               name[VK_MAX_EXTENSION_NAME_SIZE];
-    char               version[VK_MAX_EXTENSION_NAME_SIZE];
-    VkToolPurposeFlags purposes;
-    char               description[VK_MAX_DESCRIPTION_SIZE];
-    char               layer[VK_MAX_EXTENSION_NAME_SIZE];
-} VkPhysicalDeviceToolProperties;
-#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES ((VkStructureType)1000245000)
-#endif
+#if defined(VK_VERSION_1_3)
+  /* Case A: struct already in vulkan_core.h — nothing to do */
+#elif defined(VK_EXT_tooling_info)
+  /* Case B: EXT struct present, 1.3 un-suffixed alias missing */
+  typedef VkPhysicalDeviceToolPropertiesEXT VkPhysicalDeviceToolProperties;
+# ifndef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES
+#   define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES \
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES_EXT
+# endif
+#else
+  /* Case C: define everything from scratch */
+  typedef VkFlags VkToolPurposeFlags;
+  typedef struct VkPhysicalDeviceToolProperties {
+      VkStructureType    sType;
+      void              *pNext;
+      char               name[VK_MAX_EXTENSION_NAME_SIZE];
+      char               version[VK_MAX_EXTENSION_NAME_SIZE];
+      VkToolPurposeFlags purposes;
+      char               description[VK_MAX_DESCRIPTION_SIZE];
+      char               layer[VK_MAX_EXTENSION_NAME_SIZE];
+  } VkPhysicalDeviceToolProperties;
+# define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES \
+      ((VkStructureType)1000245000)
+#endif /* VkPhysicalDeviceToolProperties compat */
 
 /*
  * Older Vulkan SDK releases do not define ICD_LOADER_MAGIC or
