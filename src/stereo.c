@@ -842,6 +842,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     if (fdwReason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hinstDLL);
         vks3d_log_open();
+        vks3d_log_write("\n\n");   /* blank separator between appended sessions */
         STEREO_LOG("===== VKS3D DLL_PROCESS_ATTACH =====");
         STEREO_LOG("VKS3D version %s  commit %s  built %s  %s",
                    VKS3D_VERSION, VKS3D_GIT_COMMIT, VKS3D_BUILD_DATE,

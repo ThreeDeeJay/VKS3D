@@ -425,12 +425,16 @@ static inline void vks3d_log_open(void)
         return;
     }
 
+    /* Open in append mode — multiple DLL loads in one session all contribute
+     * to the same log file.  CREATE_ALWAYS would truncate on every DLL attach,
+     * wiping earlier sessions (e.g. the rendering session gets wiped by a
+     * subsequent probe/enumeration-only DLL load). */
     g_vks3d_log_handle = CreateFileA(
         path,
-        GENERIC_WRITE,
+        FILE_APPEND_DATA,          /* append — never overwrites earlier sessions */
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         NULL,
-        CREATE_ALWAYS,           /* truncate on each new DLL load */
+        OPEN_ALWAYS,               /* create if absent, append if already exists  */
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
         NULL);
     /* If CreateFileA fails, OutputDebugStringA still works */
