@@ -17,16 +17,20 @@
 /* Real physdevs are returned directly to the loader — pd IS the real handle.
  * We just need to look up which StereoInstance owns this physdev. */
 #define LOOKUP_PD(pd) \
+    STEREO_LOG("LOOKUP_PD: pd=%p", (void*)(uintptr_t)(pd)); \
     StereoPhysdev   *_spd  = (StereoPhysdev *)(uintptr_t)(pd); \
-    StereoInstance  *_si   = _spd->si; \
-    if (!_si) return; \
-    VkPhysicalDevice _real = _spd->real_pd
+    StereoInstance  *_si   = _spd ? _spd->si : NULL; \
+    if (!_si) { STEREO_ERR("LOOKUP_PD: si==NULL for pd=%p (not our wrapper?)", (void*)(uintptr_t)(pd)); return; } \
+    VkPhysicalDevice _real = _spd->real_pd; \
+    STEREO_LOG("LOOKUP_PD: real_pd=%p si=%p", (void*)_real, (void*)_si)
 
 #define LOOKUP_PD_R(pd, err) \
+    STEREO_LOG("LOOKUP_PD: pd=%p", (void*)(uintptr_t)(pd)); \
     StereoPhysdev   *_spd  = (StereoPhysdev *)(uintptr_t)(pd); \
-    StereoInstance  *_si   = _spd->si; \
-    if (!_si) return (err); \
-    VkPhysicalDevice _real = _spd->real_pd
+    StereoInstance  *_si   = _spd ? _spd->si : NULL; \
+    if (!_si) { STEREO_ERR("LOOKUP_PD: si==NULL for pd=%p (not our wrapper?)", (void*)(uintptr_t)(pd)); return (err); } \
+    VkPhysicalDevice _real = _spd->real_pd; \
+    STEREO_LOG("LOOKUP_PD: real_pd=%p si=%p", (void*)_real, (void*)_si)
 
 /* ── Properties ─────────────────────────────────────────────────────────── */
 

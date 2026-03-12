@@ -176,6 +176,8 @@ stereo_CreateDevice(
     const VkAllocationCallbacks  *pAllocator,
     VkDevice                     *pDevice)
 {
+    /* Belt-and-suspenders: OutputDebugStringA fires even if log file is closed/broken */
+    OutputDebugStringA("[VKS3D] stereo_CreateDevice: ENTERED\n");
     STEREO_LOG("stereo_CreateDevice: called physicalDevice=%p (wrapper)", (void*)physicalDevice);
 
     /* Unwrap: physicalDevice is our StereoPhysdev*, not the raw nvoglv64 handle */

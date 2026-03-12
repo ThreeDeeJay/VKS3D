@@ -182,10 +182,10 @@ void stereo_config_init(StereoConfig *cfg)
     cfg->step_convergence = cfg_float("step_convergence", 0.005f);
 
     stereo_config_compute_offsets(cfg);
-    STEREO_LOG("Stereo config: enabled=%d sep=%.4f conv=%.4f flip=%d mode=%d",
+    STEREO_LOG("Stereo config: enabled=%d  separation=%.4f  convergence=%.4f  flip=%d  mode=%d",
                cfg->enabled, cfg->separation, cfg->convergence,
                cfg->flip_eyes, (int)cfg->present_mode);
-    STEREO_LOG("  override %ux%u @ %uHz  half_fps=%d  steps sep=%.4f conv=%.4f",
+    STEREO_LOG("  res_override=%ux%u  refresh=%uHz  half_fps=%d  hotkey_step_sep=%.4f  hotkey_step_conv=%.4f",
                cfg->override_width, cfg->override_height, cfg->refresh_rate,
                cfg->half_fps, cfg->step_separation, cfg->step_convergence);
     STEREO_LOG("  global_ini=%s", g_global_ini);
