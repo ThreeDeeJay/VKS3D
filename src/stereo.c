@@ -381,6 +381,7 @@ bool stereo_load_real_icd(void)
 
 PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void) { return g_real_giPA; }
 PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void) { return g_real_pdPA; }
+stereo_dl_t               stereo_get_real_icd_handle(void) { return g_real_icd_handle; }
 
 /* ── Instance registry ───────────────────────────────────────────────────── */
 
@@ -847,7 +848,10 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         STEREO_LOG("VKS3D version %s  commit %s  built %s  %s",
                    VKS3D_VERSION, VKS3D_GIT_COMMIT, VKS3D_BUILD_DATE,
                    STEREO_ARCH_STR);
-        STEREO_LOG("DllMain: hinstDLL=%p", (void*)hinstDLL);
+        STEREO_LOG("DllMain: PID=%lu  TID=%lu  hinstDLL=%p",
+                   (unsigned long)GetCurrentProcessId(),
+                   (unsigned long)GetCurrentThreadId(),
+                   (void*)hinstDLL);
 
         /* Store DLL and exe paths for INI file discovery */
         {
@@ -863,8 +867,17 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
             STEREO_LOG("DllMain: host process = %s", exe_path);
             dir_of_path(exe_path, g_exe_dir, sizeof(g_exe_dir));
             snprintf(g_local_ini, sizeof(g_local_ini), "%s\\vks3d.ini", g_exe_dir);
+
+            /* Detect a local vulkan-1.dll next to the exe — this would bypass VKS3D
+             * for the rendering session while the SDL/GLFW probe uses the system loader */
+            char local_vk[512];
+            snprintf(local_vk, sizeof(local_vk), "%s\\vulkan-1.dll", g_exe_dir);
+            if (GetFileAttributesA(local_vk) != INVALID_FILE_ATTRIBUTES)
+                STEREO_LOG("DllMain: WARNING: local vulkan-1.dll found at '%s' — "
+                           "rendering may bypass VKS3D! Delete it to fix 2D output.", local_vk);
+            else
+                STEREO_LOG("DllMain: no local vulkan-1.dll found (good)");
         }
-        STEREO_LOG("DllMain: global_ini=%s", g_global_ini);
         STEREO_LOG("DllMain: local_ini=%s",  g_local_ini);
 
         /* ── Early NvAPI stereo driver mode ─────────────────────────────────

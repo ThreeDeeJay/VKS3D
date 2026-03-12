@@ -17,6 +17,7 @@ EXPORTS
     vk_icdNegotiateLoaderICDInterfaceVersion
     vk_icdGetInstanceProcAddr
     vk_icdGetPhysicalDeviceProcAddr
+    vk_icdEnumerateAdapterPhysicalDevices
     ; Public vkGetDeviceProcAddr — exported so the loader and tools can find
     ; device-level functions directly without going through the ICD interface.
     vkGetDeviceProcAddr

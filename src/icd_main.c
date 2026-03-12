@@ -18,6 +18,7 @@
 /* Set during CreateInstance from the loaded real ICD */
 /* Forward declarations for real-ICD proc-addr getters (stereo.c) */
 PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
+stereo_dl_t               stereo_get_real_icd_handle(void);
 
 /* ── Helper: map function name → our wrapped pointer ─────────────────────── */
 static PFN_vkVoidFunction get_instance_proc_addr_internal(
@@ -297,6 +298,83 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
     }
     /* Fallback: use instance-level lookup */
     return get_instance_proc_addr_internal(VK_NULL_HANDLE, pName);
+}
+
+/* ── Loader interface v6+: DXGI adapter physdev enumeration ─────────────────
+ *
+ * At loader interface version 6+, the Vulkan loader uses DXGI adapter
+ * enumeration alongside the ICD registry.  For each DXGI adapter it calls
+ * vk_icdEnumerateAdapterPhysicalDevices on every registered ICD.
+ *
+ * If we don't implement this, the loader falls back to the old
+ * vkEnumeratePhysicalDevices path for VKS3D but ALSO loads nvoglv64 via
+ * DXGI (if nvoglv64 implements interface v6+), presenting the app with BOTH
+ * VKS3D's and nvoglv64's physdevs.  The app then picks nvoglv64's physdev
+ * for rendering, completely bypassing stereo_CreateDevice.
+ *
+ * Fix: implement the function, forward to the real ICD, and wrap the
+ * returned physdevs so the app only ever sees StereoPhysdev* handles.      */
+VKAPI_ATTR VkResult VKAPI_CALL
+vk_icdEnumerateAdapterPhysicalDevices(
+    VkInstance  instance,
+    LUID        adapterLUID,
+    uint32_t   *pPhysicalDeviceCount,
+    VkPhysicalDevice *pPhysicalDevices)
+{
+    STEREO_LOG("vk_icdEnumerateAdapterPhysicalDevices: instance=%p LUID=%08lx:%08lx",
+               (void*)instance,
+               (unsigned long)adapterLUID.HighPart,
+               (unsigned long)adapterLUID.LowPart);
+
+    StereoInstance *si = stereo_instance_from_handle(instance);
+    if (!si) {
+        STEREO_ERR("vk_icdEnumerateAdapterPhysicalDevices: unknown instance %p", (void*)instance);
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    /* Look up real ICD's adapter enumeration function via GetProcAddress.
+     * It's an ICD entry point, not a Vulkan API function, so it's not in
+     * the vkGetInstanceProcAddr table. */
+    typedef VkResult (VKAPI_PTR *PFN_EnumAdapter)(
+        VkInstance, LUID, uint32_t *, VkPhysicalDevice *);
+    stereo_dl_t real_mod = stereo_get_real_icd_handle();
+    PFN_EnumAdapter real_fn = real_mod
+        ? (PFN_EnumAdapter)GetProcAddress((HMODULE)real_mod,
+                                           "vk_icdEnumerateAdapterPhysicalDevices")
+        : NULL;
+
+    if (!real_fn) {
+        /* Real ICD doesn't implement it — fall back to standard enumeration */
+        STEREO_LOG("vk_icdEnumerateAdapterPhysicalDevices: real ICD has no adapter fn, "
+                   "falling back to vkEnumeratePhysicalDevices");
+        return si->real.EnumeratePhysicalDevices
+            ? (VkResult)si->real.EnumeratePhysicalDevices(
+                  si->real_instance, pPhysicalDeviceCount, pPhysicalDevices)
+            : VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    /* Two-call pattern: first get count, then fill array */
+    if (!pPhysicalDevices) {
+        VkResult r = real_fn(si->real_instance, adapterLUID, pPhysicalDeviceCount, NULL);
+        STEREO_LOG("vk_icdEnumerateAdapterPhysicalDevices: count=%u", *pPhysicalDeviceCount);
+        return r;
+    }
+
+    /* Get raw physdevs from real ICD then wrap each one */
+    uint32_t count = *pPhysicalDeviceCount;
+    VkPhysicalDevice raw[MAX_PHYSICAL_DEVICES];
+    if (count > MAX_PHYSICAL_DEVICES) count = MAX_PHYSICAL_DEVICES;
+    VkResult r = real_fn(si->real_instance, adapterLUID, &count, raw);
+    if (r != VK_SUCCESS && r != VK_INCOMPLETE) return r;
+
+    for (uint32_t i = 0; i < count; i++) {
+        StereoPhysdev *spd = stereo_physdev_get_or_create(raw[i], si);
+        pPhysicalDevices[i] = spd ? (VkPhysicalDevice)(uintptr_t)spd : raw[i];
+        STEREO_LOG("vk_icdEnumerateAdapterPhysicalDevices: [%u] real=%p wrapper=%p",
+                   i, (void*)raw[i], (void*)pPhysicalDevices[i]);
+    }
+    *pPhysicalDeviceCount = count;
+    return r;
 }
 
 /* ── ICD negotiation ─────────────────────────────────────────────────────── */

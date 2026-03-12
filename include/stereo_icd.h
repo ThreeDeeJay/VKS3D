@@ -160,7 +160,7 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #include <stdbool.h>
 
 /* ── Loader/ICD interface version ─────────────────────────────────────────── */
-#define STEREO_ICD_INTERFACE_VERSION 5
+#define STEREO_ICD_INTERFACE_VERSION 7
 
 /* ── Maximum tracked objects ─────────────────────────────────────────────── */
 #define MAX_INSTANCES           8
