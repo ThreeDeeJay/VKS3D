@@ -39,7 +39,7 @@ function Update-JsonLibraryPath([string]$JsonPath, [string]$DllPath) {
     # the JSON literally without unescaping.
     $p = $DllPath.Replace('\', '\\').Replace('"', '\"')
     $json = "{`n    `"file_format_version`": `"1.0.0`",`n    `"ICD`": {`n        `"library_path`": `"$p`",`n        `"api_version`": `"1.1.0`"`n    }`n}"
-    [System.IO.File]::WriteAllText($JsonPath, $json, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($JsonPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 Write-Host ""
