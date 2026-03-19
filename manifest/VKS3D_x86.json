@@ -2,6 +2,6 @@
     "file_format_version": "1.0.0",
     "ICD": {
         "library_path": ".\\VKS3D_x86.dll",
-        "api_version": "1.3.0"
+        "api_version": "1.1.0"
     }
 }

@@ -194,14 +194,20 @@ void stereo_config_init(StereoConfig *cfg)
 
 void stereo_config_compute_offsets(StereoConfig *cfg)
 {
-    float half_sep  = cfg->separation  / 2.0f;
-    float half_conv = cfg->convergence / 2.0f;
+    /* Eye X-offsets in NDC: each eye shifts ±half_sep along X.
+     *
+     * Convergence is the zero-parallax plane depth and is handled separately
+     * (passed to shaders via the UBO convergence field, or as a toe-in angle
+     * in a full-stereo projection stack).  DO NOT mix it into the X-offset:
+     * doing so causes sep and conv to cancel each other when they are equal,
+     * producing zero offset and invisible stereo effect.            */
+    float half_sep = cfg->separation / 2.0f;
     if (!cfg->flip_eyes) {
-        cfg->left_eye_offset  = -half_sep + half_conv;
-        cfg->right_eye_offset = +half_sep - half_conv;
+        cfg->left_eye_offset  = -half_sep;
+        cfg->right_eye_offset = +half_sep;
     } else {
-        cfg->left_eye_offset  = +half_sep - half_conv;
-        cfg->right_eye_offset = -half_sep + half_conv;
+        cfg->left_eye_offset  = +half_sep;
+        cfg->right_eye_offset = -half_sep;
     }
 }
 
@@ -213,10 +219,12 @@ static bool try_load_icd(const char *path)
         STEREO_LOG("try_load_icd: empty path, skipping");
         return false;
     }
-    STEREO_LOG("try_load_icd: attempting '%s'", path);
+    STEREO_LOG("try_load_icd: attempting '%s' (LoadLibraryEx SEARCH_DLL_LOAD_DIR)", path);
     stereo_dl_t h = stereo_dl_open(path);
     if (!h) {
-        STEREO_ERR("try_load_icd: LoadLibraryA failed for '%s': %s",
+        STEREO_ERR("try_load_icd: LoadLibraryExA failed for '%s': %s"
+                   " (if DriverStore path, check STEREO_REAL_ICD; dependencies"
+                   " should now be found via LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)",
                    path, stereo_dl_error());
         return false;
     }

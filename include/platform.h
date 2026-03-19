@@ -38,7 +38,27 @@ typedef HMODULE stereo_dl_t;
 
 static inline stereo_dl_t stereo_dl_open(const char *path)
 {
-    return LoadLibraryA(path);
+    /* LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: adds the DLL's own directory to the
+     * dependency search path.  This is essential for loading GPU driver DLLs
+     * directly from the DriverStore: nvoglv64.dll imports other DLLs
+     * (nvcuda.dll, nvapi64.dll, …) that live in the same DriverStore directory.
+     * Without this flag, LoadLibraryA succeeds for the DLL itself but the
+     * implicit imports fail silently, leaving a half-initialised module that
+     * returns VK_ERROR_OUT_OF_HOST_MEMORY from vkCreateInstance.
+     *
+     * LOAD_LIBRARY_SEARCH_DEFAULT_DIRS is OR'd in so the standard search
+     * paths (System32, PATH, …) are still checked for other imports.
+     *
+     * These flags require KB2533623 (Windows Vista SP2+) or Windows 8+.
+     * They are not available on very old systems; if the call fails with
+     * ERROR_INVALID_PARAMETER, fall back to the plain LoadLibraryA so we
+     * still work for relative names like "nvoglv64.dll".           */
+    DWORD flags = LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                  LOAD_LIBRARY_SEARCH_DEFAULT_DIRS;
+    HMODULE h = LoadLibraryExA(path, NULL, flags);
+    if (!h && GetLastError() == ERROR_INVALID_PARAMETER)
+        h = LoadLibraryA(path);   /* old OS fallback */
+    return h;
 }
 static inline void *stereo_dl_sym(stereo_dl_t h, const char *name)
 {
@@ -181,6 +201,10 @@ static inline char **stereo_registry_enum_icd_jsons(void)
  * stereo_json_read_library_path — reads "library_path" from a minimal
  * ICD JSON file.  Very minimal parser; no full JSON library needed.
  * Returns a heap-allocated string or NULL on failure.
+ *
+ * Handles JSON string escaping: \\ → \, \" → ", \/ → /, \n → newline, etc.
+ * This is important because the Vulkan loader and VKS3D Install.bat both
+ * write JSON with escaped backslashes ("C:\\\\Programs\\\\..." or similar).
  */
 static inline char *stereo_json_read_library_path(const char *json_path)
 {
@@ -190,25 +214,37 @@ static inline char *stereo_json_read_library_path(const char *json_path)
     char line[2048];
     char *result = NULL;
     while (fgets(line, sizeof(line), f)) {
-        /* Look for: "library_path" : "value"
-         * key points to 'l' in library_path.
-         * key+12 points to the closing quote of the key name.
-         * We must skip past that quote, the colon, any spaces, then find
-         * the OPENING quote of the value before reading the value itself. */
         char *key = strstr(line, "library_path");
         if (!key) continue;
-        /* Find the colon separator (skip closing quote of key name) */
         char *colon = strchr(key + 12, ':');
         if (!colon) continue;
-        /* Find opening quote of the value */
         char *q1 = strchr(colon + 1, '"');
         if (!q1) continue;
-        q1++; /* skip past the opening quote to start of value */
-        /* Find closing quote of the value */
-        char *q2 = strchr(q1, '"');
-        if (!q2) continue;
-        *q2    = '\0';
-        result = _strdup(q1);
+        q1++; /* skip opening quote */
+
+        /* Copy value with JSON unescaping, stopping at unescaped closing quote */
+        char buf[2048];
+        char *dst = buf;
+        char *src = q1;
+        while (*src && *src != '"' && (size_t)(dst - buf) < sizeof(buf) - 1) {
+            if (*src == '\\' && *(src + 1)) {
+                src++;
+                switch (*src) {
+                    case '\\': *dst++ = '\\'; break;
+                    case '"':  *dst++ = '"';  break;
+                    case '/':  *dst++ = '/';  break;
+                    case 'n':  *dst++ = '\n'; break;
+                    case 'r':  *dst++ = '\r'; break;
+                    case 't':  *dst++ = '\t'; break;
+                    default:   *dst++ = '\\'; *dst++ = *src; break;
+                }
+                src++;
+            } else {
+                *dst++ = *src++;
+            }
+        }
+        *dst = '\0';
+        result = _strdup(buf);
         break;
     }
     fclose(f);

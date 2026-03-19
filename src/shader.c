@@ -582,10 +582,10 @@ bool spirv_patch_stereo_vertex(
     }
     /* Log full scan results to diagnose gl_Position detection failures */
     STEREO_LOG("Shader scan: is_vertex=%d is_block=%d block_type=%u ptr_type=%u "
-               "pos_var=%u member=%u float_type=%u v4=%u bound=%u words=%zu",
+               "pos_var=%u member=%u float_type=%u v4=%u int_type=%u view_var=%u bound=%u words=%zu",
                (int)m.is_vertex, (int)m.pos_is_block,
                m.pos_block_type, m.pos_ptr_type, m.pos_var, m.pos_member_idx,
-               m.float_type, m.v4_type, m.bound, (size_t)m.count);
+               m.float_type, m.v4_type, m.int_type, m.view_var, m.bound, (size_t)m.count);
     if (!m.pos_var) {
         STEREO_LOG("Shader scan: gl_Position NOT found "
                    "(block_type=%u ptr_type=%u) — skipping patch",
@@ -777,8 +777,22 @@ stereo_CreateShaderModule(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    if (!sd->stereo.enabled) {
-        return sd->real.CreateShaderModule(sd->real_device, pCreateInfo, pAllocator, pShaderModule);
+    /* VKS3D_NO_SHADER_PATCH=1 disables SPIR-V patching for debugging.
+     * Use this to test whether a crash is caused by our patched SPIR-V. */
+    static int no_patch = -1;
+    if (no_patch < 0) {
+        const char *e = stereo_getenv("VKS3D_NO_SHADER_PATCH");
+        no_patch = (e && e[0] == '1') ? 1 : 0;
+        if (no_patch) STEREO_LOG("VKS3D_NO_SHADER_PATCH=1: SPIR-V patching disabled");
+    }
+
+    if (!sd->stereo.enabled || no_patch) {
+        STEREO_LOG("stereo_CreateShaderModule: passthrough (%zu bytes)",
+                   pCreateInfo ? pCreateInfo->codeSize : 0);
+        VkResult r = sd->real.CreateShaderModule(sd->real_device, pCreateInfo, pAllocator, pShaderModule);
+        STEREO_LOG("stereo_CreateShaderModule: passthrough result=%d module=%p", r,
+                   pShaderModule ? (void*)(uintptr_t)*pShaderModule : NULL);
+        return r;
     }
 
     /* Try to patch the SPIR-V */
@@ -797,10 +811,18 @@ stereo_CreateShaderModule(
     if (patched_ok) {
         mod_ci.pCode    = patched;
         mod_ci.codeSize = patched_c * sizeof(uint32_t);
+        STEREO_LOG("stereo_CreateShaderModule: submitting patched SPIR-V (%zu words) to driver",
+                   patched_c);
+    } else {
+        STEREO_LOG("stereo_CreateShaderModule: submitting original SPIR-V (%zu words) to driver",
+                   in_c);
     }
 
     VkResult res = sd->real.CreateShaderModule(
         sd->real_device, &mod_ci, pAllocator, pShaderModule);
+
+    STEREO_LOG("stereo_CreateShaderModule: driver returned %d  module=%p",
+               res, pShaderModule ? (void*)(uintptr_t)*pShaderModule : NULL);
 
     if (patched_ok)
         spirv_patched_free(patched);

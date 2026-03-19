@@ -234,11 +234,52 @@ int main(void)
             for (;;) {
                 vl=sizeof(vn); vds=sizeof(vd);
                 if (RegEnumValueA(hk,idx++,vn,&vl,NULL,&vt,(LPBYTE)&vd,&vds)!=ERROR_SUCCESS) break;
-                if (strstr(vn,"VKS3D")||strstr(vn,"vks3d")) { result_pass("VKS3D JSON registered",vn); found=1; break; }
+                if (strstr(vn,"VKS3D")||strstr(vn,"vks3d")) {
+                    result_pass("VKS3D JSON registered", vn);
+                    found = 1;
+                    /* Verify the JSON file exists and read library_path */
+                    if (GetFileAttributesA(vn) == INVALID_FILE_ATTRIBUTES) {
+                        result_fail("VKS3D JSON file exists on disk", "File not found -- reinstall");
+                    } else {
+                        result_pass("VKS3D JSON file exists on disk", NULL);
+                        /* Read library_path from JSON with unescaping */
+                        FILE *jf = fopen(vn, "r");
+                        if (jf) {
+                            char line[2048], dll_path[2048] = "";
+                            while (fgets(line, sizeof(line), jf)) {
+                                char *key = strstr(line, "library_path");
+                                if (!key) continue;
+                                char *col = strchr(key+12, ':'); if (!col) continue;
+                                char *q1  = strchr(col+1, '"');  if (!q1)  continue;
+                                q1++;
+                                char *dst = dll_path;
+                                for (char *s = q1; *s && *s != '"' && dst < dll_path+sizeof(dll_path)-1; s++) {
+                                    if (*s == '\\' && *(s+1)) { s++;
+                                        if (*s=='\\') *dst++='\\';
+                                        else { *dst++='\\'; *dst++=*s; }
+                                    } else *dst++ = *s;
+                                }
+                                *dst = '\0';
+                                break;
+                            }
+                            fclose(jf);
+                            if (dll_path[0]) {
+                                if (GetFileAttributesA(dll_path) == INVALID_FILE_ATTRIBUTES)
+                                    result_fail("VKS3D DLL path in JSON", dll_path);
+                                else
+                                    result_pass("VKS3D DLL path in JSON", dll_path);
+                            } else {
+                                result_fail("library_path in VKS3D JSON",
+                                    "Could not parse -- re-run install.bat to rewrite JSON");
+                            }
+                        }
+                    }
+                    break;
+                }
             }
             RegCloseKey(hk);
         }
-        if (!found) result_fail("VKS3D JSON registered","Not found -- run Install-VKS3D.ps1");
+        if (!found) result_fail("VKS3D JSON registered", "Not found -- run install.bat as admin");
     }
 #endif
 
