@@ -273,6 +273,50 @@ int main(void)
                                     "Could not parse -- re-run install.bat to rewrite JSON");
                             }
                         }
+                        /* Check api_version — must be "1.1.0" not "1.3.0".
+                         * Vulkan 1.1.x loaders (driver 426.06) silently skip any
+                         * ICD whose JSON api_version exceeds the loader's own version.
+                         * If this says "1.3.0", VKS3D will never load on old drivers
+                         * (no DLL_PROCESS_ATTACH, no log, apps render 2D). */
+                        {
+                            char api_ver[32] = "";
+                            FILE *jf2 = fopen(vn, "r");
+                            if (jf2) {
+                                char ln[1024];
+                                while (fgets(ln, sizeof(ln), jf2)) {
+                                    char *p = strstr(ln, "api_version");
+                                    if (!p) continue;
+                                    char *q1 = strchr(p,'"'); if(!q1) continue; q1++;
+                                    char *q2 = strchr(q1,'"'); if(!q2) continue;
+                                    q1 = strchr(q2+1,'"'); if(!q1) continue; q1++;
+                                    q2 = strchr(q1,'"');   if(!q2) continue;
+                                    size_t n = (size_t)(q2-q1);
+                                    if (n >= sizeof(api_ver)) n = sizeof(api_ver)-1;
+                                    memcpy(api_ver, q1, n); api_ver[n] = '\0';
+                                    break;
+                                }
+                                fclose(jf2);
+                            }
+                            if (!api_ver[0]) {
+                                result_fail("VKS3D JSON api_version",
+                                    "Not found -- re-run install.bat");
+                            } else {
+                                int maj=0, min_=0;
+                                sscanf(api_ver, "%d.%d", &maj, &min_);
+                                if (maj > 1 || (maj == 1 && min_ > 1)) {
+                                    char msg[128];
+                                    snprintf(msg, sizeof(msg),
+                                        "%s -- MUST be 1.1.0. "
+                                        "Vulkan 1.1.x loaders silently skip ICDs with "
+                                        "higher api_version (no log, 2D output). "
+                                        "Re-run install.bat to fix.", api_ver);
+                                    result_fail("VKS3D JSON api_version", msg);
+                                } else {
+                                    result_pass("VKS3D JSON api_version", api_ver);
+                                }
+                            }
+                        }
+                        }
                     }
                     break;
                 }
