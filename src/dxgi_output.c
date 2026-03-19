@@ -55,8 +55,10 @@
 #define D3D11_USAGE_DEFAULT             0
 #define D3D11_BIND_SHADER_RESOURCE      0x8u
 #define D3D11_BIND_RENDER_TARGET        0x20u
-/* D3D11_RESOURCE_MISC_SHARED_NTHANDLE: enable NT-handle sharing (Win8+) */
-#define D3D11_RESOURCE_MISC_SHARED_NTHANDLE 0x800000u
+/* D3D11_RESOURCE_MISC_SHARED_NTHANDLE: enable NT-handle sharing (Win8+).
+ * MSDN value: 0x800.  (Previously was incorrectly defined as 0x800000 which
+ * caused E_INVALIDARG from CreateTexture2D on all driver versions.) */
+#define D3D11_RESOURCE_MISC_SHARED_NTHANDLE 0x800u
 
 /* ── COM helper macros ───────────────────────────────────────────────────── */
 #define COM_HR(o,N,...) \

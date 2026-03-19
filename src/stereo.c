@@ -992,9 +992,12 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
                                 char *q1, *q2;
                                 size_t n;
                                 if (!p) continue;
-                                q1 = strchr(p,   '"'); if (!q1) continue; q1++;
-                                q2 = strchr(q1,  '"'); if (!q2) continue;
+                                /* skip key name's closing quote */
+                                q1 = strchr(p,   '"'); if (!q1) continue;
+                                q2 = strchr(q1+1,'"'); if (!q2) continue;
+                                /* find opening quote of value */
                                 q1 = strchr(q2+1,'"'); if (!q1) continue; q1++;
+                                /* find closing quote of value */
                                 q2 = strchr(q1,  '"'); if (!q2) continue;
                                 n = (size_t)(q2 - q1);
                                 if (n >= sizeof(json_api_ver)) n = sizeof(json_api_ver) - 1;
