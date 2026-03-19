@@ -259,12 +259,11 @@ stereo_CreateSwapchainKHR(
         bool dxgi_ok = false;
         HANDLE nt_handle = NULL;
         if (sc->hwnd && dxgi_device_init(sd)) {
-            /* IMPORTANT: create the shared texture BEFORE the DXGI FSE swap chain.
-             * On 426.06, calling CreateTexture2D after CreateSwapChainForHwnd(Stereo=TRUE,FSE)
-             * crashes (ACCESS_VIOLATION) because the device enters a stereo-locked state
-             * that rejects additional texture creation.  Creating it first, while the device
-             * is still in normal mode, succeeds.                                          */
-            if (dxgi_shared_tex_create(sd, sc, &nt_handle) && dxgi_sc_create(sd, sc)) {
+            /* VKQB3DV pattern: dxgi_sc_create creates the swap chain windowed,
+             * gets the back buffer (Texture2DArray[2]), acquires its NT handle,
+             * then calls SetFullscreenState(TRUE) — all in one step.
+             * No separate CreateTexture2D needed or safe to call. */
+            if (dxgi_sc_create(sd, sc, &nt_handle)) {
                 dxgi_ok = true;
             } else {
                 STEREO_LOG("[DXGI] path failed — destroying DXGI swap chain and falling back");

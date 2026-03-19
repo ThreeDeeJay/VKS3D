@@ -10,7 +10,7 @@ bool dxgi_device_init(StereoDevice *sd);
 void dxgi_device_destroy(StereoDevice *sd);
 
 /* ── Per-swapchain DXGI swap chain ──────────────────────────────────────── */
-bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc);
+bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle);
 void dxgi_sc_destroy(StereoSwapchain *sc);
 
 /* ── Shared Texture2DArray[2] — Vulkan external memory import source ────── *
@@ -21,7 +21,6 @@ void dxgi_sc_destroy(StereoSwapchain *sc);
  * (VkImportMemoryWin32HandleInfoKHR).  NT handles are consumed on import;
  * do NOT CloseHandle() until after vkAllocateMemory returns.
  * ─────────────────────────────────────────────────────────────────────────── */
-bool dxgi_shared_tex_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle);
 
 /* ── Per-frame GPU copy + DXGI present ──────────────────────────────────── *
  *

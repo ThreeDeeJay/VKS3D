@@ -220,219 +220,6 @@ bool dxgi_device_init(StereoDevice *sd)
     return true;
 }
 
-/* ── Create DXGI 1.2 stereo swap chain on sc->hwnd ───────────────────── */
-bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc)
-{
-    if (!sd->d3d11_ok || !sc->hwnd) return false;
-
-    void *pDev = sd->d3d11_dev;
-
-    void *pDXGIDev = NULL;
-    HRESULT hr = ((HRESULT(WINAPI*)(void*, const GUID*, void**))(*(void***)pDev)[0])
-                 (pDev, &IID_IDXGIDevice, &pDXGIDev);
-    if (FAILED(hr) || !pDXGIDev) { STEREO_ERR("[DXGI] QI IDXGIDevice failed: 0x%x", (unsigned)hr); return false; }
-
-    void *pAdapter = NULL;
-    hr = ((HRESULT(WINAPI*)(void*, void**))(*(void***)pDXGIDev)[7])(pDXGIDev, &pAdapter);
-    COM_RELEASE(pDXGIDev);
-    if (FAILED(hr) || !pAdapter) { STEREO_ERR("[DXGI] GetAdapter failed: 0x%x", (unsigned)hr); return false; }
-
-    void *pFact2 = NULL;
-    hr = ((HRESULT(WINAPI*)(void*, const GUID*, void**))(*(void***)pAdapter)[6])
-         (pAdapter, &IID_IDXGIFactory2, &pFact2);
-    COM_RELEASE(pAdapter);
-    if (FAILED(hr) || !pFact2) { STEREO_ERR("[DXGI] GetParent IDXGIFactory2 failed: 0x%x", (unsigned)hr); return false; }
-
-    BOOL wse = ((BOOL(WINAPI*)(void*))(*(void***)pFact2)[14])(pFact2);
-    STEREO_LOG("[DXGI] IsWindowedStereoEnabled = %s", wse ? "TRUE" : "FALSE");
-
-    DXGI_SWAP_CHAIN_DESC1_ scd = {
-        .Width       = sc->app_width,
-        .Height      = sc->app_height,
-        .Format      = DXGI_FORMAT_B8G8R8A8_UNORM,
-        .Stereo      = TRUE,
-        .SampleDesc  = {1, 0},
-        .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
-        .BufferCount = 2,
-        .Scaling     = DXGI_SCALING_NONE,
-        .SwapEffect  = DXGI_SWAP_EFFECT_FLIP_DISCARD,
-        .AlphaMode   = DXGI_ALPHA_MODE_UNSPECIFIED,
-        .Flags       = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH,
-    };
-    DXGI_SC_FULLSCREEN_DESC_ fsd = { .RefreshRate = {120, 1}, .Windowed = FALSE };
-
-    void *pSC = NULL;
-    hr = ((HRESULT(WINAPI*)(void*, void*, HWND,
-                             const DXGI_SWAP_CHAIN_DESC1_*,
-                             const DXGI_SC_FULLSCREEN_DESC_*,
-                             void*, void**))(*(void***)pFact2)[15])
-         (pFact2, pDev, sc->hwnd, &scd, &fsd, NULL, &pSC);
-    STEREO_LOG("[DXGI] CreateSwapChainForHwnd(Stereo=TRUE, FSE): hr=0x%x  sc=%p", (unsigned)hr, pSC);
-
-    if (FAILED(hr) || !pSC) {
-        STEREO_LOG("[DXGI] FSE failed — retrying windowed");
-        hr = ((HRESULT(WINAPI*)(void*, void*, HWND,
-                                 const DXGI_SWAP_CHAIN_DESC1_*,
-                                 const DXGI_SC_FULLSCREEN_DESC_*,
-                                 void*, void**))(*(void***)pFact2)[15])
-             (pFact2, pDev, sc->hwnd, &scd, NULL, NULL, &pSC);
-        STEREO_LOG("[DXGI] windowed retry: hr=0x%x  sc=%p", (unsigned)hr, pSC);
-    }
-
-    COM_RELEASE(pFact2);
-    if (FAILED(hr) || !pSC) { STEREO_ERR("[DXGI] Failed to create stereo swap chain: 0x%x", (unsigned)hr); return false; }
-
-    sc->dxgi_sc = pSC;
-    STEREO_LOG("[DXGI] Stereo swap chain created: %p  size=%ux%u", pSC, sc->app_width, sc->app_height);
-    return true;
-}
-
-/* ── Create D3D11 Texture2DArray[2] with SHARED_NTHANDLE ─────────────── *
- *
- * This texture is the shared buffer between D3D11 and Vulkan.  It is NOT
- * the DXGI swap-chain back buffer; it is an intermediate that Vulkan renders
- * into directly (via external-memory import) and D3D11 copies to the DXGI
- * back buffer each frame.
- *
- * Stores ID3D11Texture2D* in sc->shared_d3d11_tex.
- * Returns the NT HANDLE in *out_nt_handle — ownership passes to Vulkan on
- * the first successful vkAllocateMemory call; callers must NOT CloseHandle.
- * ─────────────────────────────────────────────────────────────────────────── */
-bool dxgi_shared_tex_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle)
-{
-    UINT dxgi_fmt = vkfmt_to_dxgi(sc->format);
-    STEREO_LOG("[DXGI] CreateTexture2D: %ux%u fmt=%u (vk=%u)",
-               sc->app_width, sc->app_height, dxgi_fmt, (unsigned)sc->format);
-
-    /* SHARED (0x2) | SHARED_NTHANDLE (0x800): many NVIDIA drivers require both
-     * flags even though MSDN says NTHANDLE alone is sufficient on Win8+.
-     * ArraySize=2: both eye slices in one texture array for atomic sharing. */
-    D3D11_TEXTURE2D_DESC_ desc = {
-        .Width          = sc->app_width,
-        .Height         = sc->app_height,
-        .MipLevels      = 1,
-        .ArraySize      = 2,
-        .Format         = dxgi_fmt,
-        .SampleDesc     = {1, 0},
-        .Usage          = D3D11_USAGE_DEFAULT,
-        .BindFlags      = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
-        .CPUAccessFlags = 0,
-        .MiscFlags      = D3D11_RESOURCE_MISC_SHARED_NTHANDLE |
-                          D3D11_RESOURCE_MISC_SHARED,
-    };
-
-    void *pTex = NULL;
-    /* ID3D11Device::CreateTexture2D = vtable[5] */
-    HRESULT hr = ((HRESULT(WINAPI*)(void*, const D3D11_TEXTURE2D_DESC_*, void*, void**))
-                  (*(void***)sd->d3d11_dev)[5])
-                 (sd->d3d11_dev, &desc, NULL, &pTex);
-
-    /* Some older drivers reject ArraySize=2 with shared flags; fall back to
-     * ArraySize=1 so at least the single-eye path works. */
-    if ((FAILED(hr) || !pTex) && desc.ArraySize == 2) {
-        STEREO_LOG("[DXGI] ArraySize=2 shared tex failed (0x%x), retrying ArraySize=1",
-                   (unsigned)hr);
-        desc.ArraySize = 1;
-        pTex = NULL;
-        hr = ((HRESULT(WINAPI*)(void*, const D3D11_TEXTURE2D_DESC_*, void*, void**))
-              (*(void***)sd->d3d11_dev)[5])
-             (sd->d3d11_dev, &desc, NULL, &pTex);
-    }
-
-    if (FAILED(hr) || !pTex) {
-        STEREO_ERR("[DXGI] CreateTexture2D(shared stereo) failed: 0x%x"
-                   " (fmt=%u size=%ux%u misc=0x%x)",
-                   (unsigned)hr, dxgi_fmt, desc.Width, desc.Height, desc.MiscFlags);
-        return false;
-    }
-
-    /* QI for IDXGIResource1 to call CreateSharedHandle (NT handles) */
-    void *pRes1 = NULL;
-    hr = ((HRESULT(WINAPI*)(void*, const GUID*, void**))(*(void***)pTex)[0])
-         (pTex, &IID_IDXGIResource1, &pRes1);
-    if (FAILED(hr) || !pRes1) {
-        STEREO_ERR("[DXGI] QI IDXGIResource1 failed: 0x%x (Win8+ required)", (unsigned)hr);
-        COM_RELEASE(pTex);
-        return false;
-    }
-
-    /* IDXGIResource1::CreateSharedHandle = vtable[12]
-     * Access GENERIC_ALL (0x10000000) — Vulkan imports with full access */
-    HANDLE hShared = NULL;
-    hr = ((HRESULT(WINAPI*)(void*, void*, DWORD, LPCWSTR, HANDLE*))
-          (*(void***)pRes1)[12])
-         (pRes1, NULL, 0x10000000u /*GENERIC_ALL*/, NULL, &hShared);
-    COM_RELEASE(pRes1);
-    if (FAILED(hr) || !hShared) {
-        STEREO_ERR("[DXGI] CreateSharedHandle failed: 0x%x", (unsigned)hr);
-        COM_RELEASE(pTex);
-        return false;
-    }
-
-    sc->shared_d3d11_tex = pTex;
-    sc->shared_nt_handle = hShared;
-    *out_nt_handle       = hShared;
-    STEREO_LOG("[DXGI] Shared stereo texture created: tex=%p  fmt=%u  handle=%p",
-               pTex, dxgi_fmt, hShared);
-    return true;
-}
-
-/* ── GPU copy from shared texture → DXGI back buffer + Present ──────── *
- *
- * Called after CPU WaitForFences (Vulkan render complete).
- * D3D11 submits two GPU-side CopySubresourceRegion commands then presents.
- * No CPU pixel data is read or written.
- * ─────────────────────────────────────────────────────────────────────────── */
-VkResult dxgi_copy_and_present(StereoDevice *sd, StereoSwapchain *sc)
-{
-    void *pCtx = sd->d3d11_ctx;
-
-    /* Acquire DXGI back buffer (Texture2DArray[2]) */
-    void *pBB = NULL;
-    /* IDXGISwapChain::GetBuffer = vtable[9] */
-    HRESULT hr = ((HRESULT(WINAPI*)(void*, UINT, const GUID*, void**))
-                  (*(void***)sc->dxgi_sc)[9])
-                 (sc->dxgi_sc, 0, &IID_ID3D11Tex2D, &pBB);
-    if (FAILED(hr) || !pBB) {
-        STEREO_ERR("[DXGI] GetBuffer failed: 0x%x", (unsigned)hr);
-        return VK_ERROR_DEVICE_LOST;
-    }
-
-    /* CopySubresourceRegion: shared_tex slice 0 → back buffer slice 0 (left)
-     * vtable[46] = CopySubresourceRegion(dst, DstSub, DstX, DstY, DstZ, src, SrcSub, pBox) */
-    ((void(WINAPI*)(void*, void*, UINT, UINT, UINT, UINT, void*, UINT, void*))
-     (*(void***)pCtx)[46])
-    (pCtx, pBB, 0, 0, 0, 0, sc->shared_d3d11_tex, 0, NULL);
-
-    /* CopySubresourceRegion: shared_tex slice 1 → back buffer slice 1 (right) */
-    ((void(WINAPI*)(void*, void*, UINT, UINT, UINT, UINT, void*, UINT, void*))
-     (*(void***)pCtx)[46])
-    (pCtx, pBB, 1, 0, 0, 0, sc->shared_d3d11_tex, 1, NULL);
-
-    COM_RELEASE(pBB);
-
-    /* IDXGISwapChain::Present = vtable[8]
-     * Sync interval 0 (no vsync): 3D Vision driver enforces its own 120 Hz
-     * pacing; blocking for DXGI vsync serializes the pipeline and caps at ~60. */
-    hr = ((HRESULT(WINAPI*)(void*, UINT, UINT))(*(void***)sc->dxgi_sc)[8])
-         (sc->dxgi_sc, 0, 0);
-
-    if (hr == 0x087A0001 /* DXGI_STATUS_OCCLUDED */) {
-        STEREO_LOG("[DXGI] Present: OCCLUDED (window not focused)");
-        return VK_SUCCESS;
-    }
-    if (FAILED(hr)) {
-        STEREO_ERR("[DXGI] Present failed: 0x%x", (unsigned)hr);
-        return VK_ERROR_DEVICE_LOST;
-    }
-
-    /* Re-activate stereo each frame (some drivers deactivate on Alt+Tab) */
-    if (sd->nvapi_stereo) {
-        PFN_NvHandle fnAct = (PFN_NvHandle)nv_query(NvID_StereoActivate);
-        if (fnAct) fnAct(sd->nvapi_stereo);
-    }
-    return VK_SUCCESS;
-}
 
 /* ── Cleanup ─────────────────────────────────────────────────────────────── */
 void dxgi_sc_destroy(StereoSwapchain *sc)
@@ -464,3 +251,102 @@ void dxgi_device_destroy(StereoDevice *sd)
     if (sd->d3d11_lib) { FreeLibrary((HMODULE)sd->d3d11_lib); sd->d3d11_lib = NULL; }
     sd->d3d11_ok = false;
 }
+/* ── Create DXGI stereo swap chain + get back buffer NT handle ───────────
+ *
+ * VKQB3DV pattern (confirmed working on driver 426.06):
+ *   1. CreateSwapChainForHwnd(Stereo=TRUE, windowed — NULL pFullscreenDesc)
+ *   2. GetBuffer(0) → back buffer is a Texture2DArray[2] already
+ *   3. QI IDXGIResource1 → CreateSharedHandle (NT handle for Vulkan import)
+ *   4. SetFullscreenState(TRUE)
+ *
+ * Creating FSE directly (Windowed=FALSE) locks D3D11 into stereo-exclusive
+ * mode that crashes any subsequent D3D11 texture/buffer operations.
+ * Windowed-first avoids this. No separate CreateTexture2D needed at all —
+ * the swap chain back buffer IS the stereo Texture2DArray[2].
+ * ─────────────────────────────────────────────────────────────────────── */
+bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle)
+{
+    if (!sd->d3d11_ok || !sc->hwnd) return false;
+
+    void *pDev = sd->d3d11_dev;
+
+    void *pDXGIDev = NULL;
+    HRESULT hr = ((HRESULT(WINAPI*)(void*, const GUID*, void**))(*(void***)pDev)[0])
+                 (pDev, &IID_IDXGIDevice, &pDXGIDev);
+    if (FAILED(hr)||!pDXGIDev){STEREO_ERR("[DXGI] QI IDXGIDevice failed: 0x%x",(unsigned)hr);return false;}
+
+    void *pAdapter = NULL;
+    hr = ((HRESULT(WINAPI*)(void*, void**))(*(void***)pDXGIDev)[7])(pDXGIDev, &pAdapter);
+    COM_RELEASE(pDXGIDev);
+    if (FAILED(hr)||!pAdapter){STEREO_ERR("[DXGI] GetAdapter failed: 0x%x",(unsigned)hr);return false;}
+
+    void *pFact2 = NULL;
+    hr = ((HRESULT(WINAPI*)(void*, const GUID*, void**))(*(void***)pAdapter)[6])
+         (pAdapter, &IID_IDXGIFactory2, &pFact2);
+    COM_RELEASE(pAdapter);
+    if (FAILED(hr)||!pFact2){STEREO_ERR("[DXGI] GetParent IDXGIFactory2: 0x%x",(unsigned)hr);return false;}
+
+    BOOL wse = ((BOOL(WINAPI*)(void*))(*(void***)pFact2)[14])(pFact2);
+    STEREO_LOG("[DXGI] IsWindowedStereoEnabled = %s", wse ? "TRUE" : "FALSE");
+
+    DXGI_SWAP_CHAIN_DESC1_ scd = {
+        .Width=sc->app_width, .Height=sc->app_height,
+        .Format=DXGI_FORMAT_B8G8R8A8_UNORM, .Stereo=TRUE,
+        .SampleDesc={1,0}, .BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT,
+        .BufferCount=2, .Scaling=DXGI_SCALING_NONE,
+        .SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD,
+        .AlphaMode=DXGI_ALPHA_MODE_UNSPECIFIED,
+        .Flags=DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH,
+    };
+
+    /* Step 1: Create WINDOWED (NULL pFullscreenDesc).
+     * FSE directly crashes on subsequent GetBuffer/CreateTexture2D. */
+    void *pSC = NULL;
+    hr = ((HRESULT(WINAPI*)(void*,void*,HWND,
+                const DXGI_SWAP_CHAIN_DESC1_*,
+                const DXGI_SC_FULLSCREEN_DESC_*,
+                void*,void**))(*(void***)pFact2)[15])
+         (pFact2, pDev, sc->hwnd, &scd, NULL, NULL, &pSC);
+    COM_RELEASE(pFact2);
+    STEREO_LOG("[DXGI] CreateSwapChainForHwnd(Stereo=TRUE,windowed): hr=0x%x sc=%p",(unsigned)hr,pSC);
+    if (FAILED(hr)||!pSC){STEREO_ERR("[DXGI] Stereo swap chain failed: 0x%x",(unsigned)hr);return false;}
+    sc->dxgi_sc = pSC;
+
+    /* Step 2: Back buffer IS Texture2DArray[2] — get it directly */
+    void *pBB = NULL;
+    hr = ((HRESULT(WINAPI*)(void*,UINT,const GUID*,void**))(*(void***)pSC)[9])
+         (pSC, 0, &IID_ID3D11Tex2D, &pBB);
+    if (FAILED(hr)||!pBB){
+        STEREO_ERR("[DXGI] GetBuffer failed: 0x%x",(unsigned)hr);
+        dxgi_sc_destroy(sc); return false;
+    }
+    sc->shared_d3d11_tex = pBB;
+
+    /* Step 3: NT handle for Vulkan external-memory import */
+    void *pRes1 = NULL;
+    hr = ((HRESULT(WINAPI*)(void*,const GUID*,void**))(*(void***)pBB)[0])
+         (pBB, &IID_IDXGIResource1, &pRes1);
+    if (FAILED(hr)||!pRes1){
+        STEREO_ERR("[DXGI] QI IDXGIResource1 failed: 0x%x (Win8+ required)",(unsigned)hr);
+        dxgi_sc_destroy(sc); return false;
+    }
+    HANDLE hShared = NULL;
+    hr = ((HRESULT(WINAPI*)(void*,void*,DWORD,LPCWSTR,HANDLE*))
+          (*(void***)pRes1)[12])(pRes1, NULL, 0x10000000u, NULL, &hShared);
+    COM_RELEASE(pRes1);
+    if (FAILED(hr)||!hShared){
+        STEREO_ERR("[DXGI] CreateSharedHandle failed: 0x%x",(unsigned)hr);
+        dxgi_sc_destroy(sc); return false;
+    }
+    sc->shared_nt_handle = hShared;
+    *out_nt_handle = hShared;
+    STEREO_LOG("[DXGI] Stereo back buffer: %p  size=%ux%u (Tex2DArray[2])",
+               pBB, sc->app_width, sc->app_height);
+
+    /* Step 4: Go fullscreen after back buffer is captured */
+    hr = ((HRESULT(WINAPI*)(void*,int,void*))(*(void***)pSC)[10])(pSC,1,NULL);
+    STEREO_LOG("[DXGI] SetFullscreenState(TRUE): hr=0x%x", (unsigned)hr);
+    return true;
+}
+
+

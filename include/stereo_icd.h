@@ -203,6 +203,15 @@ typedef struct StereoConfig {
     uint32_t          refresh_rate;        /* Hz, 0 = driver default; use 120 for 3D Vision*/
     bool              half_fps;            /* cap to half rate (60fps for active shutter)  */
 
+    /* ── Rendering ──────────────────────────────────────── */
+    bool              multiview;           /* inject VK_KHR_multiview into render passes    *
+                                           * Default: false.  Requires ALL framebuffer       *
+                                           * attachments (incl. depth) to be 2D_ARRAY        *
+                                           * with >=2 layers — most apps only have 1-layer  *
+                                           * depth, causing VK_ERROR_DEVICE_LOST.            *
+                                           * Enable only for apps known to use array depth.  *
+                                           * Set multiview=1 in [global] of vks3d.ini.       */
+
     /* ── Hotkey step sizes ──────────────────────────────── */
     float             step_separation;     /* per Ctrl+F3/F4 press                        */
     float             step_convergence;    /* per Ctrl+F5/F6 press                        */

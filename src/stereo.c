@@ -197,6 +197,11 @@ void stereo_config_init(StereoConfig *cfg)
     cfg->refresh_rate    = (uint32_t)cfg_int("refresh_rate", 120);
     cfg->half_fps        = cfg_bool("half_fps", false);
 
+    /* multiview: off by default — most apps have single-layer depth buffers
+     * which cause VK_ERROR_DEVICE_LOST when multiview tries to write layer 1.
+     * Set multiview=1 in vks3d.ini [global] only for apps that support it. */
+    cfg->multiview       = cfg_bool("multiview", false);
+
     /* ── hotkey steps ── */
     cfg->step_separation  = cfg_float("step_separation",  0.005f);
     cfg->step_convergence = cfg_float("step_convergence", 0.005f);
