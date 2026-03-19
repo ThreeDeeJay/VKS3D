@@ -161,6 +161,26 @@ void stereo_config_init(StereoConfig *cfg)
     /* ── stereo parameters ── */
     cfg->separation  = cfg_float("separation",  0.065f);
     cfg->convergence = cfg_float("convergence", 0.030f);
+
+    /* Sanity: separation must be positive.  Convergence must be in [0, sep).
+     * If sep <= 0 or conv >= sep, the net eye offset is zero or reversed,
+     * which produces no visible stereo or inverted depth.  Warn and clamp. */
+    if (cfg->separation <= 0.0f) {
+        STEREO_ERR("INI: separation=%.4f is <= 0 — clamping to 0.065", cfg->separation);
+        cfg->separation = 0.065f;
+    }
+    if (cfg->convergence < 0.0f) {
+        STEREO_ERR("INI: convergence=%.4f is negative — clamping to 0", cfg->convergence);
+        cfg->convergence = 0.0f;
+    }
+    if (cfg->convergence >= cfg->separation) {
+        STEREO_ERR("INI: convergence=%.4f >= separation=%.4f — "
+                   "this cancels the stereo offset to zero or less! "
+                   "Clamping convergence to 0.0. "
+                   "Set convergence < separation (e.g. sep=0.065 conv=0.030).",
+                   cfg->convergence, cfg->separation);
+        cfg->convergence = 0.0f;
+    }
     cfg->flip_eyes   = cfg_bool ("flip_eyes",   false);
 
     /* ── presentation mode ── */
@@ -194,20 +214,27 @@ void stereo_config_init(StereoConfig *cfg)
 
 void stereo_config_compute_offsets(StereoConfig *cfg)
 {
-    /* Eye X-offsets in NDC: each eye shifts ±half_sep along X.
+    /* Off-axis stereo eye offsets in clip-space X.
      *
-     * Convergence is the zero-parallax plane depth and is handled separately
-     * (passed to shaders via the UBO convergence field, or as a toe-in angle
-     * in a full-stereo projection stack).  DO NOT mix it into the X-offset:
-     * doing so causes sep and conv to cancel each other when they are equal,
-     * producing zero offset and invisible stereo effect.            */
-    float half_sep = cfg->separation / 2.0f;
+     * left_eye_offset  = -(half_sep) + (half_conv)
+     * right_eye_offset = +(half_sep) - (half_conv)
+     *
+     * separation  — full inter-ocular distance in NDC (typ. 0.06).
+     * convergence — toe-in correction that shifts both images toward centre
+     *               (typ. 0.0–0.06).  Reduces apparent depth at the cost of
+     *               narrowing the depth window.  Zero = parallel-axis cameras.
+     *
+     * When sep == conv the net offset is zero (infinite convergence distance).
+     * Keep sep > conv for a visible stereo effect.  The shipped vks3d.ini
+     * defaults (sep=0.065, conv=0.030) are deliberately asymmetric.         */
+    float half_sep  = cfg->separation  / 2.0f;
+    float half_conv = cfg->convergence / 2.0f;
     if (!cfg->flip_eyes) {
-        cfg->left_eye_offset  = -half_sep;
-        cfg->right_eye_offset = +half_sep;
+        cfg->left_eye_offset  = -half_sep + half_conv;
+        cfg->right_eye_offset = +half_sep - half_conv;
     } else {
-        cfg->left_eye_offset  = +half_sep;
-        cfg->right_eye_offset = -half_sep;
+        cfg->left_eye_offset  = +half_sep - half_conv;
+        cfg->right_eye_offset = -half_sep + half_conv;
     }
 }
 

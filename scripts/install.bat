@@ -31,19 +31,12 @@ function Ensure-Key([string]$Path) {
 }
 
 function Update-JsonLibraryPath([string]$JsonPath, [string]$DllPath) {
-    $content = Get-Content $JsonPath -Raw
-    # JSON string escaping: each backslash must become \\
-    # In PowerShell the replacement string for -replace uses \ as escape, so
-    # \\ in the replacement means one literal backslash.  We need each \ in
-    # $DllPath to become \\ in the JSON, so we use [regex]::Escape to get
-    # the literal string into the replacement safely, then do a second pass
-    # to write the JSON-escaped form.
-    $json_escaped = $DllPath.Replace('\', '\\')   # C:\Foo -> C:\\Foo  (for JSON)
-    # -replace replacement: $json_escaped may contain \ which means escape next char;
-    # double them again so -replace treats them as literals.
-    $replace_safe = $json_escaped.Replace('\', '\\')
-    $content = $content -replace '"library_path"\s*:\s*"[^"]*"', "`"library_path`": `"$replace_safe`""
-    Set-Content $JsonPath $content -Encoding UTF8 -NoNewline
+    # Write JSON from scratch. No -replace regex: eliminates all escaping bugs.
+    # PS single-quoted '\' = 1 backslash; '\\' = 2 backslashes.
+    # So .Replace('\', '\\') turns each path separator into JSON-escaped \\.
+    $p = $DllPath.Replace('\', '\\').Replace('"', '\"')
+    $json = "{`n    `"file_format_version`": `"1.0.0`",`n    `"ICD`": {`n        `"library_path`": `"$p`",`n        `"api_version`": `"1.1.0`"`n    }`n}"
+    [System.IO.File]::WriteAllText($JsonPath, $json, [System.Text.Encoding]::UTF8)
 }
 
 Write-Host ""

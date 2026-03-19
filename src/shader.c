@@ -189,6 +189,12 @@ typedef struct SpvModule {
     uint32_t        v4_type;   /* ID of OpTypeVector float 4          */
     uint32_t        int_type;  /* ID of OpTypeInt 32 0 (unsigned)     */
     uint32_t        bool_type; /* ID of OpTypeBool                    */
+
+    /* Pre-existing pointer types found in the shader — reuse these instead
+     * of declaring new ones to avoid duplicate type-declaration errors that
+     * cause strict validators (595.71+) to reject/crash on the patched SPIR-V. */
+    uint32_t        ptr_out_v4_type;  /* existing OpTypePointer Output v4  (or 0) */
+    uint32_t        ptr_in_int_type;  /* existing OpTypePointer Input  int (or 0) */
     /* Positions of key sections in word stream */
     size_t          first_function_word; /* start of first OpFunction  */
     size_t          header_end;          /* end of type/decoration section */
@@ -243,6 +249,19 @@ static void spirv_scan_pass(SpvModule *m, bool second_pass)
             case SpvOpTypeBool:
                 if (wcount == 2)
                     m->bool_type = w[i+1];
+                break;
+            case SpvOpTypePointer:
+                /* Detect existing Output v4 pointer (for gl_Position) and
+                 * Input int pointer (for gl_ViewIndex) so we can REUSE these
+                 * instead of declaring duplicates, which are invalid SPIR-V. */
+                if (wcount >= 4) {
+                    if (w[i+2] == SpvStorageClassOutput && m->v4_type &&
+                        w[i+3] == m->v4_type)
+                        m->ptr_out_v4_type = w[i+1];
+                    if (w[i+2] == SpvStorageClassInput && m->int_type &&
+                        w[i+3] == m->int_type)
+                        m->ptr_in_int_type = w[i+1];
+                }
                 break;
             case SpvOpDecorate:
                 /* Path A: OpDecorate %var BuiltIn Position */
@@ -361,30 +380,31 @@ static bool inject_stereo_code(
     uint32_t id_new_x        = (*next_id)++;   /* pos.x + delta            */
     uint32_t id_new_pos      = (*next_id)++;   /* composite with new x     */
 
-    /* We'll need a pointer to gl_Position (Output vec4) */
-    /* and a pointer to gl_ViewIndex (Input int if available) */
+    /* ── Reuse existing pointer types where possible ─────────────────
+     * Emitting a duplicate OpTypePointer (same storage class + pointee) is
+     * invalid SPIR-V and causes strict validators (driver 595.71+) to reject
+     * or crash on the patched shader.  Use the IDs already in the shader when
+     * the scanner found them; only allocate + emit new ones when absent.     */
+    uint32_t use_ptr_v4_out = m->ptr_out_v4_type
+                              ? m->ptr_out_v4_type  /* reuse existing */
+                              : id_ptr_v4_out;       /* emit new below */
+    uint32_t int_type = m->int_type;
+    uint32_t use_ptr_int_in = m->ptr_in_int_type
+                              ? m->ptr_in_int_type
+                              : id_ptr_int_in;
 
-    (void)id_ptr_int_in;  /* may not need (only used if !int_type path) */
+    /* ── Emit type declarations only for types NOT already in shader ──
+     * These go in the type/decoration section BEFORE functions.         */
 
-    /* ── Emit type declarations for new IDs ──────────────────────────
-     * These must go in the type/decoration section BEFORE functions.
-     * We insert them during the second-pass copy (handled by caller).
-     * Here we just build the instruction words. */
-
-    /* OpTypePointer Output v4  — for gl_Position */
+    /* OpTypePointer Output v4  — only if not already declared */
     uint32_t ptr_out_v4_words[] = {
         spv_op(SpvOpTypePointer, 4),
-        id_ptr_v4_out,
+        id_ptr_v4_out,   /* new ID — only emitted when m->ptr_out_v4_type == 0 */
         SpvStorageClassOutput,
         m->v4_type
     };
 
-    /* OpTypePointer Input int  — for gl_ViewIndex */
-    uint32_t int_type = m->int_type;
-    if (!int_type) {
-        /* Need to allocate int type too */
-        /* This is handled as a type declaration */
-    }
+    /* OpTypePointer Input int  — only if not already declared */
     uint32_t ptr_in_int_words[4] = {
         spv_op(SpvOpTypePointer, 4),
         id_ptr_int_in,
@@ -423,11 +443,28 @@ static bool inject_stereo_code(
     /* Store in a small array tagged as "pre-function" */
     /* We return these as part of the output buffer already ordered correctly */
 
-    /* Emit type declarations (will be placed before first function by caller) */
-    spvbuf_push_n(out, ptr_out_v4_words, 4);
+    /* If shader has no OpTypeBool, we need to emit one before the function */
+    uint32_t bool_type = m->bool_type;
+    uint32_t id_new_bool = 0;
+    if (!bool_type && m->view_var && int_type) {
+        /* Need a bool type for OpIEqual — declare it in the type section */
+        id_new_bool = (*next_id)++;
+        bool_type   = id_new_bool;
+    }
+
+    /* Emit type declarations (will be placed before first function by caller).
+     * Only emit a new OpTypePointer when the shader doesn't already have one
+     * with that storage class + pointee — duplicates are invalid SPIR-V.     */
+    if (!m->ptr_out_v4_type)
+        spvbuf_push_n(out, ptr_out_v4_words, 4);
     if (int_type) {
-        spvbuf_push_n(out, ptr_in_int_words, 4);
+        if (!m->ptr_in_int_type)
+            spvbuf_push_n(out, ptr_in_int_words, 4);
         spvbuf_push_n(out, const_i0_words, 4);
+    }
+    if (id_new_bool) {
+        uint32_t bool_decl[] = { spv_op(SpvOpTypeBool, 2), id_new_bool };
+        spvbuf_push_n(out, bool_decl, 2);
     }
     spvbuf_push_n(out, const_l_words, 4);
     spvbuf_push_n(out, const_r_words, 4);
@@ -446,7 +483,7 @@ static bool inject_stereo_code(
         /* OpAccessChain %ptr_v4_out %pos_var %const_zero_i  →  id_chain */
         uint32_t ac[] = {
             spv_op(SpvOpAccessChain, 5),
-            id_ptr_v4_out, id_chain, m->pos_var, id_const_zero_i
+            use_ptr_v4_out, id_chain, m->pos_var, id_const_zero_i
         };
         spvbuf_push_n(out, ac, 5);
         pos_ptr = id_chain;
@@ -468,7 +505,7 @@ static bool inject_stereo_code(
         /* OpIEqual bool id_is_left = id_load_view == const_zero_i */
         uint32_t is_left[] = {
             spv_op(SpvOpIEqual, 5),
-            m->bool_type ? m->bool_type : (*next_id)++,
+            bool_type,
             id_is_left,
             id_load_view,
             id_const_zero_i
@@ -582,10 +619,12 @@ bool spirv_patch_stereo_vertex(
     }
     /* Log full scan results to diagnose gl_Position detection failures */
     STEREO_LOG("Shader scan: is_vertex=%d is_block=%d block_type=%u ptr_type=%u "
-               "pos_var=%u member=%u float_type=%u v4=%u int_type=%u view_var=%u bound=%u words=%zu",
+               "pos_var=%u member=%u float_type=%u v4=%u int_type=%u view_var=%u "
+               "ptr_out_v4=%u ptr_in_int=%u bound=%u words=%zu",
                (int)m.is_vertex, (int)m.pos_is_block,
                m.pos_block_type, m.pos_ptr_type, m.pos_var, m.pos_member_idx,
-               m.float_type, m.v4_type, m.int_type, m.view_var, m.bound, (size_t)m.count);
+               m.float_type, m.v4_type, m.int_type, m.view_var,
+               m.ptr_out_v4_type, m.ptr_in_int_type, m.bound, (size_t)m.count);
     if (!m.pos_var) {
         STEREO_LOG("Shader scan: gl_Position NOT found "
                    "(block_type=%u ptr_type=%u) — skipping patch",
