@@ -37,7 +37,7 @@ function Update-JsonLibraryPath([string]$JsonPath, [string]$DllPath) {
     # including the old 1.1.114 loader on driver 426.06 which does NOT unescape \.
     # Backslash-escaped paths (C:\\Programs\\...) break old loaders that read
     # the JSON literally without unescaping.
-    $p = $DllPath.Replace('\', '/').Replace('"', '\"')
+    $p = $DllPath.Replace('\', '\\').Replace('"', '\"')
     $json = "{`n    `"file_format_version`": `"1.0.0`",`n    `"ICD`": {`n        `"library_path`": `"$p`",`n        `"api_version`": `"1.1.0`"`n    }`n}"
     [System.IO.File]::WriteAllText($JsonPath, $json, [System.Text.Encoding]::UTF8)
 }

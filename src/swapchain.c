@@ -259,7 +259,12 @@ stereo_CreateSwapchainKHR(
         bool dxgi_ok = false;
         HANDLE nt_handle = NULL;
         if (sc->hwnd && dxgi_device_init(sd)) {
-            if (dxgi_sc_create(sd, sc) && dxgi_shared_tex_create(sd, sc, &nt_handle)) {
+            /* IMPORTANT: create the shared texture BEFORE the DXGI FSE swap chain.
+             * On 426.06, calling CreateTexture2D after CreateSwapChainForHwnd(Stereo=TRUE,FSE)
+             * crashes (ACCESS_VIOLATION) because the device enters a stereo-locked state
+             * that rejects additional texture creation.  Creating it first, while the device
+             * is still in normal mode, succeeds.                                          */
+            if (dxgi_shared_tex_create(sd, sc, &nt_handle) && dxgi_sc_create(sd, sc)) {
                 dxgi_ok = true;
             } else {
                 STEREO_LOG("[DXGI] path failed — destroying DXGI swap chain and falling back");
@@ -664,43 +669,8 @@ stereo_CreateImageView(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    if (!sd->stereo.enabled) {
-        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
-    }
-
-    /* Check: is this a stereo color image or a patched depth image? */
-    bool needs_upgrade = false;
-
-    /* Check stereo color images */
-    for (uint32_t si = 0; si < sd->swapchain_count && !needs_upgrade; si++) {
-        StereoSwapchain *sc = &sd->swapchains[si];
-        if (!sc->stereo_active || !sc->stereo_images) continue;
-        for (uint32_t ii = 0; ii < sc->image_count && !needs_upgrade; ii++) {
-            if (sc->stereo_images[ii] == pCreateInfo->image)
-                needs_upgrade = true;
-        }
-    }
-
-    /* Check patched depth images */
-    for (uint32_t i = 0; i < sd->intercepted_depth_count && !needs_upgrade; i++) {
-        if (sd->intercepted_depth[i] == pCreateInfo->image)
-            needs_upgrade = true;
-    }
-
-    if (!needs_upgrade) {
-        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
-    }
-
-    /* Upgrade: 2D → 2D_ARRAY, layerCount 1 → 2 */
-    VkImageViewCreateInfo upgraded = *pCreateInfo;
-    if (upgraded.viewType == VK_IMAGE_VIEW_TYPE_2D)
-        upgraded.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-    if (upgraded.subresourceRange.layerCount < 2)
-        upgraded.subresourceRange.layerCount = 2;
-
-    STEREO_LOG("CreateImageView: upgrading image %p %s: 2D→2D_ARRAY layerCount→2",
-               (void*)pCreateInfo->image,
-               needs_upgrade ? "(stereo/depth)" : "");
-
-    return sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
+    /* No view upgrades needed: multiview was removed (depth-buffer compatibility).
+     * The app's images stay single-layer; the present stage copies layer 0 to
+     * both DXGI stereo eyes in software.  Pass through unchanged. */
+    return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
 }
