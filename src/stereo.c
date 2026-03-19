@@ -962,6 +962,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
             if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, icd_key, 0, KEY_READ, &hk) == ERROR_SUCCESS) {
                 int active = 0, vks3d_found = 0;
                 char val_name[512];
+                char json_api_ver[32];
                 DWORD val_name_sz, val_type, val_data, val_data_sz, idx = 0;
                 while (1) {
                     val_name_sz  = sizeof(val_name);
@@ -973,30 +974,29 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
                     if (val_data != 0) continue; /* disabled */
                     active++;
                     if (strstr(val_name, "VKS3D") || strstr(val_name, "vks3d")) {
-                        vks3d_found = 1;
-
                         /* ── Check the api_version in our own JSON ──────────────
                          * The Vulkan loader reads api_version from the ICD JSON
                          * BEFORE calling LoadLibraryA.  If api_version is higher
                          * than the loader's own Vulkan version (e.g. "1.3.0" with
                          * a Vulkan 1.1.114 loader), the loader silently skips VKS3D
-                         * without ever loading the DLL — no log, no intercept.
-                         *
-                         * We self-check here to surface this misconfiguration.
-                         * Correct value is "1.1.0".  Re-run install.bat to fix.  */
-                        char json_api_ver[32] = "(not found)";
-                        FILE *jf = fopen(val_name, "r");
+                         * without ever loading the DLL — no log, no intercept.    */
+                        FILE *jf;
+                        int major, minor;
+                        vks3d_found = 1;
+                        json_api_ver[0] = '\0';
+                        jf = fopen(val_name, "r");
                         if (jf) {
                             char line[1024];
                             while (fgets(line, sizeof(line), jf)) {
                                 char *p = strstr(line, "api_version");
+                                char *q1, *q2;
+                                size_t n;
                                 if (!p) continue;
-                                char *q1 = strchr(p, '"'); if (!q1) continue; q1++;
-                                char *q2 = strchr(q1, '"'); if (!q2) continue;
-                                /* find second quoted token = the value */
-                                q1 = strchr(q2 + 1, '"'); if (!q1) continue; q1++;
-                                q2 = strchr(q1, '"');      if (!q2) continue;
-                                size_t n = (size_t)(q2 - q1);
+                                q1 = strchr(p,   '"'); if (!q1) continue; q1++;
+                                q2 = strchr(q1,  '"'); if (!q2) continue;
+                                q1 = strchr(q2+1,'"'); if (!q1) continue; q1++;
+                                q2 = strchr(q1,  '"'); if (!q2) continue;
+                                n = (size_t)(q2 - q1);
                                 if (n >= sizeof(json_api_ver)) n = sizeof(json_api_ver) - 1;
                                 memcpy(json_api_ver, q1, n);
                                 json_api_ver[n] = '\0';
@@ -1004,10 +1004,10 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
                             }
                             fclose(jf);
                         }
+                        if (!json_api_ver[0])
+                            strncpy(json_api_ver, "(not found)", sizeof(json_api_ver)-1);
                         STEREO_LOG("DllMain: VKS3D JSON api_version = '%s'", json_api_ver);
-
-                        /* Warn if api_version is too high for old loaders */
-                        int major = 0, minor = 0;
+                        major = 0; minor = 0;
                         if (sscanf(json_api_ver, "%d.%d", &major, &minor) == 2) {
                             if (major > 1 || (major == 1 && minor > 1)) {
                                 STEREO_ERR(

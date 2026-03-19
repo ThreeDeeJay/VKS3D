@@ -223,99 +223,122 @@ int main(void)
         }
     }
     {
+        /* All declarations at top for MSVC C89 compatibility */
         static const char *rk[] = {
             "SOFTWARE\\Khronos\\Vulkan\\Drivers",
             "SOFTWARE\\WOW6432Node\\Khronos\\Vulkan\\Drivers", NULL };
         int found = 0;
-        for (int ri = 0; rk[ri] && !found; ri++) {
+        int ri;
+        for (ri = 0; rk[ri] && !found; ri++) {
             HKEY hk = NULL;
+            DWORD idx, vl, vt, vd, vds;
+            char vn[2048];
             if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, rk[ri], 0, KEY_READ, &hk) != ERROR_SUCCESS) continue;
-            DWORD idx=0; char vn[2048]; DWORD vl,vt,vd,vds;
+            idx = 0;
             for (;;) {
                 vl=sizeof(vn); vds=sizeof(vd);
                 if (RegEnumValueA(hk,idx++,vn,&vl,NULL,&vt,(LPBYTE)&vd,&vds)!=ERROR_SUCCESS) break;
                 if (strstr(vn,"VKS3D")||strstr(vn,"vks3d")) {
                     result_pass("VKS3D JSON registered", vn);
                     found = 1;
-                    /* Verify the JSON file exists and read library_path */
+                    /* Verify the JSON file exists on disk */
                     if (GetFileAttributesA(vn) == INVALID_FILE_ATTRIBUTES) {
                         result_fail("VKS3D JSON file exists on disk", "File not found -- reinstall");
                     } else {
-                        result_pass("VKS3D JSON file exists on disk", NULL);
-                        /* Read library_path from JSON with unescaping */
+                        /* Read library_path and api_version from the JSON */
                         FILE *jf = fopen(vn, "r");
+                        char line[2048];
+                        char dll_path[2048];
+                        char api_ver[32];
+                        dll_path[0] = '\0';
+                        api_ver[0]  = '\0';
+                        result_pass("VKS3D JSON file exists on disk", NULL);
                         if (jf) {
-                            char line[2048], dll_path[2048] = "";
                             while (fgets(line, sizeof(line), jf)) {
-                                char *key = strstr(line, "library_path");
-                                if (!key) continue;
-                                char *col = strchr(key+12, ':'); if (!col) continue;
-                                char *q1  = strchr(col+1, '"');  if (!q1)  continue;
-                                q1++;
-                                char *dst = dll_path;
-                                for (char *s = q1; *s && *s != '"' && dst < dll_path+sizeof(dll_path)-1; s++) {
-                                    if (*s == '\\' && *(s+1)) { s++;
-                                        if (*s=='\\') *dst++='\\';
-                                        else { *dst++='\\'; *dst++=*s; }
-                                    } else *dst++ = *s;
+                                /* library_path */
+                                if (!dll_path[0]) {
+                                    char *key = strstr(line, "library_path");
+                                    if (key) {
+                                        char *col = strchr(key+12, ':');
+                                        if (col) {
+                                            char *q1 = strchr(col+1, '"');
+                                            if (q1) {
+                                                char *dst = dll_path;
+                                                q1++;
+                                                while (*q1 && *q1 != '"' &&
+                                                       dst < dll_path+sizeof(dll_path)-1) {
+                                                    if (*q1=='\\' && *(q1+1)) {
+                                                        q1++;
+                                                        if (*q1=='\\') *dst++='\\';
+                                                        else { *dst++='\\'; *dst++=*q1; }
+                                                    } else {
+                                                        *dst++ = *q1;
+                                                    }
+                                                    q1++;
+                                                }
+                                                *dst = '\0';
+                                            }
+                                        }
+                                    }
                                 }
-                                *dst = '\0';
-                                break;
+                                /* api_version */
+                                if (!api_ver[0]) {
+                                    char *p = strstr(line, "api_version");
+                                    if (p) {
+                                        /* find second quoted value */
+                                        char *q1 = strchr(p, '"');
+                                        if (q1) {
+                                            char *q2 = strchr(q1+1, '"');
+                                            if (q2) {
+                                                q1 = strchr(q2+1, '"');
+                                                if (q1) {
+                                                    q2 = strchr(q1+1, '"');
+                                                    if (q2) {
+                                                        size_t n = (size_t)(q2-(q1+1));
+                                                        if (n >= sizeof(api_ver))
+                                                            n = sizeof(api_ver)-1;
+                                                        memcpy(api_ver, q1+1, n);
+                                                        api_ver[n] = '\0';
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             fclose(jf);
-                            if (dll_path[0]) {
-                                if (GetFileAttributesA(dll_path) == INVALID_FILE_ATTRIBUTES)
-                                    result_fail("VKS3D DLL path in JSON", dll_path);
-                                else
-                                    result_pass("VKS3D DLL path in JSON", dll_path);
-                            } else {
-                                result_fail("library_path in VKS3D JSON",
-                                    "Could not parse -- re-run install.bat to rewrite JSON");
-                            }
                         }
-                        /* Check api_version — must be "1.1.0" not "1.3.0".
-                         * Vulkan 1.1.x loaders (driver 426.06) silently skip any
-                         * ICD whose JSON api_version exceeds the loader's own version.
-                         * If this says "1.3.0", VKS3D will never load on old drivers
-                         * (no DLL_PROCESS_ATTACH, no log, apps render 2D). */
-                        {
-                            char api_ver[32] = "";
-                            FILE *jf2 = fopen(vn, "r");
-                            if (jf2) {
-                                char ln[1024];
-                                while (fgets(ln, sizeof(ln), jf2)) {
-                                    char *p = strstr(ln, "api_version");
-                                    if (!p) continue;
-                                    char *q1 = strchr(p,'"'); if(!q1) continue; q1++;
-                                    char *q2 = strchr(q1,'"'); if(!q2) continue;
-                                    q1 = strchr(q2+1,'"'); if(!q1) continue; q1++;
-                                    q2 = strchr(q1,'"');   if(!q2) continue;
-                                    size_t n = (size_t)(q2-q1);
-                                    if (n >= sizeof(api_ver)) n = sizeof(api_ver)-1;
-                                    memcpy(api_ver, q1, n); api_ver[n] = '\0';
-                                    break;
-                                }
-                                fclose(jf2);
-                            }
-                            if (!api_ver[0]) {
-                                result_fail("VKS3D JSON api_version",
-                                    "Not found -- re-run install.bat");
-                            } else {
-                                int maj=0, min_=0;
-                                sscanf(api_ver, "%d.%d", &maj, &min_);
-                                if (maj > 1 || (maj == 1 && min_ > 1)) {
-                                    char msg[128];
-                                    snprintf(msg, sizeof(msg),
-                                        "%s -- MUST be 1.1.0. "
-                                        "Vulkan 1.1.x loaders silently skip ICDs with "
-                                        "higher api_version (no log, 2D output). "
-                                        "Re-run install.bat to fix.", api_ver);
-                                    result_fail("VKS3D JSON api_version", msg);
-                                } else {
-                                    result_pass("VKS3D JSON api_version", api_ver);
-                                }
-                            }
+                        if (dll_path[0]) {
+                            if (GetFileAttributesA(dll_path) == INVALID_FILE_ATTRIBUTES)
+                                result_fail("VKS3D DLL path in JSON", dll_path);
+                            else
+                                result_pass("VKS3D DLL path in JSON", dll_path);
+                        } else {
+                            result_fail("library_path in VKS3D JSON",
+                                "Could not parse -- re-run install.bat to rewrite JSON");
                         }
+                        /* api_version check:
+                         * Vulkan 1.1.x loaders (e.g. driver 426.06) silently skip any ICD
+                         * whose JSON api_version exceeds the loader's own version.
+                         * "1.3.0" -> loader never calls LoadLibraryA -> no log, 2D output.
+                         * Must be "1.1.0". Re-run install.bat to fix. */
+                        if (!api_ver[0]) {
+                            result_fail("VKS3D JSON api_version",
+                                "Not found -- re-run install.bat");
+                        } else {
+                            int maj=0, minv=0;
+                            sscanf(api_ver, "%d.%d", &maj, &minv);
+                            if (maj > 1 || (maj == 1 && minv > 1)) {
+                                char msg[192];
+                                snprintf(msg, sizeof(msg),
+                                    "%s -- MUST be 1.1.0. "
+                                    "Vulkan 1.1.x loaders silently skip ICDs with "
+                                    "higher api_version (no log, 2D output). "
+                                    "Re-run install.bat to fix.", api_ver);
+                                result_fail("VKS3D JSON api_version", msg);
+                            } else {
+                                result_pass("VKS3D JSON api_version", api_ver);
+                            }
                         }
                     }
                     break;
