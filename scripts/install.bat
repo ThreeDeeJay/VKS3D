@@ -31,10 +31,13 @@ function Ensure-Key([string]$Path) {
 }
 
 function Update-JsonLibraryPath([string]$JsonPath, [string]$DllPath) {
-    # Write JSON from scratch. No -replace regex: eliminates all escaping bugs.
-    # PS single-quoted '\' = 1 backslash; '\\' = 2 backslashes.
-    # So .Replace('\', '\\') turns each path separator into JSON-escaped \\.
-    $p = $DllPath.Replace('\', '\\').Replace('"', '\"')
+    # Use forward slashes in the JSON library_path.
+    # Forward slashes work as path separators on Windows (LoadLibraryA accepts them),
+    # require NO JSON escaping, and are read correctly by all Vulkan loader versions
+    # including the old 1.1.114 loader on driver 426.06 which does NOT unescape \.
+    # Backslash-escaped paths (C:\\Programs\\...) break old loaders that read
+    # the JSON literally without unescaping.
+    $p = $DllPath.Replace('\', '/').Replace('"', '\"')
     $json = "{`n    `"file_format_version`": `"1.0.0`",`n    `"ICD`": {`n        `"library_path`": `"$p`",`n        `"api_version`": `"1.1.0`"`n    }`n}"
     [System.IO.File]::WriteAllText($JsonPath, $json, [System.Text.Encoding]::UTF8)
 }

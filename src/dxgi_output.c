@@ -59,6 +59,10 @@
  * MSDN value: 0x800.  (Previously was incorrectly defined as 0x800000 which
  * caused E_INVALIDARG from CreateTexture2D on all driver versions.) */
 #define D3D11_RESOURCE_MISC_SHARED_NTHANDLE 0x800u
+/* D3D11_RESOURCE_MISC_SHARED: legacy DuplicateHandle sharing flag.
+ * Many NVIDIA drivers require this to be OR'd with SHARED_NTHANDLE even
+ * though MSDN says NTHANDLE alone is sufficient on Win8+. */
+#define D3D11_RESOURCE_MISC_SHARED          0x2u
 
 /* ── COM helper macros ───────────────────────────────────────────────────── */
 #define COM_HR(o,N,...) \
@@ -297,18 +301,24 @@ bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc)
 bool dxgi_shared_tex_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle)
 {
     UINT dxgi_fmt = vkfmt_to_dxgi(sc->format);
+    STEREO_LOG("[DXGI] CreateTexture2D: %ux%u fmt=%u (vk=%u)",
+               sc->app_width, sc->app_height, dxgi_fmt, (unsigned)sc->format);
 
+    /* SHARED (0x2) | SHARED_NTHANDLE (0x800): many NVIDIA drivers require both
+     * flags even though MSDN says NTHANDLE alone is sufficient on Win8+.
+     * ArraySize=2: both eye slices in one texture array for atomic sharing. */
     D3D11_TEXTURE2D_DESC_ desc = {
         .Width          = sc->app_width,
         .Height         = sc->app_height,
         .MipLevels      = 1,
-        .ArraySize      = 2,   /* slice 0 = left eye, slice 1 = right eye */
+        .ArraySize      = 2,
         .Format         = dxgi_fmt,
         .SampleDesc     = {1, 0},
         .Usage          = D3D11_USAGE_DEFAULT,
         .BindFlags      = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
         .CPUAccessFlags = 0,
-        .MiscFlags      = D3D11_RESOURCE_MISC_SHARED_NTHANDLE,
+        .MiscFlags      = D3D11_RESOURCE_MISC_SHARED_NTHANDLE |
+                          D3D11_RESOURCE_MISC_SHARED,
     };
 
     void *pTex = NULL;
@@ -316,8 +326,23 @@ bool dxgi_shared_tex_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_n
     HRESULT hr = ((HRESULT(WINAPI*)(void*, const D3D11_TEXTURE2D_DESC_*, void*, void**))
                   (*(void***)sd->d3d11_dev)[5])
                  (sd->d3d11_dev, &desc, NULL, &pTex);
+
+    /* Some older drivers reject ArraySize=2 with shared flags; fall back to
+     * ArraySize=1 so at least the single-eye path works. */
+    if ((FAILED(hr) || !pTex) && desc.ArraySize == 2) {
+        STEREO_LOG("[DXGI] ArraySize=2 shared tex failed (0x%x), retrying ArraySize=1",
+                   (unsigned)hr);
+        desc.ArraySize = 1;
+        pTex = NULL;
+        hr = ((HRESULT(WINAPI*)(void*, const D3D11_TEXTURE2D_DESC_*, void*, void**))
+              (*(void***)sd->d3d11_dev)[5])
+             (sd->d3d11_dev, &desc, NULL, &pTex);
+    }
+
     if (FAILED(hr) || !pTex) {
-        STEREO_ERR("[DXGI] CreateTexture2D(shared stereo) failed: 0x%x", (unsigned)hr);
+        STEREO_ERR("[DXGI] CreateTexture2D(shared stereo) failed: 0x%x"
+                   " (fmt=%u size=%ux%u misc=0x%x)",
+                   (unsigned)hr, dxgi_fmt, desc.Width, desc.Height, desc.MiscFlags);
         return false;
     }
 
@@ -413,9 +438,15 @@ VkResult dxgi_copy_and_present(StereoDevice *sd, StereoSwapchain *sc)
 void dxgi_sc_destroy(StereoSwapchain *sc)
 {
     COM_RELEASE(sc->shared_d3d11_tex);
-    /* shared_nt_handle ownership was consumed by Vulkan import; do not CloseHandle */
     sc->shared_nt_handle = NULL;
-    COM_RELEASE(sc->dxgi_sc);
+    if (sc->dxgi_sc) {
+        /* Exit FSE before releasing — required on some drivers to avoid a crash
+         * when the stereo FSE swap chain is destroyed while in fullscreen mode.
+         * IDXGISwapChain::SetFullscreenState = vtable[10], arg: FALSE = windowed */
+        ((HRESULT(WINAPI*)(void*, int, void*))(*(void***)sc->dxgi_sc)[10])
+            (sc->dxgi_sc, 0 /*FALSE*/, NULL);
+        COM_RELEASE(sc->dxgi_sc);
+    }
 }
 
 void dxgi_device_destroy(StereoDevice *sd)

@@ -259,10 +259,13 @@ stereo_CreateSwapchainKHR(
         bool dxgi_ok = false;
         HANDLE nt_handle = NULL;
         if (sc->hwnd && dxgi_device_init(sd)) {
-            if (dxgi_sc_create(sd, sc) && dxgi_shared_tex_create(sd, sc, &nt_handle))
+            if (dxgi_sc_create(sd, sc) && dxgi_shared_tex_create(sd, sc, &nt_handle)) {
                 dxgi_ok = true;
-            else
+            } else {
+                STEREO_LOG("[DXGI] path failed — destroying DXGI swap chain and falling back");
                 dxgi_sc_destroy(sc);
+                STEREO_LOG("[DXGI] DXGI swap chain destroyed, proceeding to DX9/SBS fallback");
+            }
         }
 
         if (dxgi_ok) {
