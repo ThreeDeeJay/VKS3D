@@ -350,3 +350,33 @@ bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle
 }
 
 
+
+/* ── Copy Vulkan render → DXGI back buffer and Present ───────────────────────
+ *
+ * With the windowed-first approach, shared_d3d11_tex IS the DXGI back buffer
+ * (obtained via GetBuffer in dxgi_sc_create).  Vulkan rendered into the same
+ * physical pages via external memory import.  No CopySubresourceRegion needed
+ * — just call Present.  D3D11 context flush ensures the GPU work is visible.
+ * ─────────────────────────────────────────────────────────────────────────── */
+VkResult dxgi_copy_and_present(StereoDevice *sd, StereoSwapchain *sc)
+{
+    if (!sc->dxgi_sc) return VK_ERROR_DEVICE_LOST;
+
+    /* Flush D3D11 context so the driver sees the Vulkan writes */
+    if (sd->d3d11_ctx)
+        ((void(WINAPI*)(void*))(*(void***)sd->d3d11_ctx)[47])(sd->d3d11_ctx);
+
+    /* IDXGISwapChain::Present(SyncInterval=0, Flags=0) — vtable[8] */
+    HRESULT hr = ((HRESULT(WINAPI*)(void*, UINT, UINT))(*(void***)sc->dxgi_sc)[8])
+                 (sc->dxgi_sc, 0, 0);
+
+    if (hr == 0x087A0001 /* DXGI_STATUS_OCCLUDED */) {
+        STEREO_LOG("[DXGI] Present: DXGI_STATUS_OCCLUDED (window minimised/hidden)");
+        return VK_SUCCESS;
+    }
+    if (FAILED(hr)) {
+        STEREO_ERR("[DXGI] Present failed: 0x%x", (unsigned)hr);
+        return VK_ERROR_DEVICE_LOST;
+    }
+    return VK_SUCCESS;
+}
