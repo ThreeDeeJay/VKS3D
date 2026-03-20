@@ -281,26 +281,23 @@ int main(void)
                                         }
                                     }
                                 }
-                                /* api_version */
+                                /* api_version: "api_version": "1.1.0"
+                                 * q1=closing " of key, q2=opening " of value */
                                 if (!api_ver[0]) {
                                     char *p = strstr(line, "api_version");
                                     if (p) {
-                                        /* find second quoted value */
-                                        char *q1 = strchr(p, '"');
-                                        if (q1) {
-                                            char *q2 = strchr(q1+1, '"');
-                                            if (q2) {
-                                                q1 = strchr(q2+1, '"');
-                                                if (q1) {
-                                                    q2 = strchr(q1+1, '"');
-                                                    if (q2) {
-                                                        size_t n = (size_t)(q2-(q1+1));
-                                                        if (n >= sizeof(api_ver))
-                                                            n = sizeof(api_ver)-1;
-                                                        memcpy(api_ver, q1+1, n);
-                                                        api_ver[n] = '\0';
-                                                    }
-                                                }
+                                        char *q1 = strchr(p,    '"');
+                                        char *q2 = q1 ? strchr(q1+1, '"') : NULL;
+                                        if (q2) {
+                                            /* q2 is opening " of value */
+                                            char *v  = q2 + 1;
+                                            char *ve = strchr(v, '"');
+                                            if (ve) {
+                                                size_t n = (size_t)(ve - v);
+                                                if (n >= sizeof(api_ver))
+                                                    n = sizeof(api_ver)-1;
+                                                memcpy(api_ver, v, n);
+                                                api_ver[n] = '\0';
                                             }
                                         }
                                     }
