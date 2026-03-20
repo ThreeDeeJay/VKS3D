@@ -312,7 +312,17 @@ bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle
     if (FAILED(hr)||!pSC){STEREO_ERR("[DXGI] Stereo swap chain failed: 0x%x",(unsigned)hr);return false;}
     sc->dxgi_sc = pSC;
 
-    /* Step 2: Back buffer IS Texture2DArray[2] — get it directly */
+    /* Step 2: SetFullscreenState(TRUE) BEFORE GetBuffer.
+     * Per VKQB3DV (confirmed 426.06): GetBuffer on windowed stereo swap chain
+     * crashes — driver requires FSE before the stereo back buffer is accessible. */
+    hr = ((HRESULT(WINAPI*)(void*,int,void*))(*(void***)pSC)[10])(pSC,1,NULL);
+    STEREO_LOG("[DXGI] SetFullscreenState(TRUE): hr=0x%x", (unsigned)hr);
+    if (FAILED(hr)) {
+        STEREO_ERR("[DXGI] SetFullscreenState failed: 0x%x", (unsigned)hr);
+        dxgi_sc_destroy(sc); return false;
+    }
+
+    /* Step 3: Now get the back buffer (Texture2DArray[2]) */
     void *pBB = NULL;
     hr = ((HRESULT(WINAPI*)(void*,UINT,const GUID*,void**))(*(void***)pSC)[9])
          (pSC, 0, &IID_ID3D11Tex2D, &pBB);
@@ -322,7 +332,7 @@ bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle
     }
     sc->shared_d3d11_tex = pBB;
 
-    /* Step 3: NT handle for Vulkan external-memory import */
+    /* Step 4: NT handle for Vulkan external-memory import */
     void *pRes1 = NULL;
     hr = ((HRESULT(WINAPI*)(void*,const GUID*,void**))(*(void***)pBB)[0])
          (pBB, &IID_IDXGIResource1, &pRes1);
@@ -342,10 +352,6 @@ bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle
     *out_nt_handle = hShared;
     STEREO_LOG("[DXGI] Stereo back buffer: %p  size=%ux%u (Tex2DArray[2])",
                pBB, sc->app_width, sc->app_height);
-
-    /* Step 4: Go fullscreen after back buffer is captured */
-    hr = ((HRESULT(WINAPI*)(void*,int,void*))(*(void***)pSC)[10])(pSC,1,NULL);
-    STEREO_LOG("[DXGI] SetFullscreenState(TRUE): hr=0x%x", (unsigned)hr);
     return true;
 }
 
