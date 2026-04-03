@@ -258,14 +258,21 @@ stereo_CreateSwapchainKHR(
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DXGI) {
         bool dxgi_ok = false;
         HANDLE nt_handle = NULL;
+        /* Re-entrancy guard: SetFullscreenState inside dxgi_sc_create sends
+         * WM_SIZE to the app window. The app calls vkCreateSwapchainKHR again
+         * which would call dxgi_sc_create recursively and destroy the swap chain
+         * we are currently building. Detect re-entrance and go to passthrough.  */
+        if (sd->dxgi_init_in_progress) {
+            STEREO_LOG("[DXGI] Re-entrant vkCreateSwapchainKHR during DXGI init — passthrough");
+            goto passthrough;
+        }
         if (sc->hwnd && dxgi_device_init(sd)) {
-            /* VKQB3DV pattern: dxgi_sc_create creates the swap chain windowed,
-             * gets the back buffer (Texture2DArray[2]), acquires its NT handle,
-             * then calls SetFullscreenState(TRUE) — all in one step.
-             * No separate CreateTexture2D needed or safe to call. */
+            sd->dxgi_init_in_progress = true;
             if (dxgi_sc_create(sd, sc, &nt_handle)) {
                 dxgi_ok = true;
+                sd->dxgi_init_in_progress = false;
             } else {
+                sd->dxgi_init_in_progress = false;
                 STEREO_LOG("[DXGI] path failed — destroying DXGI swap chain and falling back");
                 dxgi_sc_destroy(sc);
                 STEREO_LOG("[DXGI] DXGI swap chain destroyed, proceeding to DX9/SBS fallback");
@@ -622,8 +629,11 @@ stereo_CreateImage(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    /* Check if this is a depth image we should make 2-layer */
+    /* Check if this is a depth image we should make 2-layer.
+     * Only when multiview=1: matches Sascha Willems reference where both
+     * color and depth must be arrayLayers=2 for the multiview framebuffer. */
     bool intercept = sd->stereo.enabled
+        && sd->stereo.multiview
         && sd->stereo_w > 0
         && is_depth_format(pCreateInfo->format)
         && pCreateInfo->imageType   == VK_IMAGE_TYPE_2D
@@ -668,8 +678,45 @@ stereo_CreateImageView(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    /* No view upgrades needed: multiview was removed (depth-buffer compatibility).
-     * The app's images stay single-layer; the present stage copies layer 0 to
-     * both DXGI stereo eyes in software.  Pass through unchanged. */
-    return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
+    /* When multiview=1 we need 2D_ARRAY views on:
+     *   1. Stereo color images (stereo_images[]) — app creates plain 2D views
+     *   2. Depth images upgraded by stereo_CreateImage to arrayLayers=2
+     * This matches the Sascha Willems multiview example where both color and
+     * depth attachments are VK_IMAGE_VIEW_TYPE_2D_ARRAY with layerCount=2.
+     * Without this upgrade the multiview framebuffer is incomplete and the GPU
+     * hangs (VK_ERROR_DEVICE_LOST) when multiview tries to write to layer 1. */
+    if (!sd->stereo.multiview) {
+        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
+    }
+
+    bool needs_upgrade = false;
+
+    /* Check stereo color images */
+    for (uint32_t si = 0; si < sd->swapchain_count && !needs_upgrade; si++) {
+        StereoSwapchain *sc = &sd->swapchains[si];
+        if (!sc->stereo_active || !sc->stereo_images) continue;
+        for (uint32_t ii = 0; ii < sc->image_count && !needs_upgrade; ii++) {
+            if (sc->stereo_images[ii] == pCreateInfo->image)
+                needs_upgrade = true;
+        }
+    }
+
+    /* Check patched depth images */
+    for (uint32_t i = 0; i < sd->intercepted_depth_count && !needs_upgrade; i++) {
+        if (sd->intercepted_depth[i] == pCreateInfo->image)
+            needs_upgrade = true;
+    }
+
+    if (!needs_upgrade) {
+        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
+    }
+
+    VkImageViewCreateInfo upgraded = *pCreateInfo;
+    if (upgraded.viewType == VK_IMAGE_VIEW_TYPE_2D)
+        upgraded.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    if (upgraded.subresourceRange.layerCount < 2)
+        upgraded.subresourceRange.layerCount = 2;
+    STEREO_LOG("CreateImageView: upgraded %p to 2D_ARRAY/layerCount=2 [multiview=1]",
+               (void*)pCreateInfo->image);
+    return sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
 }

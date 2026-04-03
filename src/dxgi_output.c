@@ -312,46 +312,55 @@ bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle
     if (FAILED(hr)||!pSC){STEREO_ERR("[DXGI] Stereo swap chain failed: 0x%x",(unsigned)hr);return false;}
     sc->dxgi_sc = pSC;
 
-    /* Step 2: SetFullscreenState(TRUE) BEFORE GetBuffer.
-     * Per VKQB3DV (confirmed 426.06): GetBuffer on windowed stereo swap chain
-     * crashes — driver requires FSE before the stereo back buffer is accessible. */
-    hr = ((HRESULT(WINAPI*)(void*,int,void*))(*(void***)pSC)[10])(pSC,1,NULL);
-    STEREO_LOG("[DXGI] SetFullscreenState(TRUE): hr=0x%x", (unsigned)hr);
-    if (FAILED(hr)) {
-        STEREO_ERR("[DXGI] SetFullscreenState failed: 0x%x", (unsigned)hr);
-        dxgi_sc_destroy(sc); return false;
-    }
+    /* Steps 2-4: GetBuffer + NT handle BEFORE SetFullscreenState.
+     * SetFullscreenState(TRUE) sends WM_SIZE to the app window.  The app
+     * responds by calling vkDestroySwapchainKHR+vkCreateSwapchainKHR, which
+     * calls dxgi_sc_destroy(sc) and releases sc->dxgi_sc = pSC while we are
+     * still inside this function.  When SetFullscreenState returns, pSC is
+     * a dangling pointer → ACCESS_VIOLATION on GetBuffer.
+     * Calling GetBuffer before SetFullscreenState avoids this entirely.     */
 
-    /* Step 3: Now get the back buffer (Texture2DArray[2]) */
+    /* Step 2: Get back buffer (Texture2DArray[2]) while still windowed */
     void *pBB = NULL;
+    STEREO_LOG("[DXGI] GetBuffer...");
     hr = ((HRESULT(WINAPI*)(void*,UINT,const GUID*,void**))(*(void***)pSC)[9])
          (pSC, 0, &IID_ID3D11Tex2D, &pBB);
+    STEREO_LOG("[DXGI] GetBuffer: hr=0x%x pBB=%p", (unsigned)hr, pBB);
     if (FAILED(hr)||!pBB){
         STEREO_ERR("[DXGI] GetBuffer failed: 0x%x",(unsigned)hr);
         dxgi_sc_destroy(sc); return false;
     }
     sc->shared_d3d11_tex = pBB;
 
-    /* Step 4: NT handle for Vulkan external-memory import */
+    /* Step 3: NT handle for Vulkan external-memory import */
     void *pRes1 = NULL;
+    STEREO_LOG("[DXGI] QI IDXGIResource1...");
     hr = ((HRESULT(WINAPI*)(void*,const GUID*,void**))(*(void***)pBB)[0])
          (pBB, &IID_IDXGIResource1, &pRes1);
+    STEREO_LOG("[DXGI] QI IDXGIResource1: hr=0x%x pRes1=%p", (unsigned)hr, pRes1);
     if (FAILED(hr)||!pRes1){
         STEREO_ERR("[DXGI] QI IDXGIResource1 failed: 0x%x (Win8+ required)",(unsigned)hr);
         dxgi_sc_destroy(sc); return false;
     }
     HANDLE hShared = NULL;
+    STEREO_LOG("[DXGI] CreateSharedHandle...");
     hr = ((HRESULT(WINAPI*)(void*,void*,DWORD,LPCWSTR,HANDLE*))
           (*(void***)pRes1)[12])(pRes1, NULL, 0x10000000u, NULL, &hShared);
     COM_RELEASE(pRes1);
+    STEREO_LOG("[DXGI] CreateSharedHandle: hr=0x%x handle=%p", (unsigned)hr, hShared);
     if (FAILED(hr)||!hShared){
         STEREO_ERR("[DXGI] CreateSharedHandle failed: 0x%x",(unsigned)hr);
         dxgi_sc_destroy(sc); return false;
     }
     sc->shared_nt_handle = hShared;
     *out_nt_handle = hShared;
-    STEREO_LOG("[DXGI] Stereo back buffer: %p  size=%ux%u (Tex2DArray[2])",
+    STEREO_LOG("[DXGI] Stereo back buffer ready: %p  size=%ux%u",
                pBB, sc->app_width, sc->app_height);
+
+    /* Step 4: NOW go fullscreen — WM_SIZE may destroy pSC but we already
+     * have hShared so that's fine. Non-fatal if it fails. */
+    hr = ((HRESULT(WINAPI*)(void*,int,void*))(*(void***)pSC)[10])(pSC,1,NULL);
+    STEREO_LOG("[DXGI] SetFullscreenState(TRUE): hr=0x%x", (unsigned)hr);
     return true;
 }
 
@@ -359,25 +368,47 @@ bool dxgi_sc_create(StereoDevice *sd, StereoSwapchain *sc, HANDLE *out_nt_handle
 
 /* ── Copy Vulkan render → DXGI back buffer and Present ───────────────────────
  *
- * With the windowed-first approach, shared_d3d11_tex IS the DXGI back buffer
- * (obtained via GetBuffer in dxgi_sc_create).  Vulkan rendered into the same
- * physical pages via external memory import.  No CopySubresourceRegion needed
- * — just call Present.  D3D11 context flush ensures the GPU work is visible.
+ * CPU staging path (no external memory / NT handles needed):
+ *   1. sc->cpu_map already has the rendered pixels (copied by present.c staging CB)
+ *   2. Upload cpu_map[0..eye_bytes]   → D3D11 back buffer slice 0 (left eye)
+ *      Upload cpu_map[eye_bytes..]    → D3D11 back buffer slice 1 (right eye)
+ *   3. Flush D3D11 context
+ *   4. IDXGISwapChain::Present
+ *
+ * D3D11DeviceContext vtable indices (IUnknown=3, ID3D11DeviceChild=4, context=7+):
+ *   UpdateSubresource = vtable[48]
+ *   Flush             = vtable[111]
  * ─────────────────────────────────────────────────────────────────────────── */
 VkResult dxgi_copy_and_present(StereoDevice *sd, StereoSwapchain *sc)
 {
-    if (!sc->dxgi_sc) return VK_ERROR_DEVICE_LOST;
+    if (!sc->dxgi_sc || !sc->shared_d3d11_tex) return VK_ERROR_DEVICE_LOST;
+    if (!sc->cpu_ok  || !sc->cpu_map)          return VK_ERROR_DEVICE_LOST;
 
-    /* Flush D3D11 context so the driver sees the Vulkan writes */
-    if (sd->d3d11_ctx)
-        ((void(WINAPI*)(void*))(*(void***)sd->d3d11_ctx)[47])(sd->d3d11_ctx);
+    void *pCtx = sd->d3d11_ctx;
+    void *pBB  = sc->shared_d3d11_tex;  /* Texture2DArray[2]: slice 0=L, slice 1=R */
+    UINT stride = sc->app_width * 4;    /* bytes per row (BGRA or RGBA, 4 bpp) */
+
+    /* Upload left eye (layer 0) → back buffer subresource 0 */
+    ((void(WINAPI*)(void*, void*, UINT, void*, const void*, UINT, UINT))
+     (*(void***)pCtx)[48])
+    (pCtx, pBB, 0 /*subresource 0 = slice 0*/,
+     NULL /*full rect*/, sc->cpu_map, stride, 0);
+
+    /* Upload right eye (layer 1) → back buffer subresource 1 */
+    ((void(WINAPI*)(void*, void*, UINT, void*, const void*, UINT, UINT))
+     (*(void***)pCtx)[48])
+    (pCtx, pBB, 1 /*subresource 1 = slice 1*/,
+     NULL /*full rect*/, (const char *)sc->cpu_map + sc->cpu_eye_bytes, stride, 0);
+
+    /* Flush: vtable[111] — ensures driver sees the uploaded data */
+    ((void(WINAPI*)(void*))(*(void***)pCtx)[111])(pCtx);
 
     /* IDXGISwapChain::Present(SyncInterval=0, Flags=0) — vtable[8] */
     HRESULT hr = ((HRESULT(WINAPI*)(void*, UINT, UINT))(*(void***)sc->dxgi_sc)[8])
                  (sc->dxgi_sc, 0, 0);
 
     if (hr == 0x087A0001 /* DXGI_STATUS_OCCLUDED */) {
-        STEREO_LOG("[DXGI] Present: DXGI_STATUS_OCCLUDED (window minimised/hidden)");
+        STEREO_LOG("[DXGI] Present: DXGI_STATUS_OCCLUDED");
         return VK_SUCCESS;
     }
     if (FAILED(hr)) {

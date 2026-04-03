@@ -550,7 +550,9 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
     if (res != VK_SUCCESS) return res;
 
     const uint8_t *left  = (const uint8_t *)sc->cpu_map;
-    const uint8_t *right = left + sc->cpu_eye_bytes;
+    const uint8_t *right = sd->stereo.multiview
+                           ? left + sc->cpu_eye_bytes
+                           : left;
 
     /* Present left then right eye, then flip */
     dx9_present_eye(sd, sc, left,  NV_STEREO_EYE_LEFT);
@@ -698,7 +700,12 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
 
     uint32_t w = sc->app_width, h = sc->app_height;
     const uint8_t *left  = (const uint8_t *)sc->cpu_map;
-    const uint8_t *right = left + sc->cpu_eye_bytes;
+    /* When multiview=1, layer 1 contains the right eye rendered by the GPU.
+     * When multiview=0, the app only rendered layer 0 — use it for both eyes
+     * (flat 3D baseline; same image both sides until multiview is enabled). */
+    const uint8_t *right = sd->stereo.multiview
+                           ? left + sc->cpu_eye_bytes
+                           : left;
     uint8_t       *out   = (uint8_t *)sd->comp_composed;
 
     switch (mode) {

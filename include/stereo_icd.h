@@ -581,6 +581,7 @@ typedef struct StereoDevice {
 
     /* ── D3D11 / DXGI stereo output (lazily initialized) ─────────────── */
     bool                   d3d11_ok;
+    bool                   dxgi_init_in_progress; /* re-entrancy guard for dxgi_sc_create */
     void                  *d3d11_dev;    /* ID3D11Device*         */
     void                  *d3d11_ctx;    /* ID3D11DeviceContext*  */
     void                  *nvapi_stereo; /* NvStereoHandle        */
