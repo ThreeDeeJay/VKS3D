@@ -452,20 +452,13 @@ bool dx9_init(StereoDevice *sd, StereoSwapchain *sc)
         }
     }
 
-    /* Create POOL_SYSTEMMEM staging surface (W×H, same format as back buffer) */
-    void *pSurf = NULL;
-    typedef HRESULT (WINAPI *PFN_COPS)(void*, UINT, UINT, UINT, UINT, void*, HANDLE);
-    PFN_COPS fnCOPS = (PFN_COPS)(*(void***)pDev)[D3DDEV9_CreateOffscreenPlainSurface];
-    hr = fnCOPS(pDev, w, h, D3DFMT_X8R8G8B8, D3DPOOL_SYSTEMMEM, &pSurf, NULL);
-    if (FAILED(hr) || !pSurf) {
-        STEREO_ERR("[DX9] CreateOffscreenPlainSurface failed: 0x%x", (unsigned)hr);
-        /* Non-fatal — present path will try alternate method */
-    }
+    /* The NV stereo surface (W*2 x H+1 with NVSTEREOIMAGEHEADER) is created
+     * lazily on first dx9_present call once we know the swapchain dimensions. */
 
     sd->dx9_lib      = hD3D9;
     sd->dx9_d3d      = pD3D;
     sd->dx9_dev      = pDev;
-    sd->dx9_surf     = pSurf;
+    sd->dx9_surf     = NULL; /* created on first present */
     sd->dx9_nvstereo = hStereo;
     sd->dx9_ok       = true;
     return true;
@@ -488,53 +481,78 @@ void dx9_destroy(StereoDevice *sd)
 }
 
 /* Upload cpu_map pixels to dx9_surf and present one eye. */
-static HRESULT dx9_present_eye(StereoDevice *sd, StereoSwapchain *sc,
-                               const void *pixels, int eye_id)
+/* ── DX9 3D Vision present via sView NV Stereo Image blit ───────────────────
+ *
+ * The NVIDIA driver recognises a magic signature (NVSTEREOIMAGEHEADER, "NV3D")
+ * embedded in the last row of a double-wide offscreen surface.  When Present
+ * is called, the driver reads the header and routes left/right pixel data to
+ * the hardware frame sequencer — no NvAPI SetActiveEye needed.
+ *
+ * Surface layout (W*2 × H+1):
+ *   Row 0..H-1, cols   0..W-1  : right-eye pixels  (left  half in BGRA)
+ *   Row 0..H-1, cols W..2W-1   : left-eye  pixels  (right half in BGRA)
+ *   Row H               : NVSTEREOIMAGEHEADER (20 bytes, rest zeros)
+ *
+ * sView StDXNVSurface.cpp reference:
+ *   https://github.com/gkv311/sview/blob/master/StOutPageFlip/StDXNVSurface.cpp
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+#define NVSTEREO_IMAGE_SIGNATURE 0x4433564eu  /* "NV3D" */
+#define SIH_SWAP_EYES            0x00000001u
+#define SIH_SCALE_TO_FIT         0x00000002u
+
+typedef struct {
+    unsigned int dwSignature;
+    unsigned int dwWidth;
+    unsigned int dwHeight;
+    unsigned int dwBPP;
+    unsigned int dwFlags;
+} NVSTEREOIMAGEHEADER_;
+
+/* Create the double-wide lockable render target and write the NV3D header */
+static bool dx9_create_stereo_surface(StereoDevice *sd, uint32_t w, uint32_t h)
 {
-    void *pDev  = sd->dx9_dev;
-    void *pSurf = sd->dx9_surf;
-    if (!pDev) return E_FAIL;
-
-    uint32_t w = sc->app_width, h = sc->app_height;
-
-    /* Set active eye via NvAPI */
-    if (sd->dx9_nvstereo && s_nvQI_alt) {
-        PFN_NvHandleEye fnEye = (PFN_NvHandleEye)nv_q(NvID_StereoSetActiveEye);
-        if (fnEye) fnEye(sd->dx9_nvstereo, eye_id);
+    /* IDirect3DDevice9::CreateRenderTarget = vtable[28]
+     * Must be lockable (TRUE) so we can write the header each frame.
+     * Width = W*2, Height = H+1 (extra row for the header). */
+    typedef HRESULT (WINAPI *PFN_CRT)(void*, UINT, UINT, UINT,
+                                      UINT, UINT, BOOL, void**, HANDLE*);
+    PFN_CRT fnCRT = (PFN_CRT)(*(void***)sd->dx9_dev)[28];
+    void *pSurf = NULL;
+    HRESULT hr = fnCRT(sd->dx9_dev, w * 2, h + 1,
+                       D3DFMT_A8R8G8B8,
+                       0 /*D3DMULTISAMPLE_NONE*/, 0, TRUE /*lockable*/,
+                       &pSurf, NULL);
+    if (FAILED(hr) || !pSurf) {
+        STEREO_ERR("[DX9] CreateRenderTarget(NV stereo, %ux%u) failed: 0x%x",
+                   w * 2, h + 1, (unsigned)hr);
+        return false;
     }
 
-    /* Upload pixels to systemmem surface */
-    if (pSurf && pixels) {
-        typedef HRESULT (WINAPI *PFN_LR)(void*, D3DLOCKED_RECT_*, const RECT*, DWORD);
-        typedef HRESULT (WINAPI *PFN_ULR)(void*);
-        PFN_LR  fnLock   = (PFN_LR) (*(void***)pSurf)[D3DSURF_LockRect];
-        PFN_ULR fnUnlock = (PFN_ULR)(*(void***)pSurf)[D3DSURF_UnlockRect];
+    /* Write NV3D signature into the last row (row index h) */
+    D3DLOCKED_RECT_ lr;
+    typedef HRESULT (WINAPI *PFN_LR)(void*, D3DLOCKED_RECT_*, const RECT*, DWORD);
+    typedef HRESULT (WINAPI *PFN_ULR)(void*);
+    PFN_LR  fnLock   = (PFN_LR) (*(void***)pSurf)[D3DSURF_LockRect];
+    PFN_ULR fnUnlock = (PFN_ULR)(*(void***)pSurf)[D3DSURF_UnlockRect];
 
-        D3DLOCKED_RECT_ lr;
-        if (SUCCEEDED(fnLock(pSurf, &lr, NULL, 0))) {
-            const uint8_t *src = (const uint8_t *)pixels;
-            uint8_t       *dst = (uint8_t *)lr.pBits;
-            uint32_t row_bytes = w * 4;
-            for (uint32_t y = 0; y < h; y++) {
-                memcpy(dst + y * lr.Pitch, src + y * row_bytes, row_bytes);
-            }
-            fnUnlock(pSurf);
-        }
-
-        /* Get back buffer and UpdateSurface */
-        void *pBB = NULL;
-        typedef HRESULT (WINAPI *PFN_GBB)(void*, UINT, UINT, UINT, void**);
-        PFN_GBB fnGBB = (PFN_GBB)(*(void***)pDev)[D3DDEV9_GetBackBuffer];
-        if (SUCCEEDED(fnGBB(pDev, 0, 0, 0 /*D3DBACKBUFFER_TYPE_MONO*/, &pBB)) && pBB) {
-            /* UpdateSurface: pSrc (SYSTEMMEM) → pDest (DEFAULT) */
-            typedef HRESULT (WINAPI *PFN_US)(void*, void*, const RECT*, void*, const POINT*);
-            /* UpdateSurface = vtable[30] on Device */
-            PFN_US fnUS = (PFN_US)(*(void***)pDev)[30];
-            fnUS(pDev, pSurf, NULL, pBB, NULL);
-            ((void(WINAPI*)(void*))(*(void***)pBB)[D3DSURF_Release])(pBB);
-        }
+    if (SUCCEEDED(fnLock(pSurf, &lr, NULL, 0))) {
+        uint8_t *data = (uint8_t *)lr.pBits;
+        memset(data, 0, (size_t)lr.Pitch * h);  /* clear image rows */
+        NVSTEREOIMAGEHEADER_ *hdr =
+            (NVSTEREOIMAGEHEADER_ *)(data + (size_t)lr.Pitch * h);
+        hdr->dwSignature = NVSTEREO_IMAGE_SIGNATURE;
+        hdr->dwWidth     = w * 2;
+        hdr->dwHeight    = h;
+        hdr->dwBPP       = 32;
+        hdr->dwFlags     = 0;  /* 0 = no eye swap; right eye in left half */
+        fnUnlock(pSurf);
     }
-    return S_OK;
+
+    sd->dx9_surf = pSurf;
+    STEREO_LOG("[DX9] NV stereo surface created: %ux%u (NV3D header at row %u)",
+               w * 2, h + 1, h);
+    return true;
 }
 
 VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
@@ -543,6 +561,13 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
                      const VkSemaphore *wait_sems)
 {
     if (!sd->dx9_ok) return VK_ERROR_INITIALIZATION_FAILED;
+
+    /* Create the NV stereo surface on first present (deferred from dx9_init
+     * to avoid creating it before the device is fully set up) */
+    if (!sd->dx9_surf) {
+        if (!dx9_create_stereo_surface(sd, sc->app_width, sc->app_height))
+            return VK_ERROR_INITIALIZATION_FAILED;
+    }
 
     /* GPU readback both eye layers to CPU */
     VkResult res = alt_cpu_readback(sd, sc, queue, wait_sem_count, wait_sems,
@@ -554,32 +579,60 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
                            ? left + sc->cpu_eye_bytes
                            : left;
 
-    /* Present left then right eye, then flip */
-    dx9_present_eye(sd, sc, left,  NV_STEREO_EYE_LEFT);
-    dx9_present_eye(sd, sc, right, NV_STEREO_EYE_RIGHT);
+    uint32_t w = sc->app_width, h = sc->app_height;
 
+    /* Lock the double-wide surface and blit both eyes.
+     * Layout (dwFlags=0): left half = right eye, right half = left eye.
+     * The NVIDIA driver swaps them internally when it reads the NV3D header. */
+    void *pSurf = sd->dx9_surf;
+    {
+        D3DLOCKED_RECT_ lr;
+        typedef HRESULT (WINAPI *PFN_LR)(void*, D3DLOCKED_RECT_*, const RECT*, DWORD);
+        typedef HRESULT (WINAPI *PFN_ULR)(void*);
+        PFN_LR  fnLock   = (PFN_LR) (*(void***)pSurf)[D3DSURF_LockRect];
+        PFN_ULR fnUnlock = (PFN_ULR)(*(void***)pSurf)[D3DSURF_UnlockRect];
+
+        D3DLOCKED_RECT_ locked;
+        if (SUCCEEDED(fnLock(pSurf, &locked, NULL, 0))) {
+            uint8_t *dst = (uint8_t *)locked.pBits;
+            size_t row_bytes = (size_t)w * 4;
+            size_t stride_out = (size_t)locked.Pitch;
+
+            for (uint32_t y = 0; y < h; y++) {
+                uint8_t *row = dst + y * stride_out;
+                /* Left half  (offset 0)        → right eye
+                 * Right half (offset w*4 bytes) → left eye  */
+                memcpy(row,             right + y * row_bytes, row_bytes);
+                memcpy(row + row_bytes, left  + y * row_bytes, row_bytes);
+            }
+            /* NV3D header stays in last row (written once at surface creation) */
+            fnUnlock(pSurf);
+        }
+    }
+
+    /* StretchRect: stereo surface → D3D9 back buffer, then Present */
     void *pDev = sd->dx9_dev;
+    void *pBB  = NULL;
+    typedef HRESULT (WINAPI *PFN_GBB)(void*, UINT, UINT, UINT, void**);
+    ((PFN_GBB)(*(void***)pDev)[D3DDEV9_GetBackBuffer])(pDev, 0, 0, 0, &pBB);
+    if (pBB) {
+        typedef HRESULT (WINAPI *PFN_SR)(void*, void*, const RECT*, void*, const RECT*, UINT);
+        /* StretchRect = vtable[34]; filter = D3DTEXF_LINEAR (2) */
+        ((PFN_SR)(*(void***)pDev)[D3DDEV9_StretchRect])
+            (pDev, pSurf, NULL, pBB, NULL, 2 /*D3DTEXF_LINEAR*/);
+        ((void(WINAPI*)(void*))(*(void***)pBB)[D3DSURF_Release])(pBB);
+    }
+
     typedef HRESULT (WINAPI *PFN_PR)(void*, const RECT*, const RECT*, HWND, void*);
-    PFN_PR fnPresent = (PFN_PR)(*(void***)pDev)[D3DDEV9_Present];
-    HRESULT hr = fnPresent(pDev, NULL, NULL, NULL, NULL);
-    if (FAILED(hr)) {
+    HRESULT hr = ((PFN_PR)(*(void***)pDev)[D3DDEV9_Present])
+                 (pDev, NULL, NULL, NULL, NULL);
+    if (FAILED(hr))
         STEREO_ERR("[DX9] Present failed: 0x%x", (unsigned)hr);
-        /* Try device reset */
-        return VK_SUCCESS; /* don't propagate as fatal to Vulkan */
-    }
 
-    /* Re-activate stereo each frame */
-    if (sd->dx9_nvstereo && s_nvQI_alt) {
-        typedef int (*PFN_NvH)(void*);
-        PFN_NvH fnAct = (PFN_NvH)nv_q(0xF6A1AD68u);
-        if (fnAct) fnAct(sd->dx9_nvstereo);
-    }
-
-    /* Half-FPS limiter for active shutter displays */
     if (sd->stereo.half_fps) Sleep(16);
-
     return VK_SUCCESS;
 }
+
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Compose modes (SBS / TAB / Interlaced)
