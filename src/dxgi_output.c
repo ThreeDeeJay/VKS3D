@@ -204,7 +204,7 @@ bool dxgi_device_init(StereoDevice *sd)
 /* ── Activate NvAPI 3D Vision stereo on the D3D11 device ─────────────────
  * Called ONLY for the DXGI stereo swap chain path, NOT for SBS/compose.
  * Activating stereo on a windowed D3D11 device crashes on 426.06.          */
-static void dxgi_stereo_activate(StereoDevice *sd)
+void dxgi_stereo_activate(StereoDevice *sd)
 {
     if (!s_nvQI || !sd->d3d11_dev) return;
 

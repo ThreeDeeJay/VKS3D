@@ -586,7 +586,6 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
      * The NVIDIA driver swaps them internally when it reads the NV3D header. */
     void *pSurf = sd->dx9_surf;
     {
-        D3DLOCKED_RECT_ lr;
         typedef HRESULT (WINAPI *PFN_LR)(void*, D3DLOCKED_RECT_*, const RECT*, DWORD);
         typedef HRESULT (WINAPI *PFN_ULR)(void*);
         PFN_LR  fnLock   = (PFN_LR) (*(void***)pSurf)[D3DSURF_LockRect];
