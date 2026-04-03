@@ -267,6 +267,9 @@ stereo_CreateSwapchainKHR(
             goto passthrough;
         }
         if (sc->hwnd && dxgi_device_init(sd)) {
+            /* Activate NvAPI 3D Vision ONLY for the DXGI stereo path.
+             * Must NOT be called for SBS/compose — it crashes on windowed D3D11. */
+            dxgi_stereo_activate(sd);
             sd->dxgi_init_in_progress = true;
             if (dxgi_sc_create(sd, sc, &nt_handle)) {
                 dxgi_ok = true;

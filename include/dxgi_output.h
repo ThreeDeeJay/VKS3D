@@ -7,6 +7,7 @@ typedef struct StereoSwapchain StereoSwapchain;
 
 /* ── Device-level D3D11 init / teardown ─────────────────────────────────── */
 bool dxgi_device_init(StereoDevice *sd);
+void dxgi_stereo_activate(StereoDevice *sd); /* DXGI stereo path only — crashes on SBS/compose */
 void dxgi_device_destroy(StereoDevice *sd);
 
 /* ── Per-swapchain DXGI swap chain ──────────────────────────────────────── */

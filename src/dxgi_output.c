@@ -165,18 +165,15 @@ bool dxgi_device_init(StereoDevice *sd)
 {
     if (sd->d3d11_ok) return true;
 
+    /* Load NvAPI for DXGI stereo (used later by dxgi_stereo_activate).
+     * Do NOT call NvAPI_Stereo_Enable or Activate here — those must only
+     * happen for the DXGI stereo swap chain path, not for SBS/compose.
+     * Calling NvAPI_Stereo_Activate on a plain windowed D3D11 device
+     * (the compose path) causes -1073741819 (ACCESS_VIOLATION) crashes. */
     HMODULE hNvapi = LoadLibraryA("nvapi64.dll");
     if (!hNvapi) hNvapi = LoadLibraryA("nvapi.dll");
     if (hNvapi) {
         s_nvQI = (PFN_NvQI)GetProcAddress(hNvapi, "nvapi_QueryInterface");
-        if (s_nvQI) {
-            PFN_NvVoid fnInit = (PFN_NvVoid)nv_query(NvID_Initialize);
-            if (fnInit && fnInit() == 0) {
-                PFN_NvVoid fnEnable = (PFN_NvVoid)nv_query(NvID_StereoEnable);
-                if (fnEnable) fnEnable();
-                STEREO_LOG("[DXGI] NVAPI: Stereo_Enable called");
-            }
-        }
         sd->nvapi_lib = hNvapi;
     }
 
@@ -201,23 +198,34 @@ bool dxgi_device_init(StereoDevice *sd)
     sd->d3d11_ctx = pCtx;
     sd->d3d11_lib = hD3D11;
     sd->d3d11_ok  = true;
+    return true;
+}
 
-    if (s_nvQI) {
-        PFN_NvFromIUnk fnCr = (PFN_NvFromIUnk)nv_query(NvID_StereoCreate);
-        if (fnCr) {
-            void *hStereo = NULL;
-            int r = fnCr(pDev, &hStereo);
-            STEREO_LOG("[DXGI] NvAPI_Stereo_CreateHandleFromIUnknown = %d  handle=%p", r, hStereo);
-            if (r == 0) {
-                sd->nvapi_stereo = hStereo;
-                PFN_NvHandle fnAct = (PFN_NvHandle)nv_query(NvID_StereoActivate);
-                if (fnAct) { r = fnAct(hStereo); STEREO_LOG("[DXGI] NvAPI_Stereo_Activate = %d", r); }
-                PFN_NvSetF fnSep = (PFN_NvSetF)nv_query(NvID_StereoSetSep);
-                if (fnSep) fnSep(hStereo, 50.f);
-            }
+/* ── Activate NvAPI 3D Vision stereo on the D3D11 device ─────────────────
+ * Called ONLY for the DXGI stereo swap chain path, NOT for SBS/compose.
+ * Activating stereo on a windowed D3D11 device crashes on 426.06.          */
+static void dxgi_stereo_activate(StereoDevice *sd)
+{
+    if (!s_nvQI || !sd->d3d11_dev) return;
+
+    PFN_NvVoid fnInit = (PFN_NvVoid)nv_query(NvID_Initialize);
+    if (fnInit) fnInit();
+    PFN_NvVoid fnEnable = (PFN_NvVoid)nv_query(NvID_StereoEnable);
+    if (fnEnable) { fnEnable(); STEREO_LOG("[DXGI] NVAPI: Stereo_Enable called"); }
+
+    PFN_NvFromIUnk fnCr = (PFN_NvFromIUnk)nv_query(NvID_StereoCreate);
+    if (fnCr) {
+        void *hStereo = NULL;
+        int r = fnCr(sd->d3d11_dev, &hStereo);
+        STEREO_LOG("[DXGI] NvAPI_Stereo_CreateHandleFromIUnknown = %d  handle=%p", r, hStereo);
+        if (r == 0) {
+            sd->nvapi_stereo = hStereo;
+            PFN_NvHandle fnAct = (PFN_NvHandle)nv_query(NvID_StereoActivate);
+            if (fnAct) { r = fnAct(hStereo); STEREO_LOG("[DXGI] NvAPI_Stereo_Activate = %d", r); }
+            PFN_NvSetF fnSep = (PFN_NvSetF)nv_query(NvID_StereoSetSep);
+            if (fnSep) fnSep(hStereo, 50.f);
         }
     }
-    return true;
 }
 
 
