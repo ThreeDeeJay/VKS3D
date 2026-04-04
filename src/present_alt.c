@@ -116,8 +116,9 @@ typedef int (*PFN_NvHandleEye)(void*, int);
 #endif
 #define DXGI_USAGE_RENDER_TARGET_OUTPUT 0x20
 
-static const GUID kIID_IDXGIDevice2 =
-    {0x05008617,0xFBFD,0x4051,{0xA7,0x90,0x14,0x48,0x84,0xB4,0xF6,0xA9}};
+/* IDXGIDevice IID (not IDXGIDevice2 — simpler vtable layout) */
+static const GUID kIID_IDXGIDevice =
+    {0x54EC77FA,0x1377,0x44E6,{0x8C,0x32,0x88,0xFD,0x5F,0x44,0xC8,0x4C}};
 static const GUID kIID_IDXGIFactory2 =
     {0x50C83A1C,0xE072,0x4C48,{0x87,0xB0,0x36,0x30,0xFA,0x36,0xA6,0xD0}};
 static const GUID kIID_ID3D11Tex2D =
@@ -659,18 +660,29 @@ bool compose_init(StereoDevice *sd, StereoSwapchain *sc)
     typedef HRESULT (WINAPI *PFN_QI)(void*, const GUID*, void**);
 
     /* pDev->QueryInterface(IDXGIDevice) */
+    STEREO_LOG("[Compose] QI IDXGIDevice...");
     PFN_QI fnQI = (PFN_QI)(*(void***)sd->d3d11_dev)[0];
-    hr = fnQI(sd->d3d11_dev, &kIID_IDXGIDevice2, &pDXGIDevice);
+    hr = fnQI(sd->d3d11_dev, &kIID_IDXGIDevice, &pDXGIDevice);
+    STEREO_LOG("[Compose] QI IDXGIDevice: hr=0x%x ptr=%p", (unsigned)hr, pDXGIDevice);
     if (FAILED(hr) || !pDXGIDevice) goto fail;
 
-    /* IDXGIDevice::GetAdapter = vtable[6] */
-    typedef HRESULT (WINAPI *PFN_GA)(void*, void**);
-    ((PFN_GA)(*(void***)pDXGIDevice)[6])(pDXGIDevice, &pAdapter);
+    /* IDXGIDevice::GetAdapter = vtable[7]
+     * (vtable[6] is IDXGIObject::GetParent — wrong!) */
+    STEREO_LOG("[Compose] GetAdapter (vtable[7])...");
+    {
+        typedef HRESULT (WINAPI *PFN_GA)(void*, void**);
+        ((PFN_GA)(*(void***)pDXGIDevice)[7])(pDXGIDevice, &pAdapter);
+    }
+    STEREO_LOG("[Compose] GetAdapter: pAdapter=%p", pAdapter);
     if (!pAdapter) goto fail_dev;
 
-    /* IDXGIAdapter::GetParent(IDXGIFactory2) = vtable[5] */
-    typedef HRESULT (WINAPI *PFN_GP)(void*, const GUID*, void**);
-    ((PFN_GP)(*(void***)pAdapter)[5])(pAdapter, &kIID_IDXGIFactory2, &pFactory);
+    /* IDXGIAdapter::GetParent(IDXGIFactory2) = IDXGIObject::GetParent = vtable[6] */
+    STEREO_LOG("[Compose] GetParent IDXGIFactory2 (vtable[6])...");
+    {
+        typedef HRESULT (WINAPI *PFN_GP)(void*, const GUID*, void**);
+        ((PFN_GP)(*(void***)pAdapter)[6])(pAdapter, &kIID_IDXGIFactory2, &pFactory);
+    }
+    STEREO_LOG("[Compose] GetParent: pFactory=%p", pFactory);
     if (!pFactory) goto fail_adap;
 
     /* CreateSwapChainForHwnd */
@@ -688,8 +700,10 @@ bool compose_init(StereoDevice *sd, StereoSwapchain *sc)
         .Flags        = 0,
     };
     typedef HRESULT (WINAPI *PFN_CSH)(void*, HWND, const DXGI_SCD1_*, void*, void*, void**);
+    STEREO_LOG("[Compose] step4: CreateSwapChainForHwnd hwnd=%p idx=%d", sc->hwnd, DXGI2_CREATESWAP_HWND_IDX);
     PFN_CSH fnCSH = (PFN_CSH)(*(void***)pFactory)[DXGI2_CREATESWAP_HWND_IDX];
     hr = fnCSH(pFactory, sc->hwnd, &scd, NULL, NULL, &sd->comp_sc);
+    STEREO_LOG("[Compose] step4 result: hr=0x%x sc=%p", (unsigned)hr, sd->comp_sc);
     if (FAILED(hr) || !sd->comp_sc) {
         STEREO_ERR("[Compose] CreateSwapChainForHwnd failed: 0x%x", (unsigned)hr);
         goto fail_factory;

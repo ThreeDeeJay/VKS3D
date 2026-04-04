@@ -507,11 +507,11 @@ static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
 /* STEREO_LOG / STEREO_ERR: no-ops when logging is disabled */
 #  define STEREO_LOG(fmt, ...) \
     do { if (g_vks3d_log_enabled) \
-        vks3d_logf("[VKS3D " STEREO_ARCH_STR "] ", fmt, ##__VA_ARGS__); \
+        vks3d_logf("", fmt, ##__VA_ARGS__); \
     } while (0)
 #  define STEREO_ERR(fmt, ...) \
     do { if (g_vks3d_log_enabled) \
-        vks3d_logf("[VKS3D " STEREO_ARCH_STR " ERROR] ", fmt, ##__VA_ARGS__); \
+        vks3d_logf("[ERROR] ", fmt, ##__VA_ARGS__); \
     } while (0)
 
 #else
@@ -583,9 +583,9 @@ static inline void stereo_setenv(const char *name, const char *value)
 #  endif
 
 #  define STEREO_LOG(fmt, ...) \
-    fprintf(stderr, "[VKS3D " STEREO_ARCH_STR "] " fmt "\n", ##__VA_ARGS__)
+    fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 #  define STEREO_ERR(fmt, ...) \
-    fprintf(stderr, "[VKS3D " STEREO_ARCH_STR " ERROR] " fmt "\n", ##__VA_ARGS__)
+    fprintf(stderr, "[ERROR] " fmt "\n", ##__VA_ARGS__)
 
 #endif /* _WIN32 */
 

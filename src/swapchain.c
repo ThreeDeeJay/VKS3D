@@ -353,7 +353,9 @@ try_dx9:
         /* Need D3D11/NvAPI already loaded for NvAPI QueryInterface */
         if (!sd->d3d11_ok) dxgi_device_init(sd);
         if (sc->hwnd && dx9_init(sd, sc)) {
+            STEREO_LOG("[SBS] alloc_alt_stereo_swapchain...");
             VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            STEREO_LOG("[SBS] alloc_alt_stereo_swapchain result=%d", res);
             if (res == VK_SUCCESS) {
                 sc->present_mode  = STEREO_PRESENT_DX9;
                 sc->dxgi_mode     = false;
@@ -383,8 +385,11 @@ try_dx9:
         req == STEREO_PRESENT_TAB  ||
         req == STEREO_PRESENT_INTERLACED) {
         if (!sd->d3d11_ok) dxgi_device_init(sd);
+        STEREO_LOG("[SBS] calling compose_init hwnd=%p d3d11_ok=%d", sc->hwnd, sd->d3d11_ok);
         if (sc->hwnd && compose_init(sd, sc)) {
+            STEREO_LOG("[SBS] alloc_alt_stereo_swapchain...");
             VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            STEREO_LOG("[SBS] alloc_alt_stereo_swapchain result=%d", res);
             if (res == VK_SUCCESS) {
                 sc->present_mode  = req;
                 sc->dxgi_mode     = false;
