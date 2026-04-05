@@ -509,19 +509,25 @@ stereo_AcquireNextImageKHR(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
+    STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
+
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
-    if (!sc || !sc->dxgi_mode) {
+
+    /* Passthrough: not a stereo swapchain, or stereo not active */
+    if (!sc || !sc->stereo_active) {
         VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.AcquireNextImageKHR(sd->real_device, real,
                                              timeout, semaphore, fence, pImageIndex);
     }
 
-    /* DXGI mode: single image. Wait for the previous present barrier fence
-     * (back-pressure: ensures D3D11 CopySubresource and Present have finished
-     * before Vulkan starts rendering the next frame into the same image).    */
-    VkResult wres = sd->real.WaitForFences(
-        sd->real_device, 1, &sc->barrier_fences[0], VK_TRUE, timeout);
-    if (wres != VK_SUCCESS) return wres;
+    /* All stereo modes: single-image swapchain, always return index 0.
+     * For DXGI mode, wait for the previous present fence (back-pressure).
+     * For SBS/DX9/compose modes, no fence to wait on — just signal directly. */
+    if (sc->dxgi_mode && sc->barrier_fences && sc->barrier_fences[0]) {
+        VkResult wres = sd->real.WaitForFences(
+            sd->real_device, 1, &sc->barrier_fences[0], VK_TRUE, timeout);
+        if (wres != VK_SUCCESS) return wres;
+    }
 
     /* Signal the app's acquire semaphore/fence via a no-op submit */
     if (semaphore != VK_NULL_HANDLE || fence != VK_NULL_HANDLE) {
@@ -530,8 +536,11 @@ stereo_AcquireNextImageKHR(
             .signalSemaphoreCount = (semaphore != VK_NULL_HANDLE) ? 1 : 0,
             .pSignalSemaphores    = &semaphore,
         };
-        VkResult sres = sd->real.QueueSubmit(sd->gfx_queue, 1, &sig, fence);
-        if (sres != VK_SUCCESS) return sres;
+        VkQueue q = sd->gfx_queue;
+        if (q) {
+            VkResult sres = sd->real.QueueSubmit(q, 1, &sig, fence);
+            if (sres != VK_SUCCESS) return sres;
+        }
     }
 
     *pImageIndex = 0;
