@@ -641,114 +641,58 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
 bool compose_init(StereoDevice *sd, StereoSwapchain *sc)
 {
     if (sd->comp_ok) return true;
-    if (!sd->d3d11_ok || !sc->hwnd) return false;
+    if (!sc->hwnd) return false;
 
     uint32_t w = sc->app_width, h = sc->app_height;
-
-    /* Allocate CPU-side compose buffer (W×H×4) */
     sd->comp_composed = malloc((size_t)w * h * 4);
     if (!sd->comp_composed) return false;
-    sd->comp_w = w;
-    sd->comp_h = h;
 
-    /* Get IDXGIFactory2 from the D3D11 device */
-    void *pDXGIDevice = NULL;
-    void *pAdapter    = NULL;
-    void *pFactory    = NULL;
-    HRESULT hr;
-
-    typedef HRESULT (WINAPI *PFN_QI)(void*, const GUID*, void**);
-
-    /* pDev->QueryInterface(IDXGIDevice) */
-    STEREO_LOG("[Compose] QI IDXGIDevice...");
-    PFN_QI fnQI = (PFN_QI)(*(void***)sd->d3d11_dev)[0];
-    hr = fnQI(sd->d3d11_dev, &kIID_IDXGIDevice, &pDXGIDevice);
-    STEREO_LOG("[Compose] QI IDXGIDevice: hr=0x%x ptr=%p", (unsigned)hr, pDXGIDevice);
-    if (FAILED(hr) || !pDXGIDevice) goto fail;
-
-    /* IDXGIDevice::GetAdapter = vtable[7]
-     * (vtable[6] is IDXGIObject::GetParent — wrong!) */
-    STEREO_LOG("[Compose] GetAdapter (vtable[7])...");
-    {
-        typedef HRESULT (WINAPI *PFN_GA)(void*, void**);
-        ((PFN_GA)(*(void***)pDXGIDevice)[7])(pDXGIDevice, &pAdapter);
-    }
-    STEREO_LOG("[Compose] GetAdapter: pAdapter=%p", pAdapter);
-    if (!pAdapter) goto fail_dev;
-
-    /* IDXGIAdapter::GetParent(IDXGIFactory2) = IDXGIObject::GetParent = vtable[6] */
-    STEREO_LOG("[Compose] GetParent IDXGIFactory2 (vtable[6])...");
-    {
-        typedef HRESULT (WINAPI *PFN_GP)(void*, const GUID*, void**);
-        ((PFN_GP)(*(void***)pAdapter)[6])(pAdapter, &kIID_IDXGIFactory2, &pFactory);
-    }
-    STEREO_LOG("[Compose] GetParent: pFactory=%p", pFactory);
-    if (!pFactory) goto fail_adap;
-
-    /* CreateSwapChainForHwnd */
-    DXGI_SCD1_ scd = {
-        .Width        = w,
-        .Height       = h,
-        .Format       = DXGI_FORMAT_B8G8R8A8_UNORM,
-        .Stereo       = FALSE,
-        .SampleDesc   = {1, 0},
-        .BufferUsage  = DXGI_USAGE_RENDER_TARGET_OUTPUT,
-        .BufferCount  = 2,
-        .Scaling      = 0, /* DXGI_SCALING_STRETCH */
-        .SwapEffect   = 3, /* DXGI_SWAP_EFFECT_FLIP_DISCARD */
-        .AlphaMode    = 0,
-        .Flags        = 0,
-    };
-    typedef HRESULT (WINAPI *PFN_CSH)(void*, HWND, const DXGI_SCD1_*, void*, void*, void**);
-    STEREO_LOG("[Compose] step4: CreateSwapChainForHwnd hwnd=%p idx=%d", sc->hwnd, DXGI2_CREATESWAP_HWND_IDX);
-    PFN_CSH fnCSH = (PFN_CSH)(*(void***)pFactory)[DXGI2_CREATESWAP_HWND_IDX];
-    hr = fnCSH(pFactory, sc->hwnd, &scd, NULL, NULL, &sd->comp_sc);
-    STEREO_LOG("[Compose] step4 result: hr=0x%x sc=%p", (unsigned)hr, sd->comp_sc);
-    if (FAILED(hr) || !sd->comp_sc) {
-        STEREO_ERR("[Compose] CreateSwapChainForHwnd failed: 0x%x", (unsigned)hr);
-        goto fail_factory;
-    }
-    STEREO_LOG("[Compose] Swap chain created: %p  %ux%u", sd->comp_sc, w, h);
-    sd->comp_ok = true;
-
-fail_factory:
-    ((void(WINAPI*)(void*))(*(void***)pFactory)[2])(pFactory);
-fail_adap:
-    ((void(WINAPI*)(void*))(*(void***)pAdapter)[2])(pAdapter);
-fail_dev:
-    ((void(WINAPI*)(void*))(*(void***)pDXGIDevice)[2])(pDXGIDevice);
-fail:
-    if (!sd->comp_ok) { free(sd->comp_composed); sd->comp_composed = NULL; }
-    return sd->comp_ok;
+    /* GDI StretchDIBits path — no DXGI swap chain on the app HWND.
+     * Creating a DXGI swap chain on sc->hwnd crashes because the HWND
+     * already has a Vulkan Win32 surface attached from the same process. */
+    sd->comp_hwnd = sc->hwnd;
+    sd->comp_w    = w;
+    sd->comp_h    = h;
+    sd->comp_ok   = true;
+    STEREO_LOG("[Compose] init: GDI StretchDIBits  hwnd=%p  %ux%u", sc->hwnd, w, h);
+    return true;
 }
 
 void compose_destroy(StereoDevice *sd)
 {
-    if (sd->comp_sc) ((void(WINAPI*)(void*))(*(void***)sd->comp_sc)[2])(sd->comp_sc);
     free(sd->comp_composed);
-    sd->comp_sc = NULL; sd->comp_composed = NULL; sd->comp_ok = false;
+    sd->comp_composed = NULL;
+    sd->comp_hwnd = NULL;
+    sd->comp_ok = false;
 }
 
 /* Write one composed frame (W×H BGRA) to the DXGI swap chain back buffer */
 static VkResult compose_upload_and_present(StereoDevice *sd, uint32_t w, uint32_t h,
                                             const void *pixels)
 {
-    void *pBB = NULL;
-    typedef HRESULT (WINAPI *PFN_GB)(void*, UINT, const GUID*, void**);
-    HRESULT hr = ((PFN_GB)(*(void***)sd->comp_sc)[9])(
-                 sd->comp_sc, 0, &kIID_ID3D11Tex2D, &pBB);
-    if (FAILED(hr) || !pBB) return VK_ERROR_DEVICE_LOST;
+    /* Use GDI StretchDIBits directly into the app window's HDC.
+     * This avoids creating a second DXGI swap chain on sc->hwnd — DXGI
+     * crashes when the HWND already has a Vulkan Win32 surface attached. */
+    HWND hwnd = sd->comp_hwnd;
+    if (!hwnd) return VK_ERROR_INITIALIZATION_FAILED;
 
-    /* D3D11DeviceContext::UpdateSubresource(dest, 0, NULL, src, rowPitch, 0) */
-    typedef void (WINAPI *PFN_US)(void*, void*, UINT, void*, const void*, UINT, UINT);
-    PFN_US fnUS = (PFN_US)(*(void***)sd->d3d11_ctx)[D3D11CTX_UpdateSubresource];
-    fnUS(sd->d3d11_ctx, pBB, 0, NULL, pixels, w * 4, 0);
-    ((void(WINAPI*)(void*))(*(void***)pBB)[2])(pBB);
+    HDC hdc = GetDC(hwnd);
+    if (!hdc) return VK_ERROR_DEVICE_LOST;
 
-    /* IDXGISwapChain::Present */
-    hr = ((HRESULT(WINAPI*)(void*, UINT, UINT))(*(void***)sd->comp_sc)[8])
-         (sd->comp_sc, 0, 0);
-    if (FAILED(hr)) { STEREO_ERR("[Compose] Present failed: 0x%x", (unsigned)hr); }
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth       = (LONG)w;
+    bmi.bmiHeader.biHeight      = -(LONG)h;  /* negative = top-down */
+    bmi.bmiHeader.biPlanes      = 1;
+    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biCompression = 0; /* BI_RGB */
+
+    StretchDIBits(hdc, 0, 0, (int)w, (int)h,
+                  0, 0, (int)w, (int)h,
+                  pixels, &bmi, 0 /*DIB_RGB_COLORS*/, SRCCOPY);
+
+    ReleaseDC(hwnd, hdc);
     return VK_SUCCESS;
 }
 

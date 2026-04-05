@@ -613,8 +613,8 @@ typedef struct StereoDevice {
      * A plain DXGI windowed swap chain on sc->hwnd.  The composed frame  *
      * (CPU-built) is uploaded via ID3D11DeviceContext::UpdateSubresource. */
     bool                   comp_ok;
-    void                  *comp_sc;         /* IDXGISwapChain1*              */
-    void                  *comp_composed;   /* malloc'd W×H×4 compose buffer */
+    HWND                   comp_hwnd;       /* app HWND for GDI StretchDIBits  */
+    void                  *comp_composed;   /* malloc'd W×H×4 compose buffer   */
     uint32_t               comp_w;
     uint32_t               comp_h;
 } StereoDevice;
