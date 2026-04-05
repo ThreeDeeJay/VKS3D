@@ -277,6 +277,13 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
                           VkImageLayout layout_in)
 {
     if (!sc->cpu_ok) return VK_ERROR_INITIALIZATION_FAILED;
+    STEREO_LOG("[Readback] enter: image=%p layout=%d multiview=%d",
+               (void*)sc->stereo_images[0], (int)layout_in, sd->stereo.multiview);
+
+    /* When multiview=0, only layer 0 was rendered; layer 1 is UNDEFINED.
+     * Transitioning layer 1 from COLOR_ATTACHMENT_OPTIMAL (wrong — it was
+     * never written) crashes the GPU driver.  Only barrier/copy layer 0.  */
+    uint32_t layer_count = sd->stereo.multiview ? 2 : 1;
 
     sd->real.ResetFences(sd->real_device, 1, &sc->cpu_fence);
     sd->real.ResetCommandBuffer(sc->cpu_cmd, 0);
@@ -285,7 +292,6 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
                                        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     sd->real.BeginCommandBuffer(sc->cpu_cmd, &begin);
 
-    /* Transition both layers: layout_in → TRANSFER_SRC_OPTIMAL */
     VkImageMemoryBarrier b0 = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -295,14 +301,14 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = sc->stereo_images[0],
-        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2 },
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layer_count },
     };
+    STEREO_LOG("[Readback] barrier layer_count=%u", layer_count);
     sd->real.CmdPipelineBarrier(sc->cpu_cmd,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         0, 0, NULL, 0, NULL, 1, &b0);
 
-    /* Copy layer 0 (left) then layer 1 (right) to buffer */
     VkBufferImageCopy regions[2] = {
         { .bufferOffset = 0,
           .bufferRowLength = sc->app_width,
@@ -317,15 +323,17 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
           .imageOffset = {0,0,0},
           .imageExtent = { sc->app_width, sc->app_height, 1 } },
     };
+    STEREO_LOG("[Readback] CmdCopyImageToBuffer regions=%u", layer_count);
     sd->real.CmdCopyImageToBuffer(sc->cpu_cmd, sc->stereo_images[0],
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sc->cpu_buf, 2, regions);
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sc->cpu_buf, layer_count, regions);
 
-    /* Restore layout */
+    /* Restore layout for rendered layers only */
     VkImageMemoryBarrier b1 = b0;
     b1.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     b1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     b1.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     b1.newLayout     = layout_in;
+    b1.subresourceRange.layerCount = layer_count;
     sd->real.CmdPipelineBarrier(sc->cpu_cmd,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -702,6 +710,7 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
                          const VkSemaphore *wait_sems,
                          StereoPresentMode mode)
 {
+    STEREO_LOG("[Compose] compose_present enter: mode=%d comp_ok=%d", (int)mode, sd->comp_ok);
     if (!sd->comp_ok) return VK_ERROR_INITIALIZATION_FAILED;
 
     VkResult res = alt_cpu_readback(sd, sc, queue, wait_sem_count, wait_sems,
