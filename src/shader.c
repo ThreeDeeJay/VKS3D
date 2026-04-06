@@ -363,22 +363,26 @@ static bool inject_stereo_code(
     if (!m->float_type || !m->v4_type || !m->pos_var)
         return false;
 
-    /* Allocate IDs */
-    uint32_t id_ptr_v4_out   = (*next_id)++;   /* OpTypePointer Output v4  */
-    uint32_t id_ptr_int_in   = (*next_id)++;   /* OpTypePointer Input  int */
-    uint32_t id_chain        = (*next_id)++;   /* OpAccessChain result (path B) */
-    uint32_t id_load_pos     = (*next_id)++;   /* loaded gl_Position       */
-    uint32_t id_load_view    = (*next_id)++;   /* loaded gl_ViewIndex      */
-    uint32_t id_const_zero_i = (*next_id)++;   /* constant int 0           */
-    uint32_t id_is_left      = (*next_id)++;   /* bool: viewIndex == 0     */
-    uint32_t id_const_l      = (*next_id)++;   /* constant float left_off  */
-    uint32_t id_const_r      = (*next_id)++;   /* constant float right_off */
-    uint32_t id_off_sel      = (*next_id)++;   /* selected offset          */
-    uint32_t id_pos_w        = (*next_id)++;   /* pos.w (component 3)      */
-    uint32_t id_delta        = (*next_id)++;   /* off * pos.w              */
-    uint32_t id_pos_x        = (*next_id)++;   /* pos.x (component 0)      */
-    uint32_t id_new_x        = (*next_id)++;   /* pos.x + delta            */
-    uint32_t id_new_pos      = (*next_id)++;   /* composite with new x     */
+    /* Allocate IDs — only allocate view-index related IDs when view_var is
+     * present. Allocating an ID without defining it inflates the SPIR-V bound
+     * and produces invalid SPIR-V; the driver accepts it at CreateShaderModule
+     * but crashes during vkCreateGraphicsPipelines compilation. */
+    uint32_t id_ptr_v4_out   = (*next_id)++;
+    uint32_t id_ptr_int_in   = (*next_id)++;
+    uint32_t id_chain        = (*next_id)++;
+    uint32_t id_load_pos     = (*next_id)++;
+    /* These are only defined in the output when m->view_var != 0 */
+    uint32_t id_load_view    = m->view_var ? (*next_id)++ : 0;
+    uint32_t id_const_zero_i = (*next_id)++;   /* also used for AccessChain index */
+    uint32_t id_is_left      = m->view_var ? (*next_id)++ : 0;
+    uint32_t id_const_l      = (*next_id)++;
+    uint32_t id_const_r      = (*next_id)++;
+    uint32_t id_off_sel      = (*next_id)++;
+    uint32_t id_pos_w        = (*next_id)++;
+    uint32_t id_delta        = (*next_id)++;
+    uint32_t id_pos_x        = (*next_id)++;
+    uint32_t id_new_x        = (*next_id)++;
+    uint32_t id_new_pos      = (*next_id)++;
 
     /* ── Reuse existing pointer types where possible ─────────────────
      * Emitting a duplicate OpTypePointer (same storage class + pointee) is
