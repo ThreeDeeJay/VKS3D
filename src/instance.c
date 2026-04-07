@@ -175,7 +175,7 @@ vks3d_debug_callback(
 }
 
 
-stereo_CreateInstance(
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(
     const VkInstanceCreateInfo    *pCreateInfo,
     const VkAllocationCallbacks   *pAllocator,
     VkInstance                    *pInstance)
