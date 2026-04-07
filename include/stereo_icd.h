@@ -445,6 +445,7 @@ typedef struct StereoInstance {
     RealInstanceDispatch      real;
     StereoConfig              stereo;
     PFN_vkGetInstanceProcAddr real_get_instance_proc_addr;
+    VkDebugUtilsMessengerEXT  debug_messenger;
     /* Surface → HWND map, filled by stereo_CreateWin32SurfaceKHR */
     StereoSurfaceHWND         surface_hwnd[MAX_SURFACES];
     uint32_t                  surface_hwnd_count;

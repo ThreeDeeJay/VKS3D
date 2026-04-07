@@ -17,6 +17,7 @@
 /* Extensions we transparently add to every instance */
 static const char *STEREO_EXTRA_INSTANCE_EXTS[] = {
     "VK_KHR_get_physical_device_properties2",
+    "VK_EXT_debug_utils",
 };
 #define STEREO_EXTRA_INST_EXT_COUNT \
     (sizeof(STEREO_EXTRA_INSTANCE_EXTS) / sizeof(STEREO_EXTRA_INSTANCE_EXTS[0]))
@@ -158,6 +159,24 @@ stereo_EnumerateInstanceExtensionProperties(
 
 /* ── vkCreateInstance ───────────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
+/* ── Vulkan debug messenger callback ────────────────────────────────────── */
+VKAPI_ATTR VkBool32 VKAPI_CALL
+vks3d_debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT      severity,
+    VkDebugUtilsMessageTypeFlagsEXT             type,
+    const VkDebugUtilsMessengerCallbackDataEXT *data,
+    void                                       *user)
+{
+    (void)type; (void)user;
+    const char *sev = (severity & 0x1000) ? "[VK][E]" :
+                      (severity & 0x0100) ? "[VK][W]" :
+                      (severity & 0x0010) ? "[VK][I]" : "[VK][V]";
+    if (data && data->pMessage)
+        STEREO_LOG("%s %s", sev, data->pMessage);
+    return VK_FALSE; /* don't abort */
+}
+
+
 stereo_CreateInstance(
     const VkInstanceCreateInfo    *pCreateInfo,
     const VkAllocationCallbacks   *pAllocator,
@@ -247,6 +266,25 @@ stereo_CreateInstance(
     si->real_get_instance_proc_addr = giPA;
     stereo_config_init(&si->stereo);
     stereo_populate_instance_dispatch(si);
+
+    /* Register debug messenger — routes driver diagnostics to our log.
+     * Catches SPIR-V compile errors, pipeline faults, invalid usage, etc. */
+    if (si->real.CreateDebugUtilsMessengerEXT) {
+        extern VKAPI_ATTR VkBool32 VKAPI_CALL vks3d_debug_callback(
+            VkDebugUtilsMessageSeverityFlagBitsEXT,
+            VkDebugUtilsMessageTypeFlagsEXT,
+            const VkDebugUtilsMessengerCallbackDataEXT*,
+            void*);
+        VkDebugUtilsMessengerCreateInfoEXT dbg = {
+            .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+            .messageSeverity = 0x1111, /* VERBOSE|INFO|WARNING|ERROR */
+            .messageType     = 0x7,    /* GENERAL|VALIDATION|PERFORMANCE */
+            .pfnUserCallback = vks3d_debug_callback,
+        };
+        si->real.CreateDebugUtilsMessengerEXT(
+            real_inst, &dbg, NULL, &si->debug_messenger);
+        STEREO_LOG("Debug messenger registered");
+    }
 
     STEREO_LOG("stereo_CreateInstance: si=%p stereo=%s", (void*)si,
                si->stereo.enabled ? "ON" : "OFF");
