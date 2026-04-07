@@ -56,7 +56,7 @@ jobs:
       if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
       run: |
         curl --ssl-revoke-best-effort -L "https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/VulkanSDK-1.3.296.0-Installer.exe" -o "VulkanSDK.exe"
-        VulkanSDK --accept-licenses --default-answer --confirm-command install com.lunarg.vulkan.32bit
+        VulkanSDK.exe --accept-licenses --default-answer --confirm-command install com.lunarg.vulkan.32bit
     - name: Set VULKAN_SDK
       shell: powershell
       run: |
