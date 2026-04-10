@@ -593,7 +593,7 @@ static inline void stereo_setenv(const char *name, const char *value)
 #ifndef VKAPI_ATTR
 #  ifdef _WIN32
 #    define VKAPI_ATTR
-#    define VKAPI_CALL  __cdecl
+#    define VKAPI_CALL  __stdcall
 #  else
 #    define VKAPI_ATTR  __attribute__((visibility("default")))
 #    define VKAPI_CALL
