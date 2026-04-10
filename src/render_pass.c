@@ -39,6 +39,7 @@ stereo_CreateRenderPass(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
+    STEREO_LOG("stereo_CreateRenderPass: attachments=%u", pCreateInfo ? pCreateInfo->attachmentCount : 0);
 
     /* Detect swapchain output pass */
     bool is_swapchain_pass = false;

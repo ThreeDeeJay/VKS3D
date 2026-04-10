@@ -158,6 +158,8 @@ stereo_EnumerateInstanceExtensionProperties(
 }
 
 /* ── vkCreateInstance ───────────────────────────────────────────────────── */
+VKAPI_ATTR VkResult VKAPI_CALL
+/* ── Vulkan debug messenger callback ────────────────────────────────────── */
 VKAPI_ATTR VkBool32 VKAPI_CALL
 vks3d_debug_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT      severity,

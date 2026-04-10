@@ -647,6 +647,7 @@ stereo_CreateImage(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
+    STEREO_LOG("stereo_CreateImage: fmt=%u %ux%u layers=%u", pCreateInfo ? pCreateInfo->format : 0, pCreateInfo ? pCreateInfo->extent.width : 0, pCreateInfo ? pCreateInfo->extent.height : 0, pCreateInfo ? pCreateInfo->arrayLayers : 0);
 
     /* Check if this is a depth image we should make 2-layer.
      * Only when multiview=1: matches Sascha Willems reference where both
@@ -696,6 +697,7 @@ stereo_CreateImageView(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
+    STEREO_LOG("stereo_CreateImageView: image=%p type=%u", pCreateInfo ? (void*)(uintptr_t)pCreateInfo->image : NULL, pCreateInfo ? pCreateInfo->viewType : 0);
 
     /* When multiview=1 we need 2D_ARRAY views on:
      *   1. Stereo color images (stereo_images[]) — app creates plain 2D views
