@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stereo_icd.h"
+#include <vulkan/vulkan.h>
 
 /* Extensions we transparently add to every instance */
 static const char *STEREO_EXTRA_INSTANCE_EXTS[] = {
@@ -158,6 +159,8 @@ stereo_EnumerateInstanceExtensionProperties(
 }
 
 /* ── vkCreateInstance ───────────────────────────────────────────────────── */
+VKAPI_ATTR VkResult VKAPI_CALL
+/* ── Vulkan debug messenger callback ────────────────────────────────────── */
 VKAPI_ATTR VkBool32 VKAPI_CALL
 vks3d_debug_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT      severity,
