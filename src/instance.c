@@ -157,10 +157,8 @@ stereo_EnumerateInstanceExtensionProperties(
     return (write < total) ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-/* ── vkCreateInstance ───────────────────────────────────────────────────── */
-VKAPI_ATTR VkResult VKAPI_CALL
 /* ── Vulkan debug messenger callback ────────────────────────────────────── */
-static VKAPI_ATTR VkBool32 VKAPI_CALL
+static VkBool32 VKAPI_CALL
 vks3d_debug_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT      severity,
     VkDebugUtilsMessageTypeFlagsEXT             type,
@@ -177,7 +175,9 @@ vks3d_debug_callback(
 }
 
 
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(
+/* ── vkCreateInstance ───────────────────────────────────────────────────── */
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateInstance(
     const VkInstanceCreateInfo    *pCreateInfo,
     const VkAllocationCallbacks   *pAllocator,
     VkInstance                    *pInstance)
