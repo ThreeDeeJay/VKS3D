@@ -262,6 +262,7 @@ stereo_CreateDevice(
         /* TODO: destroy real device */
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
+    SET_LOADER_MAGIC_VALUE(sd);  /* loader dispatch: *(void**)sd must be valid */
 
     sd->real_device = real_dev;
     sd->si          = sp_si;

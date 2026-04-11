@@ -160,7 +160,7 @@ stereo_EnumerateInstanceExtensionProperties(
 /* ── vkCreateInstance ───────────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 /* ── Vulkan debug messenger callback ────────────────────────────────────── */
-VKAPI_ATTR VkBool32 VKAPI_CALL
+static VKAPI_ATTR VkBool32 VKAPI_CALL
 vks3d_debug_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT      severity,
     VkDebugUtilsMessageTypeFlagsEXT             type,
@@ -270,11 +270,6 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(
     /* Register debug messenger — routes driver diagnostics to our log.
      * Catches SPIR-V compile errors, pipeline faults, invalid usage, etc. */
     if (si->real.CreateDebugUtilsMessengerEXT) {
-        extern VKAPI_ATTR VkBool32 VKAPI_CALL vks3d_debug_callback(
-            VkDebugUtilsMessageSeverityFlagBitsEXT,
-            VkDebugUtilsMessageTypeFlagsEXT,
-            const VkDebugUtilsMessengerCallbackDataEXT*,
-            void*);
         VkDebugUtilsMessengerCreateInfoEXT dbg = {
             .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
             .messageSeverity = 0x1111, /* VERBOSE|INFO|WARNING|ERROR */

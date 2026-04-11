@@ -554,6 +554,10 @@ typedef struct StereoRenderPassInfo {
 } StereoRenderPassInfo;
 
 typedef struct StereoDevice {
+    /* MUST be first: loader reads *(void**)device for dispatch table.
+     * Without this, any Vulkan call not in our intercept list crashes
+     * because the loader reads real_device as a dispatch pointer. */
+    VK_LOADER_DATA         loader_data;
     VkDevice               real_device;
     StereoInstance        *si;           /* owning instance */
     VkPhysicalDevice       real_physdev;
