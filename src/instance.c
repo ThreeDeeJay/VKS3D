@@ -269,6 +269,7 @@ stereo_CreateInstance(
 
     /* Register debug messenger — routes driver diagnostics to our log.
      * Catches SPIR-V compile errors, pipeline faults, invalid usage, etc. */
+    STEREO_LOG("Debug messenger: fn=%p", (void*)(uintptr_t)si->real.CreateDebugUtilsMessengerEXT);
     if (si->real.CreateDebugUtilsMessengerEXT) {
         VkDebugUtilsMessengerCreateInfoEXT dbg = {
             .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -276,9 +277,10 @@ stereo_CreateInstance(
             .messageType     = 0x7,    /* GENERAL|VALIDATION|PERFORMANCE */
             .pfnUserCallback = vks3d_debug_callback,
         };
-        si->real.CreateDebugUtilsMessengerEXT(
+        VkResult _dm = si->real.CreateDebugUtilsMessengerEXT(
             real_inst, &dbg, NULL, &si->debug_messenger);
-        STEREO_LOG("Debug messenger registered");
+        STEREO_LOG("Debug messenger registered: result=%d handle=%p",
+                   (int)_dm, (void*)(uintptr_t)si->debug_messenger);
     }
 
     STEREO_LOG("stereo_CreateInstance: si=%p stereo=%s", (void*)si,

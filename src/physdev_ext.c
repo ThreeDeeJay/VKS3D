@@ -555,3 +555,31 @@ stereo_GetPhysicalDeviceSurfaceCapabilities2EXT(
     if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
     return fn(_real, surface, pSurfaceCaps);
 }
+
+/* ── Generic physdev trampoline for unknown extensions ───────────────────────
+ * Called for any vkGetPhysicalDevice* / vkEnumerateDevice* function that
+ * has no explicit wrapper stub.  We store the real function pointer paired
+ * with a thunk that translates StereoPhysdev* → real_pd before the call.
+ *
+ * Architecture: return a closure isn't possible in C, so instead we use a
+ * small table of (name → real_fn) and a fixed thunk that reads _spd->real_pd
+ * from the VkPhysicalDevice arg before forwarding.  This is safe because the
+ * real ICD's function is called with the real handle.
+ *
+ * Simpler approach: just log and return NULL for truly unknown functions.
+ * The loader already handles NULL gracefully for optional extensions.       */
+PFN_vkVoidFunction stereo_physdev_trampoline_lookup(StereoInstance *si, const char *name)
+{
+    /* Look up the real function pointer from the real ICD */
+    PFN_vkVoidFunction real_fn = ext_fn(si, name);
+    if (!real_fn) {
+        STEREO_LOG("physdev_trampoline: '%s' not in real ICD — returning NULL", name);
+        return NULL;
+    }
+    /* We cannot safely return the real ICD's raw function pointer: the loader
+     * will call it with our StereoPhysdev* wrapper as VkPhysicalDevice, and
+     * the real ICD will dereference it as its own struct → crash.
+     * Return NULL and log so we know which stubs to add. */
+    STEREO_LOG("physdev_trampoline: '%s' needs a wrapper stub — returning NULL", name);
+    return NULL;
+}

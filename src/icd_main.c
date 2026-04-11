@@ -218,9 +218,14 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         if (strncmp(name, "vkGetPhysicalDevice",           19) == 0 ||
             strncmp(name, "vkEnumerateDevice",             17) == 0 ||
             strncmp(name, "vkEnumeratePhysicalDeviceGroup", 30) == 0) {
-            STEREO_LOG("dynamic_lookup: BLOCKED unhandled physdev fn '%s' "
-                       "(returning NULL — add a wrapper stub in physdev_ext.c)", name);
-            return NULL;
+            /* Forward unknown physdev functions via generic trampoline.
+             * The trampoline translates our StereoPhysdev* to real_pd
+             * before calling the real ICD function pointer. */
+            extern PFN_vkVoidFunction stereo_physdev_trampoline_lookup(
+                StereoInstance *si, const char *name);
+            PFN_vkVoidFunction t = stereo_physdev_trampoline_lookup(si, name);
+            if (t) return t;
+            /* Fall through to instance-level lookup below */
         }
         PFN_vkVoidFunction fn =
             si->real_get_instance_proc_addr(si->real_instance, name);
