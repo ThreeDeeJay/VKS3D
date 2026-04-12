@@ -720,8 +720,12 @@ bool spirv_patch_stereo_vertex(
         }
     }
 
-    if (insert_type_after == 0)
-        insert_type_after = in_count; /* append at end */
+    if (insert_type_after == 0) {
+        STEREO_LOG("No OpFunction found in vertex shader — skipping patch");
+        spvbuf_free(&type_extras);
+        spvbuf_free(&body_extras);
+        return false;
+    }
 
     if (insert_body_after == 0) {
         /* Path B (block member) or path A with no direct store found:
@@ -743,8 +747,22 @@ bool spirv_patch_stereo_vertex(
             }
             i += wcount;
         }
-        if (!insert_body_after)
-            insert_body_after = in_count;
+        if (!insert_body_after) {
+            /* No OpReturn found — cannot safely inject; skip this shader. */
+            STEREO_LOG("No OpReturn found in vertex shader — skipping patch");
+            spvbuf_free(&type_extras);
+            spvbuf_free(&body_extras);
+            return false;
+        }
+    }
+
+    /* Sanity: body injection must come after type section */
+    if (insert_body_after < insert_type_after) {
+        STEREO_LOG("insert_body_after(%zu) < insert_type_after(%zu) — skipping patch",
+                   insert_body_after, insert_type_after);
+        spvbuf_free(&type_extras);
+        spvbuf_free(&body_extras);
+        return false;
     }
 
     /* Pass 2: Copy original + splice in extras
