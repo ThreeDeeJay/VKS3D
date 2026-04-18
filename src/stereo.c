@@ -338,15 +338,46 @@ bool stereo_load_real_icd(void)
         if (try_load_icd(explicit_path)) return true;
     }
 
-    /* 2. Windows OpenGL driver registry keys — these hold the ICD DLL directly.
-     *    On NVIDIA, nvoglv64.dll is both the OpenGL and Vulkan ICD.
-     *    Searched before the Khronos JSON path because it avoids JSON parsing
-     *    and gives us the actual DLL path in one step. */
+    /* 2. Khronos Vulkan ICD JSON registry — canonical path on all drivers.
+     *    Newer NVIDIA drivers (550+) removed the legacy OpenGL MSOGL key,
+     *    so this must be the primary search path. */
+    STEREO_LOG("stereo_load_real_icd: searching Khronos Vulkan ICD JSON registry");
+    {
+        char **json_paths = stereo_registry_enum_icd_jsons();
+        if (json_paths) {
+            for (int i = 0; json_paths[i]; i++) {
+                STEREO_LOG("stereo_load_real_icd: JSON[%d]='%s'", i, json_paths[i]);
+                if (strstr(json_paths[i], "VKS3D") || strstr(json_paths[i], "vks3d")) {
+                    STEREO_LOG("stereo_load_real_icd: skipping VKS3D JSON");
+                    free(json_paths[i]); continue;
+                }
+                char *dll_path = stereo_json_read_library_path(json_paths[i]);
+                if (dll_path) {
+                    STEREO_LOG("stereo_load_real_icd: library_path='%s'", dll_path);
+                    bool ok = try_load_icd(dll_path);
+                    free(dll_path);
+                    if (ok) {
+                        for (int j = i + 1; json_paths[j]; j++) free(json_paths[j]);
+                        free(json_paths);
+                        return true;
+                    }
+                } else {
+                    STEREO_LOG("stereo_load_real_icd: no library_path in JSON");
+                }
+                free(json_paths[i]);
+            }
+            free(json_paths);
+        } else {
+            STEREO_LOG("stereo_load_real_icd: no Khronos registry ICDs found");
+        }
+    }
+
+    /* 3. Legacy OpenGL driver registry (absent on NVIDIA 550+) */
     STEREO_LOG("stereo_load_real_icd: searching OpenGL driver registry keys");
     {
         char *ogl_dll = stereo_find_opengl_driver_icd();
         if (ogl_dll) {
-            STEREO_LOG("stereo_load_real_icd: OpenGL registry → '%s'", ogl_dll);
+            STEREO_LOG("stereo_load_real_icd: OpenGL registry -> '%s'", ogl_dll);
             bool ok = try_load_icd(ogl_dll);
             free(ogl_dll);
             if (ok) return true;
@@ -355,32 +386,7 @@ bool stereo_load_real_icd(void)
         }
     }
 
-    /* 3. Registry enumeration (Khronos Vulkan ICD JSON manifests) */
-    char **json_paths = stereo_registry_enum_icd_jsons();
-    if (json_paths) {
-        for (int i = 0; json_paths[i]; i++) {
-            STEREO_LOG("stereo_load_real_icd: JSON[%d]='%s'", i, json_paths[i]);
-            char *dll_path = stereo_json_read_library_path(json_paths[i]);
-            if (dll_path) {
-                STEREO_LOG("stereo_load_real_icd: library_path='%s'", dll_path);
-                bool ok = try_load_icd(dll_path);
-                free(dll_path);
-                if (ok) {
-                    for (int j = i; json_paths[j]; j++) free(json_paths[j]);
-                    free(json_paths);
-                    return true;
-                }
-            } else {
-                STEREO_LOG("stereo_load_real_icd: no library_path in JSON");
-            }
-            free(json_paths[i]);
-        }
-        free(json_paths);
-    } else {
-        STEREO_LOG("stereo_load_real_icd: no registry ICDs found");
-    }
-
-    /* 3. Hard-coded fallbacks */
+    /* 4. Hard-coded fallbacks */
     STEREO_LOG("stereo_load_real_icd: trying hard-coded fallbacks");
 #ifdef _WIN64
     const char **fb = WIN_FALLBACKS_X64;

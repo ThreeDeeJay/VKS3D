@@ -487,20 +487,28 @@ static inline void vks3d_log_write(const char *msg)
 
 #  include <stdarg.h>
 
-/* vks3d_logf — printf-style, stack-only, safe from DllMain */
+/* vks3d_logf — printf-style; single fixed buffer to minimise stack use */
 static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
 {
-    char buf[2048];
-    char msg[2048 + 64];
-    va_list ap;
-    va_start(ap, fmt);
-    int n = _vsnprintf(buf, sizeof(buf) - 1, fmt, ap);
-    va_end(ap);
-    if (n < 0 || n >= (int)(sizeof(buf) - 1))
-        n = (int)(sizeof(buf) - 2);
-    buf[n] = '\0';
-    _snprintf(msg, sizeof(msg) - 1, "%s%s\n", prefix, buf);
-    msg[sizeof(msg) - 1] = '\0';
+    char msg[1024];
+    int  pos = 0;
+    int  rem = (int)sizeof(msg) - 1;
+    /* Write prefix */
+    if (prefix && prefix[0]) {
+        int pn = _snprintf(msg, (size_t)rem, "%s", prefix);
+        if (pn > 0) { pos += pn; rem -= pn; }
+    }
+    /* Write formatted body */
+    if (rem > 1) {
+        va_list ap;
+        va_start(ap, fmt);
+        int n = _vsnprintf(msg + pos, (size_t)rem, fmt, ap);
+        va_end(ap);
+        if (n > 0) pos += (n < rem ? n : rem - 1);
+    }
+    /* Append newline */
+    if (pos < (int)sizeof(msg) - 1) msg[pos++] = '\n';
+    msg[pos] = '\0';
     vks3d_log_write(msg);
 }
 
