@@ -273,6 +273,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
 #endif
     if (!strcmp(pName, "vkCreateShaderModule"))
         return (PFN_vkVoidFunction)stereo_CreateShaderModule;
+    if (!strcmp(pName, "vkCreateGraphicsPipelines"))
+        return (PFN_vkVoidFunction)stereo_CreateGraphicsPipelines;
     if (!strcmp(pName, "vkDestroyShaderModule"))
         return (PFN_vkVoidFunction)stereo_DestroyShaderModule;
     if (!strcmp(pName, "vkCreateSwapchainKHR"))

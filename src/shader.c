@@ -879,6 +879,23 @@ stereo_CreateShaderModule(
                    in_c);
     }
 
+    /* VKS3D_DUMP_SPIRV=C:\path\dir dumps patched SPIR-V for spirv-val inspection */
+    {
+        const char *dump_dir = stereo_getenv("VKS3D_DUMP_SPIRV");
+        if (dump_dir && patched_ok) {
+            static int dump_idx = 0;
+            char dump_path[512];
+            _snprintf(dump_path, sizeof(dump_path)-1, "%s\\patched_%04d.spv",
+                      dump_dir, dump_idx++);
+            FILE *f = fopen(dump_path, "wb");
+            if (f) {
+                fwrite(patched, sizeof(uint32_t), patched_c, f);
+                fclose(f);
+                STEREO_LOG("Dumped patched SPIR-V: %s (%zu words)", dump_path, patched_c);
+            }
+        }
+    }
+
     VkResult res = sd->real.CreateShaderModule(
         sd->real_device, &mod_ci, pAllocator, pShaderModule);
 
@@ -889,6 +906,26 @@ stereo_CreateShaderModule(
         spirv_patched_free(patched);
 
     return res;
+}
+
+/* ── vkCreateGraphicsPipelines — logged to identify crash point ─────────── */
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateGraphicsPipelines(
+    VkDevice                            device,
+    VkPipelineCache                     pipelineCache,
+    uint32_t                            createInfoCount,
+    const VkGraphicsPipelineCreateInfo *pCreateInfos,
+    const VkAllocationCallbacks        *pAllocator,
+    VkPipeline                         *pPipelines)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd) return VK_ERROR_DEVICE_LOST;
+    STEREO_LOG("stereo_CreateGraphicsPipelines: count=%u", createInfoCount);
+    VkResult r = sd->real.CreateGraphicsPipelines(
+        sd->real_device, pipelineCache, createInfoCount,
+        pCreateInfos, pAllocator, pPipelines);
+    STEREO_LOG("stereo_CreateGraphicsPipelines: result=%d", (int)r);
+    return r;
 }
 
 /* ── vkDestroyShaderModule ────────────────────────────────────────────────── */

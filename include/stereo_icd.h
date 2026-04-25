@@ -751,6 +751,7 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass2KHR(
     VkDevice, const VkRenderPassCreateInfo2*, const VkAllocationCallbacks*, VkRenderPass*);
 #endif
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateGraphicsPipelines(VkDevice, VkPipelineCache, uint32_t, const VkGraphicsPipelineCreateInfo*, const VkAllocationCallbacks*, VkPipeline*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(
     VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
 VKAPI_ATTR void VKAPI_CALL stereo_DestroyShaderModule(
