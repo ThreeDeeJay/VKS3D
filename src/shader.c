@@ -671,10 +671,19 @@ bool spirv_patch_stereo_vertex(
     size_t type_split = 0;
     for (size_t i = 0; i < combined.count; ) {
         uint32_t op = combined.words[i] & 0xffff;
-        if (op == SpvOpLoad || op == SpvOpStore ||
-            op == SpvOpIEqual || op == SpvOpSelect ||
-            op == SpvOpFMul  || op == SpvOpFAdd   ||
-            op == SpvOpCompositeExtract || op == SpvOpCompositeInsert) {
+        /* These opcodes must appear inside a basic block (function body).
+         * SpvOpAccessChain MUST be here — for path B (is_block=true) it is
+         * the first body instruction and must NOT end up in type_extras
+         * (which would place it outside OpFunction → spirv-val error). */
+        if (op == SpvOpLoad           ||
+            op == SpvOpStore          ||
+            op == SpvOpAccessChain    ||  /* 65 — was missing, causing the bug */
+            op == SpvOpIEqual         ||
+            op == SpvOpSelect         ||
+            op == SpvOpFMul           ||
+            op == SpvOpFAdd           ||
+            op == SpvOpCompositeExtract ||
+            op == SpvOpCompositeInsert) {
             type_split = i;
             break;
         }
