@@ -651,19 +651,27 @@ stereo_CreateImage(
 
     /* Check if this is a depth image we should make 2-layer.
      * Only when multiview=1: matches Sascha Willems reference where both
-     * color and depth must be arrayLayers=2 for the multiview framebuffer. */
+     * color and depth must be arrayLayers=2 for the multiview framebuffer.
+     *
+     * We intercept ALL single-layer depth images, not just those that match
+     * the swapchain size. Shadow map depths (different sizes) also become 2-layer,
+     * but their render passes do NOT have multiview viewMask so the extra layer
+     * is ignored — no GPU hang. Requiring exact swapchain size caused DXVK's
+     * depth buffer to be missed if created at a slightly different size or order. */
     bool intercept = sd->stereo.enabled
         && sd->stereo.multiview
-        && sd->stereo_w > 0
         && is_depth_format(pCreateInfo->format)
         && pCreateInfo->imageType   == VK_IMAGE_TYPE_2D
         && pCreateInfo->arrayLayers == 1
-        && pCreateInfo->extent.width  == sd->stereo_w
-        && pCreateInfo->extent.height == sd->stereo_h
-        && pCreateInfo->samples == VK_SAMPLE_COUNT_1_BIT;
+        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT;
 
-    if (!intercept) {
-        return sd->real.CreateImage(sd->real_device, pCreateInfo, pAllocator, pImage);
+    if (intercept) {
+        STEREO_LOG("stereo_CreateImage: upgrading depth %ux%u fmt=%u to arrayLayers=2",
+                   pCreateInfo->extent.width, pCreateInfo->extent.height, pCreateInfo->format);
+    } else if (sd->stereo.multiview && is_depth_format(pCreateInfo->format)) {
+        STEREO_LOG("stereo_CreateImage: skipping depth %ux%u fmt=%u layers=%u samples=%u",
+                   pCreateInfo->extent.width, pCreateInfo->extent.height, pCreateInfo->format,
+                   pCreateInfo->arrayLayers, (uint32_t)pCreateInfo->samples);
     }
 
     VkImageCreateInfo modified = *pCreateInfo;

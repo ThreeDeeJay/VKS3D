@@ -769,7 +769,8 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentIn
 bool spirv_patch_stereo_vertex(
     const uint32_t *in_words, size_t in_count,
     uint32_t **out_words, size_t *out_count,
-    float left_offset, float right_offset, float convergence);
+    float left_offset, float right_offset, float convergence,
+    bool inject_view_index);
 void spirv_patched_free(uint32_t *words);
 
 /* DXGI stereo present: stage GPU→CPU, upload to D3D11, DXGI Present */
