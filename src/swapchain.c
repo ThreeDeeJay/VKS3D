@@ -653,25 +653,26 @@ stereo_CreateImage(
      * Only when multiview=1: matches Sascha Willems reference where both
      * color and depth must be arrayLayers=2 for the multiview framebuffer.
      *
-     * We intercept ALL single-layer depth images, not just those that match
-     * the swapchain size. Shadow map depths (different sizes) also become 2-layer,
-     * but their render passes do NOT have multiview viewMask so the extra layer
-     * is ignored — no GPU hang. Requiring exact swapchain size caused DXVK's
-     * depth buffer to be missed if created at a slightly different size or order. */
+     * Require DEPTH_STENCIL_ATTACHMENT_BIT: avoids upgrading depth textures
+     * used as shadow map samplers or other non-attachment purposes (e.g. 1x1
+     * images), which would create mismatched framebuffer attachments and break
+     * rendering. Only actual render target depth buffers need the upgrade. */
     bool intercept = sd->stereo.enabled
         && sd->stereo.multiview
         && is_depth_format(pCreateInfo->format)
         && pCreateInfo->imageType   == VK_IMAGE_TYPE_2D
         && pCreateInfo->arrayLayers == 1
-        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT;
+        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT
+        && (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
     if (intercept) {
         STEREO_LOG("stereo_CreateImage: upgrading depth %ux%u fmt=%u to arrayLayers=2",
                    pCreateInfo->extent.width, pCreateInfo->extent.height, pCreateInfo->format);
     } else if (sd->stereo.multiview && is_depth_format(pCreateInfo->format)) {
-        STEREO_LOG("stereo_CreateImage: skipping depth %ux%u fmt=%u layers=%u samples=%u",
+        STEREO_LOG("stereo_CreateImage: skipping depth %ux%u fmt=%u layers=%u samples=%u usage=0x%x",
                    pCreateInfo->extent.width, pCreateInfo->extent.height, pCreateInfo->format,
-                   pCreateInfo->arrayLayers, (uint32_t)pCreateInfo->samples);
+                   pCreateInfo->arrayLayers, (uint32_t)pCreateInfo->samples,
+                   (unsigned)pCreateInfo->usage);
     }
 
     VkImageCreateInfo modified = *pCreateInfo;
