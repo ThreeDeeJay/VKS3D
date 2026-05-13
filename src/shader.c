@@ -364,42 +364,13 @@ static bool inject_stereo_code(
     if (!m->float_type || !m->v4_type || !m->pos_var)
         return false;
 
-    /* When multiview is enabled but the shader has no gl_ViewIndex variable,
-     * inject one so we can select per-eye offsets instead of a constant.
-     * We emit: OpDecorate %new_view_var BuiltIn 4440 (ViewIndex)
-     *          OpVariable %ptr_int_in  %new_view_var Input
-     * These go into the combined buffer's TYPE section (before OpFunction).
-     * NVIDIA drivers accept BuiltIn decorations in the type section. */
-    uint32_t injected_view_var = 0;
-    if (inject_view_index && !m->view_var && m->int_type) {
-        uint32_t id_new_view = (*next_id)++;
-        /* OpDecorate %id_new_view BuiltIn 4440 (ViewIndex) */
-        uint32_t decor[] = { spv_op(SpvOpDecorate, 4), id_new_view,
-                             SpvDecorationBuiltIn, 4440u };
-        spvbuf_push_n(out, decor, 4);
-        /* Ensure we have a ptr_int Input type */
-        uint32_t use_ptr_int_in;
-        if (m->ptr_in_int_type) {
-            use_ptr_int_in = m->ptr_in_int_type;
-        } else {
-            use_ptr_int_in = (*next_id)++;
-            uint32_t ptrw[] = { spv_op(SpvOpTypePointer, 4),
-                                use_ptr_int_in,
-                                SpvStorageClassInput,
-                                m->int_type };
-            spvbuf_push_n(out, ptrw, 4);
-        }
-        /* OpVariable %ptr_int_in %id_new_view Input */
-        uint32_t varw[] = { spv_op(SpvOpVariable, 4),
-                            use_ptr_int_in,
-                            id_new_view,
-                            SpvStorageClassInput };
-        spvbuf_push_n(out, varw, 4);
-        injected_view_var = id_new_view;
-        STEREO_LOG("inject_stereo_code: injected gl_ViewIndex as %%%u", id_new_view);
-    }
-    /* Use injected view var if we created one */
-    if (injected_view_var) m->view_var = injected_view_var;
+    /* gl_ViewIndex injection deferred: injecting a new Input variable requires
+     * updating the OpEntryPoint interface list (SPIR-V 1.4+ spec §2.4 rule 4).
+     * Without that update, the driver accepts the shader but produces no output
+     * (black framebuffer) at runtime.  Proper injection needs a pre-pass to
+     * rewrite OpEntryPoint, which will be added in a future commit.
+     * For now, view_var=0 falls through to the constant-offset path below. */
+    (void)inject_view_index;
 
     /* Allocate IDs — only allocate view-index related IDs when view_var is
      * present. Allocating an ID without defining it inflates the SPIR-V bound
