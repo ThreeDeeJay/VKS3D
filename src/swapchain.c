@@ -20,12 +20,20 @@
  *        dxgi_copy_and_present: D3D11 CopySubresourceRegion × 2 + Present
  *
  * Depth image interception:
- *   stereo_CreateImage intercepts depth/stencil images whose W×H match the
- *   active DXGI swapchain.  These are forced to arrayLayers=2 so that the
- *   multiview render pass can write the depth pyramid for both eyes without
- *   layer-1 out-of-bounds access.
+ *   stereo_CreateImage intercepts depth/stencil images ONLY when multiview=1
+ *   and the image is a single-layer 2D depth-stencil attachment.  These are
+ *   forced to arrayLayers=2 so the multiview render pass can write both eye
+ *   layers.  All other images pass through UNCHANGED.
+ *
  *   stereo_CreateImageView upgrades views of intercepted depth images to
  *   VK_IMAGE_VIEW_TYPE_2D_ARRAY / layerCount=2 automatically.
+ *
+ * REGRESSION NOTE: a previous version set modified.arrayLayers=2 for ALL
+ * images regardless of the intercept flag, causing VK_ERROR_DEVICE_LOST (-4)
+ * from GPU crashes on native Vulkan apps (vulkanscene, etc.) because every
+ * color image, storage image and texture was wrongly created with 2 layers.
+ * The fix: only modify pCreateInfo when intercept==true; return a plain
+ * passthrough otherwise.
  */
 
 #include <stdio.h>
@@ -63,8 +71,6 @@ static VkResult alloc_external_stereo_image(
     VkImage         *out_image,
     VkDeviceMemory  *out_mem)
 {
-    /* External memory creation info — tells the driver this image will be
-     * backed by a D3D11 NT-handle allocation rather than new Vulkan memory */
     VkExternalMemoryImageCreateInfo ext_img = {
         .sType       = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
         .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT,
@@ -77,7 +83,7 @@ static VkResult alloc_external_stereo_image(
         .format        = sc->format,
         .extent        = {sc->app_width, sc->app_height, 1},
         .mipLevels     = 1,
-        .arrayLayers   = 2,   /* layer 0 = left eye, layer 1 = right eye */
+        .arrayLayers   = 2,
         .samples       = VK_SAMPLE_COUNT_1_BIT,
         .tiling        = VK_IMAGE_TILING_OPTIMAL,
         .usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -91,11 +97,9 @@ static VkResult alloc_external_stereo_image(
         return res;
     }
 
-    /* Image memory requirements (size, alignment, compatible type bits) */
     VkMemoryRequirements mr;
     sd->real.GetImageMemoryRequirements(sd->real_device, *out_image, &mr);
 
-    /* Query which Vulkan memory types are compatible with the D3D11 handle */
     if (!sd->real.GetMemoryWin32HandlePropertiesKHR) {
         STEREO_ERR("GetMemoryWin32HandlePropertiesKHR not loaded — "
                    "VK_KHR_external_memory_win32 missing?");
@@ -128,8 +132,6 @@ static VkResult alloc_external_stereo_image(
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
 
-    /* Import: VkDeviceMemory backed by the D3D11 NT handle.
-     * Note: NT handles are consumed (ownership transferred) on AllocateMemory. */
     VkImportMemoryWin32HandleInfoKHR import_info = {
         .sType      = VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR,
         .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT,
@@ -147,8 +149,6 @@ static VkResult alloc_external_stereo_image(
         sd->real.DestroyImage(sd->real_device, *out_image, NULL);
         return res;
     }
-    /* Handle ownership now with Vulkan runtime — set to NULL to prevent
-     * any stale use (dxgi_sc_destroy already doesn't CloseHandle it) */
     sc->shared_nt_handle = NULL;
 
     res = sd->real.BindImageMemory(sd->real_device, *out_image, *out_mem, 0);
@@ -165,7 +165,6 @@ static VkResult alloc_external_stereo_image(
 
 /* ── Shared swapchain setup helpers ────────────────────────────────────── */
 
-/* Allocate the barrier command pool / CB / fence used by the DXGI path. */
 static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
 {
     VkCommandPoolCreateInfo cpci = {
@@ -192,8 +191,6 @@ static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
     return sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[0]) == VK_SUCCESS;
 }
 
-/* Allocate a regular (non-external) 2-layer stereo swapchain image + view
- * and CPU staging buffer.  Used by DX9, SBS, TAB, Interlaced modes.     */
 static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc)
 {
     sc->image_count      = 1;
@@ -221,7 +218,6 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
     res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
     if (res != VK_SUCCESS) return res;
 
-    /* CPU staging: needed by both DX9 and compose modes */
     return alt_cpu_staging_init(sd, sc);
 }
 
@@ -253,22 +249,15 @@ stereo_CreateSwapchainKHR(
 
     StereoPresentMode req = sd->stereo.present_mode;
 
-    /* ── Try DXGI 1.2 + external memory ───────────────────────────────
-     * For AUTO or DXGI mode: attempt the zero-copy external-memory path.  */
+    /* ── Try DXGI 1.2 + external memory ─────────────────────────────── */
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DXGI) {
         bool dxgi_ok = false;
         HANDLE nt_handle = NULL;
-        /* Re-entrancy guard: SetFullscreenState inside dxgi_sc_create sends
-         * WM_SIZE to the app window. The app calls vkCreateSwapchainKHR again
-         * which would call dxgi_sc_create recursively and destroy the swap chain
-         * we are currently building. Detect re-entrance and go to passthrough.  */
         if (sd->dxgi_init_in_progress) {
             STEREO_LOG("[DXGI] Re-entrant vkCreateSwapchainKHR during DXGI init — passthrough");
             goto passthrough;
         }
         if (sc->hwnd && dxgi_device_init(sd)) {
-            /* Activate NvAPI 3D Vision ONLY for the DXGI stereo path.
-             * Must NOT be called for SBS/compose — it crashes on windowed D3D11. */
             dxgi_stereo_activate(sd);
             sd->dxgi_init_in_progress = true;
             if (dxgi_sc_create(sd, sc, &nt_handle)) {
@@ -283,7 +272,6 @@ stereo_CreateSwapchainKHR(
         }
 
         if (dxgi_ok) {
-            /* Allocate single-image arrays */
             sc->image_count      = 1;
             sc->stereo_images    = calloc(1, sizeof(VkImage));
             sc->stereo_memory    = calloc(1, sizeof(VkDeviceMemory));
@@ -296,7 +284,6 @@ stereo_CreateSwapchainKHR(
                 if (req == STEREO_PRESENT_DXGI) goto passthrough;
                 goto try_dx9;
             }
-            /* Import D3D11 shared memory → VkImage */
             VkResult res = alloc_external_stereo_image(sd, sc,
                 &sc->stereo_images[0], &sc->stereo_memory[0]);
             if (res != VK_SUCCESS) {
@@ -305,7 +292,6 @@ stereo_CreateSwapchainKHR(
                 if (req == STEREO_PRESENT_DXGI) goto passthrough;
                 goto try_dx9;
             }
-            /* 2D_ARRAY view covering both eye layers */
             VkImageViewCreateInfo vci = {
                 .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 .image    = sc->stereo_images[0],
@@ -342,15 +328,10 @@ stereo_CreateSwapchainKHR(
             STEREO_ERR("DXGI mode forced but init failed");
             goto passthrough;
         }
-        /* AUTO: fall through to DX9 */
     }
 
 try_dx9:
-    /* ── DX9 direct mode ──────────────────────────────────────────────
-     * Uses NvAPI + IDirect3D9Ex exclusive fullscreen.
-     * Requires CPU staging for Vulkan→D3D9 pixel transfer.             */
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DX9) {
-        /* Need D3D11/NvAPI already loaded for NvAPI QueryInterface */
         if (!sd->d3d11_ok) dxgi_device_init(sd);
         if (sc->hwnd && dx9_init(sd, sc)) {
             STEREO_LOG("[SBS] alloc_alt_stereo_swapchain...");
@@ -375,7 +356,6 @@ try_dx9:
             STEREO_ERR("DX9 mode forced but init failed");
             goto passthrough;
         }
-        /* AUTO: fall through to SBS */
         STEREO_LOG("DX9 init failed; falling back to SBS compose mode");
         req = STEREO_PRESENT_SBS;
     }
@@ -450,9 +430,7 @@ stereo_DestroySwapchainKHR(
         if (sc->barrier_pool)
             sd->real.DestroyCommandPool(sd->real_device, sc->barrier_pool, NULL);
 
-        /* Destroy CPU staging resources (used by DX9 / compose modes) */
         alt_cpu_staging_destroy(sd, sc);
-
         dxgi_sc_destroy(sc);
 
         if (sc->real_swapchain)
@@ -513,23 +491,18 @@ stereo_AcquireNextImageKHR(
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
 
-    /* Passthrough: not a stereo swapchain, or stereo not active */
     if (!sc || !sc->stereo_active) {
         VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.AcquireNextImageKHR(sd->real_device, real,
                                              timeout, semaphore, fence, pImageIndex);
     }
 
-    /* All stereo modes: single-image swapchain, always return index 0.
-     * For DXGI mode, wait for the previous present fence (back-pressure).
-     * For SBS/DX9/compose modes, no fence to wait on — just signal directly. */
     if (sc->dxgi_mode && sc->barrier_fences && sc->barrier_fences[0]) {
         VkResult wres = sd->real.WaitForFences(
             sd->real_device, 1, &sc->barrier_fences[0], VK_TRUE, timeout);
         if (wres != VK_SUCCESS) return wres;
     }
 
-    /* Signal the app's acquire semaphore/fence via a no-op submit */
     if (semaphore != VK_NULL_HANDLE || fence != VK_NULL_HANDLE) {
         VkSubmitInfo sig = {
             .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -572,7 +545,6 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         return fwd->real.QueuePresentKHR(queue, pPresentInfo);
     }
 
-    /* Poll hotkeys once per present */
     hotkeys_poll(sd);
 
     VkResult result = VK_SUCCESS;
@@ -597,7 +569,6 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
             pr = compose_present(sd, sc_i, queue, wcount, wsems, sc_i->present_mode);
             break;
         default:
-            /* MONO or passthrough — just signal fence so next frame can proceed */
             pr = VK_SUCCESS;
             break;
         }
@@ -613,14 +584,25 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 /* ============================================================================
  * stereo_CreateImage — intercept depth images for multiview compatibility
  *
- * Multiview render passes require ALL framebuffer attachments (including
- * depth/stencil) to have arrayLayers >= viewCount (2).  The app creates its
- * depth images as single-layer 2D images.  We intercept depth/stencil image
- * creation whose dimensions match the active DXGI swapchain and silently
- * make them arrayLayers=2.
+ * ONLY intercepts when ALL of the following are true:
+ *   - stereo is enabled
+ *   - multiview=1 in vks3d.ini
+ *   - format is a depth/stencil format
+ *   - imageType is VK_IMAGE_TYPE_2D
+ *   - arrayLayers == 1 (single-layer; already-layered images are left alone)
+ *   - samples == VK_SAMPLE_COUNT_1_BIT
+ *   - usage includes VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
  *
- * The intercepted VkImage handles are recorded in sd->intercepted_depth[] so
- * that stereo_CreateImageView can upgrade their views to 2D_ARRAY/layerCount=2.
+ * All other images pass through to the real ICD UNCHANGED.
+ *
+ * REGRESSION HISTORY:
+ *   A previous version set modified.arrayLayers=2 unconditionally (the
+ *   `intercept` flag only controlled the log message).  This caused
+ *   VK_ERROR_DEVICE_LOST (-4) from GPU TDRs on native Vulkan apps because
+ *   color images, storage images and textures were all being created with
+ *   2 array layers instead of 1, producing framebuffer incompatibilities
+ *   and out-of-bounds GPU writes.  The fix: return early with the unmodified
+ *   pCreateInfo when intercept==false.
  * ============================================================================ */
 
 static bool is_depth_format(VkFormat fmt)
@@ -647,42 +629,51 @@ stereo_CreateImage(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("stereo_CreateImage: fmt=%u %ux%u layers=%u", pCreateInfo ? pCreateInfo->format : 0, pCreateInfo ? pCreateInfo->extent.width : 0, pCreateInfo ? pCreateInfo->extent.height : 0, pCreateInfo ? pCreateInfo->arrayLayers : 0);
 
-    /* Check if this is a depth image we should make 2-layer.
-     * Only when multiview=1: matches Sascha Willems reference where both
-     * color and depth must be arrayLayers=2 for the multiview framebuffer.
-     *
-     * Require DEPTH_STENCIL_ATTACHMENT_BIT: avoids upgrading depth textures
-     * used as shadow map samplers or other non-attachment purposes (e.g. 1x1
-     * images), which would create mismatched framebuffer attachments and break
-     * rendering. Only actual render target depth buffers need the upgrade. */
+    STEREO_LOG("stereo_CreateImage: fmt=%u %ux%u layers=%u usage=0x%x",
+               pCreateInfo ? pCreateInfo->format : 0,
+               pCreateInfo ? pCreateInfo->extent.width  : 0,
+               pCreateInfo ? pCreateInfo->extent.height : 0,
+               pCreateInfo ? pCreateInfo->arrayLayers   : 0,
+               pCreateInfo ? (unsigned)pCreateInfo->usage : 0);
+
+    /* Determine whether this depth image should be upgraded to 2 layers.
+     * All conditions must be met; any mismatch → plain passthrough.         */
     bool intercept = sd->stereo.enabled
         && sd->stereo.multiview
+        && pCreateInfo != NULL
         && is_depth_format(pCreateInfo->format)
         && pCreateInfo->imageType   == VK_IMAGE_TYPE_2D
         && pCreateInfo->arrayLayers == 1
         && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT
         && (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-    if (intercept) {
-        STEREO_LOG("stereo_CreateImage: upgrading depth %ux%u fmt=%u to arrayLayers=2",
-                   pCreateInfo->extent.width, pCreateInfo->extent.height, pCreateInfo->format);
-    } else if (sd->stereo.multiview && is_depth_format(pCreateInfo->format)) {
-        STEREO_LOG("stereo_CreateImage: skipping depth %ux%u fmt=%u layers=%u samples=%u usage=0x%x",
-                   pCreateInfo->extent.width, pCreateInfo->extent.height, pCreateInfo->format,
-                   pCreateInfo->arrayLayers, (uint32_t)pCreateInfo->samples,
-                   (unsigned)pCreateInfo->usage);
+    /* ── PASSTHROUGH: image does not need upgrading ───────────────────────
+     * Return the unmodified pCreateInfo directly.  This is the common path
+     * for all color images, storage images, textures, etc.                  */
+    if (!intercept) {
+        if (sd->stereo.multiview && pCreateInfo && is_depth_format(pCreateInfo->format)) {
+            STEREO_LOG("stereo_CreateImage: depth NOT intercepted "
+                       "(layers=%u samples=%u usage=0x%x) — passthrough",
+                       pCreateInfo->arrayLayers,
+                       (uint32_t)pCreateInfo->samples,
+                       (unsigned)pCreateInfo->usage);
+        }
+        return sd->real.CreateImage(sd->real_device, pCreateInfo, pAllocator, pImage);
     }
+
+    /* ── UPGRADE: force arrayLayers=2 for multiview depth compatibility ── */
+    STEREO_LOG("stereo_CreateImage: upgrading depth %ux%u fmt=%u to arrayLayers=2",
+               pCreateInfo->extent.width, pCreateInfo->extent.height, pCreateInfo->format);
 
     VkImageCreateInfo modified = *pCreateInfo;
     modified.arrayLayers = 2;
+
     VkResult res = sd->real.CreateImage(sd->real_device, &modified, pAllocator, pImage);
     if (res == VK_SUCCESS && sd->intercepted_depth_count < MAX_DEPTH_IMAGES) {
         sd->intercepted_depth[sd->intercepted_depth_count++] = *pImage;
-        STEREO_LOG("CreateImage: patched depth image %p to arrayLayers=2 (%s %ux%u)",
-                   (void*)*pImage,
-                   modified.extent.width == sd->stereo_w ? "matches swapchain" : "?",
+        STEREO_LOG("stereo_CreateImage: intercepted depth %p (slot %u) arrayLayers=2  %ux%u",
+                   (void*)*pImage, sd->intercepted_depth_count - 1,
                    modified.extent.width, modified.extent.height);
     }
     return res;
@@ -691,10 +682,12 @@ stereo_CreateImage(
 /* ============================================================================
  * stereo_CreateImageView — upgrade views for stereo images and patched depth
  *
- * Two classes of images need their views upgraded to 2D_ARRAY/layerCount=2:
+ * Two classes of images need 2D_ARRAY views with layerCount=2:
  *   1. Stereo color render targets (stereo_images[]) — the app gets these
  *      handles from GetSwapchainImagesKHR and creates plain 2D views.
- *   2. Depth images intercepted by stereo_CreateImage above.
+ *   2. Depth images upgraded by stereo_CreateImage above.
+ *
+ * Only applies when multiview=1; otherwise all views pass through unchanged.
  * ============================================================================ */
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -706,15 +699,11 @@ stereo_CreateImageView(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("stereo_CreateImageView: image=%p type=%u", pCreateInfo ? (void*)(uintptr_t)pCreateInfo->image : NULL, pCreateInfo ? pCreateInfo->viewType : 0);
 
-    /* When multiview=1 we need 2D_ARRAY views on:
-     *   1. Stereo color images (stereo_images[]) — app creates plain 2D views
-     *   2. Depth images upgraded by stereo_CreateImage to arrayLayers=2
-     * This matches the Sascha Willems multiview example where both color and
-     * depth attachments are VK_IMAGE_VIEW_TYPE_2D_ARRAY with layerCount=2.
-     * Without this upgrade the multiview framebuffer is incomplete and the GPU
-     * hangs (VK_ERROR_DEVICE_LOST) when multiview tries to write to layer 1. */
+    STEREO_LOG("stereo_CreateImageView: image=%p type=%u",
+               pCreateInfo ? (void*)(uintptr_t)pCreateInfo->image : NULL,
+               pCreateInfo ? pCreateInfo->viewType : 0);
+
     if (!sd->stereo.multiview) {
         return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
     }
@@ -746,7 +735,8 @@ stereo_CreateImageView(
         upgraded.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
     if (upgraded.subresourceRange.layerCount < 2)
         upgraded.subresourceRange.layerCount = 2;
-    STEREO_LOG("CreateImageView: upgraded %p to 2D_ARRAY/layerCount=2 [multiview=1]",
-               (void*)pCreateInfo->image);
+
+    STEREO_LOG("stereo_CreateImageView: upgraded %p → 2D_ARRAY/layerCount=2 [multiview=1]",
+               (void*)(uintptr_t)pCreateInfo->image);
     return sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
 }
