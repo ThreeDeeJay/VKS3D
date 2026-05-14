@@ -12,6 +12,22 @@
  *   → D3D9 UpdateSurface / D3D11 UpdateSubresource
  *
  * D3D9 NvAPI IDs sourced from the NVAPI SDK header (stable ABI).
+ *
+ * layer_count safety
+ * ──────────────────
+ * alt_cpu_readback reads layer_count layers from the stereo image.
+ * It is ONLY safe to read layer 1 when we KNOW layer 1 was rendered,
+ * i.e. when sd->multiview_pass_exists is true (a multiview render pass
+ * was successfully injected for this device).
+ *
+ * If multiview was NOT injected (e.g. DXVK's render pass doesn't use
+ * PRESENT_SRC_KHR as finalLayout, so our detection misses it), layer 1
+ * remains in VK_IMAGE_LAYOUT_UNDEFINED.  Transitioning it from
+ * COLOR_ATTACHMENT_OPTIMAL (wrong) causes an invalid image layout barrier
+ * → GPU TDR → VK_ERROR_DEVICE_LOST → black right view.
+ *
+ * Fix: use layer_count=1 when multiview_pass_exists is false.  The right
+ * eye will show the same image as the left (2D, not black).
  */
 
 #include <stdio.h>
@@ -38,11 +54,11 @@
 
 typedef struct D3DPRESENT_PARAMETERS_ {
     UINT    BackBufferWidth, BackBufferHeight;
-    UINT    BackBufferFormat;           /* D3DFORMAT */
+    UINT    BackBufferFormat;
     UINT    BackBufferCount;
     UINT    MultiSampleType;
     DWORD   MultiSampleQuality;
-    UINT    SwapEffect;                 /* D3DSWAPEFFECT */
+    UINT    SwapEffect;
     HWND    hDeviceWindow;
     BOOL    Windowed;
     BOOL    EnableAutoDepthStencil;
@@ -56,40 +72,28 @@ typedef struct { int left, top, right, bottom; } D3DRECT_;
 typedef struct { UINT Width, Height; } D3DSURFACE_DESC_;
 typedef struct { void *pBits; INT Pitch; } D3DLOCKED_RECT_;
 
-/* IDirect3D9Ex vtable offsets */
 #define D3D9EX_CreateDeviceEx    20
-
-/* IDirect3DDevice9 vtable offsets */
 #define D3DDEV9_Release              2
 #define D3DDEV9_Reset               16
 #define D3DDEV9_Present             17
 #define D3DDEV9_GetBackBuffer       18
 #define D3DDEV9_StretchRect         34
 #define D3DDEV9_CreateOffscreenPlainSurface 36
-
-/* IDirect3DSurface9 vtable offsets */
 #define D3DSURF_QueryInterface  0
 #define D3DSURF_Release         2
 #define D3DSURF_LockRect       13
 #define D3DSURF_UnlockRect     14
 
-#define D3DCALL(iface, idx, ...) \
-    ((*(void***)(iface))[idx])
-
 /* ═══════════════════════════════════════════════════════════════════════════
  * NVAPI additions for DX9 direct mode
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Function IDs (stable since Vulkan-era SDK) */
 #define NvID_StereoSetDriverMode  0x5E8F1974u
 #define NvID_StereoSetActiveEye   0x96EEA9F8u
 #define NvID_StereoIsActivated    0x1FB0BC30u
 
-/* NVAPI stereo driver mode */
 #define NV_STEREO_MODE_AUTOMATIC  0
 #define NV_STEREO_MODE_DIRECT     2
-
-/* NVAPI eye selector */
 #define NV_STEREO_EYE_RIGHT       1
 #define NV_STEREO_EYE_LEFT        2
 
@@ -101,11 +105,6 @@ static inline void* nv_q(unsigned id)
 typedef int (*PFN_NvInt)(int);
 typedef int (*PFN_NvHandleEye)(void*, int);
 
-/* dx9_nvapi_early_init is defined in stereo.c (DllMain translation unit)
- * so it is always linked, even in test builds that don't include present_alt.c.
- * dx9_init below uses s_nvQI_alt loaded from sd->nvapi_lib at device-create time. */
-
-
 /* ═══════════════════════════════════════════════════════════════════════════
  * DXGI / D3D11 minimal definitions for compose mode
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -116,7 +115,6 @@ typedef int (*PFN_NvHandleEye)(void*, int);
 #endif
 #define DXGI_USAGE_RENDER_TARGET_OUTPUT 0x20
 
-/* IDXGIDevice IID (not IDXGIDevice2 — simpler vtable layout) */
 static const GUID kIID_IDXGIDevice =
     {0x54EC77FA,0x1377,0x44E6,{0x8C,0x32,0x88,0xFD,0x5F,0x44,0xC8,0x4C}};
 static const GUID kIID_IDXGIFactory2 =
@@ -124,23 +122,21 @@ static const GUID kIID_IDXGIFactory2 =
 static const GUID kIID_ID3D11Tex2D =
     {0x6F15AAF2,0xD208,0x4E89,{0x9A,0xB4,0x48,0x95,0x35,0xD3,0x4F,0x9C}};
 
-#define DXGI2_CREATESWAP_HWND_IDX  15   /* IDXGIFactory2::CreateSwapChainForHwnd */
+#define DXGI2_CREATESWAP_HWND_IDX  15
+#define D3D11CTX_UpdateSubresource 48
 
 typedef struct DXGI_SWAP_CHAIN_DESC1_ {
     UINT   Width, Height;
-    UINT   Format;       /* DXGI_FORMAT */
+    UINT   Format;
     BOOL   Stereo;
     struct { UINT Count, Quality; } SampleDesc;
     UINT   BufferUsage;
     UINT   BufferCount;
-    UINT   Scaling;      /* DXGI_SCALING */
-    UINT   SwapEffect;   /* DXGI_SWAP_EFFECT */
+    UINT   Scaling;
+    UINT   SwapEffect;
     UINT   AlphaMode;
     UINT   Flags;
 } DXGI_SCD1_;
-
-/* ID3D11DeviceContext::UpdateSubresource vtable[48] */
-#define D3D11CTX_UpdateSubresource 48
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Vulkan CPU staging helpers
@@ -224,19 +220,24 @@ VkResult alt_cpu_staging_init(StereoDevice *sd, StereoSwapchain *sc)
     uint32_t mt = find_mem_type(sd, mr.memoryTypeBits,
                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    if (mt == UINT32_MAX) { sd->real.DestroyBuffer(sd->real_device, sc->cpu_buf, NULL); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+    if (mt == UINT32_MAX) {
+        sd->real.DestroyBuffer(sd->real_device, sc->cpu_buf, NULL);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     VkMemoryAllocateInfo mai = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = mr.size, .memoryTypeIndex = mt,
     };
     res = sd->real.AllocateMemory(sd->real_device, &mai, NULL, &sc->cpu_mem);
-    if (res != VK_SUCCESS) { sd->real.DestroyBuffer(sd->real_device, sc->cpu_buf, NULL); return res; }
+    if (res != VK_SUCCESS) {
+        sd->real.DestroyBuffer(sd->real_device, sc->cpu_buf, NULL);
+        return res;
+    }
 
     sd->real.BindBufferMemory(sd->real_device, sc->cpu_buf, sc->cpu_mem, 0);
     sd->real.MapMemory(sd->real_device, sc->cpu_mem, 0, total, 0, &sc->cpu_map);
 
-    /* Command pool + buffer */
     VkCommandPoolCreateInfo cpci = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -251,11 +252,15 @@ VkResult alt_cpu_staging_init(StereoDevice *sd, StereoSwapchain *sc)
     };
     sd->real.AllocateCommandBuffers(sd->real_device, &cbai, &sc->cpu_cmd);
 
-    VkFenceCreateInfo fci = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT };
+    VkFenceCreateInfo fci = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    };
     sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->cpu_fence);
 
     sc->cpu_ok = true;
-    STEREO_LOG("CPU staging init: %u bytes/eye (%ux%u)", eye_bytes, sc->app_width, sc->app_height);
+    STEREO_LOG("CPU staging init: %u bytes/eye (%ux%u)", eye_bytes,
+               sc->app_width, sc->app_height);
     return VK_SUCCESS;
 }
 
@@ -270,6 +275,25 @@ void alt_cpu_staging_destroy(StereoDevice *sd, StereoSwapchain *sc)
     sc->cpu_ok = false;
 }
 
+/* ── alt_cpu_readback ────────────────────────────────────────────────────────
+ *
+ * layer_count decision:
+ *
+ *   multiview=1 AND multiview_pass_exists=true
+ *     → layer_count=2: a multiview render pass was confirmed to have been
+ *       created for this device, so both layers should be in layout_in
+ *       (COLOR_ATTACHMENT_OPTIMAL) after rendering.  Safe to read both.
+ *
+ *   multiview=0 OR multiview_pass_exists=false
+ *     → layer_count=1: either multiview was disabled, or the render pass
+ *       that writes to the stereo image did NOT get multiview injected
+ *       (e.g. DXVK uses GENERAL/COLOR_ATTACHMENT_OPTIMAL as finalLayout,
+ *       not PRESENT_SRC_KHR, so our swapchain-pass detector missed it).
+ *       Layer 1 is still in VK_IMAGE_LAYOUT_UNDEFINED.  Transitioning it
+ *       from layout_in (wrong) would be an invalid image barrier → GPU TDR
+ *       → VK_ERROR_DEVICE_LOST → black right view.
+ *       We read only layer 0 and show it for both eyes (2D, not black).
+ */
 VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
                           VkQueue queue,
                           uint32_t wait_sem_count,
@@ -277,31 +301,38 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
                           VkImageLayout layout_in)
 {
     if (!sc->cpu_ok) return VK_ERROR_INITIALIZATION_FAILED;
-    STEREO_LOG("[Readback] enter: image=%p layout=%d multiview=%d",
-               (void*)sc->stereo_images[0], (int)layout_in, sd->stereo.multiview);
 
-    /* When multiview=0, only layer 0 was rendered; layer 1 is UNDEFINED.
-     * Transitioning layer 1 from COLOR_ATTACHMENT_OPTIMAL (wrong — it was
-     * never written) crashes the GPU driver.  Only barrier/copy layer 0.  */
-    uint32_t layer_count = sd->stereo.multiview ? 2 : 1;
+    /* Only read layer 1 when we KNOW multiview was actually injected.
+     * If multiview_pass_exists is false (DXVK case), layer 1 is UNDEFINED. */
+    uint32_t layer_count = (sd->stereo.multiview && sd->multiview_pass_exists) ? 2 : 1;
+
+    STEREO_LOG("[Readback] enter: image=%p layout=%d multiview=%d "
+               "multiview_pass_exists=%d layer_count=%u",
+               (void*)sc->stereo_images[0], (int)layout_in,
+               sd->stereo.multiview, sd->multiview_pass_exists, layer_count);
 
     sd->real.ResetFences(sd->real_device, 1, &sc->cpu_fence);
     sd->real.ResetCommandBuffer(sc->cpu_cmd, 0);
 
-    VkCommandBufferBeginInfo begin = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                                       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+    VkCommandBufferBeginInfo begin = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
     sd->real.BeginCommandBuffer(sc->cpu_cmd, &begin);
 
+    /* Barrier: layout_in → TRANSFER_SRC_OPTIMAL for rendered layers */
     VkImageMemoryBarrier b0 = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
-        .oldLayout = layout_in,
-        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask       = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask       = VK_ACCESS_TRANSFER_READ_BIT,
+        .oldLayout           = layout_in,
+        .newLayout           = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = sc->stereo_images[0],
-        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layer_count },
+        .image               = sc->stereo_images[0],
+        .subresourceRange    = {
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layer_count
+        },
     };
     STEREO_LOG("[Readback] barrier layer_count=%u", layer_count);
     sd->real.CmdPipelineBarrier(sc->cpu_cmd,
@@ -309,25 +340,31 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         0, 0, NULL, 0, NULL, 1, &b0);
 
+    /* Copy rendered layers to CPU buffer */
     VkBufferImageCopy regions[2] = {
-        { .bufferOffset = 0,
-          .bufferRowLength = sc->app_width,
-          .bufferImageHeight = sc->app_height,
-          .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
-          .imageOffset = {0,0,0},
-          .imageExtent = { sc->app_width, sc->app_height, 1 } },
-        { .bufferOffset = sc->cpu_eye_bytes,
-          .bufferRowLength = sc->app_width,
-          .bufferImageHeight = sc->app_height,
-          .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1 },
-          .imageOffset = {0,0,0},
-          .imageExtent = { sc->app_width, sc->app_height, 1 } },
+        {   /* Layer 0 → buffer[0 .. eye_bytes) */
+            .bufferOffset      = 0,
+            .bufferRowLength   = sc->app_width,
+            .bufferImageHeight = sc->app_height,
+            .imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+            .imageOffset       = {0, 0, 0},
+            .imageExtent       = { sc->app_width, sc->app_height, 1 },
+        },
+        {   /* Layer 1 → buffer[eye_bytes .. 2*eye_bytes) */
+            .bufferOffset      = sc->cpu_eye_bytes,
+            .bufferRowLength   = sc->app_width,
+            .bufferImageHeight = sc->app_height,
+            .imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1 },
+            .imageOffset       = {0, 0, 0},
+            .imageExtent       = { sc->app_width, sc->app_height, 1 },
+        },
     };
     STEREO_LOG("[Readback] CmdCopyImageToBuffer regions=%u", layer_count);
     sd->real.CmdCopyImageToBuffer(sc->cpu_cmd, sc->stereo_images[0],
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sc->cpu_buf, layer_count, regions);
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sc->cpu_buf,
+        layer_count, regions);
 
-    /* Restore layout for rendered layers only */
+    /* Restore layout */
     VkImageMemoryBarrier b1 = b0;
     b1.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     b1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -341,7 +378,6 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
 
     sd->real.EndCommandBuffer(sc->cpu_cmd);
 
-    /* Build wait-stage masks for app semaphores */
     VkPipelineStageFlags *masks = NULL;
     if (wait_sem_count > 0) {
         masks = malloc(wait_sem_count * sizeof(VkPipelineStageFlags));
@@ -350,7 +386,7 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
             masks[i] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
     VkSubmitInfo si = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount   = wait_sem_count,
         .pWaitSemaphores      = wait_sems,
         .pWaitDstStageMask    = masks,
@@ -361,7 +397,8 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
     free(masks);
     if (res != VK_SUCCESS) return res;
 
-    return sd->real.WaitForFences(sd->real_device, 1, &sc->cpu_fence, VK_TRUE, UINT64_MAX);
+    return sd->real.WaitForFences(
+        sd->real_device, 1, &sc->cpu_fence, VK_TRUE, UINT64_MAX);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -375,7 +412,6 @@ bool dx9_init(StereoDevice *sd, StereoSwapchain *sc)
     if (sd->dx9_ok) return true;
     if (!sc->hwnd)  return false;
 
-    /* Load d3d9.dll */
     HMODULE hD3D9 = LoadLibraryA("d3d9.dll");
     if (!hD3D9) { STEREO_ERR("[DX9] d3d9.dll not found"); return false; }
 
@@ -387,26 +423,20 @@ bool dx9_init(StereoDevice *sd, StereoSwapchain *sc)
         return false;
     }
 
-    /* NvAPI: s_nvQI_alt already initialised by dx9_nvapi_early_init() at
-     * DLL_PROCESS_ATTACH.  SetDriverMode(DIRECT) was called there before any
-     * D3D9 object was created, which is the only timing that works.
-     * Just resolve it from sd->nvapi_lib as a fallback if early init didn't run. */
     if (!s_nvQI_alt && sd->nvapi_lib) {
         s_nvQI_alt = (PFN_NvQI_t)GetProcAddress((HMODULE)sd->nvapi_lib,
                                                    "nvapi_QueryInterface");
-        STEREO_LOG("[DX9] nvapi_QueryInterface from sd->nvapi_lib (early init missed)");
+        STEREO_LOG("[DX9] nvapi_QueryInterface from sd->nvapi_lib");
     }
 
-    /* Create IDirect3D9Ex */
     void *pD3D = NULL;
-    HRESULT hr = fnCreate(32 /*D3D_SDK_VERSION*/, &pD3D);
+    HRESULT hr = fnCreate(32, &pD3D);
     if (FAILED(hr) || !pD3D) {
         STEREO_ERR("[DX9] Direct3DCreate9Ex failed: 0x%x", (unsigned)hr);
         FreeLibrary(hD3D9);
         return false;
     }
 
-    /* Build presentation parameters */
     uint32_t w = sc->app_width, h = sc->app_height;
     if (sd->stereo.override_width)  w = sd->stereo.override_width;
     if (sd->stereo.override_height) h = sd->stereo.override_height;
@@ -425,15 +455,14 @@ bool dx9_init(StereoDevice *sd, StereoSwapchain *sc)
     pp.PresentationInterval        = D3DPRESENT_INTERVAL_IMMEDIATE;
 
     void *pDev = NULL;
-    /* IDirect3D9Ex::CreateDeviceEx = vtable[20] */
     typedef HRESULT (WINAPI *PFN_CDE)(void*, UINT, UINT, HWND, DWORD, D3DPP*, void*, void**);
     PFN_CDE fnCDE = (PFN_CDE)(*(void***)pD3D)[D3D9EX_CreateDeviceEx];
     hr = fnCDE(pD3D, D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, sc->hwnd,
                D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED,
                &pp, NULL, &pDev);
     if (FAILED(hr) || !pDev) {
-        STEREO_ERR("[DX9] CreateDeviceEx failed: 0x%x — trying windowed fallback", (unsigned)hr);
-        /* Try windowed fallback */
+        STEREO_ERR("[DX9] CreateDeviceEx failed: 0x%x — trying windowed fallback",
+                   (unsigned)hr);
         pp.Windowed = TRUE;
         pp.FullScreen_RefreshRateInHz = 0;
         hr = fnCDE(pD3D, D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, sc->hwnd,
@@ -441,7 +470,7 @@ bool dx9_init(StereoDevice *sd, StereoSwapchain *sc)
                    &pp, NULL, &pDev);
         if (FAILED(hr) || !pDev) {
             STEREO_ERR("[DX9] CreateDeviceEx windowed also failed: 0x%x", (unsigned)hr);
-            ((void(WINAPI*)(void*))(*(void***)pD3D)[2])(pD3D);  /* Release */
+            ((void(WINAPI*)(void*))(*(void***)pD3D)[2])(pD3D);
             FreeLibrary(hD3D9);
             return false;
         }
@@ -449,25 +478,24 @@ bool dx9_init(StereoDevice *sd, StereoSwapchain *sc)
     STEREO_LOG("[DX9] Device created: %p  %ux%u @ %uHz  windowed=%d",
                pDev, w, h, rr, pp.Windowed);
 
-    /* NvAPI stereo handle for the D3D9 device */
     void *hStereo = NULL;
     if (s_nvQI_alt) {
         typedef int (*PFN_NvFromIUnk)(void*, void**);
-        PFN_NvFromIUnk fnCr = (PFN_NvFromIUnk)nv_q(0xAC7E37F4u /*NvID_StereoCreate*/);
+        PFN_NvFromIUnk fnCr = (PFN_NvFromIUnk)nv_q(0xAC7E37F4u);
         if (fnCr && fnCr(pDev, &hStereo) == 0) {
             typedef int (*PFN_NvH)(void*);
-            PFN_NvH fnAct = (PFN_NvH)nv_q(0xF6A1AD68u /*NvID_StereoActivate*/);
-            if (fnAct) { int r = fnAct(hStereo); STEREO_LOG("[DX9] NvAPI_Stereo_Activate = %d", r); }
+            PFN_NvH fnAct = (PFN_NvH)nv_q(0xF6A1AD68u);
+            if (fnAct) {
+                int r = fnAct(hStereo);
+                STEREO_LOG("[DX9] NvAPI_Stereo_Activate = %d", r);
+            }
         }
     }
-
-    /* The NV stereo surface (W*2 x H+1 with NVSTEREOIMAGEHEADER) is created
-     * lazily on first dx9_present call once we know the swapchain dimensions. */
 
     sd->dx9_lib      = hD3D9;
     sd->dx9_d3d      = pD3D;
     sd->dx9_dev      = pDev;
-    sd->dx9_surf     = NULL; /* created on first present */
+    sd->dx9_surf     = NULL;
     sd->dx9_nvstereo = hStereo;
     sd->dx9_ok       = true;
     return true;
@@ -476,9 +504,9 @@ bool dx9_init(StereoDevice *sd, StereoSwapchain *sc)
 void dx9_destroy(StereoDevice *sd)
 {
     if (!sd->dx9_ok) return;
-    if (sd->dx9_nvstereo) {
+    if (sd->dx9_nvstereo && s_nvQI_alt) {
         typedef int (*PFN_NvH)(void*);
-        PFN_NvH fn = (PFN_NvH)nv_q(0x3A153134u /*NvID_StereoDestroy*/);
+        PFN_NvH fn = (PFN_NvH)nv_q(0x3A153134u);
         if (fn) fn(sd->dx9_nvstereo);
     }
     if (sd->dx9_surf) ((void(WINAPI*)(void*))(*(void***)sd->dx9_surf)[D3DSURF_Release])(sd->dx9_surf);
@@ -489,24 +517,7 @@ void dx9_destroy(StereoDevice *sd)
     sd->dx9_lib = sd->dx9_d3d = sd->dx9_dev = sd->dx9_surf = sd->dx9_nvstereo = NULL;
 }
 
-/* Upload cpu_map pixels to dx9_surf and present one eye. */
-/* ── DX9 3D Vision present via sView NV Stereo Image blit ───────────────────
- *
- * The NVIDIA driver recognises a magic signature (NVSTEREOIMAGEHEADER, "NV3D")
- * embedded in the last row of a double-wide offscreen surface.  When Present
- * is called, the driver reads the header and routes left/right pixel data to
- * the hardware frame sequencer — no NvAPI SetActiveEye needed.
- *
- * Surface layout (W*2 × H+1):
- *   Row 0..H-1, cols   0..W-1  : right-eye pixels  (left  half in BGRA)
- *   Row 0..H-1, cols W..2W-1   : left-eye  pixels  (right half in BGRA)
- *   Row H               : NVSTEREOIMAGEHEADER (20 bytes, rest zeros)
- *
- * sView StDXNVSurface.cpp reference:
- *   https://github.com/gkv311/sview/blob/master/StOutPageFlip/StDXNVSurface.cpp
- * ─────────────────────────────────────────────────────────────────────────── */
-
-#define NVSTEREO_IMAGE_SIGNATURE 0x4433564eu  /* "NV3D" */
+#define NVSTEREO_IMAGE_SIGNATURE 0x4433564eu
 #define SIH_SWAP_EYES            0x00000001u
 #define SIH_SCALE_TO_FIT         0x00000002u
 
@@ -518,27 +529,20 @@ typedef struct {
     unsigned int dwFlags;
 } NVSTEREOIMAGEHEADER_;
 
-/* Create the double-wide lockable render target and write the NV3D header */
 static bool dx9_create_stereo_surface(StereoDevice *sd, uint32_t w, uint32_t h)
 {
-    /* IDirect3DDevice9::CreateRenderTarget = vtable[28]
-     * Must be lockable (TRUE) so we can write the header each frame.
-     * Width = W*2, Height = H+1 (extra row for the header). */
     typedef HRESULT (WINAPI *PFN_CRT)(void*, UINT, UINT, UINT,
                                       UINT, UINT, BOOL, void**, HANDLE*);
     PFN_CRT fnCRT = (PFN_CRT)(*(void***)sd->dx9_dev)[28];
     void *pSurf = NULL;
-    HRESULT hr = fnCRT(sd->dx9_dev, w * 2, h + 1,
-                       D3DFMT_A8R8G8B8,
-                       0 /*D3DMULTISAMPLE_NONE*/, 0, TRUE /*lockable*/,
-                       &pSurf, NULL);
+    HRESULT hr = fnCRT(sd->dx9_dev, w * 2, h + 1, D3DFMT_A8R8G8B8,
+                       0, 0, TRUE, &pSurf, NULL);
     if (FAILED(hr) || !pSurf) {
         STEREO_ERR("[DX9] CreateRenderTarget(NV stereo, %ux%u) failed: 0x%x",
                    w * 2, h + 1, (unsigned)hr);
         return false;
     }
 
-    /* Write NV3D signature into the last row (row index h) */
     D3DLOCKED_RECT_ lr;
     typedef HRESULT (WINAPI *PFN_LR)(void*, D3DLOCKED_RECT_*, const RECT*, DWORD);
     typedef HRESULT (WINAPI *PFN_ULR)(void*);
@@ -547,20 +551,19 @@ static bool dx9_create_stereo_surface(StereoDevice *sd, uint32_t w, uint32_t h)
 
     if (SUCCEEDED(fnLock(pSurf, &lr, NULL, 0))) {
         uint8_t *data = (uint8_t *)lr.pBits;
-        memset(data, 0, (size_t)lr.Pitch * h);  /* clear image rows */
+        memset(data, 0, (size_t)lr.Pitch * h);
         NVSTEREOIMAGEHEADER_ *hdr =
             (NVSTEREOIMAGEHEADER_ *)(data + (size_t)lr.Pitch * h);
         hdr->dwSignature = NVSTEREO_IMAGE_SIGNATURE;
         hdr->dwWidth     = w * 2;
         hdr->dwHeight    = h;
         hdr->dwBPP       = 32;
-        hdr->dwFlags     = 0;  /* 0 = no eye swap; right eye in left half */
+        hdr->dwFlags     = 0;
         fnUnlock(pSurf);
     }
 
     sd->dx9_surf = pSurf;
-    STEREO_LOG("[DX9] NV stereo surface created: %ux%u (NV3D header at row %u)",
-               w * 2, h + 1, h);
+    STEREO_LOG("[DX9] NV stereo surface created: %ux%u", w * 2, h + 1);
     return true;
 }
 
@@ -571,28 +574,22 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
 {
     if (!sd->dx9_ok) return VK_ERROR_INITIALIZATION_FAILED;
 
-    /* Create the NV stereo surface on first present (deferred from dx9_init
-     * to avoid creating it before the device is fully set up) */
     if (!sd->dx9_surf) {
         if (!dx9_create_stereo_surface(sd, sc->app_width, sc->app_height))
             return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    /* GPU readback both eye layers to CPU */
     VkResult res = alt_cpu_readback(sd, sc, queue, wait_sem_count, wait_sems,
                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     if (res != VK_SUCCESS) return res;
 
     const uint8_t *left  = (const uint8_t *)sc->cpu_map;
-    const uint8_t *right = sd->stereo.multiview
+    /* Only use layer 1 if we actually read it (multiview confirmed) */
+    const uint8_t *right = (sd->stereo.multiview && sd->multiview_pass_exists)
                            ? left + sc->cpu_eye_bytes
                            : left;
 
     uint32_t w = sc->app_width, h = sc->app_height;
-
-    /* Lock the double-wide surface and blit both eyes.
-     * Layout (dwFlags=0): left half = right eye, right half = left eye.
-     * The NVIDIA driver swaps them internally when it reads the NV3D header. */
     void *pSurf = sd->dx9_surf;
     {
         typedef HRESULT (WINAPI *PFN_LR)(void*, D3DLOCKED_RECT_*, const RECT*, DWORD);
@@ -605,29 +602,23 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
             uint8_t *dst = (uint8_t *)locked.pBits;
             size_t row_bytes = (size_t)w * 4;
             size_t stride_out = (size_t)locked.Pitch;
-
             for (uint32_t y = 0; y < h; y++) {
                 uint8_t *row = dst + y * stride_out;
-                /* Left half  (offset 0)        → right eye
-                 * Right half (offset w*4 bytes) → left eye  */
                 memcpy(row,             right + y * row_bytes, row_bytes);
                 memcpy(row + row_bytes, left  + y * row_bytes, row_bytes);
             }
-            /* NV3D header stays in last row (written once at surface creation) */
             fnUnlock(pSurf);
         }
     }
 
-    /* StretchRect: stereo surface → D3D9 back buffer, then Present */
     void *pDev = sd->dx9_dev;
     void *pBB  = NULL;
     typedef HRESULT (WINAPI *PFN_GBB)(void*, UINT, UINT, UINT, void**);
     ((PFN_GBB)(*(void***)pDev)[D3DDEV9_GetBackBuffer])(pDev, 0, 0, 0, &pBB);
     if (pBB) {
         typedef HRESULT (WINAPI *PFN_SR)(void*, void*, const RECT*, void*, const RECT*, UINT);
-        /* StretchRect = vtable[34]; filter = D3DTEXF_LINEAR (2) */
         ((PFN_SR)(*(void***)pDev)[D3DDEV9_StretchRect])
-            (pDev, pSurf, NULL, pBB, NULL, 2 /*D3DTEXF_LINEAR*/);
+            (pDev, pSurf, NULL, pBB, NULL, 2);
         ((void(WINAPI*)(void*))(*(void***)pBB)[D3DSURF_Release])(pBB);
     }
 
@@ -640,7 +631,6 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
     if (sd->stereo.half_fps) Sleep(16);
     return VK_SUCCESS;
 }
-
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Compose modes (SBS / TAB / Interlaced)
@@ -655,9 +645,6 @@ bool compose_init(StereoDevice *sd, StereoSwapchain *sc)
     sd->comp_composed = malloc((size_t)w * h * 4);
     if (!sd->comp_composed) return false;
 
-    /* GDI StretchDIBits path — no DXGI swap chain on the app HWND.
-     * Creating a DXGI swap chain on sc->hwnd crashes because the HWND
-     * already has a Vulkan Win32 surface attached from the same process. */
     sd->comp_hwnd = sc->hwnd;
     sd->comp_w    = w;
     sd->comp_h    = h;
@@ -674,13 +661,9 @@ void compose_destroy(StereoDevice *sd)
     sd->comp_ok = false;
 }
 
-/* Write one composed frame (W×H BGRA) to the DXGI swap chain back buffer */
 static VkResult compose_upload_and_present(StereoDevice *sd, uint32_t w, uint32_t h,
                                             const void *pixels)
 {
-    /* Use GDI StretchDIBits directly into the app window's HDC.
-     * This avoids creating a second DXGI swap chain on sc->hwnd — DXGI
-     * crashes when the HWND already has a Vulkan Win32 surface attached. */
     HWND hwnd = sd->comp_hwnd;
     if (!hwnd) return VK_ERROR_INITIALIZATION_FAILED;
 
@@ -691,14 +674,14 @@ static VkResult compose_upload_and_present(StereoDevice *sd, uint32_t w, uint32_
     ZeroMemory(&bmi, sizeof(bmi));
     bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth       = (LONG)w;
-    bmi.bmiHeader.biHeight      = -(LONG)h;  /* negative = top-down */
+    bmi.bmiHeader.biHeight      = -(LONG)h;
     bmi.bmiHeader.biPlanes      = 1;
     bmi.bmiHeader.biBitCount    = 32;
-    bmi.bmiHeader.biCompression = 0; /* BI_RGB */
+    bmi.bmiHeader.biCompression = 0;
 
     StretchDIBits(hdc, 0, 0, (int)w, (int)h,
                   0, 0, (int)w, (int)h,
-                  pixels, &bmi, 0 /*DIB_RGB_COLORS*/, SRCCOPY);
+                  pixels, &bmi, 0, SRCCOPY);
 
     ReleaseDC(hwnd, hdc);
     return VK_SUCCESS;
@@ -710,7 +693,9 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
                          const VkSemaphore *wait_sems,
                          StereoPresentMode mode)
 {
-    STEREO_LOG("[Compose] compose_present enter: mode=%d comp_ok=%d", (int)mode, sd->comp_ok);
+    STEREO_LOG("[Compose] enter: mode=%d comp_ok=%d multiview=%d pass_exists=%d",
+               (int)mode, sd->comp_ok,
+               sd->stereo.multiview, sd->multiview_pass_exists);
     if (!sd->comp_ok) return VK_ERROR_INITIALIZATION_FAILED;
 
     VkResult res = alt_cpu_readback(sd, sc, queue, wait_sem_count, wait_sems,
@@ -719,19 +704,19 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
 
     uint32_t w = sc->app_width, h = sc->app_height;
     const uint8_t *left  = (const uint8_t *)sc->cpu_map;
-    /* When multiview=1, layer 1 contains the right eye rendered by the GPU.
-     * When multiview=0, the app only rendered layer 0 — use it for both eyes
-     * (flat 3D baseline; same image both sides until multiview is enabled). */
-    const uint8_t *right = sd->stereo.multiview
+
+    /* Only use layer 1 if multiview was confirmed injected AND actually
+     * read back (layer_count=2 in alt_cpu_readback).  Otherwise the right
+     * eye shows the same frame as the left (2D, but not black or garbage). */
+    const uint8_t *right = (sd->stereo.multiview && sd->multiview_pass_exists)
                            ? left + sc->cpu_eye_bytes
                            : left;
-    uint8_t       *out   = (uint8_t *)sd->comp_composed;
+
+    uint8_t *out = (uint8_t *)sd->comp_composed;
 
     switch (mode) {
 
     case STEREO_PRESENT_SBS: {
-        /* Left eye in left half-width, right eye in right half-width.
-         * Each eye is horizontally scaled to w/2 via nearest-neighbour.    */
         uint32_t hw = w / 2;
         for (uint32_t y = 0; y < h; y++) {
             const uint8_t *lrow = left  + y * w * 4;
@@ -747,7 +732,6 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
     }
 
     case STEREO_PRESENT_TAB: {
-        /* Left eye top half, right eye bottom half. */
         uint32_t hh = h / 2;
         for (uint32_t y = 0; y < hh; y++) {
             uint32_t sy = y * h / hh;
@@ -759,7 +743,6 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
 
     case STEREO_PRESENT_INTERLACED:
     default: {
-        /* Even rows from left eye, odd rows from right eye. */
         for (uint32_t y = 0; y < h; y++) {
             const uint8_t *src = (y & 1) ? right + y * w * 4 : left + y * w * 4;
             memcpy(out + y * w * 4, src, w * 4);
@@ -776,7 +759,6 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
  * Hotkeys
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Bit indices for our tracked key combos */
 #define HOT_DEC_SEP   0
 #define HOT_INC_SEP   1
 #define HOT_DEC_CONV  2
@@ -786,7 +768,7 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
 static uint32_t sample_hotkeys(void)
 {
     SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
-    if (!(ctrl & 0x8000)) return 0;  /* Ctrl not held */
+    if (!(ctrl & 0x8000)) return 0;
     uint32_t mask = 0;
     if (GetAsyncKeyState(VK_F3) & 0x8000) mask |= (1u << HOT_DEC_SEP);
     if (GetAsyncKeyState(VK_F4) & 0x8000) mask |= (1u << HOT_INC_SEP);
@@ -800,7 +782,7 @@ void hotkeys_poll(StereoDevice *sd)
 {
     uint32_t cur  = sample_hotkeys();
     uint32_t prev = sd->hotkey_prev;
-    uint32_t rise = cur & ~prev;   /* keys newly pressed this frame */
+    uint32_t rise = cur & ~prev;
     sd->hotkey_prev = cur;
     if (!rise) return;
 
@@ -831,7 +813,6 @@ void hotkeys_poll(StereoDevice *sd)
 
     if (changed) {
         stereo_config_compute_offsets(cfg);
-        /* Update the stereo UBO if it's mapped */
         if (sd->stereo_ubo_map) {
             float *p = (float *)sd->stereo_ubo_map;
             p[0] = cfg->left_eye_offset;
@@ -841,14 +822,11 @@ void hotkeys_poll(StereoDevice *sd)
     }
 
     if (rise & (1u << HOT_SAVE)) {
-        /* Write separation + convergence to local INI */
         const char *ini = sd->local_ini[0] ? sd->local_ini : sd->global_ini;
-        STEREO_LOG("[Hotkey] INI save: separation = %.6g -> %s",  cfg->separation,  ini);
         ini_write_float(ini, "VKS3D", "separation",  cfg->separation);
-        STEREO_LOG("[Hotkey] INI save: convergence = %.6g -> %s", cfg->convergence, ini);
         ini_write_float(ini, "VKS3D", "convergence", cfg->convergence);
-        STEREO_LOG("[Hotkey] INI save: complete");
-        /* Brief visual feedback via a Windows beep */
+        STEREO_LOG("[Hotkey] Saved sep=%.4f conv=%.4f → %s",
+                   cfg->separation, cfg->convergence, ini);
         Beep(880, 80);
     }
 }
