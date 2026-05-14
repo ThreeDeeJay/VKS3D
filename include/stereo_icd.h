@@ -570,6 +570,7 @@ typedef struct StereoDevice {
     uint32_t               render_pass_count;
     StereoSwapchain        swapchains[MAX_SWAPCHAINS];
     uint32_t               swapchain_count;
+    bool                   multiview_pass_exists;
 
     /* ── Intercepted depth/stencil images (upgraded to arrayLayers=2) ─── *
      * When vkCreateImage is called for a depth/stencil image whose W×H     *
@@ -613,7 +614,6 @@ typedef struct StereoDevice {
     void                  *dx9_dev;         /* IDirect3DDevice9Ex*           */
     void                  *dx9_surf;        /* IDirect3DSurface9* systemmem  */
     void                  *dx9_nvstereo;    /* NvAPI StereoHandle for dx9    */
-    bool                   multiview_pass_exists;
 
     /* ── Compose swap chain state (SBS / TAB / Interlaced) ─────────── *
      * A plain DXGI windowed swap chain on sc->hwnd.  The composed frame  *
