@@ -1,33 +1,10 @@
 #pragma once
 /*
  * stereo_icd.h — Vulkan 1.1 Stereoscopic ICD (VKS3D)
- *
- * Supports: Windows x64, Windows x86 (WoW64), Linux x86_64, Linux x86
- *
- * This ICD wraps a real GPU ICD and injects:
- *   - VK_KHR_multiview (viewMask=0b11) into all render passes
- *   - SPIR-V vertex shader patching for per-eye clip-space stereo offset
- *   - Swapchain width doubling for Side-By-Side (SBS) output
- *   - VkCmdBlitImage composite pass at present time
- *
- * Configuration (environment variables):
- *   STEREO_SEPARATION   — IPD/clip-space separation  (default: 0.065)
- *   STEREO_CONVERGENCE  — Convergence distance shift  (default: 0.030)
- *   STEREO_ENABLED      — 0 to disable stereo         (default: 1)
- *   STEREO_FLIP_EYES    — 1 to swap left/right        (default: 0)
- *   STEREO_REAL_ICD     — Path to real GPU ICD .dll/.so  (auto-detected)
- *
- * Architecture:
- *   Vulkan Loader → VKS3D_x64.dll → real GPU ICD (nvoglv64.dll / amdvlk64.dll …)
- *   Vulkan Loader → VKS3D_x86.dll → real GPU ICD (nvoglv32.dll / amdvlk32.dll …)
  */
 
-/* platform.h must come first — defines stereo_mutex_t, STEREO_LOG, etc. */
 #include "platform.h"
 
-/* Pull in platform-specific Vulkan extensions (Win32 surface, etc.).
- * This must be defined BEFORE vulkan.h so that vulkan.h includes
- * vulkan_win32.h, making PFN_vkCreateWin32SurfaceKHR etc. available. */
 #ifdef _WIN32
 #  ifndef VK_USE_PLATFORM_WIN32_KHR
 #    define VK_USE_PLATFORM_WIN32_KHR
@@ -37,13 +14,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_icd.h>
 
-/* ── Self-contained fallbacks for external memory extensions ─────────────────
- * Older Vulkan SDK releases do not ship all extension headers.  We define the
- * minimal types we need, guarded by the extension feature-test macros so they
- * don't clash when a newer SDK provides them.
- * ─────────────────────────────────────────────────────────────────────────── */
-
-/* VK_KHR_external_memory ── VkExternalMemoryImageCreateInfo + handle types */
+/* ── Self-contained fallbacks for external memory extensions ─────────────── */
 #if !defined(VK_KHR_external_memory)
 #define VK_KHR_external_memory 1
 typedef struct VkExternalMemoryImageCreateInfo {
@@ -54,12 +25,10 @@ typedef struct VkExternalMemoryImageCreateInfo {
 #define VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO ((VkStructureType)1000072001)
 #endif
 
-/* VK_KHR_external_memory_win32 ── import handle + Win32 memory properties */
 #if defined(_WIN32) && !defined(VK_KHR_external_memory_win32)
 #define VK_KHR_external_memory_win32 1
 #define VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME "VK_KHR_external_memory_win32"
 
-/* D3D11 texture handle type — value from Vulkan spec §44.2 */
 #ifndef VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT
 #define VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT \
     ((VkExternalMemoryHandleTypeFlagBits)0x00000008)
@@ -89,24 +58,7 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
     VkMemoryWin32HandlePropertiesKHR     *pMemoryWin32HandleProperties);
 #endif /* VK_KHR_external_memory_win32 */
 
-/* VkPhysicalDeviceToolProperties — three-way SDK compatibility shim
- *
- * VkPhysicalDeviceToolProperties was promoted to Vulkan 1.3 core from
- * VK_EXT_tooling_info.  Three SDK states exist:
- *
- *  Case A — SDK >= 1.3 (VK_VERSION_1_3 defined):
- *    vulkan_core.h defines the struct and the un-suffixed typedef.  Nothing
- *    to do.
- *
- *  Case B — SDK has VK_EXT_tooling_info but NOT Vulkan 1.3 core:
- *    The SDK defines VkPhysicalDeviceToolPropertiesEXT.  The 1.3 alias
- *    VkPhysicalDeviceToolProperties does NOT exist.  We add it as a typedef.
- *
- *  Case C — SDK predates VK_EXT_tooling_info:
- *    Nothing exists.  Define the struct from scratch.
- *
- * We distinguish cases with #if/#elif on macro sentinels only (never
- * #ifndef on a typedef name, which is a non-starter in C). */
+/* VkPhysicalDeviceToolProperties compat shim */
 #ifndef VK_MAX_EXTENSION_NAME_SIZE
 #  define VK_MAX_EXTENSION_NAME_SIZE 256
 #endif
@@ -114,16 +66,14 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #  define VK_MAX_DESCRIPTION_SIZE 256
 #endif
 #if defined(VK_VERSION_1_3)
-  /* Case A: struct already in vulkan_core.h — nothing to do */
+  /* Case A: struct already in vulkan_core.h */
 #elif defined(VK_EXT_tooling_info)
-  /* Case B: EXT struct present, 1.3 un-suffixed alias missing */
   typedef VkPhysicalDeviceToolPropertiesEXT VkPhysicalDeviceToolProperties;
 # ifndef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES
 #   define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES \
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES_EXT
 # endif
 #else
-  /* Case C: define everything from scratch */
   typedef VkFlags VkToolPurposeFlags;
   typedef struct VkPhysicalDeviceToolProperties {
       VkStructureType    sType;
@@ -136,19 +86,11 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
   } VkPhysicalDeviceToolProperties;
 # define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES \
       ((VkStructureType)1000245000)
-#endif /* VkPhysicalDeviceToolProperties compat */
+#endif
 
-/*
- * Older Vulkan SDK releases do not define ICD_LOADER_MAGIC or
- * SET_LOADER_MAGIC_VALUE in vk_icd.h (VK_LOADER_DATA itself is present
- * in all SDK versions we care about, so we do NOT redefine that type).
- *
- * The values are part of the stable Vulkan loader ABI since Vulkan 1.0.
- */
 #ifndef ICD_LOADER_MAGIC
 #  define ICD_LOADER_MAGIC 0xCD1CDABA1DABADABULL
 #endif
-
 #ifndef SET_LOADER_MAGIC_VALUE
 #  define SET_LOADER_MAGIC_VALUE(obj) \
     do { \
@@ -176,51 +118,37 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #define MAX_DESCRIPTOR_SETS     16384
 #define MAX_CMD_BUFFERS         65536
 
-/* ── Stereo configuration ─────────────────────────────────────────────────── */
 /* ── Stereo presentation mode ─────────────────────────────────────────────── */
 typedef enum StereoPresentMode {
-    STEREO_PRESENT_AUTO       = 0,  /* try DXGI → DX9 → SBS */
-    STEREO_PRESENT_DXGI       = 1,  /* DXGI 1.2 stereo swap chain (classic 3DV) */
-    STEREO_PRESENT_DX9        = 2,  /* NvAPI + D3D9Ex direct mode (3D Fix Manager) */
-    STEREO_PRESENT_SBS        = 3,  /* side-by-side half-width */
-    STEREO_PRESENT_TAB        = 4,  /* top-and-bottom half-height */
-    STEREO_PRESENT_INTERLACED = 5,  /* row-interleaved */
-    STEREO_PRESENT_MONO       = 6,  /* passthrough (no stereo, debug) */
+    STEREO_PRESENT_AUTO       = 0,
+    STEREO_PRESENT_DXGI       = 1,
+    STEREO_PRESENT_DX9        = 2,
+    STEREO_PRESENT_SBS        = 3,
+    STEREO_PRESENT_TAB        = 4,
+    STEREO_PRESENT_INTERLACED = 5,
+    STEREO_PRESENT_MONO       = 6,
 } StereoPresentMode;
 
 typedef struct StereoConfig {
     bool              enabled;
-    float             separation;          /* clip-space IPD offset, half applied per eye */
-    float             convergence;         /* clip-space convergence correction            */
-    bool              flip_eyes;           /* swap left/right if display is mirrored       */
-    float             left_eye_offset;     /* applied to gl_Position.x for view 0         */
-    float             right_eye_offset;    /* applied to gl_Position.x for view 1         */
-
-    /* ── Presentation ───────────────────────────────────── */
-    StereoPresentMode present_mode;        /* requested mode (may fall back at runtime)    */
-    uint32_t          override_width;      /* 0 = use app resolution                       */
+    float             separation;
+    float             convergence;
+    bool              flip_eyes;
+    float             left_eye_offset;
+    float             right_eye_offset;
+    StereoPresentMode present_mode;
+    uint32_t          override_width;
     uint32_t          override_height;
-    uint32_t          refresh_rate;        /* Hz, 0 = driver default; use 120 for 3D Vision*/
-    bool              half_fps;            /* cap to half rate (60fps for active shutter)  */
-
-    /* ── Rendering ──────────────────────────────────────── */
-    bool              multiview;           /* inject VK_KHR_multiview into render passes    *
-                                           * Default: false.  Requires ALL framebuffer       *
-                                           * attachments (incl. depth) to be 2D_ARRAY        *
-                                           * with >=2 layers — most apps only have 1-layer  *
-                                           * depth, causing VK_ERROR_DEVICE_LOST.            *
-                                           * Enable only for apps known to use array depth.  *
-                                           * Set multiview=1 in [global] of vks3d.ini.       */
-
-    /* ── Hotkey step sizes ──────────────────────────────── */
-    float             step_separation;     /* per Ctrl+F3/F4 press                        */
-    float             step_convergence;    /* per Ctrl+F5/F6 press                        */
+    uint32_t          refresh_rate;
+    bool              half_fps;
+    bool              multiview;
+    float             step_separation;
+    float             step_convergence;
 } StereoConfig;
 
 void stereo_config_init(StereoConfig *cfg);
 void stereo_config_compute_offsets(StereoConfig *cfg);
 
-/* Global INI paths (set in DllMain, available to all TUs) */
 extern char g_dll_dir[512];
 extern char g_exe_dir[512];
 extern char g_global_ini[512];
@@ -251,22 +179,18 @@ typedef struct RealInstanceDispatch {
     PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR GetPhysicalDeviceSurfaceCapabilitiesKHR;
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR  GetPhysicalDeviceSurfaceFormatsKHR;
     PFN_vkGetPhysicalDeviceSurfacePresentModesKHR GetPhysicalDeviceSurfacePresentModesKHR;
-    /* ── Vulkan 1.1 physdev functions ────────────────────────────────────── */
     PFN_vkGetPhysicalDeviceImageFormatProperties2   GetPhysicalDeviceImageFormatProperties2;
     PFN_vkGetPhysicalDeviceSparseImageFormatProperties2 GetPhysicalDeviceSparseImageFormatProperties2;
     PFN_vkGetPhysicalDeviceExternalBufferProperties GetPhysicalDeviceExternalBufferProperties;
     PFN_vkGetPhysicalDeviceExternalFenceProperties  GetPhysicalDeviceExternalFenceProperties;
     PFN_vkGetPhysicalDeviceExternalSemaphoreProperties GetPhysicalDeviceExternalSemaphoreProperties;
     PFN_vkEnumeratePhysicalDeviceGroups             EnumeratePhysicalDeviceGroups;
-    /* ── KHR surface extensions ──────────────────────────────────────────── */
     PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR  GetPhysicalDeviceSurfaceCapabilities2KHR;
     PFN_vkGetPhysicalDeviceSurfaceFormats2KHR       GetPhysicalDeviceSurfaceFormats2KHR;
     PFN_vkGetPhysicalDevicePresentRectanglesKHR     GetPhysicalDevicePresentRectanglesKHR;
-    /* ── Win32 ───────────────────────────────────────────────────────────── */
 #ifdef VK_KHR_win32_surface
     PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR GetPhysicalDeviceWin32PresentationSupportKHR;
 #endif
-    /* ── EXT extensions ──────────────────────────────────────────────────── */
 #ifdef VK_EXT_full_screen_exclusive
     PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT  GetPhysicalDeviceSurfacePresentModes2EXT;
 #endif
@@ -274,7 +198,6 @@ typedef struct RealInstanceDispatch {
     PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT GetPhysicalDeviceCalibrateableTimeDomainsEXT;
 #endif
     PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT GetPhysicalDeviceMultisamplePropertiesEXT;
-    /* ── NV extensions ───────────────────────────────────────────────────── */
     PFN_vkGetPhysicalDeviceExternalImageFormatPropertiesNV GetPhysicalDeviceExternalImageFormatPropertiesNV;
 #ifdef VK_NV_cooperative_matrix
     PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesNV GetPhysicalDeviceCooperativeMatrixPropertiesNV;
@@ -282,10 +205,7 @@ typedef struct RealInstanceDispatch {
 #ifdef VK_NV_coverage_reduction_mode
     PFN_vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV;
 #endif
-    /* NVX: stored as void* because VkDeviceGeneratedCommands* structs were
-     * removed from newer SDK versions; we cast at the call site.           */
     PFN_vkVoidFunction GetPhysicalDeviceGeneratedCommandsPropertiesNVX;
-    /* ── Instance-level functions (VkInstance first arg) ─────────────────── */
 #ifdef VK_KHR_win32_surface
     PFN_vkCreateWin32SurfaceKHR                     CreateWin32SurfaceKHR;
 #endif
@@ -298,7 +218,7 @@ typedef struct RealInstanceDispatch {
 } RealInstanceDispatch;
 
 typedef struct RealDeviceDispatch {
-    PFN_vkGetDeviceProcAddr                   GetDeviceProcAddr; /* must be first for forwarding */
+    PFN_vkGetDeviceProcAddr                   GetDeviceProcAddr;
     PFN_vkDestroyDevice                       DestroyDevice;
     PFN_vkGetDeviceQueue                      GetDeviceQueue;
     PFN_vkQueueSubmit                         QueueSubmit;
@@ -422,13 +342,11 @@ typedef struct RealDeviceDispatch {
     PFN_vkGetSwapchainImagesKHR              GetSwapchainImagesKHR;
     PFN_vkAcquireNextImageKHR                AcquireNextImageKHR;
     PFN_vkQueuePresentKHR                    QueuePresentKHR;
-    /* VK_KHR_external_memory_win32 — may be NULL on non-Windows or old drivers */
     PFN_vkGetMemoryWin32HandlePropertiesKHR  GetMemoryWin32HandlePropertiesKHR;
 } RealDeviceDispatch;
 
 /* ── Object wrappers ─────────────────────────────────────────────────────── */
 
-/* Surface → HWND mapping (populated by stereo_CreateWin32SurfaceKHR) */
 #define MAX_SURFACES 16
 typedef struct StereoSurfaceHWND {
     VkSurfaceKHR surface;
@@ -436,22 +354,16 @@ typedef struct StereoSurfaceHWND {
 } StereoSurfaceHWND;
 
 typedef struct StereoInstance {
-    /* VK_LOADER_DATA MUST be the very first field of every dispatchable handle
-     * returned by an ICD.  The loader writes its dispatch pointer here.
-     * Without it the loader corrupts whatever comes first (e.g. real_instance),
-     * which makes the real ICD reject its own handle with INITIALIZATION_FAILED. */
     VK_LOADER_DATA            loader_data;
     VkInstance                real_instance;
     RealInstanceDispatch      real;
     StereoConfig              stereo;
     PFN_vkGetInstanceProcAddr real_get_instance_proc_addr;
     VkDebugUtilsMessengerEXT  debug_messenger;
-    /* Surface → HWND map, filled by stereo_CreateWin32SurfaceKHR */
     StereoSurfaceHWND         surface_hwnd[MAX_SURFACES];
     uint32_t                  surface_hwnd_count;
 } StereoInstance;
 
-/* Look up HWND for a surface (returns NULL if not found) */
 static inline HWND stereo_si_hwnd_for_surface(StereoInstance *si, VkSurfaceKHR surface)
 {
     for (uint32_t i = 0; i < si->surface_hwnd_count; i++)
@@ -460,90 +372,44 @@ static inline HWND stereo_si_hwnd_for_surface(StereoInstance *si, VkSurfaceKHR s
     return NULL;
 }
 
-/* ── StereoPhysdev ───────────────────────────────────────────────────────────
- * Wrapper around the real GPU ICD's VkPhysicalDevice handle.
- *
- * WHY: The Vulkan loader dispatches vkCreateDevice (and all other physdev-level
- * functions) by reading the dispatch table pointer stored at offset 0
- * (VK_LOADER_DATA) of the VkPhysicalDevice handle.  If we return the raw
- * nvoglv64 physdev handle from EnumeratePhysicalDevices, the loader reads
- * nvoglv64's own dispatch table and calls nvoglv64's vkCreateDevice — bypassing
- * stereo_CreateDevice entirely.
- *
- * FIX: Return OUR wrapper as the VkPhysicalDevice handle.  The loader writes
- * its dispatch pointer into wrapper->loader_data.  Our function pointers are
- * installed in that dispatch table (via vk_icdGetInstanceProcAddr), so all
- * physdev-level calls and vkCreateDevice go through VKS3D. */
 typedef struct StereoPhysdev {
-    /* VK_LOADER_DATA MUST be the very first field.  The loader writes its
-     * own dispatch pointer here; SET_LOADER_MAGIC_VALUE initialises it. */
     VK_LOADER_DATA   loader_data;
-    VkPhysicalDevice real_pd;    /* raw nvoglv64 handle                 */
-    StereoInstance  *si;         /* owning StereoInstance               */
+    VkPhysicalDevice real_pd;
+    StereoInstance  *si;
 } StereoPhysdev;
 
 typedef struct StereoSwapchain {
-    /* ── Handle ─────────────────────────────────────────────────────── */
-    VkSwapchainKHR    real_swapchain;   /* VK_NULL_HANDLE in DXGI stereo mode */
-    VkSwapchainKHR    app_handle;       /* handle returned to app */
+    VkSwapchainKHR    real_swapchain;
+    VkSwapchainKHR    app_handle;
     VkDevice          device;
     uint32_t          app_width;
     uint32_t          app_height;
     VkFormat          format;
-    bool              stereo_active;    /* false = passthrough to real_swapchain */
-    bool              dxgi_mode;        /* true = DXGI 1.2 stereo output */
-
-    /* ── Vulkan stereo render targets (app renders here via multiview) */
+    bool              stereo_active;
+    bool              dxgi_mode;
     uint32_t          image_count;
-    VkImage          *stereo_images;    /* [image_count], arrayLayers=2, W×H */
+    VkImage          *stereo_images;
     VkDeviceMemory   *stereo_memory;
-    VkImageView      *stereo_views_arr; /* 2D_ARRAY views for framebuffer */
-
-    /* ── DXGI stereo output ──────────────────────────────────────────── */
+    VkImageView      *stereo_views_arr;
     HWND              hwnd;
-    void             *dxgi_sc;          /* IDXGISwapChain* */
-
-    /* ── Shared D3D11 texture (Vulkan external memory import) ─────────
-     * shared_d3d11_tex: ID3D11Texture2D* Texture2DArray[2].
-     *   slice 0 = left eye, slice 1 = right eye.
-     * shared_nt_handle: NT HANDLE used for vkAllocateMemory import.
-     *   Ownership passes to Vulkan after successful AllocateMemory.
-     * ───────────────────────────────────────────────────────────────── */
-    void             *shared_d3d11_tex; /* ID3D11Texture2D* Texture2DArray[2] */
-    HANDLE            shared_nt_handle; /* NT HANDLE (consumed by Vulkan import) */
-
-    /* ── Barrier command pool + per-image fence ──────────────────────
-     * A lightweight "present-prep" CB that transitions the shared image
-     * COLOR_ATTACHMENT → GENERAL and signals barrier_fences[i].
-     * The CPU waits on this fence before calling D3D11 CopySubresource.
-     * ───────────────────────────────────────────────────────────────── */
+    void             *dxgi_sc;
+    void             *shared_d3d11_tex;
+    HANDLE            shared_nt_handle;
     VkCommandPool     barrier_pool;
-    VkCommandBuffer  *barrier_cmds;     /* [image_count] */
-    VkFence          *barrier_fences;   /* [image_count] */
-
-    /* ── AcquireNextImageKHR round-robin ─────────────────────────────── */
+    VkCommandBuffer  *barrier_cmds;
+    VkFence          *barrier_fences;
     uint32_t          acquire_idx;
-
-    /* ── Passthrough mode fields (when dxgi_mode = false) ───────────── */
-    VkImage          *sbs_images;       /* real swapchain images */
+    VkImage          *sbs_images;
     uint32_t          sbs_width;
-
-    /* ── Resolved presentation mode for this swapchain ──────────────── */
-    StereoPresentMode  present_mode;    /* effective mode (may differ from config) */
-
-    /* ── CPU staging (used by DX9 / SBS / TAB / Interlaced modes) ──── *
-     * A VkBuffer of size W×H×4×2 (layer 0 then layer 1, BGRA/RGBA),    *
-     * HOST_VISIBLE | HOST_COHERENT, persistently mapped.                 *
-     * A command buffer copies both layers → buffer, then restores layout.*
-     * ─────────────────────────────────────────────────────────────────── */
+    StereoPresentMode  present_mode;
     bool              cpu_ok;
     VkCommandPool     cpu_pool;
     VkCommandBuffer   cpu_cmd;
     VkFence           cpu_fence;
     VkBuffer          cpu_buf;
     VkDeviceMemory    cpu_mem;
-    void             *cpu_map;         /* persistently mapped base pointer */
-    uint32_t          cpu_eye_bytes;   /* W × H × 4 (bytes per eye layer)  */
+    void             *cpu_map;
+    uint32_t          cpu_eye_bytes;
 } StereoSwapchain;
 
 typedef struct StereoRenderPassInfo {
@@ -554,12 +420,10 @@ typedef struct StereoRenderPassInfo {
 } StereoRenderPassInfo;
 
 typedef struct StereoDevice {
-    /* MUST be first: loader reads *(void**)device for dispatch table.
-     * Without this, any Vulkan call not in our intercept list crashes
-     * because the loader reads real_device as a dispatch pointer. */
+    /* MUST be first: loader reads *(void**)device for dispatch table. */
     VK_LOADER_DATA         loader_data;
     VkDevice               real_device;
-    StereoInstance        *si;           /* owning instance */
+    StereoInstance        *si;
     VkPhysicalDevice       real_physdev;
     RealDeviceDispatch     real;
     StereoConfig           stereo;
@@ -570,111 +434,108 @@ typedef struct StereoDevice {
     uint32_t               render_pass_count;
     StereoSwapchain        swapchains[MAX_SWAPCHAINS];
     uint32_t               swapchain_count;
-    bool                   multiview_pass_exists;
 
-    /* ── Intercepted depth/stencil images (upgraded to arrayLayers=2) ─── *
-     * When vkCreateImage is called for a depth/stencil image whose W×H     *
-     * matches an active DXGI swapchain, we force arrayLayers=2 so the      *
-     * multiview render pass can write depth for both eyes.  We track the   *
-     * resulting VkImage handles here so stereo_CreateImageView can upgrade  *
-     * their views to VK_IMAGE_VIEW_TYPE_2D_ARRAY / layerCount=2.           */
 #define MAX_DEPTH_IMAGES  256
     VkImage                intercepted_depth[MAX_DEPTH_IMAGES];
     uint32_t               intercepted_depth_count;
-    uint32_t               stereo_w;   /* active swapchain width  (set at CreateSwapchainKHR) */
-    uint32_t               stereo_h;   /* active swapchain height */
+    uint32_t               stereo_w;
+    uint32_t               stereo_h;
     stereo_mutex_t         lock;
+
+    /* ── Multiview render pass tracking ─────────────────────────────────── *
+     * Set to true when stereo_CreateRenderPass successfully injects          *
+     * viewMask=0x3 into a swapchain output render pass.                      *
+     *                                                                         *
+     * alt_cpu_readback in present_alt.c uses this flag to decide layer_count: *
+     *   true  → both layers rendered → read 2 layers (real stereo)           *
+     *   false → only layer 0 rendered (e.g. DXVK render pass did not use    *
+     *           PRESENT_SRC_KHR as finalLayout so injection was skipped) →  *
+     *           read 1 layer and use it for both eyes (2D, not black).       *
+     *                                                                         *
+     * Without this flag, alt_cpu_readback would try to transition layer 1    *
+     * from COLOR_ATTACHMENT_OPTIMAL when it is actually UNDEFINED, producing *
+     * an invalid image layout barrier → GPU TDR → VK_ERROR_DEVICE_LOST.     */
+    bool                   multiview_pass_exists;
 
     /* ── D3D11 / DXGI stereo output (lazily initialized) ─────────────── */
     bool                   d3d11_ok;
-    bool                   dxgi_init_in_progress; /* re-entrancy guard for dxgi_sc_create */
-    void                  *d3d11_dev;    /* ID3D11Device*         */
-    void                  *d3d11_ctx;    /* ID3D11DeviceContext*  */
-    void                  *nvapi_stereo; /* NvStereoHandle        */
-    void                  *nvapi_lib;    /* HMODULE nvapi64.dll   */
-    void                  *d3d11_lib;    /* HMODULE d3d11.dll     */
+    bool                   dxgi_init_in_progress;
+    void                  *d3d11_dev;
+    void                  *d3d11_ctx;
+    void                  *nvapi_stereo;
+    void                  *nvapi_lib;
+    void                  *d3d11_lib;
 
-    /* ── Graphics queue (for AcquireNextImageKHR semaphore signaling) ── */
+    /* ── Graphics queue ──────────────────────────────────────────────── */
     VkQueue                gfx_queue;
-    uint32_t               gfx_qf;      /* graphics queue family index */
+    uint32_t               gfx_qf;
 
-    /* ── INI file paths (set in DllMain, used by config + hotkeys) ──── */
-    char                   global_ini[512];  /* <dll_dir>/vks3d.ini        */
-    char                   local_ini[512];   /* <exe_dir>/vks3d.ini        */
+    /* ── INI file paths ──────────────────────────────────────────────── */
+    char                   global_ini[512];
+    char                   local_ini[512];
 
-    /* ── Hotkey debounce state ──────────────────────────────────────── */
-    uint32_t               hotkey_prev;     /* bitmask of keys active last frame */
+    /* ── Hotkey debounce ─────────────────────────────────────────────── */
+    uint32_t               hotkey_prev;
 
-    /* ── D3D9 direct-mode state (STEREO_PRESENT_DX9) ────────────────── *
-     * IDirect3D9Ex + device created on sc->hwnd in exclusive fullscreen.  *
-     * NvAPI stereo activated on dx9_dev.                                   */
+    /* ── D3D9 direct-mode state ──────────────────────────────────────── */
     bool                   dx9_ok;
-    void                  *dx9_lib;         /* HMODULE d3d9.dll              */
-    void                  *dx9_d3d;         /* IDirect3D9Ex*                 */
-    void                  *dx9_dev;         /* IDirect3DDevice9Ex*           */
-    void                  *dx9_surf;        /* IDirect3DSurface9* systemmem  */
-    void                  *dx9_nvstereo;    /* NvAPI StereoHandle for dx9    */
+    void                  *dx9_lib;
+    void                  *dx9_d3d;
+    void                  *dx9_dev;
+    void                  *dx9_surf;
+    void                  *dx9_nvstereo;
 
-    /* ── Compose swap chain state (SBS / TAB / Interlaced) ─────────── *
-     * A plain DXGI windowed swap chain on sc->hwnd.  The composed frame  *
-     * (CPU-built) is uploaded via ID3D11DeviceContext::UpdateSubresource. */
+    /* ── Compose swap chain state ────────────────────────────────────── */
     bool                   comp_ok;
-    HWND                   comp_hwnd;       /* app HWND for GDI StretchDIBits  */
-    void                  *comp_composed;   /* malloc'd W×H×4 compose buffer   */
+    HWND                   comp_hwnd;
+    void                  *comp_composed;
     uint32_t               comp_w;
     uint32_t               comp_h;
 } StereoDevice;
 
-/* ── Stereo UBO layout (matches GLSL std140) ─────────────────────────────── */
+/* ── Stereo UBO layout ───────────────────────────────────────────────────── */
 typedef struct StereoUBO {
     float eye_offset[2];
     float convergence;
     float _pad;
 } StereoUBO;
 
-/* ── Object lookup helpers ────────────────────────────────────────────────── */
+/* ── Object lookup helpers ───────────────────────────────────────────────── */
 StereoInstance         *stereo_instance_from_handle(VkInstance h);
 StereoInstance         *stereo_si_from_physdev(VkPhysicalDevice pd);
 StereoPhysdev          *stereo_physdev_get_or_create(VkPhysicalDevice real_pd, StereoInstance *si);
 StereoDevice           *stereo_device_from_handle(VkDevice h);
 StereoSwapchain        *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc);
 StereoRenderPassInfo   *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp);
-/* Real ICD accessor functions */
 PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void);
 PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
-/* Object lifecycle helpers */
 void                    stereo_instance_free(VkInstance h);
 StereoDevice           *stereo_device_alloc(void);
 
 /* ── Forward declarations ────────────────────────────────────────────────── */
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(
-    const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
-VKAPI_ATTR void VKAPI_CALL stereo_DestroyInstance(VkInstance, const VkAllocationCallbacks*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumeratePhysicalDevices(
-    VkInstance, uint32_t*, VkPhysicalDevice*);
-/* Physical device wrappers (physdev.c) — translate StereoPhysicalDevice* → real handle */
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceProperties(VkPhysicalDevice, VkPhysicalDeviceProperties*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceProperties2(VkPhysicalDevice, VkPhysicalDeviceProperties2*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceFeatures(VkPhysicalDevice, VkPhysicalDeviceFeatures*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceFeatures2(VkPhysicalDevice, VkPhysicalDeviceFeatures2*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceMemoryProperties2(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties2*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice, uint32_t*, VkQueueFamilyProperties*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice, uint32_t*, VkQueueFamilyProperties2*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceFormatProperties(VkPhysicalDevice, VkFormat, VkFormatProperties*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice, VkFormat, VkFormatProperties2*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyInstance(VkInstance, const VkAllocationCallbacks*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumeratePhysicalDevices(VkInstance, uint32_t*, VkPhysicalDevice*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceProperties(VkPhysicalDevice, VkPhysicalDeviceProperties*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceProperties2(VkPhysicalDevice, VkPhysicalDeviceProperties2*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceFeatures(VkPhysicalDevice, VkPhysicalDeviceFeatures*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceFeatures2(VkPhysicalDevice, VkPhysicalDeviceFeatures2*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceMemoryProperties2(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties2*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice, uint32_t*, VkQueueFamilyProperties*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice, uint32_t*, VkQueueFamilyProperties2*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceFormatProperties(VkPhysicalDevice, VkFormat, VkFormatProperties*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice, VkFormat, VkFormatProperties2*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice, VkFormat, VkImageType, VkImageTiling, VkImageUsageFlags, VkImageCreateFlags, VkImageFormatProperties*);
-VKAPI_ATTR void VKAPI_CALL stereo_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice, VkFormat, VkImageType, VkSampleCountFlagBits, VkImageUsageFlags, VkImageTiling, uint32_t*, VkSparseImageFormatProperties*);
+VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice, VkFormat, VkImageType, VkSampleCountFlagBits, VkImageUsageFlags, VkImageTiling, uint32_t*, VkSparseImageFormatProperties*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateDeviceExtensionProperties(VkPhysicalDevice, const char*, uint32_t*, VkExtensionProperties*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateDeviceLayerProperties(VkPhysicalDevice, uint32_t*, VkLayerProperties*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice, uint32_t, VkSurfaceKHR, VkBool32*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice, VkSurfaceKHR, VkSurfaceCapabilitiesKHR*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice, VkSurfaceKHR, uint32_t*, VkSurfaceFormatKHR*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice, VkSurfaceKHR, uint32_t*, VkPresentModeKHR*);
-/* Vulkan 1.3 core physdev — physdev.c */
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceToolProperties(VkPhysicalDevice, uint32_t*, VkPhysicalDeviceToolProperties*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceToolPropertiesEXT(VkPhysicalDevice, uint32_t*, VkPhysicalDeviceToolProperties*);
-/* physdev_ext.c — extension / KHR-alias wrappers */
 VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice, VkPhysicalDeviceFeatures2*);
 VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceProperties2KHR(VkPhysicalDevice, VkPhysicalDeviceProperties2*);
 VKAPI_ATTR void     VKAPI_CALL stereo_GetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice, VkFormat, VkFormatProperties2*);
@@ -724,10 +585,8 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceCooperativeMatrixProperti
 #ifdef VK_NV_coverage_reduction_mode
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(VkPhysicalDevice, uint32_t*, VkFramebufferMixedSamplesCombinationNV*);
 #endif
-VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateInstanceExtensionProperties(
-    const char*, uint32_t*, VkExtensionProperties*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateInstanceExtensionProperties(const char*, uint32_t*, VkExtensionProperties*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumerateInstanceVersion(uint32_t*);
-/* ── Instance-level surface / debug wrappers (translate VkInstance) ──── */
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroySurfaceKHR(VkInstance, VkSurfaceKHR, const VkAllocationCallbacks*);
 #ifdef VK_KHR_win32_surface
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateWin32SurfaceKHR(VkInstance, const VkWin32SurfaceCreateInfoKHR*, const VkAllocationCallbacks*, VkSurfaceKHR*);
@@ -738,43 +597,29 @@ VKAPI_ATTR void     VKAPI_CALL stereo_DebugReportMessageEXT(VkInstance, VkDebugR
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDebugUtilsMessengerEXT(VkInstance, const VkDebugUtilsMessengerCreateInfoEXT*, const VkAllocationCallbacks*, VkDebugUtilsMessengerEXT*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyDebugUtilsMessengerEXT(VkInstance, VkDebugUtilsMessengerEXT, const VkAllocationCallbacks*);
 VKAPI_ATTR void     VKAPI_CALL stereo_SubmitDebugUtilsMessageEXT(VkInstance, VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDevice(
-    VkPhysicalDevice, const VkDeviceCreateInfo*, const VkAllocationCallbacks*, VkDevice*);
-VKAPI_ATTR void VKAPI_CALL stereo_DestroyDevice(VkDevice, const VkAllocationCallbacks*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo*, const VkAllocationCallbacks*, VkDevice*);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyDevice(VkDevice, const VkAllocationCallbacks*);
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL stereo_GetDeviceProcAddr(VkDevice, const char*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImageView(
-    VkDevice, const VkImageViewCreateInfo*, const VkAllocationCallbacks*, VkImageView*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImage(
-    VkDevice, const VkImageCreateInfo*, const VkAllocationCallbacks*, VkImage*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(
-    VkDevice, const VkRenderPassCreateInfo*, const VkAllocationCallbacks*, VkRenderPass*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImageView(VkDevice, const VkImageViewCreateInfo*, const VkAllocationCallbacks*, VkImageView*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImage(VkDevice, const VkImageCreateInfo*, const VkAllocationCallbacks*, VkImage*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(VkDevice, const VkRenderPassCreateInfo*, const VkAllocationCallbacks*, VkRenderPass*);
 #ifdef VK_KHR_create_renderpass2
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass2KHR(
-    VkDevice, const VkRenderPassCreateInfo2*, const VkAllocationCallbacks*, VkRenderPass*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass2KHR(VkDevice, const VkRenderPassCreateInfo2*, const VkAllocationCallbacks*, VkRenderPass*);
 #endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateGraphicsPipelines(VkDevice, VkPipelineCache, uint32_t, const VkGraphicsPipelineCreateInfo*, const VkAllocationCallbacks*, VkPipeline*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(
-    VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
-VKAPI_ATTR void VKAPI_CALL stereo_DestroyShaderModule(
-    VkDevice, VkShaderModule, const VkAllocationCallbacks*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateSwapchainKHR(
-    VkDevice, const VkSwapchainCreateInfoKHR*, const VkAllocationCallbacks*, VkSwapchainKHR*);
-VKAPI_ATTR void VKAPI_CALL stereo_DestroySwapchainKHR(
-    VkDevice, VkSwapchainKHR, const VkAllocationCallbacks*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(
-    VkDevice, VkSwapchainKHR, uint32_t*, VkImage*);
-VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(
-    VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyShaderModule(VkDevice, VkShaderModule, const VkAllocationCallbacks*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateSwapchainKHR(VkDevice, const VkSwapchainCreateInfoKHR*, const VkAllocationCallbacks*, VkSwapchainKHR*);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroySwapchainKHR(VkDevice, VkSwapchainKHR, const VkAllocationCallbacks*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(VkDevice, VkSwapchainKHR, uint32_t*, VkImage*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 
-bool spirv_patch_stereo_vertex(
-    const uint32_t *in_words, size_t in_count,
+bool spirv_patch_stereo_vertex(const uint32_t *in_words, size_t in_count,
     uint32_t **out_words, size_t *out_count,
     float left_offset, float right_offset, float convergence,
     bool inject_view_index);
 void spirv_patched_free(uint32_t *words);
 
-/* DXGI stereo present: stage GPU→CPU, upload to D3D11, DXGI Present */
-VkResult stereo_dxgi_present(
-    StereoDevice*, VkQueue, StereoSwapchain*, uint32_t image_index,
-    uint32_t wait_sem_count, const VkSemaphore *wait_sems);
+VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*, uint32_t,
+    uint32_t, const VkSemaphore*);
