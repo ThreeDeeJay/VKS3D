@@ -18,6 +18,15 @@
  * Depth/stencil attachments: guaranteed by stereo_CreateImage intercept,
  *   which upgrades matching depth images to arrayLayers=2 before the app
  *   creates its framebuffers.
+ *
+ * sd->multiview_pass_exists is set to true the first time we successfully
+ * inject multiview into a render pass.  This flag is read by alt_cpu_readback
+ * in present_alt.c to decide how many layers to read back:
+ *   - false → only layer 0 was rendered (multiview not injected, e.g. DXVK
+ *             render passes that don't use PRESENT_SRC_KHR final layout) →
+ *             read layer_count=1, use same image for both eyes (no stereo but
+ *             not black / not a GPU crash from reading UNDEFINED layer 1).
+ *   - true  → both layers were rendered → read layer_count=2.
  */
 
 #include <stdio.h>
@@ -66,9 +75,9 @@ stereo_CreateRenderPass(
         return res;
     }
 
-    /* ── Patch PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL (always required) ──
+    /* ── Patch PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL ─────────────────
      * Our stereo render target is a plain VkImage (not a real swapchain image)
-     * so it cannot transition to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR.              */
+     * so it cannot transition to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR.          */
     VkAttachmentDescription *patched =
         malloc(pCreateInfo->attachmentCount * sizeof(VkAttachmentDescription));
     if (!patched) return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -79,13 +88,6 @@ stereo_CreateRenderPass(
             patched[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     }
 
-    /* ── Multiview injection (opt-in via multiview=1 in vks3d.ini) ────────────
-     * VK_KHR_multiview renders both eye layers in one geometry pass.
-     * REQUIREMENT: ALL framebuffer attachments (including depth) must be
-     * VK_IMAGE_VIEW_TYPE_2D_ARRAY with layerCount >= 2.  Most apps use
-     * single-layer depth buffers → GPU hang → VK_ERROR_DEVICE_LOST.
-     * Only enable for apps that explicitly provide array depth buffers.
-     * Default: off.  Enable: set multiview=1 in [global] of vks3d.ini.       */
     VkRenderPassCreateInfo modified = *pCreateInfo;
     modified.pAttachments = patched;
 
@@ -95,8 +97,8 @@ stereo_CreateRenderPass(
 
     if (sd->stereo.multiview) {
         uint32_t sc = pCreateInfo->subpassCount;
-        view_masks  = malloc(sc * sizeof(uint32_t));
-        corr_masks  = malloc(sc * sizeof(uint32_t));
+        view_masks   = malloc(sc * sizeof(uint32_t));
+        corr_masks   = malloc(sc * sizeof(uint32_t));
         view_offsets = pCreateInfo->dependencyCount
             ? calloc(pCreateInfo->dependencyCount, sizeof(int32_t)) : NULL;
         if (!view_masks || !corr_masks ||
@@ -132,14 +134,19 @@ stereo_CreateRenderPass(
         rpi->has_multiview = sd->stereo.multiview;
         rpi->view_mask     = sd->stereo.multiview ? STEREO_VIEW_MASK : 0;
         rpi->subpass_count = pCreateInfo->subpassCount;
-        if (sd->stereo.multiview)
+
+        if (sd->stereo.multiview) {
+            /* Signal to present_alt.c that at least one multiview pass exists.
+             * alt_cpu_readback uses this to decide layer_count (1 vs 2).     */
+            sd->multiview_pass_exists = true;
             STEREO_LOG("RenderPass %p: multiview injected (viewMask=0x%x, %u subpasses) "
-                       "[INI: multiview=1]",
+                       "[INI: multiview=1] → multiview_pass_exists=true",
                        (void*)*pRenderPass, STEREO_VIEW_MASK, pCreateInfo->subpassCount);
-        else
+        } else {
             STEREO_LOG("RenderPass %p: finalLayout patched (multiview disabled — "
                        "set multiview=1 in vks3d.ini to enable)",
                        (void*)*pRenderPass);
+        }
     }
     return res;
 }
@@ -176,7 +183,6 @@ stereo_CreateRenderPass2KHR(
             sd->real_device, pCreateInfo, pAllocator, pRenderPass);
     }
 
-    /* Patch attachments + set per-subpass viewMasks */
     uint32_t ac = pCreateInfo->attachmentCount;
     uint32_t sc = pCreateInfo->subpassCount;
 
@@ -191,7 +197,6 @@ stereo_CreateRenderPass2KHR(
         }
     }
 
-    /* No multiview injection — see CreateRenderPass comment for rationale */
     VkRenderPassCreateInfo2 modified = *pCreateInfo;
     if (patched_atts) modified.pAttachments = patched_atts;
 
@@ -220,7 +225,9 @@ stereo_CreateRenderPass2KHR(
             rpi->has_multiview = true;
             rpi->view_mask     = STEREO_VIEW_MASK;
             rpi->subpass_count = sc;
-            STEREO_LOG("RenderPass2 %p: multiview injected (viewMask=0x%x) [INI: multiview=1]",
+            sd->multiview_pass_exists = true;
+            STEREO_LOG("RenderPass2 %p: multiview injected (viewMask=0x%x) "
+                       "[INI: multiview=1] → multiview_pass_exists=true",
                        (void*)*pRenderPass, STEREO_VIEW_MASK);
         }
         return res;
