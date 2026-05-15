@@ -353,6 +353,14 @@ typedef struct StereoSurfaceHWND {
     HWND         hwnd;
 } StereoSurfaceHWND;
 
+#define MAX_SHADER_CACHE 2048
+typedef struct {
+    VkShaderModule  handle;
+    uint32_t       *spv;
+    size_t          words;
+    int             exec_model;  /* 0=Vertex, 3=Geometry, -1=other */
+} StereoShaderCache;
+
 typedef struct StereoInstance {
     VK_LOADER_DATA            loader_data;
     VkInstance                real_instance;
@@ -434,6 +442,8 @@ typedef struct StereoDevice {
     uint32_t               render_pass_count;
     StereoSwapchain        swapchains[MAX_SWAPCHAINS];
     uint32_t               swapchain_count;
+    StereoShaderCache      shader_cache[MAX_SHADER_CACHE];
+    uint32_t               shader_cache_count;
 
 #define MAX_DEPTH_IMAGES  256
     VkImage                intercepted_depth[MAX_DEPTH_IMAGES];

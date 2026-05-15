@@ -1,48 +1,33 @@
 /*
- * shader.c — SPIR-V patching for stereo vertex transform
+ * shader.c — SPIR-V stereo injection, deferred to pipeline creation
  *
- * ────────────────────────────────────────────────────────────────────────────
- * Strategy
- * ────────────────────────────────────────────────────────────────────────────
- * We intercept vkCreateShaderModule and, if the module is a vertex shader,
- * we patch the SPIR-V to apply a per-eye clip-space offset to gl_Position.
+ * Architecture
+ * ────────────
+ * Patching at vkCreateShaderModule is wrong for pipelines that contain a
+ * geometry or tessellation stage: the geometry shader recomputes gl_Position
+ * from scratch, so any offset injected into the vertex shader is silently
+ * overwritten before rasterisation.
  *
- * The patch injected after the last write to gl_Position:
+ * The fix: cache the original (unpatched) SPIR-V at CreateShaderModule
+ * time, then at CreateGraphicsPipelines time inspect the stage list, pick
+ * the last pre-rasterisation stage (priority: GS > TES > VS), patch only
+ * that stage's SPIR-V, create a temporary VkShaderModule from it, build the
+ * pipeline, and immediately destroy the temporary module.
  *
- *   // GLSL equivalent of what we inject in SPIR-V:
- *   float sign = (gl_ViewIndex == 0) ? -1.0 : 1.0;
- *   gl_Position.x += sign * stereoOffset * gl_Position.w;
+ * Stage patching priority
+ *   Geometry (GS)              → ExecutionModel 3
+ *   Tessellation Eval (TES)    → ExecutionModel 2
+ *   Vertex (VS)                → ExecutionModel 0
  *
- * When inject_view_index=true (multiview=1 in vks3d.ini) and the shader
- * doesn't already have gl_ViewIndex, we inject:
- *   - OpCapability MultiView          (if not already declared)
- *   - OpDecorate %view_var BuiltIn 4440
- *   - OpTypePointer Input int         (if not already declared)
- *   - OpVariable %ptr_in_int %view_var Input
- *   - Extension of OpEntryPoint's interface list to include %view_var
+ * The patcher accepts all three execution models — the gl_Position injection
+ * logic (AccessChain, load gl_ViewIndex, select per-eye offset, store) is
+ * identical for all three because they all write to Output gl_Position.
  *
- * ────────────────────────────────────────────────────────────────────────────
- * SPIR-V patching approach (binary rewriting)
- * ────────────────────────────────────────────────────────────────────────────
- * 1. Parse SPIR-V header (magic, version, generator, bound, schema)
- * 2. Find the entry point with ExecutionModel = Vertex (0)
- * 3. Find (or insert) the gl_Position Output BuiltIn variable
- * 4. Find (or insert) gl_ViewIndex Input BuiltIn variable
- * 5. Find (or insert) a PushConstant struct with a float at offset 124
- * 6. Locate the last OpStore to gl_Position in the function body
- * 7. After that store, inject new SPIR-V instructions to:
- *      a. Load gl_Position
- *      b. Load gl_ViewIndex
- *      c. Compute offset = (viewIndex == 0) ? left_off : right_off
- *      d. Multiply by w component
- *      e. Add to x component
- *      f. Store back to gl_Position
- *
- * ────────────────────────────────────────────────────────────────────────────
- * NOTE: This is a simplified patcher targeting common SPIR-V patterns.
- * Full production use should employ a proper SPIR-V library (spirv-tools,
- * SPIRV-Cross, or LLVM SPIR-V backend).
- * ────────────────────────────────────────────────────────────────────────────
+ * Geometry-shader bug (fixed here)
+ * The Sascha Willems geometryshader sample rendered normal-visualisation
+ * lines in stereo (geometry shader passed through the VS-patched position)
+ * but the 3D mesh was flat (geometry shader rewrote gl_Position from MVP).
+ * Patching the GS instead of the VS fixes both cases correctly.
  */
 
 #include <stdio.h>
@@ -51,735 +36,343 @@
 #include <stdbool.h>
 #include "stereo_icd.h"
 
-/* ── SPIR-V opcodes we care about ─────────────────────────────────────────── */
-#define SpvOpCapability              17
-#define SpvOpExtension               10
-#define SpvOpExtInstImport           11
-#define SpvOpMemoryModel             14
-#define SpvOpEntryPoint              15
-#define SpvOpExecutionMode           16
-#define SpvOpTypeVoid                19
-#define SpvOpTypeBool                20
-#define SpvOpTypeInt                 21
-#define SpvOpTypeFloat               22
-#define SpvOpTypeVector              23
-#define SpvOpTypePointer             32
-#define SpvOpTypeFunction            33
-#define SpvOpTypeStruct              30
-#define SpvOpTypeArray               28
-#define SpvOpConstant                43
-#define SpvOpConstantComposite       44
-#define SpvOpConstantTrue            41
-#define SpvOpConstantFalse           42
-#define SpvOpVariable                59
-#define SpvOpLoad                    61
-#define SpvOpStore                   62
-#define SpvOpAccessChain             65
-#define SpvOpDecorate                71
-#define SpvOpMemberDecorate          72
-#define SpvOpFunction                54
-#define SpvOpFunctionEnd             56
-#define SpvOpLabel                   248
-#define SpvOpBranch                  249
-#define SpvOpReturn                  253
-#define SpvOpCompositeExtract        81
-#define SpvOpCompositeInsert         82
-#define SpvOpFAdd                    129
-#define SpvOpFMul                    133
-#define SpvOpFNegate                 127
-#define SpvOpIEqual                  170
-#define SpvOpSelect                  169
-#define SpvOpConvertUToF             112
-#define SpvOpSConvertToF             111
-#define SpvOpBitcast                 124
+/* ── SPIR-V opcodes ───────────────────────────────────────────────────────── */
+#define SpvOpCapability     17
+#define SpvOpEntryPoint     15
+#define SpvOpTypeBool       20
+#define SpvOpTypeInt        21
+#define SpvOpTypeFloat      22
+#define SpvOpTypeVector     23
+#define SpvOpTypePointer    32
+#define SpvOpConstant       43
+#define SpvOpVariable       59
+#define SpvOpLoad           61
+#define SpvOpStore          62
+#define SpvOpAccessChain    65
+#define SpvOpDecorate       71
+#define SpvOpMemberDecorate 72
+#define SpvOpFunction       54
+#define SpvOpCompositeExtract 81
+#define SpvOpCompositeInsert  82
+#define SpvOpFAdd           129
+#define SpvOpFMul           133
+#define SpvOpIEqual         170
+#define SpvOpSelect         169
 
-#define SpvDecorationBuiltIn         11
-#define SpvDecorationLocation        30
-#define SpvDecorationBinding         33
-#define SpvDecorationOffset          35
-#define SpvDecorationBlock           2
+#define SpvDecorationBuiltIn  11
+#define SpvBuiltInPosition     0
+#define SpvBuiltInViewIndex 4440
 
-#define SpvBuiltInPosition           0
-#define SpvBuiltInViewIndex          4440  /* SPV_KHR_multiview */
+#define SpvStorageClassInput   1
+#define SpvStorageClassOutput  3
 
-#define SpvStorageClassInput         1
-#define SpvStorageClassOutput        3
-#define SpvStorageClassPushConstant  9
+#define SpvExecVertex      0
+#define SpvExecTessEval    2
+#define SpvExecGeometry    3
 
-#define SpvExecutionModelVertex      0
-
-/* Capability MultiView = 5296 (SPV_KHR_multiview) */
-#define SpvCapabilityMultiView       5296
+#define SpvCapabilityMultiView 5296
 
 #define SPIRV_MAGIC 0x07230203u
 
-/* ── SPIR-V word buffer (dynamic array) ──────────────────────────────────── */
-typedef struct SpvBuf {
-    uint32_t *words;
-    size_t    count;
-    size_t    capacity;
-} SpvBuf;
+/* ── Dynamic word buffer ──────────────────────────────────────────────────── */
+typedef struct { uint32_t *words; size_t count, cap; } SpvBuf;
 
-static bool spvbuf_init(SpvBuf *b, size_t initial)
-{
-    b->words    = malloc(initial * sizeof(uint32_t));
-    b->count    = 0;
-    b->capacity = initial;
-    return b->words != NULL;
-}
+static bool sb_init(SpvBuf *b, size_t n)
+{ b->words=malloc(n*4); b->count=0; b->cap=n; return !!b->words; }
 
-static bool spvbuf_push(SpvBuf *b, uint32_t w)
-{
-    if (b->count >= b->capacity) {
-        size_t nc = b->capacity * 2;
-        uint32_t *nw = realloc(b->words, nc * sizeof(uint32_t));
-        if (!nw) return false;
-        b->words    = nw;
-        b->capacity = nc;
+static bool sb_push(SpvBuf *b, uint32_t w) {
+    if (b->count>=b->cap) {
+        uint32_t *p=realloc(b->words, b->cap*8);
+        if (!p) return false; b->words=p; b->cap*=2;
     }
-    b->words[b->count++] = w;
-    return true;
+    b->words[b->count++]=w; return true;
 }
+static bool sb_push_n(SpvBuf *b, const uint32_t *ws, size_t n)
+{ for (size_t i=0;i<n;i++) if (!sb_push(b,ws[i])) return false; return true; }
+static void sb_free(SpvBuf *b) { free(b->words); b->words=NULL; b->count=b->cap=0; }
+static inline uint32_t spv_op(uint32_t op, uint32_t wc) { return (wc<<16)|op; }
 
-static bool spvbuf_push_n(SpvBuf *b, const uint32_t *ws, size_t n)
-{
-    for (size_t i = 0; i < n; i++)
-        if (!spvbuf_push(b, ws[i])) return false;
-    return true;
-}
+/* ── Module scanner ───────────────────────────────────────────────────────── */
+typedef struct {
+    const uint32_t *words; size_t count;
+    uint32_t bound;
+    bool     is_patchable;
+    bool     has_mv_cap;
+    int      exec_model;      /* SpvExecVertex / SpvExecGeometry / … */
 
-static void spvbuf_free(SpvBuf *b)
-{
-    free(b->words);
-    b->words    = NULL;
-    b->count    = 0;
-    b->capacity = 0;
-}
+    uint32_t pos_var;
+    bool     pos_is_block;
+    uint32_t pos_block_type, pos_member_idx, pos_ptr_type;
 
-/* SPIR-V instruction word: [wordcount|opcode] */
-static inline uint32_t spv_op(uint32_t opcode, uint32_t wordcount)
-{
-    return (wordcount << 16) | opcode;
-}
+    uint32_t view_var;
+    uint32_t float_type, v4_type, int_type, bool_type;
+    uint32_t ptr_out_v4, ptr_in_int;
+    size_t   fn_word;
+} SpvMod;
 
-/* ── SPIR-V module parser ──────────────────────────────────────────────── */
-typedef struct SpvModule {
-    const uint32_t *words;
-    size_t          count;
-    uint32_t        bound;     /* current ID bound, we extend it */
-    /* Parsed info */
-    bool            is_vertex; /* has Vertex entry point              */
-    bool            has_mv_capability; /* OpCapability MultiView present */
-
-    /* gl_Position — two discovery paths:
-     *
-     * (A) Direct:  OpDecorate %var BuiltIn Position
-     *     pos_var = %var, pos_is_block = false
-     *     Load/store pos_var directly.
-     *
-     * (B) Block member (standard GLSL compilation):
-     *     OpMemberDecorate %struct member BuiltIn Position
-     *     OpTypePointer Output %struct  →  pos_ptr_type
-     *     OpVariable pos_ptr_type Output →  pos_var
-     *     pos_is_block = true
-     *     Access: OpAccessChain %ptr_v4 %pos_var %int_const_0 → chain
-     *             then OpLoad/OpStore chain.
-     */
-    uint32_t        pos_var;       /* variable ID (both paths)            */
-    bool            pos_is_block;  /* true = use AccessChain to member    */
-    uint32_t        pos_block_type;/* struct type ID (path B)             */
-    uint32_t        pos_member_idx;/* member index in struct (path B)     */
-    uint32_t        pos_ptr_type;  /* OpTypePointer Output struct (B)     */
-
-    uint32_t        view_var;  /* ID of gl_ViewIndex variable         */
-    uint32_t        float_type;/* ID of OpTypeFloat 32                */
-    uint32_t        v4_type;   /* ID of OpTypeVector float 4          */
-    uint32_t        int_type;  /* ID of OpTypeInt 32 0 (unsigned)     */
-    uint32_t        bool_type; /* ID of OpTypeBool                    */
-
-    /* Pre-existing pointer types found in the shader — reuse these instead
-     * of declaring new ones to avoid duplicate type-declaration errors. */
-    uint32_t        ptr_out_v4_type;  /* existing OpTypePointer Output v4  (or 0) */
-    uint32_t        ptr_in_int_type;  /* existing OpTypePointer Input  int (or 0) */
-    /* Positions of key sections in word stream */
-    size_t          first_function_word; /* start of first OpFunction  */
-    size_t          header_end;          /* end of type/decoration section */
-} SpvModule;
-
-static void spirv_scan_pass(SpvModule *m, bool second_pass)
+static void scan_pass(SpvMod *m, bool p2)
 {
     const uint32_t *w = m->words;
-    size_t          i = 5;
-
-    while (i < m->count) {
-        uint32_t op_code = w[i] & 0xffff;
-        uint32_t wcount  = w[i] >> 16;
-        if (wcount == 0 || i + wcount > m->count) break;
-
-        if (!second_pass) {
-            switch (op_code) {
+    for (size_t i=5; i<m->count; ) {
+        uint32_t op=w[i]&0xffff, wc=w[i]>>16;
+        if (!wc||i+wc>m->count) break;
+        if (!p2) switch (op) {
             case SpvOpCapability:
-                if (wcount >= 2 && w[i+1] == SpvCapabilityMultiView)
-                    m->has_mv_capability = true;
-                break;
+                if (wc>=2&&w[i+1]==SpvCapabilityMultiView) m->has_mv_cap=true; break;
             case SpvOpEntryPoint:
-                if (wcount >= 2 && w[i+1] == SpvExecutionModelVertex)
-                    m->is_vertex = true;
-                break;
+                if (wc>=2) { uint32_t e=w[i+1];
+                    if (e==SpvExecVertex||e==SpvExecTessEval||e==SpvExecGeometry)
+                        { m->is_patchable=true; m->exec_model=(int)e; } } break;
             case SpvOpTypeFloat:
-                if (wcount == 3 && w[i+2] == 32)
-                    m->float_type = w[i+1];
-                break;
+                if (wc==3&&w[i+2]==32) m->float_type=w[i+1]; break;
             case SpvOpTypeVector:
-                if (wcount == 4 && w[i+2] == m->float_type && w[i+3] == 4)
-                    m->v4_type = w[i+1];
-                break;
+                if (wc==4&&w[i+2]==m->float_type&&w[i+3]==4) m->v4_type=w[i+1]; break;
             case SpvOpTypeInt:
-                if (wcount == 4 && w[i+2] == 32)
-                    m->int_type = w[i+1];
-                break;
+                if (wc==4&&w[i+2]==32) m->int_type=w[i+1]; break;
             case SpvOpTypeBool:
-                if (wcount == 2)
-                    m->bool_type = w[i+1];
-                break;
+                if (wc==2) m->bool_type=w[i+1]; break;
             case SpvOpTypePointer:
-                if (wcount >= 4) {
-                    if (w[i+2] == SpvStorageClassOutput && m->v4_type &&
-                        w[i+3] == m->v4_type)
-                        m->ptr_out_v4_type = w[i+1];
-                    if (w[i+2] == SpvStorageClassInput && m->int_type &&
-                        w[i+3] == m->int_type)
-                        m->ptr_in_int_type = w[i+1];
-                }
-                break;
+                if (wc>=4) {
+                    if (w[i+2]==SpvStorageClassOutput&&m->v4_type&&w[i+3]==m->v4_type)
+                        m->ptr_out_v4=w[i+1];
+                    if (w[i+2]==SpvStorageClassInput&&m->int_type&&w[i+3]==m->int_type)
+                        m->ptr_in_int=w[i+1];
+                } break;
             case SpvOpDecorate:
-                if (wcount >= 4 &&
-                    w[i+2] == SpvDecorationBuiltIn &&
-                    w[i+3] == SpvBuiltInPosition &&
-                    !m->pos_is_block)
-                    m->pos_var = w[i+1];
-                if (wcount >= 4 &&
-                    w[i+2] == SpvDecorationBuiltIn &&
-                    w[i+3] == SpvBuiltInViewIndex)
-                    m->view_var = w[i+1];
-                break;
+                if (wc>=4&&w[i+2]==SpvDecorationBuiltIn) {
+                    if (w[i+3]==SpvBuiltInPosition&&!m->pos_is_block) m->pos_var=w[i+1];
+                    if (w[i+3]==SpvBuiltInViewIndex)                  m->view_var=w[i+1];
+                } break;
             case SpvOpMemberDecorate:
-                if (wcount >= 5 &&
-                    w[i+3] == SpvDecorationBuiltIn &&
-                    w[i+4] == SpvBuiltInPosition) {
-                    m->pos_block_type = w[i+1];
-                    m->pos_member_idx = w[i+2];
-                    m->pos_is_block   = true;
-                    m->pos_var        = 0;
-                }
-                break;
+                if (wc>=5&&w[i+3]==SpvDecorationBuiltIn&&w[i+4]==SpvBuiltInPosition)
+                    { m->pos_block_type=w[i+1]; m->pos_member_idx=w[i+2];
+                      m->pos_is_block=true; m->pos_var=0; } break;
             case SpvOpFunction:
-                if (m->first_function_word == 0)
-                    m->first_function_word = i;
-                break;
-            default:
-                break;
-            }
+                if (!m->fn_word) m->fn_word=i; break;
         } else {
-            switch (op_code) {
-            case SpvOpTypePointer:
-                if (wcount >= 4 &&
-                    w[i+2] == SpvStorageClassOutput &&
-                    m->pos_block_type != 0 &&
-                    w[i+3] == m->pos_block_type)
-                    m->pos_ptr_type = w[i+1];
-                break;
-            case SpvOpVariable:
-                if (wcount >= 4 &&
-                    w[i+3] == SpvStorageClassOutput &&
-                    m->pos_ptr_type != 0 &&
-                    w[i+1] == m->pos_ptr_type)
-                    m->pos_var = w[i+2];
-                break;
-            default:
-                break;
-            }
+            if (op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageClassOutput
+                &&m->pos_block_type&&w[i+3]==m->pos_block_type) m->pos_ptr_type=w[i+1];
+            if (op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageClassOutput
+                &&m->pos_ptr_type&&w[i+1]==m->pos_ptr_type) m->pos_var=w[i+2];
         }
-        i += wcount;
+        i+=wc;
     }
 }
+static void spirv_scan(SpvMod *m)
+{ m->bound=m->words[3]; scan_pass(m,false); if (m->pos_is_block) scan_pass(m,true); }
 
-static void spirv_scan(SpvModule *m)
+/* ── Code injection ───────────────────────────────────────────────────────── */
+static bool inject(SpvBuf *out, SpvMod *m, uint32_t *nid,
+                   float lo, float ro, bool inj_vi, uint32_t *out_iv)
 {
-    m->bound = m->words[3];
-    spirv_scan_pass(m, false);
-    if (m->pos_is_block)
-        spirv_scan_pass(m, true);
-}
+    if (!m->float_type||!m->v4_type||!m->pos_var) return false;
 
-/* ── Inject stereo offset code ───────────────────────────────────────────────
- *
- * Pushes type-section declarations then body instructions into `out`.
- * The caller splits them at the first body opcode.
- *
- * If inject_view_index is true and m->view_var is 0 (shader has no
- * gl_ViewIndex), we inject the variable declarations here and return its
- * ID in *out_injected_view_var so the caller can update OpEntryPoint.
- */
-static bool inject_stereo_code(
-    SpvBuf   *out,
-    SpvModule *m,
-    uint32_t  *next_id,
-    float      left_off,
-    float      right_off,
-    bool       inject_view_index,
-    uint32_t  *out_injected_view_var)
-{
-    if (!m->float_type || !m->v4_type || !m->pos_var)
-        return false;
+    bool will_inj  = inj_vi && !m->view_var && m->int_type;
+    bool have_view = m->view_var || will_inj;
 
-    /* Will we have a view_var available (existing or injected)? */
-    bool will_inject_view = inject_view_index && !m->view_var && m->int_type;
-    bool will_have_view   = m->view_var || will_inject_view;
+    uint32_t pv4  = (*nid)++, pint = (*nid)++, iv  = will_inj?(*nid)++:0;
+    uint32_t ch   = (*nid)++, lpos = (*nid)++;
+    uint32_t lv   = have_view?(*nid)++:0;
+    uint32_t cz   = (*nid)++, isl = have_view?(*nid)++:0;
+    uint32_t cl   = (*nid)++, cr  = (*nid)++, sel = (*nid)++;
+    uint32_t pw   = (*nid)++, dlt = (*nid)++, px  = (*nid)++;
+    uint32_t nx   = (*nid)++, np  = (*nid)++;
 
-    /* ── Allocate all IDs up front ─────────────────────────────────────── */
-    uint32_t id_ptr_v4_out    = (*next_id)++;
-    uint32_t id_ptr_int_in    = (*next_id)++;  /* may be used for view var too */
-    uint32_t id_injected_view = will_inject_view ? (*next_id)++ : 0;
-    uint32_t id_chain         = (*next_id)++;
-    uint32_t id_load_pos      = (*next_id)++;
-    uint32_t id_load_view     = will_have_view ? (*next_id)++ : 0;
-    uint32_t id_const_zero_i  = (*next_id)++;
-    uint32_t id_is_left       = will_have_view ? (*next_id)++ : 0;
-    uint32_t id_const_l       = (*next_id)++;
-    uint32_t id_const_r       = (*next_id)++;
-    uint32_t id_off_sel       = (*next_id)++;
-    uint32_t id_pos_w         = (*next_id)++;
-    uint32_t id_delta         = (*next_id)++;
-    uint32_t id_pos_x         = (*next_id)++;
-    uint32_t id_new_x         = (*next_id)++;
-    uint32_t id_new_pos       = (*next_id)++;
+    uint32_t uv4  = m->ptr_out_v4 ? m->ptr_out_v4 : pv4;
+    uint32_t uint_ = m->ptr_in_int ? m->ptr_in_int : pint;
+    uint32_t bt    = m->bool_type, nb = 0;
+    if (!bt && have_view && m->int_type) { nb=(*nid)++; bt=nb; }
 
-    /* Resolve which pointer type IDs to use (prefer existing ones) */
-    uint32_t use_ptr_v4_out = m->ptr_out_v4_type ? m->ptr_out_v4_type : id_ptr_v4_out;
-    uint32_t use_ptr_int_in = m->ptr_in_int_type  ? m->ptr_in_int_type  : id_ptr_int_in;
-    uint32_t int_type       = m->int_type;
-
-    /* Bool type — may need to declare if absent and we need branching */
-    uint32_t bool_type = m->bool_type;
-    uint32_t id_new_bool = 0;
-    if (!bool_type && will_have_view && int_type) {
-        id_new_bool = (*next_id)++;
-        bool_type   = id_new_bool;
+    /* Type section */
+    if (!m->ptr_out_v4) {
+        uint32_t w[]={spv_op(SpvOpTypePointer,4),pv4,SpvStorageClassOutput,m->v4_type};
+        sb_push_n(out,w,4);
     }
-
-    /* ── TYPE SECTION DECLARATIONS ─────────────────────────────────────── */
-
-    /* OpTypePointer Output v4 — only if not already declared */
-    if (!m->ptr_out_v4_type) {
-        uint32_t w[] = { spv_op(SpvOpTypePointer, 4), id_ptr_v4_out,
-                         SpvStorageClassOutput, m->v4_type };
-        spvbuf_push_n(out, w, 4);
+    if (m->int_type && !m->ptr_in_int) {
+        uint32_t w[]={spv_op(SpvOpTypePointer,4),pint,SpvStorageClassInput,m->int_type};
+        sb_push_n(out,w,4); m->ptr_in_int=pint; uint_=pint;
     }
+    if (m->int_type) {
+        uint32_t w[]={spv_op(SpvOpConstant,4),m->int_type,cz,0}; sb_push_n(out,w,4); }
+    if (nb) { uint32_t w[]={spv_op(SpvOpTypeBool,2),nb}; sb_push_n(out,w,2); }
+    { uint32_t w[4]={spv_op(SpvOpConstant,4),m->float_type,cl,0}; memcpy(&w[3],&lo,4); sb_push_n(out,w,4); }
+    { uint32_t w[4]={spv_op(SpvOpConstant,4),m->float_type,cr,0}; memcpy(&w[3],&ro,4); sb_push_n(out,w,4); }
 
-    /* OpTypePointer Input int — only if not already declared */
-    if (int_type && !m->ptr_in_int_type) {
-        uint32_t w[] = { spv_op(SpvOpTypePointer, 4), id_ptr_int_in,
-                         SpvStorageClassInput, int_type };
-        spvbuf_push_n(out, w, 4);
-        /* Mark as now emitted so injection below reuses the same ID */
-        m->ptr_in_int_type = id_ptr_int_in;
-        use_ptr_int_in = id_ptr_int_in;
-    }
+    /* Inject gl_ViewIndex variable if absent */
+    if (will_inj) {
+        uint32_t d[]={spv_op(SpvOpDecorate,4),iv,SpvDecorationBuiltIn,SpvBuiltInViewIndex};
+        sb_push_n(out,d,4);
+        uint32_t v[]={spv_op(SpvOpVariable,4),uint_,iv,SpvStorageClassInput};
+        sb_push_n(out,v,4);
+        m->view_var=iv; if (out_iv) *out_iv=iv;
+    } else { if (out_iv) *out_iv=0; }
 
-    /* OpConstant int 0 (used for both AccessChain index and IEqual) */
-    if (int_type) {
-        uint32_t w[] = { spv_op(SpvOpConstant, 4), int_type, id_const_zero_i, 0u };
-        spvbuf_push_n(out, w, 4);
-    }
-
-    /* OpTypeBool — only if absent and needed */
-    if (id_new_bool) {
-        uint32_t w[] = { spv_op(SpvOpTypeBool, 2), id_new_bool };
-        spvbuf_push_n(out, w, 2);
-    }
-
-    /* OpConstant float left_off */
-    {
-        uint32_t w[4] = { spv_op(SpvOpConstant, 4), m->float_type, id_const_l, 0u };
-        memcpy(&w[3], &left_off, sizeof(float));
-        spvbuf_push_n(out, w, 4);
-    }
-
-    /* OpConstant float right_off */
-    {
-        uint32_t w[4] = { spv_op(SpvOpConstant, 4), m->float_type, id_const_r, 0u };
-        memcpy(&w[3], &right_off, sizeof(float));
-        spvbuf_push_n(out, w, 4);
-    }
-
-    /* ── INJECT gl_ViewIndex VARIABLE (if needed) ─────────────────────── *
-     * Placed after type declarations so use_ptr_int_in is resolved.       *
-     * In strict SPIR-V, OpDecorate should be in the annotation section    *
-     * and OpVariable in the global-variable section.  Both land here in   *
-     * the "before-first-OpFunction" region; drivers tolerate the order.   */
-    if (will_inject_view) {
-        /* OpDecorate %view_var BuiltIn ViewIndex */
-        uint32_t deco[] = { spv_op(SpvOpDecorate, 4),
-                            id_injected_view, SpvDecorationBuiltIn, SpvBuiltInViewIndex };
-        spvbuf_push_n(out, deco, 4);
-
-        /* OpVariable ptr_in_int %view_var Input */
-        uint32_t var[] = { spv_op(SpvOpVariable, 4),
-                           use_ptr_int_in, id_injected_view, SpvStorageClassInput };
-        spvbuf_push_n(out, var, 4);
-
-        /* Update module so body code uses the new variable */
-        m->view_var = id_injected_view;
-        if (out_injected_view_var) *out_injected_view_var = id_injected_view;
-    } else {
-        if (out_injected_view_var) *out_injected_view_var = 0;
-    }
-
-    /* ── BODY INSTRUCTIONS ─────────────────────────────────────────────── */
-
-    /* Determine pos_ptr: AccessChain for block path, direct var for path A */
-    uint32_t pos_ptr;
+    /* Body: load pos, optionally select per-eye offset, write back */
+    uint32_t pptr;
     if (m->pos_is_block) {
-        if (!int_type) {
-            STEREO_LOG("inject_stereo_code: no int type for AccessChain");
-            return false;
-        }
-        uint32_t ac[] = { spv_op(SpvOpAccessChain, 5),
-                          use_ptr_v4_out, id_chain, m->pos_var, id_const_zero_i };
-        spvbuf_push_n(out, ac, 5);
-        pos_ptr = id_chain;
-    } else {
-        pos_ptr = m->pos_var;
-        (void)id_chain;
-    }
+        if (!m->int_type) return false;
+        uint32_t a[]={spv_op(SpvOpAccessChain,5),uv4,ch,m->pos_var,cz}; sb_push_n(out,a,5);
+        pptr=ch;
+    } else { pptr=m->pos_var; (void)ch; }
 
-    /* OpLoad vec4 id_load_pos = *pos_ptr */
-    {
-        uint32_t w[] = { spv_op(SpvOpLoad, 4), m->v4_type, id_load_pos, pos_ptr };
-        spvbuf_push_n(out, w, 4);
-    }
+    { uint32_t w[]={spv_op(SpvOpLoad,4),m->v4_type,lpos,pptr}; sb_push_n(out,w,4); }
 
-    /* View-index branch or constant path */
-    if (m->view_var && int_type && bool_type) {
-        /* OpLoad int id_load_view = *view_var */
-        uint32_t lv[] = { spv_op(SpvOpLoad, 4), int_type, id_load_view, m->view_var };
-        spvbuf_push_n(out, lv, 4);
+    if (m->view_var && m->int_type && bt) {
+        { uint32_t w[]={spv_op(SpvOpLoad,4),m->int_type,lv,m->view_var}; sb_push_n(out,w,4); }
+        { uint32_t w[]={spv_op(SpvOpIEqual,5),bt,isl,lv,cz}; sb_push_n(out,w,5); }
+        { uint32_t w[]={spv_op(SpvOpSelect,6),m->float_type,sel,isl,cl,cr}; sb_push_n(out,w,6); }
+    } else { sel=cl; (void)lv; (void)isl; }
 
-        /* OpIEqual bool id_is_left = (id_load_view == 0) */
-        uint32_t eq[] = { spv_op(SpvOpIEqual, 5), bool_type, id_is_left,
-                          id_load_view, id_const_zero_i };
-        spvbuf_push_n(out, eq, 5);
-
-        /* OpSelect float id_off_sel = is_left ? left_off : right_off */
-        uint32_t sel[] = { spv_op(SpvOpSelect, 6), m->float_type, id_off_sel,
-                           id_is_left, id_const_l, id_const_r };
-        spvbuf_push_n(out, sel, 6);
-    } else {
-        /* No view index — both eyes get the same (left) offset.
-         * id_off_sel aliases id_const_l; nothing to emit. */
-        id_off_sel = id_const_l;
-        (void)id_load_view; (void)id_is_left;
-    }
-
-    /* OpCompositeExtract float id_pos_w = pos[3] */
-    {
-        uint32_t w[] = { spv_op(SpvOpCompositeExtract, 5),
-                         m->float_type, id_pos_w, id_load_pos, 3u };
-        spvbuf_push_n(out, w, 5);
-    }
-
-    /* OpFMul float id_delta = id_off_sel * id_pos_w */
-    {
-        uint32_t w[] = { spv_op(SpvOpFMul, 5),
-                         m->float_type, id_delta, id_off_sel, id_pos_w };
-        spvbuf_push_n(out, w, 5);
-    }
-
-    /* OpCompositeExtract float id_pos_x = pos[0] */
-    {
-        uint32_t w[] = { spv_op(SpvOpCompositeExtract, 5),
-                         m->float_type, id_pos_x, id_load_pos, 0u };
-        spvbuf_push_n(out, w, 5);
-    }
-
-    /* OpFAdd float id_new_x = id_pos_x + id_delta */
-    {
-        uint32_t w[] = { spv_op(SpvOpFAdd, 5),
-                         m->float_type, id_new_x, id_pos_x, id_delta };
-        spvbuf_push_n(out, w, 5);
-    }
-
-    /* OpCompositeInsert vec4 id_new_pos = pos with [0]=id_new_x */
-    {
-        uint32_t w[] = { spv_op(SpvOpCompositeInsert, 6),
-                         m->v4_type, id_new_pos, id_new_x, id_load_pos, 0u };
-        spvbuf_push_n(out, w, 6);
-    }
-
-    /* OpStore *pos_ptr = id_new_pos */
-    {
-        uint32_t w[] = { spv_op(SpvOpStore, 3), pos_ptr, id_new_pos };
-        spvbuf_push_n(out, w, 3);
-    }
-
+    { uint32_t w[]={spv_op(SpvOpCompositeExtract,5),m->float_type,pw,lpos,3u}; sb_push_n(out,w,5); }
+    { uint32_t w[]={spv_op(SpvOpFMul,5),m->float_type,dlt,sel,pw}; sb_push_n(out,w,5); }
+    { uint32_t w[]={spv_op(SpvOpCompositeExtract,5),m->float_type,px,lpos,0u}; sb_push_n(out,w,5); }
+    { uint32_t w[]={spv_op(SpvOpFAdd,5),m->float_type,nx,px,dlt}; sb_push_n(out,w,5); }
+    { uint32_t w[]={spv_op(SpvOpCompositeInsert,6),m->v4_type,np,nx,lpos,0u}; sb_push_n(out,w,6); }
+    { uint32_t w[]={spv_op(SpvOpStore,3),pptr,np}; sb_push_n(out,w,3); }
     return true;
 }
 
-/* ── Main SPIR-V patcher ─────────────────────────────────────────────────── */
-bool spirv_patch_stereo_vertex(
-    const uint32_t  *in_words,
-    size_t           in_count,
-    uint32_t       **out_words,
-    size_t          *out_count,
-    float            left_offset,
-    float            right_offset,
-    float            convergence,
-    bool             inject_view_index)
+/* ── SPIR-V patcher ───────────────────────────────────────────────────────── */
+bool spirv_patch_stereo_vertex(const uint32_t *in, size_t in_c,
+                               uint32_t **out, size_t *out_c,
+                               float lo, float ro, float conv, bool inj_vi)
 {
-    (void)convergence;
+    (void)conv;
+    if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
 
-    if (!in_words || in_count < 5) return false;
-    if (in_words[0] != SPIRV_MAGIC)  return false;
-
-    SpvModule m;
-    memset(&m, 0, sizeof(m));
-    m.words = in_words;
-    m.count = in_count;
+    SpvMod m={0}; m.words=in; m.count=in_c;
     spirv_scan(&m);
 
-    if (!m.is_vertex) {
-        STEREO_LOG("Shader scan: is_vertex=0, skipping patch");
-        return false;
+    if (!m.is_patchable) { STEREO_LOG("Shader: not patchable (model=%d)", m.exec_model); return false; }
+    if (!m.pos_var)       { STEREO_LOG("Shader: no gl_Position (model=%d)", m.exec_model); return false; }
+    STEREO_LOG("Shader: model=%d block=%d pos=%u view=%u bound=%u",
+               m.exec_model,(int)m.pos_is_block,m.pos_var,m.view_var,m.bound);
+
+    SpvBuf comb; if (!sb_init(&comb,256)) return false;
+    uint32_t nid=m.bound, iv=0;
+    if (!inject(&comb,&m,&nid,lo,ro,inj_vi,&iv)) { sb_free(&comb); return false; }
+
+    /* Split combined into type-extras and body-extras */
+    SpvBuf te,be;
+    if (!sb_init(&te,64)||!sb_init(&be,64)) { sb_free(&comb);sb_free(&te);sb_free(&be); return false; }
+    size_t split=0;
+    for (size_t i=0; i<comb.count; ) {
+        uint32_t op=comb.words[i]&0xffff;
+        if (op==SpvOpLoad||op==SpvOpStore||op==SpvOpAccessChain||
+            op==SpvOpIEqual||op==SpvOpSelect||op==SpvOpFMul||op==SpvOpFAdd||
+            op==SpvOpCompositeExtract||op==SpvOpCompositeInsert) { split=i; break; }
+        uint32_t wc=comb.words[i]>>16; if (!wc) break; i+=wc; split=i;
     }
-    STEREO_LOG("Shader scan: is_vertex=%d is_block=%d block_type=%u ptr_type=%u "
-               "pos_var=%u member=%u float_type=%u v4=%u int_type=%u view_var=%u "
-               "ptr_out_v4=%u ptr_in_int=%u bound=%u words=%zu has_mv_cap=%d",
-               (int)m.is_vertex, (int)m.pos_is_block,
-               m.pos_block_type, m.pos_ptr_type, m.pos_var, m.pos_member_idx,
-               m.float_type, m.v4_type, m.int_type, m.view_var,
-               m.ptr_out_v4_type, m.ptr_in_int_type, m.bound, m.count,
-               (int)m.has_mv_capability);
+    for (size_t i=0;i<split;i++) sb_push(&te,comb.words[i]);
+    for (size_t i=split;i<comb.count;i++) sb_push(&be,comb.words[i]);
+    sb_free(&comb);
 
-    if (!m.pos_var) {
-        STEREO_LOG("Shader scan: gl_Position NOT found — skipping patch");
-        return false;
+    /* Find insertion points in original binary */
+    size_t ins_t=0, ins_b=0;
+    for (size_t i=5; i<in_c; ) {
+        uint32_t op=in[i]&0xffff, wc=in[i]>>16;
+        if (!wc||i+wc>in_c) break;
+        if (op==SpvOpFunction&&!ins_t) ins_t=i;
+        if (!m.pos_is_block&&op==SpvOpStore&&wc>=3&&in[i+1]==m.pos_var) ins_b=i+wc;
+        i+=wc;
     }
-
-    STEREO_LOG("Patching vertex shader: pos_var=%u view_var=%u inject_view=%d bound=%u",
-               m.pos_var, m.view_var, (int)inject_view_index, m.bound);
-
-    /* ── Build combined type+body buffer via inject_stereo_code ─────────── */
-    SpvBuf combined;
-    if (!spvbuf_init(&combined, 256)) return false;
-
-    uint32_t next_id = m.bound;
-    uint32_t injected_view_var = 0;
-
-    if (!inject_stereo_code(&combined, &m, &next_id,
-                            left_offset, right_offset,
-                            inject_view_index, &injected_view_var)) {
-        STEREO_LOG("Stereo code injection skipped (missing types)");
-        spvbuf_free(&combined);
-        return false;
-    }
-
-    /* ── Split combined buffer into type_extras and body_extras ──────────── */
-    SpvBuf type_extras, body_extras;
-    if (!spvbuf_init(&type_extras, 64) || !spvbuf_init(&body_extras, 64)) {
-        spvbuf_free(&combined);
-        spvbuf_free(&type_extras);
-        spvbuf_free(&body_extras);
-        return false;
-    }
-
-    size_t type_split = 0;
-    for (size_t i = 0; i < combined.count; ) {
-        uint32_t op = combined.words[i] & 0xffff;
-        if (op == SpvOpLoad           ||
-            op == SpvOpStore          ||
-            op == SpvOpAccessChain    ||
-            op == SpvOpIEqual         ||
-            op == SpvOpSelect         ||
-            op == SpvOpFMul           ||
-            op == SpvOpFAdd           ||
-            op == SpvOpCompositeExtract ||
-            op == SpvOpCompositeInsert) {
-            type_split = i;
-            break;
+    if (!ins_t) { sb_free(&te);sb_free(&be); return false; }
+    if (!ins_b) {
+        for (size_t i=5; i<in_c; ) {
+            uint32_t op=in[i]&0xffff, wc=in[i]>>16; if (!wc) break;
+            if (op==253||op==254) { ins_b=i; break; } i+=wc;
         }
-        uint32_t wc = combined.words[i] >> 16;
-        if (!wc) break;
-        i += wc;
-        type_split = i;
+        if (!ins_b) { sb_free(&te);sb_free(&be); return false; }
     }
+    if (ins_b<ins_t) { sb_free(&te);sb_free(&be); return false; }
 
-    for (size_t i = 0; i < type_split; i++)
-        spvbuf_push(&type_extras, combined.words[i]);
-    for (size_t i = type_split; i < combined.count; i++)
-        spvbuf_push(&body_extras, combined.words[i]);
-    spvbuf_free(&combined);
+    bool need_mv=iv&&!m.has_mv_cap, mv_done=false;
+    SpvBuf ob; if (!sb_init(&ob, in_c+te.count+be.count+16)) { sb_free(&te);sb_free(&be); return false; }
+    sb_push_n(&ob,in,5); ob.words[3]=nid;
 
-    /* ── Find insertion points ───────────────────────────────────────────── */
-    size_t insert_type_after = 0;
-    size_t insert_body_after = 0;
-    {
-        size_t i = 5;
-        while (i < in_count) {
-            uint32_t op     = in_words[i] & 0xffff;
-            uint32_t wcount = in_words[i] >> 16;
-            if (!wcount || i + wcount > in_count) break;
-            if (op == SpvOpFunction && insert_type_after == 0)
-                insert_type_after = i;
-            if (!m.pos_is_block &&
-                op == SpvOpStore && wcount >= 3 && in_words[i+1] == m.pos_var)
-                insert_body_after = i + wcount;
-            i += wcount;
+    for (size_t i=5; i<in_c; ) {
+        if (!mv_done&&need_mv) {
+            uint32_t c[]={spv_op(SpvOpCapability,2),SpvCapabilityMultiView};
+            sb_push_n(&ob,c,2); mv_done=true;
         }
+        if (i==ins_t&&te.count) { sb_push_n(&ob,te.words,te.count); te.count=0; }
+        if (i==ins_b&&be.count) { sb_push_n(&ob,be.words,be.count); be.count=0; }
+
+        uint32_t op=in[i]&0xffff, wc=in[i]>>16;
+        if (!wc||i+wc>in_c) break;
+
+        /* Extend OpEntryPoint interface list with the injected view variable */
+        if (op==SpvOpEntryPoint&&wc>=4&&iv!=0&&
+            (in[i+1]==SpvExecVertex||in[i+1]==SpvExecGeometry||in[i+1]==SpvExecTessEval)) {
+            sb_push(&ob,((wc+1)<<16)|SpvOpEntryPoint);
+            sb_push_n(&ob,&in[i+1],wc-1);
+            sb_push(&ob,iv);
+            STEREO_LOG("OpEntryPoint extended: view_var=%u exec=%u", iv, in[i+1]);
+            i+=wc; continue;
+        }
+        sb_push_n(&ob,&in[i],wc); i+=wc;
     }
+    if (te.count) sb_push_n(&ob,te.words,te.count);
+    if (be.count) sb_push_n(&ob,be.words,be.count);
+    sb_free(&te); sb_free(&be);
 
-    if (insert_type_after == 0) {
-        STEREO_LOG("No OpFunction found — skipping patch");
-        spvbuf_free(&type_extras);
-        spvbuf_free(&body_extras);
-        return false;
-    }
-
-    if (insert_body_after == 0) {
-        if (m.pos_is_block)
-            STEREO_LOG("Block-member Position: injecting before first OpReturn");
-        else
-            STEREO_LOG("No direct OpStore to gl_Position; injecting before first OpReturn");
-        size_t i = 5;
-        while (i < in_count) {
-            uint32_t op     = in_words[i] & 0xffff;
-            uint32_t wcount = in_words[i] >> 16;
-            if (!wcount) break;
-            if (op == SpvOpReturn || op == 254 /* ReturnValue */) {
-                insert_body_after = i;
-                break;
-            }
-            i += wcount;
-        }
-        if (!insert_body_after) {
-            STEREO_LOG("No OpReturn found — skipping patch");
-            spvbuf_free(&type_extras);
-            spvbuf_free(&body_extras);
-            return false;
-        }
-    }
-
-    if (insert_body_after < insert_type_after) {
-        STEREO_LOG("insert_body_after(%zu) < insert_type_after(%zu) — skipping",
-                   insert_body_after, insert_type_after);
-        spvbuf_free(&type_extras);
-        spvbuf_free(&body_extras);
-        return false;
-    }
-
-    /* ── Pass 2: Rebuild output ──────────────────────────────────────────── *
-     *                                                                         *
-     * Three special transformations during the copy:                          *
-     *                                                                         *
-     * 1. OpCapability MultiView — if we injected gl_ViewIndex and the shader  *
-     *    doesn't already declare this capability, emit it as the very first   *
-     *    instruction so it lands in the capability section.                   *
-     *                                                                         *
-     * 2. OpEntryPoint (vertex) — if we injected a new Input variable, extend  *
-     *    the instruction's interface list with the new variable ID.  SPIR-V   *
-     *    1.4 §2.4 rule 4 requires every statically-used Input/Output variable *
-     *    to appear in the OpEntryPoint interface; missing it causes black      *
-     *    output at runtime on strict drivers (ICD silently discards writes).   *
-     *                                                                         *
-     * 3. Splice points — type_extras before first OpFunction, body_extras at  *
-     *    insert_body_after (existing logic).                                   */
-
-    bool need_mv_cap  = injected_view_var && !m.has_mv_capability;
-    bool mv_cap_done  = false;
-
-    SpvBuf out_buf;
-    if (!spvbuf_init(&out_buf,
-                     in_count + type_extras.count + body_extras.count +
-                     (need_mv_cap ? 2 : 0) +
-                     (injected_view_var ? 1 : 0) + 16)) {
-        spvbuf_free(&type_extras);
-        spvbuf_free(&body_extras);
-        return false;
-    }
-
-    /* Copy 5-word header, updating the ID bound */
-    spvbuf_push_n(&out_buf, in_words, 5);
-    out_buf.words[3] = next_id;
-
-    for (size_t i = 5; i < in_count; ) {
-        /* 1. Inject OpCapability MultiView before the very first instruction */
-        if (!mv_cap_done && need_mv_cap) {
-            uint32_t cap[] = { spv_op(SpvOpCapability, 2), SpvCapabilityMultiView };
-            spvbuf_push_n(&out_buf, cap, 2);
-            mv_cap_done = true;
-        }
-
-        /* 2. Splice type_extras just before first OpFunction */
-        if (i == insert_type_after && type_extras.count > 0) {
-            spvbuf_push_n(&out_buf, type_extras.words, type_extras.count);
-            type_extras.count = 0;
-        }
-
-        /* 3. Splice body_extras at target position */
-        if (i == insert_body_after && body_extras.count > 0) {
-            spvbuf_push_n(&out_buf, body_extras.words, body_extras.count);
-            body_extras.count = 0;
-        }
-
-        uint32_t op     = in_words[i] & 0xffff;
-        uint32_t wcount = in_words[i] >> 16;
-        if (!wcount || i + wcount > in_count) break;
-
-        /* 4. Extend OpEntryPoint for vertex shader with the injected variable */
-        if (op == SpvOpEntryPoint &&
-            wcount >= 4 &&
-            in_words[i+1] == SpvExecutionModelVertex &&
-            injected_view_var != 0) {
-            /* Emit with wordcount+1 and append the new interface variable */
-            spvbuf_push(&out_buf, ((wcount + 1) << 16) | SpvOpEntryPoint);
-            spvbuf_push_n(&out_buf, &in_words[i+1], wcount - 1);
-            spvbuf_push(&out_buf, injected_view_var);
-            STEREO_LOG("OpEntryPoint extended: added view_var=%u to interface list",
-                       injected_view_var);
-            i += wcount;
-            continue;
-        }
-
-        /* Normal copy */
-        spvbuf_push_n(&out_buf, &in_words[i], wcount);
-        i += wcount;
-    }
-
-    /* Flush any remaining extras whose insertion point was == in_count */
-    if (type_extras.count > 0)
-        spvbuf_push_n(&out_buf, type_extras.words, type_extras.count);
-    if (body_extras.count > 0)
-        spvbuf_push_n(&out_buf, body_extras.words, body_extras.count);
-
-    spvbuf_free(&type_extras);
-    spvbuf_free(&body_extras);
-
-    *out_words = out_buf.words;
-    *out_count = out_buf.count;
-
-    STEREO_LOG("SPIR-V patched: %zu -> %zu words, new bound=%u, "
-               "view_var=%u (injected=%d), mv_cap_added=%d",
-               in_count, out_buf.count, next_id,
-               m.view_var, (int)(injected_view_var != 0), (int)mv_cap_done);
+    *out=ob.words; *out_c=ob.count;
+    STEREO_LOG("Patched: model=%d  %zu→%zu words  bound=%u  vi=%d  mvcap=%d",
+               m.exec_model,in_c,ob.count,nid,(int)(iv!=0),(int)mv_done);
     return true;
 }
+void spirv_patched_free(uint32_t *w) { free(w); }
 
-void spirv_patched_free(uint32_t *words)
+/* ── Shader module cache ──────────────────────────────────────────────────── */
+
+/* Quick check: is this SPIR-V a patchable stage? Avoids caching FS/CS. */
+static bool is_patchable_spv(const uint32_t *w, size_t c)
 {
-    free(words);
+    if (c<5||w[0]!=SPIRV_MAGIC) return false;
+    for (size_t i=5; i<c; ) {
+        uint32_t op=w[i]&0xffff, wc=w[i]>>16;
+        if (!wc||i+wc>c) break;
+        if (op==SpvOpEntryPoint&&wc>=2) {
+            uint32_t e=w[i+1];
+            return e==SpvExecVertex||e==SpvExecGeometry||e==SpvExecTessEval;
+        }
+        i+=wc;
+    }
+    return false;
 }
 
-/* ── vkCreateShaderModule ────────────────────────────────────────────────── */
+static StereoShaderCache *cache_find(StereoDevice *sd, VkShaderModule h)
+{
+    for (uint32_t i=0;i<sd->shader_cache_count;i++)
+        if (sd->shader_cache[i].handle==h) return &sd->shader_cache[i];
+    return NULL;
+}
+static void cache_add(StereoDevice *sd, VkShaderModule h,
+                      const uint32_t *spv, size_t words)
+{
+    if (sd->shader_cache_count>=MAX_SHADER_CACHE) {
+        STEREO_ERR("Shader cache full, cannot cache %p", (void*)(uintptr_t)h);
+        return;
+    }
+    uint32_t *cp=malloc(words*4); if (!cp) return;
+    memcpy(cp,spv,words*4);
+    StereoShaderCache *e=&sd->shader_cache[sd->shader_cache_count++];
+    e->handle=h; e->spv=cp; e->words=words;
+    STEREO_LOG("cache_add: module=%p words=%zu slot=%u",
+               (void*)(uintptr_t)h, words, sd->shader_cache_count-1);
+}
+static void cache_remove(StereoDevice *sd, VkShaderModule h)
+{
+    for (uint32_t i=0;i<sd->shader_cache_count;i++) {
+        if (sd->shader_cache[i].handle==h) {
+            free(sd->shader_cache[i].spv);
+            sd->shader_cache[i]=sd->shader_cache[--sd->shader_cache_count];
+            return;
+        }
+    }
+}
+
+/* ── vkCreateShaderModule: cache, do NOT patch ───────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateShaderModule(
     VkDevice                         device,
@@ -790,101 +383,126 @@ stereo_CreateShaderModule(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    static int no_patch = -1;
-    if (no_patch < 0) {
-        const char *e = stereo_getenv("VKS3D_NO_SHADER_PATCH");
-        no_patch = (e && e[0] == '1') ? 1 : 0;
-        if (no_patch) STEREO_LOG("VKS3D_NO_SHADER_PATCH=1: SPIR-V patching disabled");
-    }
-
-    if (!sd->stereo.enabled || no_patch) {
-        STEREO_LOG("stereo_CreateShaderModule: passthrough (%zu bytes)",
-                   pCreateInfo ? pCreateInfo->codeSize : 0);
-        VkResult r = sd->real.CreateShaderModule(sd->real_device, pCreateInfo,
-                                                  pAllocator, pShaderModule);
-        STEREO_LOG("stereo_CreateShaderModule: passthrough result=%d module=%p", r,
-                   pShaderModule ? (void*)(uintptr_t)*pShaderModule : NULL);
-        return r;
-    }
-
-    const uint32_t *in   = (const uint32_t*)pCreateInfo->pCode;
-    size_t          in_c = pCreateInfo->codeSize / 4;
-    uint32_t       *patched   = NULL;
-    size_t          patched_c = 0;
-
-    bool patched_ok = spirv_patch_stereo_vertex(
-        in, in_c, &patched, &patched_c,
-        sd->stereo.left_eye_offset,
-        sd->stereo.right_eye_offset,
-        sd->stereo.convergence,
-        sd->stereo.multiview);
-
-    VkShaderModuleCreateInfo mod_ci = *pCreateInfo;
-    if (patched_ok) {
-        mod_ci.pCode    = patched;
-        mod_ci.codeSize = patched_c * sizeof(uint32_t);
-        STEREO_LOG("stereo_CreateShaderModule: submitting patched SPIR-V (%zu words)",
-                   patched_c);
-    } else {
-        STEREO_LOG("stereo_CreateShaderModule: submitting original SPIR-V (%zu words)",
-                   in_c);
-    }
-
-    /* VKS3D_DUMP_SPIRV=C:\path\dir dumps patched SPIR-V for spirv-val inspection */
-    {
-        const char *dump_dir = stereo_getenv("VKS3D_DUMP_SPIRV");
-        if (dump_dir && patched_ok) {
-            static int dump_idx = 0;
-            char dump_path[512];
-            _snprintf(dump_path, sizeof(dump_path)-1, "%s\\patched_%04d.spv",
-                      dump_dir, dump_idx++);
-            FILE *f = fopen(dump_path, "wb");
-            if (f) {
-                fwrite(patched, sizeof(uint32_t), patched_c, f);
-                fclose(f);
-                STEREO_LOG("Dumped patched SPIR-V: %s (%zu words)", dump_path, patched_c);
-            }
-        }
-    }
-
+    /* Always pass original SPIR-V straight through to the driver */
     VkResult res = sd->real.CreateShaderModule(
-        sd->real_device, &mod_ci, pAllocator, pShaderModule);
+        sd->real_device, pCreateInfo, pAllocator, pShaderModule);
+    if (res!=VK_SUCCESS) return res;
 
-    STEREO_LOG("stereo_CreateShaderModule: driver returned %d  module=%p",
-               res, pShaderModule ? (void*)(uintptr_t)*pShaderModule : NULL);
+    if (!sd->stereo.enabled) return VK_SUCCESS;
 
-    if (patched_ok) spirv_patched_free(patched);
-    return res;
+    const uint32_t *spv = (const uint32_t*)pCreateInfo->pCode;
+    size_t          wc  = pCreateInfo->codeSize/4;
+
+    if (is_patchable_spv(spv, wc))
+        cache_add(sd, *pShaderModule, spv, wc);
+
+    return VK_SUCCESS;
 }
 
-/* ── vkCreateGraphicsPipelines ───────────────────────────────────────────── */
+/* ── vkCreateGraphicsPipelines: patch last pre-rast stage ───────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(
     VkDevice                            device,
     VkPipelineCache                     pipelineCache,
-    uint32_t                            createInfoCount,
+    uint32_t                            N,
     const VkGraphicsPipelineCreateInfo *pCreateInfos,
     const VkAllocationCallbacks        *pAllocator,
     VkPipeline                         *pPipelines)
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("stereo_CreateGraphicsPipelines: count=%u", createInfoCount);
-    VkResult r = sd->real.CreateGraphicsPipelines(
-        sd->real_device, pipelineCache, createInfoCount,
-        pCreateInfos, pAllocator, pPipelines);
-    STEREO_LOG("stereo_CreateGraphicsPipelines: result=%d", (int)r);
-    return r;
+    STEREO_LOG("CreateGraphicsPipelines: count=%u stereo=%d", N, sd->stereo.enabled);
+
+    if (!sd->stereo.enabled) {
+        return sd->real.CreateGraphicsPipelines(
+            sd->real_device, pipelineCache, N, pCreateInfos, pAllocator, pPipelines);
+    }
+
+    VkShaderModule               *tmods   = calloc(N, sizeof(VkShaderModule));
+    VkPipelineShaderStageCreateInfo **tstages = calloc(N, sizeof(void*));
+    VkGraphicsPipelineCreateInfo    *infos    = malloc(N*sizeof(*infos));
+    if (!tmods||!tstages||!infos) {
+        free(tmods);free(tstages);free(infos); return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    memcpy(infos, pCreateInfos, N*sizeof(*infos));
+
+    const char *dump_dir = stereo_getenv("VKS3D_DUMP_SPIRV");
+    static int dump_n = 0;
+
+    for (uint32_t p=0; p<N; p++) {
+        const VkGraphicsPipelineCreateInfo *ci = &pCreateInfos[p];
+
+        /* Find last pre-rasterisation stage: GS(2) > TES(1) > VS(0) */
+        int best=-1; uint32_t best_s=~0u;
+        for (uint32_t s=0; s<ci->stageCount; s++) {
+            VkShaderStageFlagBits sf=ci->pStages[s].stage;
+            int pr=(sf==VK_SHADER_STAGE_GEOMETRY_BIT)               ? 2 :
+                   (sf==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) ? 1 :
+                   (sf==VK_SHADER_STAGE_VERTEX_BIT)                  ? 0 : -1;
+            if (pr>best) { best=pr; best_s=s; }
+        }
+        if (best_s==~0u) continue;
+
+        STEREO_LOG("Pipeline %u: last pre-rast stage=%u (prio=%d) module=%p",
+                   p, best_s, best, (void*)(uintptr_t)ci->pStages[best_s].module);
+
+        StereoShaderCache *entry=cache_find(sd, ci->pStages[best_s].module);
+        if (!entry) { STEREO_LOG("Pipeline %u: not in cache, no patch", p); continue; }
+
+        uint32_t *patched=NULL; size_t pc=0;
+        if (!spirv_patch_stereo_vertex(
+                entry->spv, entry->words, &patched, &pc,
+                sd->stereo.left_eye_offset, sd->stereo.right_eye_offset,
+                sd->stereo.convergence, sd->stereo.multiview)) {
+            STEREO_LOG("Pipeline %u: patch failed", p); continue;
+        }
+
+        if (dump_dir) {
+            char path[512];
+            _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_s%u.spv",dump_dir,dump_n++,best_s);
+            FILE *f=fopen(path,"wb");
+            if (f) { fwrite(patched,4,pc,f); fclose(f);
+                     STEREO_LOG("Dumped: %s", path); }
+        }
+
+        VkShaderModuleCreateInfo smci={
+            .sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=pc*4, .pCode=patched };
+        VkShaderModule tmp=VK_NULL_HANDLE;
+        VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
+        spirv_patched_free(patched);
+        if (mr!=VK_SUCCESS) { STEREO_ERR("Pipeline %u: tmp module failed %d",p,mr); continue; }
+
+        uint32_t sc=ci->stageCount;
+        VkPipelineShaderStageCreateInfo *stages=malloc(sc*sizeof(*stages));
+        if (!stages) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
+        memcpy(stages,ci->pStages,sc*sizeof(*stages));
+        stages[best_s].module=tmp;
+
+        infos[p].pStages=stages;
+        tmods[p]=tmp; tstages[p]=stages;
+        STEREO_LOG("Pipeline %u: patched stage %u with tmp=%p",p,best_s,(void*)(uintptr_t)tmp);
+    }
+
+    VkResult res=sd->real.CreateGraphicsPipelines(
+        sd->real_device,pipelineCache,N,infos,pAllocator,pPipelines);
+    STEREO_LOG("CreateGraphicsPipelines result=%d", res);
+
+    for (uint32_t p=0;p<N;p++) {
+        if (tmods[p]) sd->real.DestroyShaderModule(sd->real_device,tmods[p],NULL);
+        free(tstages[p]);
+    }
+    free(tmods); free(tstages); free(infos);
+    return res;
 }
 
 /* ── vkDestroyShaderModule ───────────────────────────────────────────────── */
 VKAPI_ATTR void VKAPI_CALL
-stereo_DestroyShaderModule(
-    VkDevice                        device,
-    VkShaderModule                  shaderModule,
-    const VkAllocationCallbacks    *pAllocator)
+stereo_DestroyShaderModule(VkDevice device, VkShaderModule sm,
+                           const VkAllocationCallbacks *pAllocator)
 {
-    StereoDevice *sd = stereo_device_from_handle(device);
+    StereoDevice *sd=stereo_device_from_handle(device);
     if (!sd) return;
-    sd->real.DestroyShaderModule(sd->real_device, shaderModule, pAllocator);
+    cache_remove(sd, sm);
+    sd->real.DestroyShaderModule(sd->real_device, sm, pAllocator);
 }
