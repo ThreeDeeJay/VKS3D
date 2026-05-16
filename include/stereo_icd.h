@@ -66,7 +66,6 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #  define VK_MAX_DESCRIPTION_SIZE 256
 #endif
 #if defined(VK_VERSION_1_3)
-  /* Case A: struct already in vulkan_core.h */
 #elif defined(VK_EXT_tooling_info)
   typedef VkPhysicalDeviceToolPropertiesEXT VkPhysicalDeviceToolProperties;
 # ifndef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES
@@ -76,16 +75,14 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #else
   typedef VkFlags VkToolPurposeFlags;
   typedef struct VkPhysicalDeviceToolProperties {
-      VkStructureType    sType;
-      void              *pNext;
-      char               name[VK_MAX_EXTENSION_NAME_SIZE];
-      char               version[VK_MAX_EXTENSION_NAME_SIZE];
+      VkStructureType    sType; void *pNext;
+      char name[VK_MAX_EXTENSION_NAME_SIZE];
+      char version[VK_MAX_EXTENSION_NAME_SIZE];
       VkToolPurposeFlags purposes;
-      char               description[VK_MAX_DESCRIPTION_SIZE];
-      char               layer[VK_MAX_EXTENSION_NAME_SIZE];
+      char description[VK_MAX_DESCRIPTION_SIZE];
+      char layer[VK_MAX_EXTENSION_NAME_SIZE];
   } VkPhysicalDeviceToolProperties;
-# define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES \
-      ((VkStructureType)1000245000)
+# define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES ((VkStructureType)1000245000)
 #endif
 
 #ifndef ICD_LOADER_MAGIC
@@ -93,11 +90,9 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #endif
 #ifndef SET_LOADER_MAGIC_VALUE
 #  define SET_LOADER_MAGIC_VALUE(obj) \
-    do { \
-        VK_LOADER_DATA *_ld = (VK_LOADER_DATA *)(void *)(obj); \
-        _ld->loaderMagic = ICD_LOADER_MAGIC; \
-    } while (0)
+    do { ((VK_LOADER_DATA*)(void*)(obj))->loaderMagic = ICD_LOADER_MAGIC; } while(0)
 #endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -109,14 +104,19 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #define MAX_PHYSICAL_DEVICES    16
 #define MAX_DEVICES             32
 #define MAX_RENDER_PASSES       4096
-#define MAX_IMAGES              16384
-#define MAX_IMAGE_VIEWS         16384
-#define MAX_FRAMEBUFFERS        4096
-#define MAX_PIPELINES           4096
 #define MAX_SWAPCHAINS          64
-#define MAX_SHADER_MODULES      8192
-#define MAX_DESCRIPTOR_SETS     16384
-#define MAX_CMD_BUFFERS         65536
+#define MAX_DEPTH_IMAGES        256
+
+/* ── Shader module cache ──────────────────────────────────────────────────── *
+ * Stores original (unpatched) SPIR-V for vertex/geometry/tesseval shaders.   *
+ * Used by stereo_CreateGraphicsPipelines to patch the correct stage.          *
+ * Fragment and compute shaders are never cached.                              */
+#define MAX_SHADER_CACHE 2048
+typedef struct {
+    VkShaderModule  handle;
+    uint32_t       *spv;    /* heap copy of original SPIR-V words */
+    size_t          words;
+} StereoShaderCache;
 
 /* ── Stereo presentation mode ─────────────────────────────────────────────── */
 typedef enum StereoPresentMode {
@@ -155,7 +155,6 @@ extern char g_global_ini[512];
 extern char g_local_ini[512];
 
 /* ── Dispatch tables ─────────────────────────────────────────────────────── */
-
 typedef struct RealInstanceDispatch {
     PFN_vkDestroyInstance                     DestroyInstance;
     PFN_vkEnumeratePhysicalDevices            EnumeratePhysicalDevices;
@@ -218,148 +217,137 @@ typedef struct RealInstanceDispatch {
 } RealInstanceDispatch;
 
 typedef struct RealDeviceDispatch {
-    PFN_vkGetDeviceProcAddr                   GetDeviceProcAddr;
-    PFN_vkDestroyDevice                       DestroyDevice;
-    PFN_vkGetDeviceQueue                      GetDeviceQueue;
-    PFN_vkQueueSubmit                         QueueSubmit;
-    PFN_vkQueueWaitIdle                       QueueWaitIdle;
-    PFN_vkDeviceWaitIdle                      DeviceWaitIdle;
-    PFN_vkAllocateMemory                      AllocateMemory;
-    PFN_vkFreeMemory                          FreeMemory;
-    PFN_vkMapMemory                           MapMemory;
-    PFN_vkUnmapMemory                         UnmapMemory;
-    PFN_vkFlushMappedMemoryRanges             FlushMappedMemoryRanges;
-    PFN_vkInvalidateMappedMemoryRanges        InvalidateMappedMemoryRanges;
-    PFN_vkBindBufferMemory                    BindBufferMemory;
-    PFN_vkBindImageMemory                     BindImageMemory;
-    PFN_vkGetBufferMemoryRequirements         GetBufferMemoryRequirements;
-    PFN_vkGetImageMemoryRequirements          GetImageMemoryRequirements;
-    PFN_vkCreateFence                         CreateFence;
-    PFN_vkDestroyFence                        DestroyFence;
-    PFN_vkResetFences                         ResetFences;
-    PFN_vkGetFenceStatus                      GetFenceStatus;
-    PFN_vkWaitForFences                       WaitForFences;
-    PFN_vkCreateSemaphore                     CreateSemaphore;
-    PFN_vkDestroySemaphore                    DestroySemaphore;
-    PFN_vkCreateEvent                         CreateEvent;
-    PFN_vkDestroyEvent                        DestroyEvent;
-    PFN_vkGetEventStatus                      GetEventStatus;
-    PFN_vkSetEvent                            SetEvent;
-    PFN_vkResetEvent                          ResetEvent;
-    PFN_vkCreateQueryPool                     CreateQueryPool;
-    PFN_vkDestroyQueryPool                    DestroyQueryPool;
-    PFN_vkGetQueryPoolResults                 GetQueryPoolResults;
-    PFN_vkCreateBuffer                        CreateBuffer;
-    PFN_vkDestroyBuffer                       DestroyBuffer;
-    PFN_vkCreateBufferView                    CreateBufferView;
-    PFN_vkDestroyBufferView                   DestroyBufferView;
-    PFN_vkCreateImage                         CreateImage;
-    PFN_vkDestroyImage                        DestroyImage;
-    PFN_vkGetImageSubresourceLayout           GetImageSubresourceLayout;
-    PFN_vkCreateImageView                     CreateImageView;
-    PFN_vkDestroyImageView                    DestroyImageView;
-    PFN_vkCreateShaderModule                  CreateShaderModule;
-    PFN_vkDestroyShaderModule                 DestroyShaderModule;
-    PFN_vkCreatePipelineCache                 CreatePipelineCache;
-    PFN_vkDestroyPipelineCache                DestroyPipelineCache;
-    PFN_vkGetPipelineCacheData                GetPipelineCacheData;
-    PFN_vkMergePipelineCaches                 MergePipelineCaches;
-    PFN_vkCreateGraphicsPipelines             CreateGraphicsPipelines;
-    PFN_vkCreateComputePipelines              CreateComputePipelines;
-    PFN_vkDestroyPipeline                     DestroyPipeline;
-    PFN_vkCreatePipelineLayout                CreatePipelineLayout;
-    PFN_vkDestroyPipelineLayout               DestroyPipelineLayout;
-    PFN_vkCreateSampler                       CreateSampler;
-    PFN_vkDestroySampler                      DestroySampler;
-    PFN_vkCreateDescriptorSetLayout          CreateDescriptorSetLayout;
-    PFN_vkDestroyDescriptorSetLayout         DestroyDescriptorSetLayout;
-    PFN_vkCreateDescriptorPool               CreateDescriptorPool;
-    PFN_vkDestroyDescriptorPool              DestroyDescriptorPool;
-    PFN_vkResetDescriptorPool                ResetDescriptorPool;
-    PFN_vkAllocateDescriptorSets             AllocateDescriptorSets;
-    PFN_vkFreeDescriptorSets                 FreeDescriptorSets;
-    PFN_vkUpdateDescriptorSets               UpdateDescriptorSets;
-    PFN_vkCreateFramebuffer                  CreateFramebuffer;
-    PFN_vkDestroyFramebuffer                 DestroyFramebuffer;
-    PFN_vkCreateRenderPass                   CreateRenderPass;
-    PFN_vkCreateRenderPass2KHR               CreateRenderPass2KHR;
-    PFN_vkDestroyRenderPass                  DestroyRenderPass;
-    PFN_vkGetRenderAreaGranularity           GetRenderAreaGranularity;
-    PFN_vkCreateCommandPool                  CreateCommandPool;
-    PFN_vkDestroyCommandPool                 DestroyCommandPool;
-    PFN_vkResetCommandPool                   ResetCommandPool;
-    PFN_vkAllocateCommandBuffers             AllocateCommandBuffers;
-    PFN_vkFreeCommandBuffers                 FreeCommandBuffers;
-    PFN_vkBeginCommandBuffer                 BeginCommandBuffer;
-    PFN_vkEndCommandBuffer                   EndCommandBuffer;
-    PFN_vkResetCommandBuffer                 ResetCommandBuffer;
-    PFN_vkCmdBindPipeline                    CmdBindPipeline;
-    PFN_vkCmdSetViewport                     CmdSetViewport;
-    PFN_vkCmdSetScissor                      CmdSetScissor;
-    PFN_vkCmdSetLineWidth                    CmdSetLineWidth;
-    PFN_vkCmdSetDepthBias                    CmdSetDepthBias;
-    PFN_vkCmdSetBlendConstants               CmdSetBlendConstants;
-    PFN_vkCmdSetDepthBounds                  CmdSetDepthBounds;
-    PFN_vkCmdSetStencilCompareMask           CmdSetStencilCompareMask;
-    PFN_vkCmdSetStencilWriteMask             CmdSetStencilWriteMask;
-    PFN_vkCmdSetStencilReference             CmdSetStencilReference;
-    PFN_vkCmdBindDescriptorSets              CmdBindDescriptorSets;
-    PFN_vkCmdBindIndexBuffer                 CmdBindIndexBuffer;
-    PFN_vkCmdBindVertexBuffers               CmdBindVertexBuffers;
-    PFN_vkCmdDraw                            CmdDraw;
-    PFN_vkCmdDrawIndexed                     CmdDrawIndexed;
-    PFN_vkCmdDrawIndirect                    CmdDrawIndirect;
-    PFN_vkCmdDrawIndexedIndirect             CmdDrawIndexedIndirect;
-    PFN_vkCmdDispatch                        CmdDispatch;
-    PFN_vkCmdDispatchIndirect                CmdDispatchIndirect;
-    PFN_vkCmdCopyBuffer                      CmdCopyBuffer;
-    PFN_vkCmdCopyImage                       CmdCopyImage;
-    PFN_vkCmdBlitImage                       CmdBlitImage;
-    PFN_vkCmdCopyBufferToImage               CmdCopyBufferToImage;
-    PFN_vkCmdCopyImageToBuffer               CmdCopyImageToBuffer;
-    PFN_vkCmdUpdateBuffer                    CmdUpdateBuffer;
-    PFN_vkCmdFillBuffer                      CmdFillBuffer;
-    PFN_vkCmdClearColorImage                 CmdClearColorImage;
-    PFN_vkCmdClearDepthStencilImage          CmdClearDepthStencilImage;
-    PFN_vkCmdClearAttachments                CmdClearAttachments;
-    PFN_vkCmdResolveImage                    CmdResolveImage;
-    PFN_vkCmdSetEvent                        CmdSetEvent;
-    PFN_vkCmdResetEvent                      CmdResetEvent;
-    PFN_vkCmdWaitEvents                      CmdWaitEvents;
-    PFN_vkCmdPipelineBarrier                 CmdPipelineBarrier;
-    PFN_vkCmdBeginQuery                      CmdBeginQuery;
-    PFN_vkCmdEndQuery                        CmdEndQuery;
-    PFN_vkCmdResetQueryPool                  CmdResetQueryPool;
-    PFN_vkCmdWriteTimestamp                  CmdWriteTimestamp;
-    PFN_vkCmdCopyQueryPoolResults            CmdCopyQueryPoolResults;
-    PFN_vkCmdPushConstants                   CmdPushConstants;
-    PFN_vkCmdBeginRenderPass                 CmdBeginRenderPass;
-    PFN_vkCmdNextSubpass                     CmdNextSubpass;
-    PFN_vkCmdEndRenderPass                   CmdEndRenderPass;
-    PFN_vkCmdExecuteCommands                 CmdExecuteCommands;
-    PFN_vkCreateSwapchainKHR                 CreateSwapchainKHR;
-    PFN_vkDestroySwapchainKHR                DestroySwapchainKHR;
-    PFN_vkGetSwapchainImagesKHR              GetSwapchainImagesKHR;
-    PFN_vkAcquireNextImageKHR                AcquireNextImageKHR;
-    PFN_vkQueuePresentKHR                    QueuePresentKHR;
-    PFN_vkGetMemoryWin32HandlePropertiesKHR  GetMemoryWin32HandlePropertiesKHR;
+    PFN_vkGetDeviceProcAddr          GetDeviceProcAddr;
+    PFN_vkDestroyDevice              DestroyDevice;
+    PFN_vkGetDeviceQueue             GetDeviceQueue;
+    PFN_vkQueueSubmit                QueueSubmit;
+    PFN_vkQueueWaitIdle              QueueWaitIdle;
+    PFN_vkDeviceWaitIdle             DeviceWaitIdle;
+    PFN_vkAllocateMemory             AllocateMemory;
+    PFN_vkFreeMemory                 FreeMemory;
+    PFN_vkMapMemory                  MapMemory;
+    PFN_vkUnmapMemory                UnmapMemory;
+    PFN_vkFlushMappedMemoryRanges    FlushMappedMemoryRanges;
+    PFN_vkInvalidateMappedMemoryRanges InvalidateMappedMemoryRanges;
+    PFN_vkBindBufferMemory           BindBufferMemory;
+    PFN_vkBindImageMemory            BindImageMemory;
+    PFN_vkGetBufferMemoryRequirements GetBufferMemoryRequirements;
+    PFN_vkGetImageMemoryRequirements  GetImageMemoryRequirements;
+    PFN_vkCreateFence                CreateFence;
+    PFN_vkDestroyFence               DestroyFence;
+    PFN_vkResetFences                ResetFences;
+    PFN_vkGetFenceStatus             GetFenceStatus;
+    PFN_vkWaitForFences              WaitForFences;
+    PFN_vkCreateSemaphore            CreateSemaphore;
+    PFN_vkDestroySemaphore           DestroySemaphore;
+    PFN_vkCreateEvent                CreateEvent;
+    PFN_vkDestroyEvent               DestroyEvent;
+    PFN_vkGetEventStatus             GetEventStatus;
+    PFN_vkSetEvent                   SetEvent;
+    PFN_vkResetEvent                 ResetEvent;
+    PFN_vkCreateQueryPool            CreateQueryPool;
+    PFN_vkDestroyQueryPool           DestroyQueryPool;
+    PFN_vkGetQueryPoolResults        GetQueryPoolResults;
+    PFN_vkCreateBuffer               CreateBuffer;
+    PFN_vkDestroyBuffer              DestroyBuffer;
+    PFN_vkCreateBufferView           CreateBufferView;
+    PFN_vkDestroyBufferView          DestroyBufferView;
+    PFN_vkCreateImage                CreateImage;
+    PFN_vkDestroyImage               DestroyImage;
+    PFN_vkGetImageSubresourceLayout  GetImageSubresourceLayout;
+    PFN_vkCreateImageView            CreateImageView;
+    PFN_vkDestroyImageView           DestroyImageView;
+    PFN_vkCreateShaderModule         CreateShaderModule;
+    PFN_vkDestroyShaderModule        DestroyShaderModule;
+    PFN_vkCreatePipelineCache        CreatePipelineCache;
+    PFN_vkDestroyPipelineCache       DestroyPipelineCache;
+    PFN_vkGetPipelineCacheData       GetPipelineCacheData;
+    PFN_vkMergePipelineCaches        MergePipelineCaches;
+    PFN_vkCreateGraphicsPipelines    CreateGraphicsPipelines;
+    PFN_vkCreateComputePipelines     CreateComputePipelines;
+    PFN_vkDestroyPipeline            DestroyPipeline;
+    PFN_vkCreatePipelineLayout       CreatePipelineLayout;
+    PFN_vkDestroyPipelineLayout      DestroyPipelineLayout;
+    PFN_vkCreateSampler              CreateSampler;
+    PFN_vkDestroySampler             DestroySampler;
+    PFN_vkCreateDescriptorSetLayout  CreateDescriptorSetLayout;
+    PFN_vkDestroyDescriptorSetLayout DestroyDescriptorSetLayout;
+    PFN_vkCreateDescriptorPool       CreateDescriptorPool;
+    PFN_vkDestroyDescriptorPool      DestroyDescriptorPool;
+    PFN_vkResetDescriptorPool        ResetDescriptorPool;
+    PFN_vkAllocateDescriptorSets     AllocateDescriptorSets;
+    PFN_vkFreeDescriptorSets         FreeDescriptorSets;
+    PFN_vkUpdateDescriptorSets       UpdateDescriptorSets;
+    PFN_vkCreateFramebuffer          CreateFramebuffer;
+    PFN_vkDestroyFramebuffer         DestroyFramebuffer;
+    PFN_vkCreateRenderPass           CreateRenderPass;
+    PFN_vkCreateRenderPass2KHR       CreateRenderPass2KHR;
+    PFN_vkDestroyRenderPass          DestroyRenderPass;
+    PFN_vkGetRenderAreaGranularity   GetRenderAreaGranularity;
+    PFN_vkCreateCommandPool          CreateCommandPool;
+    PFN_vkDestroyCommandPool         DestroyCommandPool;
+    PFN_vkResetCommandPool           ResetCommandPool;
+    PFN_vkAllocateCommandBuffers     AllocateCommandBuffers;
+    PFN_vkFreeCommandBuffers         FreeCommandBuffers;
+    PFN_vkBeginCommandBuffer         BeginCommandBuffer;
+    PFN_vkEndCommandBuffer           EndCommandBuffer;
+    PFN_vkResetCommandBuffer         ResetCommandBuffer;
+    PFN_vkCmdBindPipeline            CmdBindPipeline;
+    PFN_vkCmdSetViewport             CmdSetViewport;
+    PFN_vkCmdSetScissor              CmdSetScissor;
+    PFN_vkCmdSetLineWidth            CmdSetLineWidth;
+    PFN_vkCmdSetDepthBias            CmdSetDepthBias;
+    PFN_vkCmdSetBlendConstants       CmdSetBlendConstants;
+    PFN_vkCmdSetDepthBounds          CmdSetDepthBounds;
+    PFN_vkCmdSetStencilCompareMask   CmdSetStencilCompareMask;
+    PFN_vkCmdSetStencilWriteMask     CmdSetStencilWriteMask;
+    PFN_vkCmdSetStencilReference     CmdSetStencilReference;
+    PFN_vkCmdBindDescriptorSets      CmdBindDescriptorSets;
+    PFN_vkCmdBindIndexBuffer         CmdBindIndexBuffer;
+    PFN_vkCmdBindVertexBuffers       CmdBindVertexBuffers;
+    PFN_vkCmdDraw                    CmdDraw;
+    PFN_vkCmdDrawIndexed             CmdDrawIndexed;
+    PFN_vkCmdDrawIndirect            CmdDrawIndirect;
+    PFN_vkCmdDrawIndexedIndirect     CmdDrawIndexedIndirect;
+    PFN_vkCmdDispatch                CmdDispatch;
+    PFN_vkCmdDispatchIndirect        CmdDispatchIndirect;
+    PFN_vkCmdCopyBuffer              CmdCopyBuffer;
+    PFN_vkCmdCopyImage               CmdCopyImage;
+    PFN_vkCmdBlitImage               CmdBlitImage;
+    PFN_vkCmdCopyBufferToImage       CmdCopyBufferToImage;
+    PFN_vkCmdCopyImageToBuffer       CmdCopyImageToBuffer;
+    PFN_vkCmdUpdateBuffer            CmdUpdateBuffer;
+    PFN_vkCmdFillBuffer              CmdFillBuffer;
+    PFN_vkCmdClearColorImage         CmdClearColorImage;
+    PFN_vkCmdClearDepthStencilImage  CmdClearDepthStencilImage;
+    PFN_vkCmdClearAttachments        CmdClearAttachments;
+    PFN_vkCmdResolveImage            CmdResolveImage;
+    PFN_vkCmdSetEvent                CmdSetEvent;
+    PFN_vkCmdResetEvent              CmdResetEvent;
+    PFN_vkCmdWaitEvents              CmdWaitEvents;
+    PFN_vkCmdPipelineBarrier         CmdPipelineBarrier;
+    PFN_vkCmdBeginQuery              CmdBeginQuery;
+    PFN_vkCmdEndQuery                CmdEndQuery;
+    PFN_vkCmdResetQueryPool          CmdResetQueryPool;
+    PFN_vkCmdWriteTimestamp          CmdWriteTimestamp;
+    PFN_vkCmdCopyQueryPoolResults    CmdCopyQueryPoolResults;
+    PFN_vkCmdPushConstants           CmdPushConstants;
+    PFN_vkCmdBeginRenderPass         CmdBeginRenderPass;
+    PFN_vkCmdNextSubpass             CmdNextSubpass;
+    PFN_vkCmdEndRenderPass           CmdEndRenderPass;
+    PFN_vkCmdExecuteCommands         CmdExecuteCommands;
+    PFN_vkCreateSwapchainKHR         CreateSwapchainKHR;
+    PFN_vkDestroySwapchainKHR        DestroySwapchainKHR;
+    PFN_vkGetSwapchainImagesKHR      GetSwapchainImagesKHR;
+    PFN_vkAcquireNextImageKHR        AcquireNextImageKHR;
+    PFN_vkQueuePresentKHR            QueuePresentKHR;
+    PFN_vkGetMemoryWin32HandlePropertiesKHR GetMemoryWin32HandlePropertiesKHR;
 } RealDeviceDispatch;
 
 /* ── Object wrappers ─────────────────────────────────────────────────────── */
 
 #define MAX_SURFACES 16
-typedef struct StereoSurfaceHWND {
-    VkSurfaceKHR surface;
-    HWND         hwnd;
-} StereoSurfaceHWND;
-
-#define MAX_SHADER_CACHE 2048
-typedef struct {
-    VkShaderModule  handle;
-    uint32_t       *spv;
-    size_t          words;
-    int             exec_model;  /* 0=Vertex, 3=Geometry, -1=other */
-} StereoShaderCache;
+typedef struct StereoSurfaceHWND { VkSurfaceKHR surface; HWND hwnd; } StereoSurfaceHWND;
 
 typedef struct StereoInstance {
     VK_LOADER_DATA            loader_data;
@@ -374,9 +362,8 @@ typedef struct StereoInstance {
 
 static inline HWND stereo_si_hwnd_for_surface(StereoInstance *si, VkSurfaceKHR surface)
 {
-    for (uint32_t i = 0; i < si->surface_hwnd_count; i++)
-        if (si->surface_hwnd[i].surface == surface)
-            return si->surface_hwnd[i].hwnd;
+    for (uint32_t i=0; i<si->surface_hwnd_count; i++)
+        if (si->surface_hwnd[i].surface==surface) return si->surface_hwnd[i].hwnd;
     return NULL;
 }
 
@@ -390,18 +377,15 @@ typedef struct StereoSwapchain {
     VkSwapchainKHR    real_swapchain;
     VkSwapchainKHR    app_handle;
     VkDevice          device;
-    uint32_t          app_width;
-    uint32_t          app_height;
+    uint32_t          app_width, app_height;
     VkFormat          format;
-    bool              stereo_active;
-    bool              dxgi_mode;
+    bool              stereo_active, dxgi_mode;
     uint32_t          image_count;
     VkImage          *stereo_images;
     VkDeviceMemory   *stereo_memory;
     VkImageView      *stereo_views_arr;
     HWND              hwnd;
-    void             *dxgi_sc;
-    void             *shared_d3d11_tex;
+    void             *dxgi_sc, *shared_d3d11_tex;
     HANDLE            shared_nt_handle;
     VkCommandPool     barrier_pool;
     VkCommandBuffer  *barrier_cmds;
@@ -409,7 +393,7 @@ typedef struct StereoSwapchain {
     uint32_t          acquire_idx;
     VkImage          *sbs_images;
     uint32_t          sbs_width;
-    StereoPresentMode  present_mode;
+    StereoPresentMode present_mode;
     bool              cpu_ok;
     VkCommandPool     cpu_pool;
     VkCommandBuffer   cpu_cmd;
@@ -442,65 +426,55 @@ typedef struct StereoDevice {
     uint32_t               render_pass_count;
     StereoSwapchain        swapchains[MAX_SWAPCHAINS];
     uint32_t               swapchain_count;
-    StereoShaderCache      shader_cache[MAX_SHADER_CACHE];
-    uint32_t               shader_cache_count;
 
-#define MAX_DEPTH_IMAGES  256
     VkImage                intercepted_depth[MAX_DEPTH_IMAGES];
     uint32_t               intercepted_depth_count;
-    uint32_t               stereo_w;
-    uint32_t               stereo_h;
+    uint32_t               stereo_w, stereo_h;
     stereo_mutex_t         lock;
 
     /* ── Multiview render pass tracking ─────────────────────────────────── *
      * Set to true when stereo_CreateRenderPass successfully injects          *
      * viewMask=0x3 into a swapchain output render pass.                      *
-     *                                                                         *
-     * alt_cpu_readback in present_alt.c uses this flag to decide layer_count: *
-     *   true  → both layers rendered → read 2 layers (real stereo)           *
-     *   false → only layer 0 rendered (e.g. DXVK render pass did not use    *
-     *           PRESENT_SRC_KHR as finalLayout so injection was skipped) →  *
-     *           read 1 layer and use it for both eyes (2D, not black).       *
-     *                                                                         *
-     * Without this flag, alt_cpu_readback would try to transition layer 1    *
-     * from COLOR_ATTACHMENT_OPTIMAL when it is actually UNDEFINED, producing *
-     * an invalid image layout barrier → GPU TDR → VK_ERROR_DEVICE_LOST.     */
+     * alt_cpu_readback uses this to decide layer_count (1 vs 2):             *
+     *   true  → both layers rendered → read layer_count=2                    *
+     *   false → DXVK / app did not use PRESENT_SRC_KHR as finalLayout →     *
+     *           layer 1 is UNDEFINED → read layer_count=1, show left for     *
+     *           both eyes (2D, not black, not a GPU TDR).                    */
     bool                   multiview_pass_exists;
 
-    /* ── D3D11 / DXGI stereo output (lazily initialized) ─────────────── */
-    bool                   d3d11_ok;
-    bool                   dxgi_init_in_progress;
-    void                  *d3d11_dev;
-    void                  *d3d11_ctx;
-    void                  *nvapi_stereo;
-    void                  *nvapi_lib;
-    void                  *d3d11_lib;
+    /* ── Shader module cache for deferred SPIR-V patching ───────────────── *
+     * stereo_CreateShaderModule stores original SPIR-V here for VS/GS/TES.  *
+     * stereo_CreateGraphicsPipelines picks the last pre-rast stage, patches  *
+     * it, creates a temporary VkShaderModule, builds the pipeline, then      *
+     * destroys the temporary module — all in one call.                        *
+     * stereo_DestroyShaderModule frees the cache entry.                       */
+    StereoShaderCache      shader_cache[MAX_SHADER_CACHE];
+    uint32_t               shader_cache_count;
 
-    /* ── Graphics queue ──────────────────────────────────────────────── */
+    /* ── D3D11 / DXGI stereo output ──────────────────────────────────────── */
+    bool                   d3d11_ok, dxgi_init_in_progress;
+    void                  *d3d11_dev, *d3d11_ctx, *nvapi_stereo, *nvapi_lib, *d3d11_lib;
+
+    /* ── Graphics queue ───────────────────────────────────────────────────── */
     VkQueue                gfx_queue;
     uint32_t               gfx_qf;
 
-    /* ── INI file paths ──────────────────────────────────────────────── */
+    /* ── INI file paths ───────────────────────────────────────────────────── */
     char                   global_ini[512];
     char                   local_ini[512];
 
-    /* ── Hotkey debounce ─────────────────────────────────────────────── */
+    /* ── Hotkey debounce ──────────────────────────────────────────────────── */
     uint32_t               hotkey_prev;
 
-    /* ── D3D9 direct-mode state ──────────────────────────────────────── */
+    /* ── D3D9 direct-mode state ───────────────────────────────────────────── */
     bool                   dx9_ok;
-    void                  *dx9_lib;
-    void                  *dx9_d3d;
-    void                  *dx9_dev;
-    void                  *dx9_surf;
-    void                  *dx9_nvstereo;
+    void                  *dx9_lib, *dx9_d3d, *dx9_dev, *dx9_surf, *dx9_nvstereo;
 
-    /* ── Compose swap chain state ────────────────────────────────────── */
+    /* ── Compose swap chain state ─────────────────────────────────────────── */
     bool                   comp_ok;
     HWND                   comp_hwnd;
     void                  *comp_composed;
-    uint32_t               comp_w;
-    uint32_t               comp_h;
+    uint32_t               comp_w, comp_h;
 } StereoDevice;
 
 /* ── Stereo UBO layout ───────────────────────────────────────────────────── */
@@ -511,16 +485,16 @@ typedef struct StereoUBO {
 } StereoUBO;
 
 /* ── Object lookup helpers ───────────────────────────────────────────────── */
-StereoInstance         *stereo_instance_from_handle(VkInstance h);
-StereoInstance         *stereo_si_from_physdev(VkPhysicalDevice pd);
-StereoPhysdev          *stereo_physdev_get_or_create(VkPhysicalDevice real_pd, StereoInstance *si);
-StereoDevice           *stereo_device_from_handle(VkDevice h);
-StereoSwapchain        *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc);
-StereoRenderPassInfo   *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp);
+StereoInstance  *stereo_instance_from_handle(VkInstance h);
+StereoInstance  *stereo_si_from_physdev(VkPhysicalDevice pd);
+StereoPhysdev   *stereo_physdev_get_or_create(VkPhysicalDevice real_pd, StereoInstance *si);
+StereoDevice    *stereo_device_from_handle(VkDevice h);
+StereoSwapchain *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc);
+StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp);
 PFN_vkGetInstanceProcAddr stereo_get_real_giPA(void);
 PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
-void                    stereo_instance_free(VkInstance h);
-StereoDevice           *stereo_device_alloc(void);
+void             stereo_instance_free(VkInstance h);
+StereoDevice    *stereo_device_alloc(void);
 
 /* ── Forward declarations ────────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
@@ -625,11 +599,10 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(VkDevice, VkSwapchai
 VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 
-bool spirv_patch_stereo_vertex(const uint32_t *in_words, size_t in_count,
-    uint32_t **out_words, size_t *out_count,
-    float left_offset, float right_offset, float convergence,
-    bool inject_view_index);
-void spirv_patched_free(uint32_t *words);
+bool spirv_patch_stereo_vertex(const uint32_t *in, size_t in_c,
+    uint32_t **out, size_t *out_c,
+    float lo, float ro, float conv, bool inj_vi);
+void spirv_patched_free(uint32_t *w);
 
-VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*, uint32_t,
-    uint32_t, const VkSemaphore*);
+VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*,
+    uint32_t, uint32_t, const VkSemaphore*);
