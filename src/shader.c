@@ -525,8 +525,24 @@ stereo_CreateGraphicsPipelines(
 
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG("CreateGraphicsPipelines result=%d",res);
+
+    /* Pool the tmp modules — do NOT destroy them here.
+     * Driver 426.06 retains a reference to the shader module's SPIR-V even
+     * after CreateGraphicsPipelines returns (technically non-conformant but
+     * observed on old NVIDIA drivers).  Destroying the module immediately
+     * causes the driver to silently fall back to unpatched code, producing
+     * mono output.  Modules are released in bulk at stereo_DestroyDevice. */
     for (uint32_t p=0;p<N;p++){
-        if(tmods[p]) sd->real.DestroyShaderModule(sd->real_device,tmods[p],NULL);
+        if(tmods[p]){
+            if(sd->tmp_module_count < MAX_TMP_MODULES)
+                sd->tmp_modules[sd->tmp_module_count++]=tmods[p];
+            else{
+                /* Pool full — destroy immediately as last resort */
+                STEREO_ERR("tmp_module pool full — destroying module %p immediately",
+                           (void*)(uintptr_t)tmods[p]);
+                sd->real.DestroyShaderModule(sd->real_device,tmods[p],NULL);
+            }
+        }
         free(tst[p]);
     }
     free(tmods);free(tst);free(infos);

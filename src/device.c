@@ -22,38 +22,18 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst);
 
 /*
  * Candidate device extensions VKS3D wants to enable.
- *
- * On Vulkan 1.1+ devices VK_KHR_multiview and VK_KHR_maintenance2 are
- * promoted to core — re-enabling them as explicit extensions is allowed by
- * the spec and is harmless, but we skip them on 1.1+ to stay clean.
- *
- * VK_KHR_create_renderpass2 is NOT in Vulkan 1.1 core; it was promoted
- * to core only in 1.2.  We add it conditionally if the physical device
- * advertises it (checked at CreateDevice time).
  */
 static const char *STEREO_CANDIDATE_EXTS[] = {
-    /* Multiview (promoted to Vulkan 1.1 core, but explicit ext is still harmless) */
     "VK_KHR_multiview",
-    "VK_KHR_maintenance2",          /* required by VK_KHR_create_renderpass2 */
-    "VK_KHR_create_renderpass2",    /* for multiview via RP2 path */
-    /* NVIDIA Single Pass Stereo optimisation: pre-computed per-view clip
-     * positions in the vertex shader, halving geometry transform bandwidth */
+    "VK_KHR_maintenance2",
+    "VK_KHR_create_renderpass2",
     "VK_NVX_multiview_per_view_attributes",
-    /* External memory — needed for D3D11 NT-handle import */
     "VK_KHR_external_memory",
     "VK_KHR_external_memory_win32",
 };
 #define STEREO_CANDIDATE_EXT_COUNT \
     (sizeof(STEREO_CANDIDATE_EXTS) / sizeof(STEREO_CANDIDATE_EXTS[0]))
 
-/*
- * stereo_filter_extensions — from STEREO_CANDIDATE_EXTS keep only those
- * that (a) are not already in the app's list, and (b) are either promoted
- * to core for this apiVersion OR advertised by the physical device.
- *
- * Returns a heap-allocated merged list.  *out_count = total count.
- * Caller must free() the returned pointer.
- */
 static const char **stereo_filter_extensions(
     VkPhysicalDevice               physDev,
     PFN_vkEnumerateDeviceExtensionProperties enumDevExts,
@@ -62,7 +42,7 @@ static const char **stereo_filter_extensions(
     uint32_t                       app_ext_count,
     uint32_t                      *out_count)
 {
-    /* Fetch what the physical device actually supports */
+    (void)api_version;
     uint32_t dev_count = 0;
     enumDevExts(physDev, NULL, &dev_count, NULL);
     VkExtensionProperties *dev_props = NULL;
@@ -72,26 +52,22 @@ static const char **stereo_filter_extensions(
             enumDevExts(physDev, NULL, &dev_count, dev_props);
     }
 
-    /* Allocate worst-case output */
     const char **merged = malloc(
         (app_ext_count + STEREO_CANDIDATE_EXT_COUNT) * sizeof(char*));
     uint32_t total = 0;
 
-    /* Copy app extensions */
     for (uint32_t i = 0; i < app_ext_count; i++)
         merged[total++] = app_exts[i];
 
     for (uint32_t e = 0; e < STEREO_CANDIDATE_EXT_COUNT; e++) {
         const char *ext = STEREO_CANDIDATE_EXTS[e];
 
-        /* Skip if app already enabled it */
         bool app_has = false;
         for (uint32_t i = 0; i < app_ext_count; i++) {
             if (app_exts[i] && !strcmp(app_exts[i], ext)) { app_has = true; break; }
         }
         if (app_has) continue;
 
-        /* Check device support */
         bool supported = false;
         for (uint32_t d = 0; d < dev_count && dev_props; d++) {
             if (!strcmp(dev_props[d].extensionName, ext)) { supported = true; break; }
@@ -122,7 +98,6 @@ static VkResult create_stereo_ubo(StereoDevice *sd)
     VkMemoryRequirements mr;
     sd->real.GetBufferMemoryRequirements(sd->real_device, sd->stereo_ubo, &mr);
 
-    /* Find HOST_VISIBLE | HOST_COHERENT memory type */
     VkPhysicalDeviceMemoryProperties mp;
     sd->si->real.GetPhysicalDeviceMemoryProperties(sd->real_physdev, &mp);
 
@@ -156,7 +131,6 @@ static VkResult create_stereo_ubo(StereoDevice *sd)
                               0, sizeof(StereoUBO), 0, &sd->stereo_ubo_map);
     if (res != VK_SUCCESS) return res;
 
-    /* Write initial values */
     StereoUBO *ubo = (StereoUBO*)sd->stereo_ubo_map;
     ubo->eye_offset[0] = sd->stereo.left_eye_offset;
     ubo->eye_offset[1] = sd->stereo.right_eye_offset;
@@ -176,11 +150,9 @@ stereo_CreateDevice(
     const VkAllocationCallbacks  *pAllocator,
     VkDevice                     *pDevice)
 {
-    /* Belt-and-suspenders: OutputDebugStringA fires even if log file is closed/broken */
     OutputDebugStringA("[VKS3D] stereo_CreateDevice: ENTERED\n");
     STEREO_LOG("stereo_CreateDevice: called physicalDevice=%p (wrapper)", (void*)physicalDevice);
 
-    /* Unwrap: physicalDevice is our StereoPhysdev*, not the raw nvoglv64 handle */
     StereoPhysdev   *sp          = (StereoPhysdev *)(uintptr_t)physicalDevice;
     VkPhysicalDevice real_physdev = sp->real_pd;
     StereoInstance  *sp_si        = sp->si;
@@ -192,16 +164,11 @@ stereo_CreateDevice(
     STEREO_LOG("stereo_CreateDevice: wrapper=%p real_pd=%p si=%p",
                (void*)physicalDevice, (void*)real_physdev, (void*)sp_si);
 
-    /* ── Inject VkPhysicalDeviceMultiviewFeatures ─────────────────────
-     * Multiview requires explicit feature enable even when the extension
-     * is promoted to core (Vulkan 1.1+).
-     * ─────────────────────────────────────────────────────────────────── */
     VkPhysicalDeviceMultiviewFeatures multiview_feat = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES,
         .multiview = VK_TRUE,
     };
 
-    /* Walk pNext chain to see if app already set multiview features */
     bool has_mv_feat = false;
     {
         VkBaseOutStructure *node = (VkBaseOutStructure*)pCreateInfo->pNext;
@@ -217,12 +184,10 @@ stereo_CreateDevice(
     if (!has_mv_feat)
         multiview_feat.pNext = (void*)pCreateInfo->pNext;
 
-    /* ── Build modified VkDeviceCreateInfo ───────────────────────────── */
     VkDeviceCreateInfo dci = *pCreateInfo;
     if (!has_mv_feat)
         dci.pNext = &multiview_feat;
 
-    /* Inject extensions — only those the device actually supports */
     VkPhysicalDeviceProperties phys_props;
     sp_si->real.GetPhysicalDeviceProperties(real_physdev, &phys_props);
     uint32_t dev_api = phys_props.apiVersion;
@@ -245,7 +210,6 @@ stereo_CreateDevice(
     dci.enabledExtensionCount   = total_exts;
     dci.ppEnabledExtensionNames = (const char* const*)new_exts;
 
-    /* ── Create real device ──────────────────────────────────────────── */
     VkDevice real_dev = VK_NULL_HANDLE;
     VkResult res = sp_si->real.CreateDevice(
         real_physdev, &dci, pAllocator, &real_dev);
@@ -256,13 +220,11 @@ stereo_CreateDevice(
         return res;
     }
 
-    /* ── Allocate our wrapper ────────────────────────────────────────── */
     StereoDevice *sd = stereo_device_alloc();
     if (!sd) {
-        /* TODO: destroy real device */
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
-    SET_LOADER_MAGIC_VALUE(sd);  /* loader dispatch: *(void**)sd must be valid */
+    SET_LOADER_MAGIC_VALUE(sd);
 
     sd->real_device = real_dev;
     sd->si          = sp_si;
@@ -271,7 +233,6 @@ stereo_CreateDevice(
 
     stereo_populate_device_dispatch(sd, sp_si->real_instance);
 
-    /* ── Cache graphics queue for AcquireNextImageKHR semaphore signaling ── */
     {
         uint32_t qf_count = 0;
         sp_si->real.GetPhysicalDeviceQueueFamilyProperties(real_physdev, &qf_count, NULL);
@@ -289,12 +250,10 @@ stereo_CreateDevice(
         }
     }
 
-    /* Allocate stereo UBO */
     if (sd->stereo.enabled) {
         res = create_stereo_ubo(sd);
         if (res != VK_SUCCESS) {
             STEREO_ERR("Failed to create stereo UBO: %d", res);
-            /* Non-fatal: continue without per-draw UBO updates */
         }
     }
 
@@ -309,6 +268,28 @@ stereo_DestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator)
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return;
+
+    /* Destroy pooled temporary patched shader modules.
+     *
+     * Driver 426.06 retains a reference to the VkShaderModule SPIR-V even
+     * after vkCreateGraphicsPipelines returns, so we must not destroy them
+     * immediately after pipeline creation (doing so causes the driver to
+     * silently fall back to unpatched code, producing mono output).
+     * We pool them in sd->tmp_modules[] and release them all here, just
+     * before the device itself is destroyed — at that point the driver has
+     * no further use for the modules. */
+    STEREO_LOG("stereo_DestroyDevice: releasing %u pooled tmp shader modules",
+               sd->tmp_module_count);
+    for (uint32_t i = 0; i < sd->tmp_module_count; i++) {
+        if (sd->tmp_modules[i])
+            sd->real.DestroyShaderModule(sd->real_device, sd->tmp_modules[i], NULL);
+    }
+    sd->tmp_module_count = 0;
+
+    /* Release shader SPIR-V cache */
+    for (uint32_t i = 0; i < sd->shader_cache_count; i++)
+        free(sd->shader_cache[i].spv);
+    sd->shader_cache_count = 0;
 
     /* Cleanup stereo UBO */
     if (sd->stereo_ubo != VK_NULL_HANDLE) {

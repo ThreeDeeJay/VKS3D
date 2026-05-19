@@ -451,6 +451,14 @@ typedef struct StereoDevice {
     StereoShaderCache      shader_cache[MAX_SHADER_CACHE];
     uint32_t               shader_cache_count;
 
+    /* ── Temporary patched shader modules (alive until DestroyDevice) ───── *
+     * Driver 426.06 holds a reference to module SPIR-V even after           *
+     * CreateGraphicsPipelines returns, so we must not destroy the temp      *
+     * module immediately.  Pool them here and destroy in stereo_DestroyDevice */
+#define MAX_TMP_MODULES 512
+    VkShaderModule         tmp_modules[MAX_TMP_MODULES];
+    uint32_t               tmp_module_count;
+
     /* ── D3D11 / DXGI stereo output ──────────────────────────────────────── */
     bool                   d3d11_ok, dxgi_init_in_progress;
     void                  *d3d11_dev, *d3d11_ctx, *nvapi_stereo, *nvapi_lib, *d3d11_lib;
