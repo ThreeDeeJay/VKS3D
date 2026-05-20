@@ -73,7 +73,9 @@
 #define SpvExecTessEval 2
 #define SpvExecGeometry 3
 
-#define SpvCapMV 5296   /* MultiView */
+#define SpvOpTypeArray    28
+#define SpvCapPVNA       5260   /* PerViewAttributesNV — write both eye positions at once */
+#define SpvBuiltInPVNV   5261   /* PositionPerViewNV builtin */
 
 #define SPIRV_MAGIC 0x07230203u
 
