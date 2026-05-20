@@ -183,7 +183,20 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     /* Pointer to gl_Position */
     uint32_t pptr;
     if (m->pos_is_block) {
-        uint32_t a[]={op_(SpvOpAccessChain,5),c->uv4,ch,m->pos_var,c->cz};
+        /* Use the actual member index from the scan, not hardcoded 0.
+         * For standard gl_PerVertex gl_Position IS member 0, but using
+         * pos_member_idx is robust against non-standard block layouts. */
+        uint32_t member_idx_id;
+        if (m->pos_member_idx == 0) {
+            member_idx_id = c->cz;           /* already a const-int-0 */
+        } else {
+            /* Need a fresh constant for this non-zero member index.
+             * Allocate a new ID to avoid reuse conflicts. */
+            member_idx_id = (*nid)++;
+            uint32_t ci[]={op_(SpvOpConstant,4),m->it,member_idx_id,m->pos_member_idx};
+            sb_push_n(out,ci,4);
+        }
+        uint32_t a[]={op_(SpvOpAccessChain,5),c->uv4,ch,m->pos_var,member_idx_id};
         sb_push_n(out,a,5); pptr=ch;
     } else { pptr=m->pos_var; }
 
@@ -196,6 +209,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz}; sb_push_n(out,w,5); }
         { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cl,c->cr}; sb_push_n(out,w,6); }
     } else {
+        STEREO_LOG("emit_body: no view index (have_view=%d view_var=%u it=%u bt=%u) — using constant left offset",
+                   (int)c->have_view, m->view_var, m->it, (unsigned)(uintptr_t)c->bt);
         sel=c->cl; /* both eyes get the same (left) offset */
     }
 
@@ -218,7 +233,11 @@ bool spirv_patch_stereo_vertex(
     float lo, float ro, float conv, bool inj_vi)
 {
     (void)conv;
-    if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
+    if (!in||in_c<5||in[0]!=SPIRV_MAGIC) {
+        STEREO_LOG("Shader: bad header in=%p in_c=%zu magic=0x%x (expected 0x%x)",
+                   (void*)in, in_c, in ? in[0] : 0u, SPIRV_MAGIC);
+        return false;
+    }
 
     SpvMod m={0}; m.words=in; m.count=in_c;
     spv_scan(&m);
@@ -236,6 +255,18 @@ bool spirv_patch_stereo_vertex(
     /* Optional: new ptr types if not already declared */
     uint32_t id_ptr_v4  = nid++;   /* OpTypePointer Output vec4 (if needed) */
     uint32_t id_ptr_int = nid++;   /* OpTypePointer Input  int  (if needed) */
+
+    /* Bug fix: simple VS shaders may have no integer type at all (no int ops).
+     * Without m.it we cannot declare gl_ViewIndex (an int builtin) nor create
+     * the comparison constants.  Create a signed int32 type when missing so
+     * that view-index injection works even in the simplest MVP vertex shader. */
+    uint32_t id_new_it = 0;
+    if (!m.it && inj_vi && !m.view_var) {
+        id_new_it = nid++;     /* will emit OpTypeInt 32 1 (signed) */
+        m.it      = id_new_it; /* from this point m.it is usable    */
+        STEREO_LOG("Shader: no int type found — creating id=%u for gl_ViewIndex", id_new_it);
+    }
+
     /* Optional: new gl_ViewIndex variable */
     bool     will_inj_vi = inj_vi && !m.view_var && m.it;
     uint32_t id_inj_view = will_inj_vi ? nid++ : 0;
@@ -257,6 +288,9 @@ bool spirv_patch_stereo_vertex(
     /* ── Build type_extras (emitted once before first OpFunction) ─────────── */
     SpvBuf te; if (!sb_init(&te,64)) return false;
 
+    if (id_new_it) {
+        /* OpTypeInt 32 1  (signed 32-bit integer, for gl_ViewIndex) */
+        uint32_t w[]={op_(SpvOpTypeInt,4),id_new_it,32,1}; sb_push_n(&te,w,4); }
     if (!m.ptr_out_v4) {
         uint32_t w[]={op_(SpvOpTypePointer,4),id_ptr_v4,SpvStorageOutput,m.v4t};
         sb_push_n(&te,w,4); }
