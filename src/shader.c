@@ -77,6 +77,8 @@
 #define SpvCapPVNA       5260   /* PerViewAttributesNV — write both eye positions at once */
 #define SpvBuiltInPVNV   5261   /* PositionPerViewNV builtin */
 
+#define SpvCapMV 5296   /* MultiView */
+
 #define SPIRV_MAGIC 0x07230203u
 
 /* ── Dynamic word buffer ──────────────────────────────────────────────────── */
@@ -161,6 +163,12 @@ typedef struct {
     uint32_t bt;          /* bool type               (shared)               */
     uint32_t cz;          /* const int  0            (shared)               */
     uint32_t cl, cr;      /* const float left/right  (shared)               */
+    /* PVNA mode: write both eye positions to gl_PositionPerViewNV[] instead
+     * of reading gl_ViewIndex.  Used for VS/GS where driver 426.06 does not
+     * populate gl_ViewIndex, but does honour per-view attribute outputs.    */
+    bool     pvna;        /* true → use PositionPerViewNV, false → ViewIndex */
+    uint32_t pvnv_var;    /* gl_PositionPerViewNV Output variable ID         */
+    uint32_t c1;          /* const int 1 (for pvnv[1] access)                */
 } BodyCtx;
 
 /* Emit one instance of the stereo-offset body.
@@ -170,30 +178,17 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m = c->m;
 
-    /* Allocate per-instance IDs */
+    /* Allocate per-instance IDs (shared by both paths) */
     uint32_t ch   = (*nid)++;   /* AccessChain result (block path only) */
     uint32_t lp   = (*nid)++;   /* loaded gl_Position                   */
-    uint32_t lv   = c->have_view ? (*nid)++ : 0;
-    uint32_t isl  = c->have_view ? (*nid)++ : 0;
-    uint32_t sel  = (*nid)++;
-    uint32_t pw   = (*nid)++;
-    uint32_t dlt  = (*nid)++;
-    uint32_t px   = (*nid)++;
-    uint32_t nx   = (*nid)++;
-    uint32_t np   = (*nid)++;
 
     /* Pointer to gl_Position */
     uint32_t pptr;
     if (m->pos_is_block) {
-        /* Use the actual member index from the scan, not hardcoded 0.
-         * For standard gl_PerVertex gl_Position IS member 0, but using
-         * pos_member_idx is robust against non-standard block layouts. */
         uint32_t member_idx_id;
         if (m->pos_member_idx == 0) {
-            member_idx_id = c->cz;           /* already a const-int-0 */
+            member_idx_id = c->cz;
         } else {
-            /* Need a fresh constant for this non-zero member index.
-             * Allocate a new ID to avoid reuse conflicts. */
             member_idx_id = (*nid)++;
             uint32_t ci[]={op_(SpvOpConstant,4),m->it,member_idx_id,m->pos_member_idx};
             sb_push_n(out,ci,4);
@@ -205,27 +200,64 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     /* Load gl_Position */
     { uint32_t w[]={op_(SpvOpLoad,4),m->v4t,lp,pptr}; sb_push_n(out,w,4); }
 
-    /* Per-eye offset selection */
-    if (c->have_view && m->view_var && m->it && c->bt) {
-        { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var}; sb_push_n(out,w,4); }
-        { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz}; sb_push_n(out,w,5); }
-        { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cl,c->cr}; sb_push_n(out,w,6); }
-    } else {
-        STEREO_LOG("emit_body: no view index (have_view=%d view_var=%u it=%u bt=%u) — using constant left offset",
-                   (int)c->have_view, m->view_var, m->it, (unsigned)(uintptr_t)c->bt);
-        sel=c->cl; /* both eyes get the same (left) offset */
-    }
+    if (c->pvna && c->pvnv_var) {
+        /* ── PVNA path: compute both eye positions, write to pvnv[0]/[1] ──── *
+         * The driver picks pvnv[view_index] for each view automatically.      *
+         * No need for gl_ViewIndex at all — works on NVIDIA 426.06 VS/GS.    */
+        uint32_t pw   = (*nid)++;   /* pos.w                             */
+        uint32_t lox  = (*nid)++;   /* left  delta x = left_offset  * w  */
+        uint32_t rox  = (*nid)++;   /* right delta x = right_offset * w  */
+        uint32_t px   = (*nid)++;   /* pos.x                             */
+        uint32_t lx   = (*nid)++;   /* left  eye x                       */
+        uint32_t rx   = (*nid)++;   /* right eye x                       */
+        uint32_t lpos = (*nid)++;   /* full left  eye vec4               */
+        uint32_t rpos = (*nid)++;   /* full right eye vec4               */
+        uint32_t p0   = (*nid)++;   /* &pvnv[0]                          */
+        uint32_t p1   = (*nid)++;   /* &pvnv[1]                          */
 
-    /* offset_x = select * pos.w */
-    { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,pw,lp,3u}; sb_push_n(out,w,5); }
-    { uint32_t w[]={op_(SpvOpFMul,5),m->ft,dlt,sel,pw};           sb_push_n(out,w,5); }
-    /* new_x = pos.x + offset_x */
-    { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u}; sb_push_n(out,w,5); }
-    { uint32_t w[]={op_(SpvOpFAdd,5),m->ft,nx,px,dlt};            sb_push_n(out,w,5); }
-    /* insert new_x into position */
-    { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
-    /* store back */
-    { uint32_t w[]={op_(SpvOpStore,3),pptr,np}; sb_push_n(out,w,3); }
+        { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,pw,lp,3u};   sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpFMul,5),m->ft,lox,c->cl,pw};           sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpFMul,5),m->ft,rox,c->cr,pw};           sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u};   sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpFAdd,5),m->ft,lx,px,lox};              sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpFAdd,5),m->ft,rx,px,rox};              sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,lpos,lx,lp,0u}; sb_push_n(out,w,6); }
+        { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,rpos,rx,lp,0u}; sb_push_n(out,w,6); }
+        /* pvnv[0] = left eye position */
+        { uint32_t w[]={op_(SpvOpAccessChain,5),c->uv4,p0,c->pvnv_var,c->cz}; sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpStore,3),p0,lpos};                     sb_push_n(out,w,3); }
+        /* pvnv[1] = right eye position */
+        { uint32_t w[]={op_(SpvOpAccessChain,5),c->uv4,p1,c->pvnv_var,c->c1}; sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpStore,3),p1,rpos};                     sb_push_n(out,w,3); }
+
+    } else {
+        /* ── gl_ViewIndex path (TES, or any stage where it works) ─────────── */
+        uint32_t lv   = c->have_view ? (*nid)++ : 0;
+        uint32_t isl  = c->have_view ? (*nid)++ : 0;
+        uint32_t sel  = (*nid)++;
+        uint32_t pw   = (*nid)++;
+        uint32_t dlt  = (*nid)++;
+        uint32_t px   = (*nid)++;
+        uint32_t nx   = (*nid)++;
+        uint32_t np   = (*nid)++;
+
+        if (c->have_view && m->view_var && m->it && c->bt) {
+            { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
+            { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
+            { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cl,c->cr}; sb_push_n(out,w,6); }
+        } else {
+            STEREO_LOG("emit_body: no view index (have_view=%d view_var=%u it=%u bt=%u) — using constant left offset",
+                       (int)c->have_view, m->view_var, m->it, (unsigned)(uintptr_t)c->bt);
+            sel=c->cl;
+        }
+
+        { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,pw,lp,3u};      sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpFMul,5),m->ft,dlt,sel,pw};                sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u};      sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpFAdd,5),m->ft,nx,px,dlt};                 sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u};   sb_push_n(out,w,6); }
+        { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                        sb_push_n(out,w,3); }
+    }
 }
 
 /* ── Patcher ──────────────────────────────────────────────────────────────── */
@@ -251,6 +283,12 @@ bool spirv_patch_stereo_vertex(
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
+    /* PVNA (PerViewAttributesNV): VS and GS on NVIDIA 426.06 do not populate
+     * gl_ViewIndex during multiview rendering.  Instead, write both eye
+     * positions to gl_PositionPerViewNV[0/1] in a single invocation and let
+     * the driver distribute them per-view.  TES keeps gl_ViewIndex (works). */
+    bool use_pvna = (m.exec_model == SpvExecVertex || m.exec_model == SpvExecGeometry);
+
     /* ── Allocate shared IDs ─────────────────────────────────────────────── */
     uint32_t nid = m.bound;
 
@@ -269,13 +307,29 @@ bool spirv_patch_stereo_vertex(
         STEREO_LOG("Shader: no int type found — creating id=%u for gl_ViewIndex", id_new_it);
     }
 
-    /* Optional: new gl_ViewIndex variable */
-    bool     will_inj_vi = inj_vi && !m.view_var && m.it;
+    /* PVNA-specific IDs (VS/GS only) */
+    uint32_t id_uint_type  = 0; /* OpTypeInt 32 0 (unsigned, for array size)  */
+    uint32_t id_const_2    = 0; /* OpConstant uint 2 (array length)           */
+    uint32_t id_v4arr2     = 0; /* OpTypeArray vec4 2                         */
+    uint32_t id_ptr_v4arr2 = 0; /* OpTypePointer Output (array)               */
+    uint32_t id_pvnv_var   = 0; /* gl_PositionPerViewNV Output variable       */
+    uint32_t id_const_1    = 0; /* OpConstant int 1 (for pvnv[1] index)       */
+    if (use_pvna) {
+        id_uint_type  = nid++;
+        id_const_2    = nid++;
+        id_v4arr2     = nid++;
+        id_ptr_v4arr2 = nid++;
+        id_pvnv_var   = nid++;
+        id_const_1    = nid++;
+    }
+
+    /* gl_ViewIndex injection (TES only — not used in PVNA mode) */
+    bool     will_inj_vi = !use_pvna && inj_vi && !m.view_var && m.it;
     uint32_t id_inj_view = will_inj_vi ? nid++ : 0;
-    bool     have_view   = m.view_var || will_inj_vi;
-    /* Optional: new bool type */
+    bool     have_view   = !use_pvna && (m.view_var || will_inj_vi);
+    /* Optional: new bool type (for gl_ViewIndex IEqual result) */
     uint32_t id_new_bt = 0;
-    if (!m.bt && have_view && m.it) { id_new_bt=nid++; }
+    if (!use_pvna && !m.bt && have_view && m.it) { id_new_bt=nid++; }
 
     /* Shared constants */
     uint32_t id_cz = nid++; /* const int  0 */
@@ -305,7 +359,25 @@ bool spirv_patch_stereo_vertex(
     { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cl,0}; memcpy(&w[3],&lo,4); sb_push_n(&te,w,4); }
     { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cr,0}; memcpy(&w[3],&ro,4); sb_push_n(&te,w,4); }
 
-    /* Optional gl_ViewIndex variable injection (goes in type section too) */
+    /* PVNA declarations: array type + variable for gl_PositionPerViewNV */
+    if (use_pvna) {
+        /* unsigned int (for array length constant) */
+        { uint32_t w[]={op_(SpvOpTypeInt,4),id_uint_type,32,0};            sb_push_n(&te,w,4); }
+        /* const uint 2 (array length) */
+        { uint32_t w[]={op_(SpvOpConstant,4),id_uint_type,id_const_2,2};  sb_push_n(&te,w,4); }
+        /* OpTypeArray vec4 2 */
+        { uint32_t w[]={op_(SpvOpTypeArray,4),id_v4arr2,m.v4t,id_const_2}; sb_push_n(&te,w,4); }
+        /* OpTypePointer Output (OpTypeArray vec4 2) */
+        { uint32_t w[]={op_(SpvOpTypePointer,4),id_ptr_v4arr2,SpvStorageOutput,id_v4arr2}; sb_push_n(&te,w,4); }
+        /* OpDecorate pvnv_var BuiltIn PositionPerViewNV */
+        { uint32_t w[]={op_(SpvOpDecorate,4),id_pvnv_var,SpvDecorationBuiltIn,SpvBuiltInPVNV}; sb_push_n(&te,w,4); }
+        /* OpVariable (pointer) pvnv_var Output */
+        { uint32_t w[]={op_(SpvOpVariable,4),id_ptr_v4arr2,id_pvnv_var,SpvStorageOutput}; sb_push_n(&te,w,4); }
+        /* const int 1 (for pvnv[1] access index) */
+        if (m.it) { uint32_t w[]={op_(SpvOpConstant,4),m.it,id_const_1,1}; sb_push_n(&te,w,4); }
+    }
+
+    /* Optional gl_ViewIndex variable injection (TES path, goes in type section) */
     uint32_t inj_view_id = 0;
     if (will_inj_vi) {
         uint32_t d[]={op_(SpvOpDecorate,4),id_inj_view,SpvDecorationBuiltIn,SpvBuiltInViewIndex};
@@ -316,7 +388,8 @@ bool spirv_patch_stereo_vertex(
     }
 
     /* ── Body context (shared data for emit_body) ─────────────────────────── */
-    BodyCtx bc = { &m, have_view, uv4, uint_, bt, id_cz, id_cl, id_cr };
+    BodyCtx bc = { &m, have_view, uv4, uint_, bt, id_cz, id_cl, id_cr,
+                   use_pvna, id_pvnv_var, id_const_1 };
 
     /* For GS we need emit_count * ~10 body IDs.  For VS/TES we need ~10. */
     uint32_t instances = is_gs ? (m.emit_count > 0 ? m.emit_count : 1) : 1;
@@ -359,22 +432,27 @@ bool spirv_patch_stereo_vertex(
     if (!is_gs && ins_b < ins_t) { sb_free(&te); return false; }
 
     /* ── Pass 2: Rebuild output ───────────────────────────────────────────── */
-    bool need_mv_cap = inj_view_id && !m.has_mv_cap;
-    bool mv_done     = false;
-    bool te_done     = false;
-    bool vs_body_done = false; /* VS/TES: only inject once */
+    bool need_mv_cap  = inj_view_id && !m.has_mv_cap;
+    bool need_pvna_cap = use_pvna;   /* always inject PerViewAttributesNV for VS/GS */
+    bool mv_done      = false;
+    bool pvna_done    = false;
+    bool te_done      = false;
+    bool vs_body_done = false;
 
     SpvBuf ob;
     /* Estimate output size: in_c + type_extras + bodies */
     size_t est = in_c + te.n + instances*32 + 32;
     if (!sb_init(&ob, est)) { sb_free(&te); return false; }
     sb_push_n(&ob, in, 5);
-    ob.w[3] = nid + instances*12; /* upper bound on new IDs; corrected below */
+    ob.w[3] = nid + instances*12 + (use_pvna ? 16 : 0); /* upper bound; corrected below */
 
     for (size_t i=5; i<in_c; ) {
         /* Inject OpCapability MultiView before first instruction */
         if (!mv_done && need_mv_cap) {
             uint32_t c[]={op_(SpvOpCapability,2),SpvCapMV}; sb_push_n(&ob,c,2); mv_done=true; }
+        /* Inject OpCapability PerViewAttributesNV for VS/GS */
+        if (!pvna_done && need_pvna_cap) {
+            uint32_t c[]={op_(SpvOpCapability,2),SpvCapPVNA}; sb_push_n(&ob,c,2); pvna_done=true; }
 
         /* Inject type_extras before first OpFunction */
         if (!te_done && i==ins_t) {
@@ -383,13 +461,22 @@ bool spirv_patch_stereo_vertex(
         uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
         if (!wcx||i+wcx>in_c) break;
 
-        /* Extend OpEntryPoint interface for injected view var */
+        /* Extend OpEntryPoint interface for injected view var (TES path) */
         if (opx==SpvOpEntryPoint && wcx>=4 && inj_view_id &&
             (in[i+1]==SpvExecVertex||in[i+1]==SpvExecGeometry||in[i+1]==SpvExecTessEval)) {
             sb_push(&ob, ((wcx+1)<<16)|SpvOpEntryPoint);
             sb_push_n(&ob, &in[i+1], wcx-1);
             sb_push(&ob, inj_view_id);
             STEREO_LOG("OpEntryPoint extended: added view_var=%u", inj_view_id);
+            i+=wcx; continue;
+        }
+        /* Extend OpEntryPoint interface for pvnv_var (PVNA path: VS/GS) */
+        if (opx==SpvOpEntryPoint && wcx>=4 && use_pvna && id_pvnv_var &&
+            (in[i+1]==SpvExecVertex||in[i+1]==SpvExecGeometry||in[i+1]==SpvExecTessEval)) {
+            sb_push(&ob, ((wcx+1)<<16)|SpvOpEntryPoint);
+            sb_push_n(&ob, &in[i+1], wcx-1);
+            sb_push(&ob, id_pvnv_var);
+            STEREO_LOG("OpEntryPoint extended: added pvnv_var=%u", id_pvnv_var);
             i+=wcx; continue;
         }
 
@@ -415,8 +502,9 @@ bool spirv_patch_stereo_vertex(
     ob.w[3] = nid;
 
     *out=ob.w; *out_c=ob.n;
-    STEREO_LOG("Patched: model=%d  %zu→%zu words  bound=%u  vi=%d  gs_inj=%u",
-               m.exec_model, in_c, ob.n, nid, (int)(inj_view_id!=0), is_gs?m.emit_count:1);
+    STEREO_LOG("Patched: model=%d  %zu→%zu words  bound=%u  vi=%d  pvna=%d  gs_inj=%u",
+               m.exec_model, in_c, ob.n, nid, (int)(inj_view_id!=0),
+               (int)use_pvna, is_gs?m.emit_count:1);
     return true;
 }
 
