@@ -37,6 +37,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "stereo_icd.h"
+#include "tes_inject.h"
 
 /* ── SPIR-V opcodes ───────────────────────────────────────────────────────── */
 #define SpvOpCapability     17
