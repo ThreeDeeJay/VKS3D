@@ -39,7 +39,7 @@
 #include "stereo_icd.h"
 #include "tes_inject.h"
 
-/* ── SPIR-V opcodes ─────────────────────────────────────────────────────────[...]
+/* ── SPIR-V opcodes ────────────────────────────────────────────────────���────[...]
 #define SpvOpCapability     17
 #define SpvOpEntryPoint     15
 #define SpvOpTypeBool       20
