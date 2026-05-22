@@ -39,7 +39,7 @@
 #include "stereo_icd.h"
 #include "tes_inject.h"
 
-/* ── SPIR-V opcodes ───────────────────────────────────────────────────────── */
+/* ── SPIR-V opcodes ─────────────────────────────────────────────────────────[...]
 #define SpvOpCapability     17
 #define SpvOpEntryPoint     15
 #define SpvOpTypeBool       20
@@ -93,7 +93,7 @@ static bool  sb_push_n(SpvBuf *b, const uint32_t *v, size_t c) {
     for(size_t i=0;i<c;i++) if(!sb_push(b,v[i])) return false; return true; }
 static inline uint32_t op_(uint32_t op, uint32_t wc) { return (wc<<16)|op; }
 
-/* ── Module info ──────────────────────────────────────────────────────────── */
+/* ── Module info ──────────────────────────────────────────────────────────[...]
 typedef struct {
     const uint32_t *words; size_t count;
     uint32_t  bound;
@@ -261,7 +261,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
 }
 
-/* ── Patcher ──────────────────────────────────────────────────────────────── */
+/* ── Patcher ───────────────────────────────────────────────────────────[...]
 bool spirv_patch_stereo_vertex(
     const uint32_t *in, size_t in_c,
     uint32_t **out, size_t *out_c,
@@ -845,102 +845,6 @@ stereo_CreateGraphicsPipelines(
         free(tst[p]);
     }
     free(tmods); free(tst); free(infos); free(ia_mods); free(ts_mods);
-    return res;
-}
-
-
-    VkDevice device, VkPipelineCache pc,
-    uint32_t N, const VkGraphicsPipelineCreateInfo *pCI,
-    const VkAllocationCallbacks *pAlloc, VkPipeline *pP)
-{
-    StereoDevice *sd=stereo_device_from_handle(device);
-    if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("CreateGraphicsPipelines: N=%u stereo=%d",N,sd->stereo.enabled);
-
-    if (!sd->stereo.enabled)
-        return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
-
-    VkShaderModule               *tmods  =calloc(N,sizeof(VkShaderModule));
-    VkPipelineShaderStageCreateInfo **tst=calloc(N,sizeof(void*));
-    VkGraphicsPipelineCreateInfo    *infos=malloc(N*sizeof(*infos));
-    if (!tmods||!tst||!infos){ free(tmods);free(tst);free(infos); return VK_ERROR_OUT_OF_HOST_MEMORY; }
-    memcpy(infos,pCI,N*sizeof(*infos));
-
-    const char *dump=stereo_getenv("VKS3D_DUMP_SPIRV");
-    static int dump_n=0;
-
-    for (uint32_t p=0;p<N;p++) {
-        const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
-
-        /* Find last pre-rast stage: GS(2)>TES(1)>VS(0) */
-        int best=-1; uint32_t bst=~0u;
-        for (uint32_t s=0;s<ci->stageCount;s++) {
-            VkShaderStageFlagBits sf=ci->pStages[s].stage;
-            int pr=(sf==VK_SHADER_STAGE_GEOMETRY_BIT)               ?2:
-                   (sf==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)?1:
-                   (sf==VK_SHADER_STAGE_VERTEX_BIT)                 ?0:-1;
-            if(pr>best){best=pr;bst=s;}
-        }
-        if (bst==~0u) continue;
-        STEREO_LOG("Pipeline %u: last pre-rast stage=%u (GS/TES/VS prio=%d) mod=%p",
-                   p,bst,best,(void*)(uintptr_t)ci->pStages[bst].module);
-
-        StereoShaderCache *e=cache_find(sd,ci->pStages[bst].module);
-        if (!e){ STEREO_LOG("Pipeline %u: stage %u not cached",p,bst); continue; }
-
-        uint32_t *patched=NULL; size_t pc2=0;
-        if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
-                sd->stereo.left_eye_offset,sd->stereo.right_eye_offset,
-                sd->stereo.convergence,sd->stereo.multiview))
-            { STEREO_LOG("Pipeline %u: patch failed",p); continue; }
-
-        if (dump) {
-            char path[512];
-            _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_s%u.spv",dump,dump_n++,bst);
-            FILE *f=fopen(path,"wb");
-            if(f){fwrite(patched,4,pc2,f);fclose(f);STEREO_LOG("Dumped %s",path);}
-        }
-
-        VkShaderModuleCreateInfo smci={
-            .sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-            .codeSize=pc2*4,.pCode=patched};
-        VkShaderModule tmp=VK_NULL_HANDLE;
-        VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
-        spirv_patched_free(patched);
-        if (mr!=VK_SUCCESS){STEREO_ERR("Pipeline %u: tmp module failed %d",p,mr); continue;}
-
-        uint32_t sc=ci->stageCount;
-        VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
-        if(!st){sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue;}
-        memcpy(st,ci->pStages,sc*sizeof(*st));
-        st[bst].module=tmp;
-        infos[p].pStages=st; tmods[p]=tmp; tst[p]=st;
-        STEREO_LOG("Pipeline %u: patched stage %u → tmp=%p",p,bst,(void*)(uintptr_t)tmp);
-    }
-
-    VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
-    STEREO_LOG("CreateGraphicsPipelines result=%d",res);
-
-    /* Pool the tmp modules — do NOT destroy them here.
-     * Driver 426.06 retains a reference to the shader module's SPIR-V even
-     * after CreateGraphicsPipelines returns (technically non-conformant but
-     * observed on old NVIDIA drivers).  Destroying the module immediately
-     * causes the driver to silently fall back to unpatched code, producing
-     * mono output.  Modules are released in bulk at stereo_DestroyDevice. */
-    for (uint32_t p=0;p<N;p++){
-        if(tmods[p]){
-            if(sd->tmp_module_count < MAX_TMP_MODULES)
-                sd->tmp_modules[sd->tmp_module_count++]=tmods[p];
-            else{
-                /* Pool full — destroy immediately as last resort */
-                STEREO_ERR("tmp_module pool full — destroying module %p immediately",
-                           (void*)(uintptr_t)tmods[p]);
-                sd->real.DestroyShaderModule(sd->real_device,tmods[p],NULL);
-            }
-        }
-        free(tst[p]);
-    }
-    free(tmods);free(tst);free(infos);
     return res;
 }
 
