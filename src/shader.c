@@ -576,9 +576,279 @@ stereo_CreateShaderModule(
     return VK_SUCCESS;
 }
 
-/* ── vkCreateGraphicsPipelines: patch last pre-rast stage ───────────────── */
+/* ── vkCreateGraphicsPipelines ──────────────────────────────────────────────
+ *
+ * Strategy (in priority order):
+ *
+ * 1. Pipeline already has TCS+TES (app-provided tessellation):
+ *    Patch the TES with gl_ViewIndex stereo — CONFIRMED WORKING on 426.06.
+ *
+ * 2. Pipeline is VS-only or VS+GS, topology == TRIANGLE_LIST:
+ *    Inject our own pass-through TCS + stereo TES between VS and the
+ *    rasterizer (or between VS and GS).  The TES uses the same confirmed-
+ *    working gl_ViewIndex path.  Tessellation level-1 = exact passthrough;
+ *    no visual change except each vertex now gets the correct per-view
+ *    position from the TES stage where gl_ViewIndex IS populated.
+ *
+ * 3. Fallback (non-triangle topology, or injection fails):
+ *    PVNA / gl_ViewIndex attempt (produces mono on 426.06 but is harmless).
+ */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(
+    VkDevice device, VkPipelineCache pc,
+    uint32_t N, const VkGraphicsPipelineCreateInfo *pCI,
+    const VkAllocationCallbacks *pAlloc, VkPipeline *pP)
+{
+    StereoDevice *sd=stereo_device_from_handle(device);
+    if (!sd) return VK_ERROR_DEVICE_LOST;
+    STEREO_LOG("CreateGraphicsPipelines: N=%u stereo=%d",N,sd->stereo.enabled);
+
+    if (!sd->stereo.enabled)
+        return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
+
+    /* Per-pipeline scratch — one entry per pipeline in the batch */
+    VkShaderModule               *tmods  = calloc(N, sizeof(VkShaderModule));
+    VkPipelineShaderStageCreateInfo **tst = calloc(N, sizeof(void*));
+    VkGraphicsPipelineCreateInfo    *infos = malloc(N * sizeof(*infos));
+    /* Per-pipeline modified IA/tess state for TCS+TES injection path */
+    VkPipelineInputAssemblyStateCreateInfo *ia_mods =
+        calloc(N, sizeof(*ia_mods));
+    VkPipelineTessellationStateCreateInfo  *ts_mods =
+        calloc(N, sizeof(*ts_mods));
+
+    if (!tmods||!tst||!infos||!ia_mods||!ts_mods) {
+        free(tmods); free(tst); free(infos); free(ia_mods); free(ts_mods);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    memcpy(infos, pCI, N * sizeof(*infos));
+
+    const char *dump = stereo_getenv("VKS3D_DUMP_SPIRV");
+    static int  dump_n = 0;
+
+    for (uint32_t p = 0; p < N; p++) {
+        const VkGraphicsPipelineCreateInfo *ci = &pCI[p];
+
+        /* ── Detect stage composition ──────────────────────────────────────── */
+        bool has_vs=false, has_gs=false, has_tcs=false, has_tes=false;
+        uint32_t tes_stage = ~0u;
+        for (uint32_t s = 0; s < ci->stageCount; s++) {
+            VkShaderStageFlagBits sf = ci->pStages[s].stage;
+            if (sf == VK_SHADER_STAGE_VERTEX_BIT)                   has_vs  = true;
+            if (sf == VK_SHADER_STAGE_GEOMETRY_BIT)                 has_gs  = true;
+            if (sf == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)     has_tcs = true;
+            if (sf == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
+                has_tes = true; tes_stage = s;
+            }
+        }
+
+        bool is_triangle_list = (ci->pInputAssemblyState &&
+            ci->pInputAssemblyState->topology == 3 /* TRIANGLE_LIST */);
+
+        /* ── Path A: existing TES → patch it (confirmed working) ──────────── */
+        if (has_tes && tes_stage != ~0u) {
+            StereoShaderCache *e = cache_find(sd, ci->pStages[tes_stage].module);
+            if (!e) { STEREO_LOG("Pipeline %u: TES not cached — passthrough",p); continue; }
+
+            uint32_t *patched=NULL; size_t pc2=0;
+            if (!spirv_patch_stereo_vertex(e->spv, e->words, &patched, &pc2,
+                    sd->stereo.left_eye_offset, sd->stereo.right_eye_offset,
+                    sd->stereo.convergence, /*inj_vi=*/true))
+                { STEREO_LOG("Pipeline %u: TES patch failed",p); continue; }
+
+            VkShaderModuleCreateInfo smci = {
+                VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,NULL,0,pc2*4,patched};
+            VkShaderModule tmp = VK_NULL_HANDLE;
+            VkResult mr = sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
+            spirv_patched_free(patched);
+            if (mr != VK_SUCCESS) {
+                STEREO_ERR("Pipeline %u: TES tmp module failed %d",p,mr); continue; }
+
+            uint32_t sc = ci->stageCount;
+            VkPipelineShaderStageCreateInfo *st = malloc(sc * sizeof(*st));
+            if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
+            memcpy(st, ci->pStages, sc * sizeof(*st));
+            st[tes_stage].module = tmp;
+            infos[p].pStages = st; tmods[p] = tmp; tst[p] = st;
+            STEREO_LOG("Pipeline %u: TES stereo patched → tmp=%p",
+                       p, (void*)(uintptr_t)tmp);
+            continue;
+        }
+
+        /* ── Path B: inject TCS+TES for VS/GS triangle pipelines ─────────── *
+         * Only for TRIANGLE_LIST — other topologies can't use triangle tess. */
+        if (has_vs && !has_tcs && !has_tes && is_triangle_list) {
+            /* Build pass-through TCS */
+            uint32_t *tcs_spv=NULL; size_t tcs_c=0;
+            if (!build_tcs_spv(&tcs_spv, &tcs_c)) {
+                STEREO_LOG("Pipeline %u: build_tcs_spv failed",p); goto fallback; }
+
+            /* Build base TES, then patch it for stereo */
+            uint32_t *base_tes=NULL; size_t base_c=0;
+            if (!build_base_tes_spv(&base_tes, &base_c)) {
+                free(tcs_spv); STEREO_LOG("Pipeline %u: build_base_tes failed",p);
+                goto fallback; }
+
+            uint32_t *tes_patched=NULL; size_t tes_pc=0;
+            if (!spirv_patch_stereo_vertex(base_tes, base_c, &tes_patched, &tes_pc,
+                    sd->stereo.left_eye_offset, sd->stereo.right_eye_offset,
+                    sd->stereo.convergence, /*inj_vi=*/true)) {
+                free(tcs_spv); free(base_tes);
+                STEREO_LOG("Pipeline %u: TES stereo patch failed",p); goto fallback; }
+            free(base_tes);
+
+            if (dump) {
+                char path[512];
+                _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_tcs.spv",dump,dump_n);
+                FILE *f=fopen(path,"wb");
+                if(f){fwrite(tcs_spv,4,tcs_c,f);fclose(f);}
+                _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_tes.spv",dump,dump_n++);
+                f=fopen(path,"wb");
+                if(f){fwrite(tes_patched,4,tes_pc,f);fclose(f);}
+            }
+
+            VkShaderModule tcs_mod=VK_NULL_HANDLE, tes_mod=VK_NULL_HANDLE;
+            {
+                VkShaderModuleCreateInfo smci = {
+                    VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,NULL,0,
+                    tcs_c*4, tcs_spv};
+                sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tcs_mod);
+                free(tcs_spv);
+            }
+            {
+                VkShaderModuleCreateInfo smci = {
+                    VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,NULL,0,
+                    tes_pc*4, tes_patched};
+                sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tes_mod);
+                spirv_patched_free(tes_patched);
+            }
+
+            if (!tcs_mod || !tes_mod) {
+                if (tcs_mod) sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL);
+                if (tes_mod) sd->real.DestroyShaderModule(sd->real_device,tes_mod,NULL);
+                STEREO_LOG("Pipeline %u: TCS/TES module creation failed",p);
+                goto fallback;
+            }
+
+            /* Pool both modules for cleanup at DestroyDevice */
+            if (sd->tmp_module_count+1 < MAX_TMP_MODULES) {
+                sd->tmp_modules[sd->tmp_module_count++] = tcs_mod;
+                sd->tmp_modules[sd->tmp_module_count++] = tes_mod;
+            }
+
+            /* Build extended stage array: original stages + TCS + TES */
+            uint32_t orig_sc = ci->stageCount;
+            VkPipelineShaderStageCreateInfo *st =
+                malloc((orig_sc + 2) * sizeof(*st));
+            if (!st) goto fallback;
+            memcpy(st, ci->pStages, orig_sc * sizeof(*st));
+
+            VkPipelineShaderStageCreateInfo tcs_stage = {
+                VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                NULL, 0,
+                VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+                tcs_mod, "main", NULL
+            };
+            VkPipelineShaderStageCreateInfo tes_stage_info = {
+                VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                NULL, 0,
+                VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+                tes_mod, "main", NULL
+            };
+            st[orig_sc]     = tcs_stage;
+            st[orig_sc + 1] = tes_stage_info;
+
+            /* Modified input assembly: PATCH_LIST */
+            ia_mods[p] = *ci->pInputAssemblyState;
+            ia_mods[p].topology = 10; /* VK_PRIMITIVE_TOPOLOGY_PATCH_LIST */
+            ia_mods[p].primitiveRestartEnable = 0;
+
+            /* Tessellation state */
+            ts_mods[p].sType = 20; /* VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO */
+            ts_mods[p].pNext = NULL;
+            ts_mods[p].flags = 0;
+            ts_mods[p].patchControlPoints = 3;
+
+            infos[p].stageCount          = orig_sc + 2;
+            infos[p].pStages             = st;
+            infos[p].pInputAssemblyState = &ia_mods[p];
+            infos[p].pTessellationState  = &ts_mods[p];
+            tst[p] = st; /* track for free() */
+
+            STEREO_LOG("Pipeline %u: injected TCS+TES (TRIANGLE_LIST→PATCH_LIST, "
+                       "tcs=%p tes=%p)",
+                       p, (void*)(uintptr_t)tcs_mod, (void*)(uintptr_t)tes_mod);
+            continue;
+        }
+
+        fallback:
+        /* ── Path C: PVNA / gl_ViewIndex attempt (fallback, usually mono) ── */
+        {
+            /* Find last pre-rast stage: GS(2)>TES(1)>VS(0) */
+            int best=-1; uint32_t bst=~0u;
+            for (uint32_t s=0;s<ci->stageCount;s++) {
+                VkShaderStageFlagBits sf=ci->pStages[s].stage;
+                int pr=(sf==VK_SHADER_STAGE_GEOMETRY_BIT)               ?2:
+                       (sf==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)?1:
+                       (sf==VK_SHADER_STAGE_VERTEX_BIT)                 ?0:-1;
+                if(pr>best){best=pr;bst=s;}
+            }
+            if (bst==~0u) continue;
+
+            StereoShaderCache *e=cache_find(sd,ci->pStages[bst].module);
+            if (!e){ STEREO_LOG("Pipeline %u: stage %u not cached",p,bst); continue; }
+
+            uint32_t *patched=NULL; size_t pc2=0;
+            if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
+                    sd->stereo.left_eye_offset,sd->stereo.right_eye_offset,
+                    sd->stereo.convergence,sd->stereo.multiview))
+                { STEREO_LOG("Pipeline %u: patch failed",p); continue; }
+
+            if (dump) {
+                char path[512];
+                _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_s%u.spv",dump,dump_n++,bst);
+                FILE *f=fopen(path,"wb");
+                if(f){fwrite(patched,4,pc2,f);fclose(f);}
+            }
+
+            VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                NULL,0,pc2*4,patched};
+            VkShaderModule tmp=VK_NULL_HANDLE;
+            VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
+            spirv_patched_free(patched);
+            if (mr!=VK_SUCCESS) {
+                STEREO_ERR("Pipeline %u: tmp module failed %d",p,mr); continue; }
+
+            uint32_t sc=ci->stageCount;
+            VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
+            if(!st){sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue;}
+            memcpy(st,ci->pStages,sc*sizeof(*st));
+            st[bst].module=tmp;
+            infos[p].pStages=st; tmods[p]=tmp; tst[p]=st;
+            STEREO_LOG("Pipeline %u: fallback patch stage %u → tmp=%p",
+                       p,bst,(void*)(uintptr_t)tmp);
+        }
+    }
+
+    VkResult res = sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
+    STEREO_LOG("CreateGraphicsPipelines result=%d", res);
+
+    /* Pool all tmp modules — driver 426.06 holds SPIR-V refs past Create */
+    for (uint32_t p=0;p<N;p++) {
+        if (tmods[p]) {
+            if (sd->tmp_module_count < MAX_TMP_MODULES)
+                sd->tmp_modules[sd->tmp_module_count++] = tmods[p];
+            else {
+                STEREO_ERR("tmp_module pool full");
+                sd->real.DestroyShaderModule(sd->real_device,tmods[p],NULL);
+            }
+        }
+        free(tst[p]);
+    }
+    free(tmods); free(tst); free(infos); free(ia_mods); free(ts_mods);
+    return res;
+}
+
+
     VkDevice device, VkPipelineCache pc,
     uint32_t N, const VkGraphicsPipelineCreateInfo *pCI,
     const VkAllocationCallbacks *pAlloc, VkPipeline *pP)
