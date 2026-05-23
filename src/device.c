@@ -194,6 +194,7 @@ stereo_CreateDevice(
     VkDeviceCreateInfo dci = *pCreateInfo;
     if (!has_mv_feat)
         dci.pNext = &multiview_feat;
+    dci.pEnabledFeatures = &base_feats;
 
     VkPhysicalDeviceProperties phys_props;
     sp_si->real.GetPhysicalDeviceProperties(real_physdev, &phys_props);
