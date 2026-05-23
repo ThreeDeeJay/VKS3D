@@ -169,6 +169,13 @@ stereo_CreateDevice(
         .multiview = VK_TRUE,
     };
 
+    /* Enable tessellationShader in base features so we can inject TCS+TES
+     * into VS-only pipelines.  We merge with whatever the app requested. */
+    VkPhysicalDeviceFeatures base_feats = {0};
+    if (pCreateInfo->pEnabledFeatures)
+        base_feats = *pCreateInfo->pEnabledFeatures;
+    base_feats.tessellationShader = VK_TRUE;
+
     bool has_mv_feat = false;
     {
         VkBaseOutStructure *node = (VkBaseOutStructure*)pCreateInfo->pNext;
