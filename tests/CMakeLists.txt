@@ -17,6 +17,7 @@ if(VKS3D_BUILD_TESTS)
     add_executable(test_spirv_patch
         test_spirv_patch.c
         ${CMAKE_SOURCE_DIR}/src/shader.c
+        ${CMAKE_SOURCE_DIR}/src/tes_inject.c
         ${CMAKE_SOURCE_DIR}/src/stereo.c
         ${CMAKE_SOURCE_DIR}/src/ini.c
     )
