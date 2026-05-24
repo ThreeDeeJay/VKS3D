@@ -54,6 +54,7 @@ set(STEREO_SOURCES
     src/present_alt.c
     src/dxgi_output.c
     src/ini.c
+    src/tes_inject.c
 )
 
 # ── Shader compilation ───────────────────────────────────────────────────────
