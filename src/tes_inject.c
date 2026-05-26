@@ -1,42 +1,13 @@
 /*
  * tes_inject.c — Build pass-through TCS and stereo TES SPIR-V at runtime
  *
- * On NVIDIA 426.06, gl_ViewIndex and gl_PositionPerViewNV are not populated
- * for VS or GS stages in multiview rendering.  They ARE populated for the
- * Tessellation Evaluation stage.
+ * The TCS gl_in struct MUST match the VS output block exactly.
+ * We scan the cached VS SPIR-V to find its gl_PerVertex layout and
+ * replicate it in the TCS input declaration.
  *
- * Fix: for VS-only or VS+GS pipelines with TRIANGLE_LIST topology, inject a
- * level-1 pass-through TCS + stereo TES pair.  The TES uses the confirmed-
- * working gl_ViewIndex path to apply per-eye X offsets.
- *
- * TCS: passes gl_in[invoc_id].gl_Position → gl_out[invoc_id].gl_Position
- *      sets TessLevelInner[0..1] = TessLevelOuter[0..3] = 1.0
- *      (level-1 triangle tessellation = exact passthrough, no subdivision)
- *
- * TES: barycentric interpolation of the 3 control points, then applies
- *      gl_ViewIndex-based stereo X offset before writing gl_Position.
- *      The patcher (spirv_patch_stereo_vertex) handles the gl_ViewIndex
- *      injection into the base TES SPIR-V.
- *
- * SPIR-V is written directly as uint32_t words — no external compiler needed.
- *
- * BuiltIn values (from SPIR-V spec §3.21):
- *   Position        = 0    TessLevelOuter = 11
- *   InvocationId    = 8    TessLevelInner = 12
- *   Layer           = 9    TessCoord      = 13
- *   ViewportIndex   = 10   ViewIndex      = 4440
- *
- * Decoration values (from SPIR-V spec §3.20):
- *   Block = 2    BuiltIn = 11    Patch = 15
- *
- * OpCode values used:
- *   OpCapability=17  OpMemoryModel=14  OpEntryPoint=15  OpExecutionMode=16
- *   OpDecorate=71    OpMemberDecorate=72
- *   OpTypeVoid=19    OpTypeInt=21  OpTypeFloat=22  OpTypeVector=23
- *   OpTypeArray=28   OpTypeStruct=30  OpTypePointer=32  OpTypeFunction=33
- *   OpConstant=43    OpVariable=59    OpLoad=61    OpStore=62
- *   OpAccessChain=65 OpFAdd=129  OpFMul=133  OpVectorTimesScalar=142
- *   OpFunction=54    OpLabel=248  OpReturn=253  OpFunctionEnd=56
+ * BuiltIn  = 11, Block = 2, Patch = 15
+ * TessLevelOuter = 11, TessLevelInner = 12, TessCoord = 13, InvocationId = 8
+ * Position = 0,  PointSize = 1, ClipDistance = 3, CullDistance = 4
  */
 
 #include <stdio.h>
@@ -44,329 +15,466 @@
 #include <string.h>
 #include "stereo_icd.h"
 
-/* Reuse SpvBuf from shader.c — declare it locally */
-typedef struct { uint32_t *w; size_t n, cap; } SpvBuf2;
-static bool  sb2_init(SpvBuf2 *b, size_t c) { b->w=malloc(c*4); b->n=0; b->cap=c; return !!b->w; }
-static bool  sb2_push(SpvBuf2 *b, uint32_t v) {
-    if (b->n>=b->cap) { uint32_t *p=realloc(b->w,b->cap*8); if(!p)return false; b->w=p; b->cap*=2; }
+typedef struct { uint32_t *w; size_t n, cap; } SB;
+static bool sb_i(SB *b, size_t c) { b->w=malloc(c*4); b->n=0; b->cap=c; return !!b->w; }
+static bool sb_p(SB *b, uint32_t v) {
+    if (b->n>=b->cap){uint32_t *p=realloc(b->w,b->cap*8);if(!p)return false;b->w=p;b->cap*=2;}
     b->w[b->n++]=v; return true; }
-static bool  sb2_push_n(SpvBuf2 *b, const uint32_t *v, size_t c) {
-    for(size_t i=0;i<c;i++) if(!sb2_push(b,v[i])) return false; return true; }
-static inline uint32_t op2(uint32_t op, uint32_t wc) { return (wc<<16)|op; }
+static bool sb_pn(SB *b, const uint32_t *v, size_t c) {
+    for(size_t i=0;i<c;i++) if(!sb_p(b,v[i])) return false; return true; }
+static uint32_t OP(uint32_t op, uint32_t wc) { return (wc<<16)|op; }
 
-/* ── Pass-through TCS SPIR-V ──────────────────────────────────────────────── *
- *
- * GLSL equivalent (3 control points, triangle mode, level 1):
- *
- *   layout(vertices = 3) out;
- *   void main() {
- *       gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
- *       gl_TessLevelOuter[0] = gl_TessLevelOuter[1] =
- *       gl_TessLevelOuter[2] = gl_TessLevelOuter[3] =
- *       gl_TessLevelInner[0] = gl_TessLevelInner[1] = 1.0;
- *   }
- *
- * Key SPIR-V decoration values:
- *   Block = 2,  BuiltIn = 11,  Patch = 15   (NOT 58 — common mistake)
- *
- * ID map:
- *   1=void  3=int  4=uint  5=float  6=v4float
- *   7=uint_32(const)  8=uint_3(const)  9=uint_2(const)  10=uint_4(const)
- *   11=PerVertex_in{v4float}   (INPUT  block — separate type from output)
- *   12=PerV_in_arr32           (gl_in array type)
- *   13=PerV_out_arr3           (gl_out array type)
- *   14=float_arr2  15=float_arr4
- *   16=ptr_Input_PerV_in_32   17=ptr_Output_PerV_out_3
- *   18=ptr_Input_v4  19=ptr_Output_v4
- *   20=ptr_Input_int  21=ptr_Output_float2  22=ptr_Output_float4
- *   23=ptr_Output_float
- *   24=gl_in  25=gl_out  26=tl_inner  27=tl_outer  28=invoc_id_var
- *   29=void_fn  30=main_fn
- *   31=int_0  32=int_1  33=int_2  34=int_3  35=float_1
- *   36=PerVertex_out{v4float}  (OUTPUT block — distinct type from input)
- *   SSA body: 37..49
- * ─────────────────────────────────────────────────────────────────────────── */
-bool build_tcs_spv(uint32_t **out, size_t *out_c)
+/* ── VS output block scanner ──────────────────────────────────────────────── */
+
+#define MAX_MBRS 8
+
+/* Member kinds as they appear in gl_PerVertex */
+typedef enum { MBR_VEC4=0, MBR_FLOAT=1, MBR_FARR=2 } MbrKind;
+typedef struct { MbrKind kind; uint32_t arr_n; uint32_t builtin; } Mbr;
+
+/* Scan VS SPIR-V for the Output Block struct and its member types.
+ * Returns the number of members found (at least 1 for Position). */
+static int scan_vs_block(const uint32_t *spv, size_t wc, Mbr out[MAX_MBRS])
 {
-    SpvBuf2 b; if (!sb2_init(&b, 320)) return false;
+    /* Phase 1: find the Block-decorated Output struct (member 0 = BuiltIn Position) */
+    uint32_t block_id = 0;
+    for (size_t i=5; i<wc; ) {
+        uint32_t op=spv[i]&0xffff, n=spv[i]>>16;
+        if (!n||i+n>wc) break;
+        /* OpMemberDecorate struct member BuiltIn(11) Position(0) */
+        if (op==72 && n>=5 && spv[i+2]==0 && spv[i+3]==11 && spv[i+4]==0)
+            block_id = spv[i+1];
+        i += n;
+    }
+    if (!block_id) return 0;
 
-    /* ── Header ─────────────────────────────────────────────────────────── */
-    sb2_push(&b, 0x07230203u); /* magic */
-    sb2_push(&b, 0x00010000u); /* SPIR-V 1.0 */
-    sb2_push(&b, 0x56533344u); /* generator: "VKS3D" */
-    sb2_push(&b, 55u);         /* bound (IDs up to 54) */
-    sb2_push(&b, 0u);          /* schema */
+    /* Phase 2: find OpTypeStruct result=block_id → get member type IDs */
+    uint32_t mbr_types[MAX_MBRS] = {0};
+    int n_mbrs = 0;
+    for (size_t i=5; i<wc; ) {
+        uint32_t op=spv[i]&0xffff, n=spv[i]>>16;
+        if (!n||i+n>wc) break;
+        if (op==30/*OpTypeStruct*/ && n>=2 && spv[i+1]==block_id) {
+            n_mbrs = (int)(n-2);
+            if (n_mbrs > MAX_MBRS) n_mbrs = MAX_MBRS;
+            for (int m=0;m<n_mbrs;m++) mbr_types[m]=spv[i+2+m];
+        }
+        i += n;
+    }
+    if (!n_mbrs) return 0;
 
-    /* ── Capabilities ────────────────────────────────────────────────────── */
-    { uint32_t w[]={op2(17,2), 1}; sb2_push_n(&b,w,2); }   /* Shader */
-    { uint32_t w[]={op2(17,2), 34}; sb2_push_n(&b,w,2); }  /* Tessellation */
+    /* Phase 3: for each member type ID, determine kind */
+    /* First find float type and build lookup */
+    uint32_t float_id = 0;
+    for (size_t i=5; i<wc; ) {
+        uint32_t op=spv[i]&0xffff, n=spv[i]>>16;
+        if (!n||i+n>wc) break;
+        if (op==22/*OpTypeFloat*/ && n>=3 && spv[i+2]==32) float_id=spv[i+1];
+        i += n;
+    }
 
-    /* ── Memory model ────────────────────────────────────────────────────── */
-    { uint32_t w[]={op2(14,3), 0, 1}; sb2_push_n(&b,w,3); }
+    for (int m=0; m<n_mbrs; m++) {
+        uint32_t tid = mbr_types[m];
+        out[m].kind = MBR_FLOAT;
+        out[m].arr_n = 0;
+        out[m].builtin = 0; /* filled in phase 4 */
 
-    /* ── Entry point ──────────────────────────────────────────────────────
-     * TessellationControl(1), %main=30, "main", gl_in=24, gl_out=25,
-     * tl_inner=26, tl_outer=27, invoc_id=28
-     */
-    { uint32_t w[]={op2(15,10), 1, 30, 0x6E69616Du, 0x00000000u, 24,25,26,27,28};
-      sb2_push_n(&b,w,10); }
+        for (size_t i=5; i<wc; ) {
+            uint32_t op=spv[i]&0xffff, n=spv[i]>>16;
+            if (!n||i+n>wc) break;
+            if (spv[i+1]==tid) {
+                if (op==22) { /* OpTypeFloat */
+                    out[m].kind = MBR_FLOAT;
+                } else if (op==23 && n>=4) { /* OpTypeVector */
+                    /* vec4 if elem=float and count=4 */
+                    out[m].kind = (spv[i+2]==float_id && spv[i+3]==4) ? MBR_VEC4 : MBR_FLOAT;
+                } else if (op==28 && n>=4) { /* OpTypeArray */
+                    out[m].kind = MBR_FARR;
+                    /* find array length constant */
+                    uint32_t len_id = spv[i+3];
+                    for (size_t j=5; j<wc; ) {
+                        uint32_t op2=spv[j]&0xffff, n2=spv[j]>>16;
+                        if (!n2||j+n2>wc) break;
+                        if (op2==43/*OpConstant*/ && n2>=4 && spv[j+2]==len_id) {
+                            out[m].arr_n = spv[j+3];
+                        }
+                        j += n2;
+                    }
+                    if (!out[m].arr_n) out[m].arr_n = 1; /* safe fallback */
+                }
+                break;
+            }
+            i += n;
+        }
+    }
 
-    /* ── Execution mode: OutputVertices 3 ────────────────────────────────── */
-    /* SpvExecutionModeOutputVertices = 26 */
-    { uint32_t w[]={op2(16,4), 30, 26, 3}; sb2_push_n(&b,w,4); }
+    /* Phase 4: fill builtin values from MemberDecorate */
+    for (size_t i=5; i<wc; ) {
+        uint32_t op=spv[i]&0xffff, n=spv[i]>>16;
+        if (!n||i+n>wc) break;
+        if (op==72/*OpMemberDecorate*/ && n>=5 &&
+            spv[i+1]==block_id && spv[i+3]==11/*BuiltIn*/) {
+            uint32_t mem = spv[i+2];
+            if (mem < (uint32_t)n_mbrs)
+                out[mem].builtin = spv[i+4];
+        }
+        i += n;
+    }
 
-    /* ── Decorations ─────────────────────────────────────────────────────── */
-    /* INPUT block: PerVertex_in (ID 11) */
-    { uint32_t w[]={op2(71,3), 11, 2}; sb2_push_n(&b,w,3); }       /* Block=2 */
-    { uint32_t w[]={op2(72,5), 11, 0, 11, 0}; sb2_push_n(&b,w,5); }/* MemberDecorate 0 BuiltIn(11) Position(0) */
-    /* OUTPUT block: PerVertex_out (ID 36) */
-    { uint32_t w[]={op2(71,3), 36, 2}; sb2_push_n(&b,w,3); }       /* Block=2 */
-    { uint32_t w[]={op2(72,5), 36, 0, 11, 0}; sb2_push_n(&b,w,5); }/* MemberDecorate 0 BuiltIn(11) Position(0) */
-    /* TessLevelInner: BuiltIn(12) + Patch(15) */
-    { uint32_t w[]={op2(71,4), 26, 11, 12}; sb2_push_n(&b,w,4); }  /* BuiltIn TessLevelInner */
-    { uint32_t w[]={op2(71,3), 26, 15}; sb2_push_n(&b,w,3); }      /* Patch = 15 (NOT 58) */
-    /* TessLevelOuter: BuiltIn(11) + Patch(15) */
-    { uint32_t w[]={op2(71,4), 27, 11, 11}; sb2_push_n(&b,w,4); }  /* BuiltIn TessLevelOuter */
-    { uint32_t w[]={op2(71,3), 27, 15}; sb2_push_n(&b,w,3); }      /* Patch = 15 */
-    /* InvocationId */
-    { uint32_t w[]={op2(71,4), 28, 11, 8}; sb2_push_n(&b,w,4); }   /* BuiltIn InvocationId */
+    /* Make sure member 0 is always MBR_VEC4 (Position) */
+    if (n_mbrs >= 1) out[0].kind = MBR_VEC4;
 
-    /* ── Types ───────────────────────────────────────────────────────────── */
-    { uint32_t w[]={op2(19,2), 1}; sb2_push_n(&b,w,2); }            /* void */
-    { uint32_t w[]={op2(21,4), 3, 32, 1}; sb2_push_n(&b,w,4); }    /* int32 signed */
-    { uint32_t w[]={op2(21,4), 4, 32, 0}; sb2_push_n(&b,w,4); }    /* uint32 */
-    { uint32_t w[]={op2(22,3), 5, 32}; sb2_push_n(&b,w,3); }       /* float32 */
-    { uint32_t w[]={op2(23,4), 6, 5, 4}; sb2_push_n(&b,w,4); }     /* vec4 */
+    return n_mbrs;
+}
 
-    /* Array size constants */
-    { uint32_t w[]={op2(43,4), 4, 7, 32}; sb2_push_n(&b,w,4); }    /* uint=32 (gl_in max) */
-    { uint32_t w[]={op2(43,4), 4, 8, 3}; sb2_push_n(&b,w,4); }     /* uint=3  (gl_out size) */
-    { uint32_t w[]={op2(43,4), 4, 9, 2}; sb2_push_n(&b,w,4); }     /* uint=2  (tl_inner) */
-    { uint32_t w[]={op2(43,4), 4, 10, 4}; sb2_push_n(&b,w,4); }    /* uint=4  (tl_outer) */
+/* ── TCS SPIR-V builder ────────────────────────────────────────────────────── *
+ *
+ * Generates a pass-through TCS that matches the VS output block exactly.
+ * gl_in  = matches VS output (all members, exact types)
+ * gl_out = only Position (matches our base TES gl_in)
+ * Body: copies Position gl_in[invoc_id] → gl_out[invoc_id], sets tess levels=1.
+ *
+ * Using dynamic ID allocation to handle variable member counts.
+ * ─────────────────────────────────────────────────────────────────────────── */
+bool build_tcs_spv(const uint32_t *vs_spv, size_t vs_wc,
+                   uint32_t **out, size_t *out_c)
+{
+    /* Scan VS for output block */
+    Mbr mbrs[MAX_MBRS];
+    int n_mbrs = vs_spv ? scan_vs_block(vs_spv, vs_wc, mbrs) : 0;
+    if (n_mbrs < 1) {
+        /* Fallback: 1-member block (just Position) */
+        n_mbrs = 1;
+        mbrs[0].kind = MBR_VEC4; mbrs[0].arr_n = 0; mbrs[0].builtin = 0;
+    }
+    STEREO_LOG("build_tcs_spv: VS output block has %d members", n_mbrs);
 
-    /* INPUT struct: PerVertex_in {vec4} — for gl_in */
-    { uint32_t w[]={op2(30,3), 11, 6}; sb2_push_n(&b,w,3); }
-    /* OUTPUT struct: PerVertex_out {vec4} — for gl_out (SEPARATE type) */
-    { uint32_t w[]={op2(30,3), 36, 6}; sb2_push_n(&b,w,3); }
+    SB b; if (!sb_i(&b, 400 + n_mbrs*30)) return false;
+
+    /* ── Assign IDs ──────────────────────────────────────────────────────── */
+    uint32_t nid = 1;
+    uint32_t id_void  = nid++;  /* 1 */
+    uint32_t id_int   = nid++;  /* 2 */
+    uint32_t id_uint  = nid++;  /* 3 */
+    uint32_t id_float = nid++;  /* 4 */
+    uint32_t id_vec4  = nid++;  /* 5 */
+
+    /* Array-size constants for struct member arrays */
+    uint32_t id_farr_consts[MAX_MBRS]; /* uint constant for each FARR member */
+    uint32_t id_farr_types [MAX_MBRS]; /* OpTypeArray for each FARR member */
+    for (int m=0; m<n_mbrs; m++) {
+        id_farr_consts[m] = (mbrs[m].kind==MBR_FARR) ? nid++ : 0;
+        id_farr_types [m] = (mbrs[m].kind==MBR_FARR) ? nid++ : 0;
+    }
+
+    /* Array size constants for gl_in/gl_out arrays and tess levels */
+    uint32_t id_c32 = nid++;   /* uint const = 32 (gl_in max) */
+    uint32_t id_c3  = nid++;   /* uint const = 3  (gl_out patch size) */
+    uint32_t id_c2  = nid++;   /* uint const = 2  (tl_inner size) */
+    uint32_t id_c4  = nid++;   /* uint const = 4  (tl_outer size) */
+
+    /* Struct types */
+    uint32_t id_pv_in  = nid++; /* PerVertex_in  {all VS members} */
+    uint32_t id_pv_out = nid++; /* PerVertex_out {vec4 only} */
 
     /* Array types */
-    { uint32_t w[]={op2(28,4), 12, 11, 7}; sb2_push_n(&b,w,4); }   /* PerV_in[32] */
-    { uint32_t w[]={op2(28,4), 13, 36, 8}; sb2_push_n(&b,w,4); }   /* PerV_out[3] */
-    { uint32_t w[]={op2(28,4), 14, 5, 9}; sb2_push_n(&b,w,4); }    /* float[2] */
-    { uint32_t w[]={op2(28,4), 15, 5, 10}; sb2_push_n(&b,w,4); }   /* float[4] */
+    uint32_t id_arr_in   = nid++;  /* PerV_in[32] */
+    uint32_t id_arr_out  = nid++;  /* PerV_out[3] */
+    uint32_t id_float_a2 = nid++;  /* float[2] — tl_inner */
+    uint32_t id_float_a4 = nid++;  /* float[4] — tl_outer */
 
     /* Pointer types */
-    { uint32_t w[]={op2(32,4), 16, 1, 12}; sb2_push_n(&b,w,4); }   /* ptr_In_PerV_in_32 */
-    { uint32_t w[]={op2(32,4), 17, 3, 13}; sb2_push_n(&b,w,4); }   /* ptr_Out_PerV_out_3 */
-    { uint32_t w[]={op2(32,4), 18, 1, 6}; sb2_push_n(&b,w,4); }    /* ptr_In_v4 */
-    { uint32_t w[]={op2(32,4), 19, 3, 6}; sb2_push_n(&b,w,4); }    /* ptr_Out_v4 */
-    { uint32_t w[]={op2(32,4), 20, 1, 3}; sb2_push_n(&b,w,4); }    /* ptr_In_int */
-    { uint32_t w[]={op2(32,4), 21, 3, 14}; sb2_push_n(&b,w,4); }   /* ptr_Out_float2 */
-    { uint32_t w[]={op2(32,4), 22, 3, 15}; sb2_push_n(&b,w,4); }   /* ptr_Out_float4 */
-    { uint32_t w[]={op2(32,4), 23, 3, 5}; sb2_push_n(&b,w,4); }    /* ptr_Out_float */
+    uint32_t id_ptr_in_arr  = nid++;  /* ptr Input PerV_in[32] */
+    uint32_t id_ptr_out_arr = nid++;  /* ptr Output PerV_out[3] */
+    uint32_t id_ptr_in_v4   = nid++;  /* ptr Input  vec4 */
+    uint32_t id_ptr_out_v4  = nid++;  /* ptr Output vec4 */
+    uint32_t id_ptr_in_int  = nid++;  /* ptr Input  int */
+    uint32_t id_ptr_out_f2  = nid++;  /* ptr Output float[2] */
+    uint32_t id_ptr_out_f4  = nid++;  /* ptr Output float[4] */
+    uint32_t id_ptr_out_f   = nid++;  /* ptr Output float */
 
     /* Variables */
-    { uint32_t w[]={op2(59,4), 16, 24, 1}; sb2_push_n(&b,w,4); }   /* gl_in  Input */
-    { uint32_t w[]={op2(59,4), 17, 25, 3}; sb2_push_n(&b,w,4); }   /* gl_out Output */
-    { uint32_t w[]={op2(59,4), 21, 26, 3}; sb2_push_n(&b,w,4); }   /* tl_inner Output */
-    { uint32_t w[]={op2(59,4), 22, 27, 3}; sb2_push_n(&b,w,4); }   /* tl_outer Output */
-    { uint32_t w[]={op2(59,4), 20, 28, 1}; sb2_push_n(&b,w,4); }   /* invoc_id Input */
+    uint32_t id_gl_in    = nid++;
+    uint32_t id_gl_out   = nid++;
+    uint32_t id_tl_inner = nid++;
+    uint32_t id_tl_outer = nid++;
+    uint32_t id_invoc_id = nid++;
 
-    /* Integer index constants */
-    { uint32_t w[]={op2(43,4), 3, 31, 0}; sb2_push_n(&b,w,4); }    /* int=0 */
-    { uint32_t w[]={op2(43,4), 3, 32, 1}; sb2_push_n(&b,w,4); }    /* int=1 */
-    { uint32_t w[]={op2(43,4), 3, 33, 2}; sb2_push_n(&b,w,4); }    /* int=2 */
-    { uint32_t w[]={op2(43,4), 3, 34, 3}; sb2_push_n(&b,w,4); }    /* int=3 */
-    { uint32_t w[]={op2(43,4), 5, 35, 0x3F800000u}; sb2_push_n(&b,w,4); } /* float=1.0 */
+    /* Integer/float constants */
+    uint32_t id_i0    = nid++;
+    uint32_t id_i1    = nid++;
+    uint32_t id_i2    = nid++;
+    uint32_t id_i3    = nid++;
+    uint32_t id_f1    = nid++;
+
+    /* Function */
+    uint32_t id_fn_ty = nid++;
+    uint32_t id_main  = nid++;
+    uint32_t id_label = nid++;
+
+    /* Body SSA: invoc_id_val, in_ptr, pos, out_ptr, tl_ptrs × 6 */
+    uint32_t id_inv   = nid++;
+    uint32_t id_inptr = nid++;
+    uint32_t id_pos   = nid++;
+    uint32_t id_optr  = nid++;
+    uint32_t id_tl[6];
+    for (int k=0; k<6; k++) id_tl[k] = nid++;
+
+    uint32_t bound = nid;
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    sb_p(&b, 0x07230203u);
+    sb_p(&b, 0x00010000u);
+    sb_p(&b, 0x56533344u);
+    sb_p(&b, bound);
+    sb_p(&b, 0u);
+
+    /* ── Capabilities ────────────────────────────────────────────────────── */
+    { uint32_t w[]={OP(17,2),1}; sb_pn(&b,w,2); }  /* Shader */
+    { uint32_t w[]={OP(17,2),34}; sb_pn(&b,w,2); } /* Tessellation */
+
+    /* ── MemoryModel ─────────────────────────────────────────────────────── */
+    { uint32_t w[]={OP(14,3),0,1}; sb_pn(&b,w,3); }
+
+    /* ── EntryPoint ──────────────────────────────────────────────────────── *
+     * TessellationControl(1), %main, "main\0", gl_in, gl_out,
+     * tl_inner, tl_outer, invoc_id
+     */
+    { uint32_t w[]={OP(15,10),1,id_main,0x6E69616Du,0x00000000u,
+                    id_gl_in,id_gl_out,id_tl_inner,id_tl_outer,id_invoc_id};
+      sb_pn(&b,w,10); }
+
+    /* ── ExecutionMode: OutputVertices 3 (SpvExecutionModeOutputVertices=26) */
+    { uint32_t w[]={OP(16,4),id_main,26,3}; sb_pn(&b,w,4); }
+
+    /* ── Decorations ─────────────────────────────────────────────────────── */
+    /* PerVertex_in: Block */
+    { uint32_t w[]={OP(71,3),id_pv_in,2}; sb_pn(&b,w,3); }
+    /* PerVertex_in: member decorations (matching VS output) */
+    for (int m=0; m<n_mbrs; m++) {
+        /* BuiltIn decoration */
+        { uint32_t w[]={OP(72,5),id_pv_in,(uint32_t)m,11,mbrs[m].builtin};
+          sb_pn(&b,w,5); }
+    }
+    /* PerVertex_out: Block + member 0 = BuiltIn Position */
+    { uint32_t w[]={OP(71,3),id_pv_out,2}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(72,5),id_pv_out,0,11,0}; sb_pn(&b,w,5); }
+    /* tl_inner: BuiltIn TessLevelInner(12) + Patch(15) */
+    { uint32_t w[]={OP(71,4),id_tl_inner,11,12}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(71,3),id_tl_inner,15}; sb_pn(&b,w,3); }
+    /* tl_outer: BuiltIn TessLevelOuter(11) + Patch(15) */
+    { uint32_t w[]={OP(71,4),id_tl_outer,11,11}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(71,3),id_tl_outer,15}; sb_pn(&b,w,3); }
+    /* invoc_id: BuiltIn InvocationId(8) */
+    { uint32_t w[]={OP(71,4),id_invoc_id,11,8}; sb_pn(&b,w,4); }
+
+    /* ── Types ───────────────────────────────────────────────────────────── */
+    { uint32_t w[]={OP(19,2),id_void}; sb_pn(&b,w,2); }
+    { uint32_t w[]={OP(21,4),id_int, 32,1}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(21,4),id_uint,32,0}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(22,3),id_float,32}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(23,4),id_vec4,id_float,4}; sb_pn(&b,w,4); }
+
+    /* Per-member FARR types (uint constant + OpTypeArray) */
+    for (int m=0; m<n_mbrs; m++) {
+        if (mbrs[m].kind != MBR_FARR) continue;
+        { uint32_t w[]={OP(43,4),id_uint,id_farr_consts[m],mbrs[m].arr_n};
+          sb_pn(&b,w,4); }
+        { uint32_t w[]={OP(28,4),id_farr_types[m],id_float,id_farr_consts[m]};
+          sb_pn(&b,w,4); }
+    }
+
+    /* Array size constants */
+    { uint32_t w[]={OP(43,4),id_uint,id_c32,32}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_uint,id_c3, 3};  sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_uint,id_c2, 2};  sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_uint,id_c4, 4};  sb_pn(&b,w,4); }
+
+    /* PerVertex_in struct: one member type per VS member */
+    {
+        uint32_t hdr = OP(30, 2 + (uint32_t)n_mbrs);
+        sb_p(&b, hdr);
+        sb_p(&b, id_pv_in);
+        for (int m=0; m<n_mbrs; m++) {
+            uint32_t mt = (mbrs[m].kind==MBR_VEC4)  ? id_vec4  :
+                          (mbrs[m].kind==MBR_FLOAT)  ? id_float :
+                          id_farr_types[m];
+            sb_p(&b, mt);
+        }
+    }
+
+    /* PerVertex_out struct: just vec4 (Position only, matches TES gl_in) */
+    { uint32_t w[]={OP(30,3),id_pv_out,id_vec4}; sb_pn(&b,w,3); }
+
+    /* Array types */
+    { uint32_t w[]={OP(28,4),id_arr_in,  id_pv_in, id_c32}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(28,4),id_arr_out, id_pv_out,id_c3};  sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(28,4),id_float_a2,id_float,  id_c2}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(28,4),id_float_a4,id_float,  id_c4}; sb_pn(&b,w,4); }
+
+    /* Pointer types */
+    { uint32_t w[]={OP(32,4),id_ptr_in_arr, 1,id_arr_in};   sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_ptr_out_arr,3,id_arr_out};  sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_ptr_in_v4,  1,id_vec4};     sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_ptr_out_v4, 3,id_vec4};     sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_ptr_in_int, 1,id_int};      sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_ptr_out_f2, 3,id_float_a2}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_ptr_out_f4, 3,id_float_a4}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_ptr_out_f,  3,id_float};    sb_pn(&b,w,4); }
+
+    /* Variables */
+    { uint32_t w[]={OP(59,4),id_ptr_in_arr, id_gl_in,   1}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(59,4),id_ptr_out_arr,id_gl_out,  3}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(59,4),id_ptr_out_f2, id_tl_inner,3}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(59,4),id_ptr_out_f4, id_tl_outer,3}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(59,4),id_ptr_in_int, id_invoc_id,1}; sb_pn(&b,w,4); }
+
+    /* Integer / float constants */
+    { uint32_t w[]={OP(43,4),id_int,  id_i0,0}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_int,  id_i1,1}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_int,  id_i2,2}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_int,  id_i3,3}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_float,id_f1, 0x3F800000u}; sb_pn(&b,w,4); }
 
     /* Function type */
-    { uint32_t w[]={op2(33,3), 29, 1}; sb2_push_n(&b,w,3); }       /* void() */
+    { uint32_t w[]={OP(33,3),id_fn_ty,id_void}; sb_pn(&b,w,3); }
 
-    /* ── Main function ──────────────────────────────────────────────────── */
-    { uint32_t w[]={op2(54,5), 1, 30, 0, 29}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(248,2), 37}; sb2_push_n(&b,w,2); }          /* OpLabel */
+    /* ── Function body ───────────────────────────────────────────────────── */
+    { uint32_t w[]={OP(54,5),id_void,id_main,0,id_fn_ty}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(248,2),id_label}; sb_pn(&b,w,2); }
 
-    /* %38 = OpLoad int %invoc_id_var */
-    { uint32_t w[]={op2(61,4), 3, 38, 28}; sb2_push_n(&b,w,4); }
-    /* %39 = AccessChain ptr_In_v4 gl_in [38] [int_0] */
-    { uint32_t w[]={op2(65,6), 18, 39, 24, 38, 31}; sb2_push_n(&b,w,6); }
-    /* %40 = OpLoad v4 %39 */
-    { uint32_t w[]={op2(61,4), 6, 40, 39}; sb2_push_n(&b,w,4); }
-    /* %41 = AccessChain ptr_Out_v4 gl_out [38] [int_0] */
-    { uint32_t w[]={op2(65,6), 19, 41, 25, 38, 31}; sb2_push_n(&b,w,6); }
-    /* OpStore %41 %40 */
-    { uint32_t w[]={op2(62,3), 41, 40}; sb2_push_n(&b,w,3); }
+    /* Load InvocationID */
+    { uint32_t w[]={OP(61,4),id_int,id_inv,id_invoc_id}; sb_pn(&b,w,4); }
+    /* AccessChain gl_in[invoc_id].Position (member 0) */
+    { uint32_t w[]={OP(65,6),id_ptr_in_v4,id_inptr,id_gl_in,id_inv,id_i0};
+      sb_pn(&b,w,6); }
+    /* Load Position */
+    { uint32_t w[]={OP(61,4),id_vec4,id_pos,id_inptr}; sb_pn(&b,w,4); }
+    /* AccessChain gl_out[invoc_id].Position (member 0) */
+    { uint32_t w[]={OP(65,6),id_ptr_out_v4,id_optr,id_gl_out,id_inv,id_i0};
+      sb_pn(&b,w,6); }
+    /* Store Position */
+    { uint32_t w[]={OP(62,3),id_optr,id_pos}; sb_pn(&b,w,3); }
 
-    /* TessLevelInner[0] = 1.0 */
-    { uint32_t w[]={op2(65,5), 23, 42, 26, 31}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(62,3), 42, 35}; sb2_push_n(&b,w,3); }
-    /* TessLevelInner[1] = 1.0 */
-    { uint32_t w[]={op2(65,5), 23, 43, 26, 32}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(62,3), 43, 35}; sb2_push_n(&b,w,3); }
-    /* TessLevelOuter[0] = 1.0 */
-    { uint32_t w[]={op2(65,5), 23, 44, 27, 31}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(62,3), 44, 35}; sb2_push_n(&b,w,3); }
-    /* TessLevelOuter[1] = 1.0 */
-    { uint32_t w[]={op2(65,5), 23, 45, 27, 32}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(62,3), 45, 35}; sb2_push_n(&b,w,3); }
-    /* TessLevelOuter[2] = 1.0 */
-    { uint32_t w[]={op2(65,5), 23, 46, 27, 33}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(62,3), 46, 35}; sb2_push_n(&b,w,3); }
-    /* TessLevelOuter[3] = 1.0 */
-    { uint32_t w[]={op2(65,5), 23, 47, 27, 34}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(62,3), 47, 35}; sb2_push_n(&b,w,3); }
+    /* TessLevelInner[0] = TessLevelInner[1] = 1.0 */
+    { uint32_t w[]={OP(65,5),id_ptr_out_f,id_tl[0],id_tl_inner,id_i0}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(62,3),id_tl[0],id_f1}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(65,5),id_ptr_out_f,id_tl[1],id_tl_inner,id_i1}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(62,3),id_tl[1],id_f1}; sb_pn(&b,w,3); }
+    /* TessLevelOuter[0..3] = 1.0 */
+    { uint32_t w[]={OP(65,5),id_ptr_out_f,id_tl[2],id_tl_outer,id_i0}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(62,3),id_tl[2],id_f1}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(65,5),id_ptr_out_f,id_tl[3],id_tl_outer,id_i1}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(62,3),id_tl[3],id_f1}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(65,5),id_ptr_out_f,id_tl[4],id_tl_outer,id_i2}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(62,3),id_tl[4],id_f1}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(65,5),id_ptr_out_f,id_tl[5],id_tl_outer,id_i3}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(62,3),id_tl[5],id_f1}; sb_pn(&b,w,3); }
 
-    { uint32_t w[]={op2(253,1)}; sb2_push_n(&b,w,1); }  /* OpReturn */
-    { uint32_t w[]={op2(56,1)};  sb2_push_n(&b,w,1); }  /* OpFunctionEnd */
+    { uint32_t w[]={OP(253,1)}; sb_pn(&b,w,1); } /* OpReturn */
+    { uint32_t w[]={OP(56,1)};  sb_pn(&b,w,1); } /* OpFunctionEnd */
 
-    /* Fix up the ID bound: max ID used = 47, so bound = 48 */
-    b.w[3] = 48u;
+    b.w[3] = bound; /* restore correct bound */
     *out   = b.w;
     *out_c = b.n;
     return true;
 }
 
-/* ── Base TES SPIR-V (no stereo — patcher adds gl_ViewIndex offset) ─────── *
- *
- * GLSL equivalent (pass-through barycentric interpolation):
- *
- *   layout(triangles, equal_spacing, ccw) in;
- *   void main() {
- *       gl_Position = gl_TessCoord.x * gl_in[0].gl_Position
- *                   + gl_TessCoord.y * gl_in[1].gl_Position
- *                   + gl_TessCoord.z * gl_in[2].gl_Position;
- *   }
- *
- * The patcher (spirv_patch_stereo_vertex) is called on this SPIR-V to inject
- * the gl_ViewIndex-based stereo offset before OpReturn.
- *
- * gl_in[] element struct (ID 8) and gl_out struct (ID 10) are DISTINCT types.
- *
- * ID map:
- *   1=void  2=int  3=uint  4=float  5=v4float  6=v3float
- *   7=uint_32(const for gl_in array)
- *   8=PerVertex_in{v4float}  (INPUT  block — distinct from output)
- *   9=PerV_in_arr32
- *   10=PerVertex_out{v4float} (OUTPUT block — distinct from input)
- *   11=ptr_In_PerVarr32  12=ptr_Out_PerV
- *   13=ptr_In_v4  14=ptr_Out_v4  15=ptr_In_v3
- *   16=gl_in  17=gl_out  18=tess_coord_var
- *   19=void_fn  20=main_fn
- *   21=int_0  22=int_1  23=int_2
- *   SSA body: 24..40
- * ─────────────────────────────────────────────────────────────────────────── */
+/* ── Base TES SPIR-V ──────────────────────────────────────────────────────── */
 bool build_base_tes_spv(uint32_t **out, size_t *out_c)
 {
-    SpvBuf2 b; if (!sb2_init(&b, 260)) return false;
+    SB b; if (!sb_i(&b, 260)) return false;
+    /* IDs: 1=void 2=int 3=uint 4=float 5=v4 6=v3
+     * 7=c32 8=PVin{v4} 9=PVin[32] 10=PVout{v4}
+     * 11=ptr_In_arr 12=ptr_Out_PV 13=ptr_In_v4 14=ptr_Out_v4 15=ptr_In_v3
+     * 16=gl_in 17=gl_out 18=tc_var
+     * 19=fn_ty 20=main
+     * 21=i0 22=i1 23=i2
+     * body: 24..40 */
+    uint32_t id_void=1,id_int=2,id_uint=3,id_float=4,id_v4=5,id_v3=6;
+    uint32_t id_c32=7,id_PVin=8,id_PVinarr=9,id_PVout=10;
+    uint32_t id_pIarr=11,id_pOPV=12,id_pIv4=13,id_pOv4=14,id_pIv3=15;
+    uint32_t id_glin=16,id_glout=17,id_tc=18;
+    uint32_t id_fnty=19,id_main=20;
+    uint32_t id_i0=21,id_i1=22,id_i2=23;
+    /* body */
+    uint32_t id_lb=24,id_tcv=25,id_tcx=26,id_tcy=27,id_tcz=28;
+    uint32_t id_p0=29,id_in0=30,id_p1=31,id_in1=32,id_p2=33,id_in2=34;
+    uint32_t id_s0=35,id_s1=36,id_s2=37,id_a01=38,id_a012=39;
+    uint32_t id_op=40;
 
-    /* Header */
-    sb2_push(&b, 0x07230203u);
-    sb2_push(&b, 0x00010000u);
-    sb2_push(&b, 0x56533344u);
-    sb2_push(&b, 41u);         /* bound: max ID = 40 */
-    sb2_push(&b, 0u);
+    sb_p(&b,0x07230203u); sb_p(&b,0x00010000u);
+    sb_p(&b,0x56533344u); sb_p(&b,41u); sb_p(&b,0u);
 
-    /* Capabilities */
-    { uint32_t w[]={op2(17,2), 1}; sb2_push_n(&b,w,2); }   /* Shader */
-    { uint32_t w[]={op2(17,2), 34}; sb2_push_n(&b,w,2); }  /* Tessellation */
+    { uint32_t w[]={OP(17,2),1}; sb_pn(&b,w,2); }
+    { uint32_t w[]={OP(17,2),34}; sb_pn(&b,w,2); }
+    { uint32_t w[]={OP(14,3),0,1}; sb_pn(&b,w,3); }
 
-    /* OpMemoryModel Logical GLSL450 */
-    { uint32_t w[]={op2(14,3), 0, 1}; sb2_push_n(&b,w,3); }
+    /* EntryPoint TessEval(2) main "main" gl_in gl_out tc */
+    { uint32_t w[]={OP(15,9),2,id_main,0x6E69616Du,0x00000000u,id_glin,id_glout,id_tc};
+      sb_pn(&b,w,9); }
+    { uint32_t w[]={OP(16,3),id_main,4}; sb_pn(&b,w,3); } /* Triangles */
+    { uint32_t w[]={OP(16,3),id_main,1}; sb_pn(&b,w,3); } /* SpacingEqual */
+    { uint32_t w[]={OP(16,3),id_main,2}; sb_pn(&b,w,3); } /* VertexOrderCcw */
 
-    /* OpEntryPoint TessellationEvaluation(2) %main "main" gl_in gl_out tess_coord */
-    { uint32_t w[]={op2(15,9), 2, 20, 0x6E69616Du, 0x00000000u, 16,17,18};
-      sb2_push_n(&b,w,9); }
+    /* Decorations */
+    { uint32_t w[]={OP(71,3),id_PVin,2};   sb_pn(&b,w,3); } /* Block */
+    { uint32_t w[]={OP(72,5),id_PVin,0,11,0}; sb_pn(&b,w,5); } /* Position */
+    { uint32_t w[]={OP(71,3),id_PVout,2};  sb_pn(&b,w,3); } /* Block */
+    { uint32_t w[]={OP(72,5),id_PVout,0,11,0}; sb_pn(&b,w,5); } /* Position */
+    { uint32_t w[]={OP(71,4),id_tc,11,13}; sb_pn(&b,w,4); } /* BuiltIn TessCoord */
 
-    /* Execution modes */
-    { uint32_t w[]={op2(16,3), 20, 4}; sb2_push_n(&b,w,3); }  /* Triangles */
-    { uint32_t w[]={op2(16,3), 20, 1}; sb2_push_n(&b,w,3); }  /* SpacingEqual */
-    { uint32_t w[]={op2(16,3), 20, 2}; sb2_push_n(&b,w,3); }  /* VertexOrderCcw */
+    /* Types */
+    { uint32_t w[]={OP(19,2),id_void}; sb_pn(&b,w,2); }
+    { uint32_t w[]={OP(21,4),id_int, 32,1}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(21,4),id_uint,32,0}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(22,3),id_float,32}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(23,4),id_v4,id_float,4}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(23,4),id_v3,id_float,3}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_uint,id_c32,32}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(30,3),id_PVin, id_v4}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(28,4),id_PVinarr,id_PVin,id_c32}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(30,3),id_PVout,id_v4}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(32,4),id_pIarr,1,id_PVinarr}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_pOPV, 3,id_PVout};   sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_pIv4, 1,id_v4};      sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_pOv4, 3,id_v4};      sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(32,4),id_pIv3, 1,id_v3};      sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(59,4),id_pIarr,id_glin, 1}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(59,4),id_pOPV, id_glout,3}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(59,4),id_pIv3, id_tc,   1}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_int,id_i0,0}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_int,id_i1,1}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(43,4),id_int,id_i2,2}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(33,3),id_fnty,id_void}; sb_pn(&b,w,3); }
 
-    /* ── Decorations ──────────────────────────────────────────────────────── */
-    /* INPUT PerVertex_in (ID 8): Block + member 0 = BuiltIn Position */
-    { uint32_t w[]={op2(71,3), 8, 2}; sb2_push_n(&b,w,3); }
-    { uint32_t w[]={op2(72,5), 8, 0, 11, 0}; sb2_push_n(&b,w,5); }
-    /* OUTPUT PerVertex_out (ID 10): Block + member 0 = BuiltIn Position */
-    { uint32_t w[]={op2(71,3), 10, 2}; sb2_push_n(&b,w,3); }
-    { uint32_t w[]={op2(72,5), 10, 0, 11, 0}; sb2_push_n(&b,w,5); }
-    /* TessCoord: BuiltIn TessCoord(13) */
-    { uint32_t w[]={op2(71,4), 18, 11, 13}; sb2_push_n(&b,w,4); }
+    /* Function body */
+    { uint32_t w[]={OP(54,5),id_void,id_main,0,id_fnty}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(248,2),id_lb}; sb_pn(&b,w,2); }
+    { uint32_t w[]={OP(61,4),id_v3,id_tcv,id_tc}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(81,5),id_float,id_tcx,id_tcv,0}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(81,5),id_float,id_tcy,id_tcv,1}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(81,5),id_float,id_tcz,id_tcv,2}; sb_pn(&b,w,5); }
+    /* AccessChain gl_in[0/1/2].Position */
+    { uint32_t w[]={OP(65,6),id_pIv4,id_p0,id_glin,id_i0,id_i0}; sb_pn(&b,w,6); }
+    { uint32_t w[]={OP(61,4),id_v4,id_in0,id_p0}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(65,6),id_pIv4,id_p1,id_glin,id_i1,id_i0}; sb_pn(&b,w,6); }
+    { uint32_t w[]={OP(61,4),id_v4,id_in1,id_p1}; sb_pn(&b,w,4); }
+    { uint32_t w[]={OP(65,6),id_pIv4,id_p2,id_glin,id_i2,id_i0}; sb_pn(&b,w,6); }
+    { uint32_t w[]={OP(61,4),id_v4,id_in2,id_p2}; sb_pn(&b,w,4); }
+    /* Barycentric: pos = x*in0 + y*in1 + z*in2 */
+    { uint32_t w[]={OP(142,5),id_v4,id_s0,id_in0,id_tcx}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(142,5),id_v4,id_s1,id_in1,id_tcy}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(142,5),id_v4,id_s2,id_in2,id_tcz}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(129,5),id_v4,id_a01, id_s0,id_s1}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(129,5),id_v4,id_a012,id_a01,id_s2}; sb_pn(&b,w,5); }
+    /* Store to gl_out.Position */
+    { uint32_t w[]={OP(65,5),id_pOv4,id_op,id_glout,id_i0}; sb_pn(&b,w,5); }
+    { uint32_t w[]={OP(62,3),id_op,id_a012}; sb_pn(&b,w,3); }
+    { uint32_t w[]={OP(253,1)}; sb_pn(&b,w,1); }
+    { uint32_t w[]={OP(56,1)};  sb_pn(&b,w,1); }
 
-    /* ── Types ─────────────────────────────────────────────────────────────── */
-    { uint32_t w[]={op2(19,2), 1}; sb2_push_n(&b,w,2); }            /* void */
-    { uint32_t w[]={op2(21,4), 2, 32, 1}; sb2_push_n(&b,w,4); }    /* int32 */
-    { uint32_t w[]={op2(21,4), 3, 32, 0}; sb2_push_n(&b,w,4); }    /* uint32 */
-    { uint32_t w[]={op2(22,3), 4, 32}; sb2_push_n(&b,w,3); }       /* float32 */
-    { uint32_t w[]={op2(23,4), 5, 4, 4}; sb2_push_n(&b,w,4); }     /* vec4 */
-    { uint32_t w[]={op2(23,4), 6, 4, 3}; sb2_push_n(&b,w,4); }     /* vec3 */
-
-    /* gl_in array size */
-    { uint32_t w[]={op2(43,4), 3, 7, 32}; sb2_push_n(&b,w,4); }    /* uint=32 */
-
-    /* INPUT struct */
-    { uint32_t w[]={op2(30,3), 8, 5}; sb2_push_n(&b,w,3); }        /* PerVertex_in{vec4} */
-    { uint32_t w[]={op2(28,4), 9, 8, 7}; sb2_push_n(&b,w,4); }     /* PerV_in[32] */
-    /* OUTPUT struct (separate type) */
-    { uint32_t w[]={op2(30,3), 10, 5}; sb2_push_n(&b,w,3); }       /* PerVertex_out{vec4} */
-
-    /* Pointer types */
-    { uint32_t w[]={op2(32,4), 11, 1, 9}; sb2_push_n(&b,w,4); }    /* ptr_In_PerVarr32 */
-    { uint32_t w[]={op2(32,4), 12, 3, 10}; sb2_push_n(&b,w,4); }   /* ptr_Out_PerV */
-    { uint32_t w[]={op2(32,4), 13, 1, 5}; sb2_push_n(&b,w,4); }    /* ptr_In_v4 */
-    { uint32_t w[]={op2(32,4), 14, 3, 5}; sb2_push_n(&b,w,4); }    /* ptr_Out_v4 */
-    { uint32_t w[]={op2(32,4), 15, 1, 6}; sb2_push_n(&b,w,4); }    /* ptr_In_v3 */
-
-    /* Variables */
-    { uint32_t w[]={op2(59,4), 11, 16, 1}; sb2_push_n(&b,w,4); }   /* gl_in Input */
-    { uint32_t w[]={op2(59,4), 12, 17, 3}; sb2_push_n(&b,w,4); }   /* gl_out Output */
-    { uint32_t w[]={op2(59,4), 15, 18, 1}; sb2_push_n(&b,w,4); }   /* tess_coord Input */
-
-    /* Integer index constants */
-    { uint32_t w[]={op2(43,4), 2, 21, 0}; sb2_push_n(&b,w,4); }    /* int=0 */
-    { uint32_t w[]={op2(43,4), 2, 22, 1}; sb2_push_n(&b,w,4); }    /* int=1 */
-    { uint32_t w[]={op2(43,4), 2, 23, 2}; sb2_push_n(&b,w,4); }    /* int=2 */
-
-    /* Function type */
-    { uint32_t w[]={op2(33,3), 19, 1}; sb2_push_n(&b,w,3); }       /* void() */
-
-    /* ── Function body ──────────────────────────────────────────────────── */
-    { uint32_t w[]={op2(54,5), 1, 20, 0, 19}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(248,2), 24}; sb2_push_n(&b,w,2); }          /* OpLabel */
-
-    /* Load TessCoord (vec3) */
-    { uint32_t w[]={op2(61,4), 6, 25, 18}; sb2_push_n(&b,w,4); }
-    /* Extract x, y, z */
-    { uint32_t w[]={op2(81,5), 4, 26, 25, 0}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(81,5), 4, 27, 25, 1}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(81,5), 4, 28, 25, 2}; sb2_push_n(&b,w,5); }
-
-    /* Load gl_in[0].Position */
-    { uint32_t w[]={op2(65,6), 13, 29, 16, 21, 21}; sb2_push_n(&b,w,6); }
-    { uint32_t w[]={op2(61,4), 5, 30, 29}; sb2_push_n(&b,w,4); }
-    /* Load gl_in[1].Position */
-    { uint32_t w[]={op2(65,6), 13, 31, 16, 22, 21}; sb2_push_n(&b,w,6); }
-    { uint32_t w[]={op2(61,4), 5, 32, 31}; sb2_push_n(&b,w,4); }
-    /* Load gl_in[2].Position */
-    { uint32_t w[]={op2(65,6), 13, 33, 16, 23, 21}; sb2_push_n(&b,w,6); }
-    { uint32_t w[]={op2(61,4), 5, 34, 33}; sb2_push_n(&b,w,4); }
-
-    /* Barycentric: pos = tc.x*in0 + tc.y*in1 + tc.z*in2 */
-    { uint32_t w[]={op2(142,5), 5, 35, 30, 26}; sb2_push_n(&b,w,5); } /* VectorTimesScalar */
-    { uint32_t w[]={op2(142,5), 5, 36, 32, 27}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(142,5), 5, 37, 34, 28}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(129,5), 5, 38, 35, 36}; sb2_push_n(&b,w,5); } /* FAdd */
-    { uint32_t w[]={op2(129,5), 5, 39, 38, 37}; sb2_push_n(&b,w,5); }
-
-    /* Store result to gl_out.Position (single struct, member 0) */
-    { uint32_t w[]={op2(65,5), 14, 40, 17, 21}; sb2_push_n(&b,w,5); }
-    { uint32_t w[]={op2(62,3), 40, 39}; sb2_push_n(&b,w,3); }
-
-    { uint32_t w[]={op2(253,1)}; sb2_push_n(&b,w,1); }  /* OpReturn */
-    { uint32_t w[]={op2(56,1)};  sb2_push_n(&b,w,1); }  /* OpFunctionEnd */
-
-    /* Bound = 41 (max ID = 40) */
-    b.w[3] = 41u;
-    *out   = b.w;
-    *out_c = b.n;
+    b.w[3] = 41u; /* max ID = 40 */
+    *out = b.w; *out_c = b.n;
     return true;
 }
