@@ -166,7 +166,9 @@ stereo_CreateDevice(
 
     VkPhysicalDeviceMultiviewFeatures multiview_feat = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES,
-        .multiview = VK_TRUE,
+        .multiview                  = VK_TRUE,
+        .multiviewGeometryShader    = VK_TRUE,  /* needed: GS in multiview render pass */
+        .multiviewTessellationShader = VK_TRUE, /* needed: injected TCS+TES in multiview */
     };
 
     /* Enable tessellationShader in base features so we can inject TCS+TES
