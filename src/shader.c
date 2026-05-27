@@ -677,9 +677,20 @@ stereo_CreateGraphicsPipelines(
         /* ── Path B: inject TCS+TES for VS/GS triangle pipelines ─────────── *
          * Only for TRIANGLE_LIST — other topologies can't use triangle tess. */
         if (has_vs && !has_tcs && !has_tes && is_triangle_list) {
-            /* Build pass-through TCS */
+            /* Find the VS cache entry to replicate its gl_PerVertex layout */
+            VkShaderModule vs_mod_handle = VK_NULL_HANDLE;
+            for (uint32_t s = 0; s < ci->stageCount; s++) {
+                if (ci->pStages[s].stage == VK_SHADER_STAGE_VERTEX_BIT) {
+                    vs_mod_handle = ci->pStages[s].module; break;
+                }
+            }
+            StereoShaderCache *vs_e = vs_mod_handle ? cache_find(sd, vs_mod_handle) : NULL;
+
+            /* Build pass-through TCS matching VS output block */
             uint32_t *tcs_spv=NULL; size_t tcs_c=0;
-            if (!build_tcs_spv(&tcs_spv, &tcs_c)) {
+            if (!build_tcs_spv(vs_e ? vs_e->spv : NULL,
+                               vs_e ? vs_e->words : 0,
+                               &tcs_spv, &tcs_c)) {
                 STEREO_LOG("Pipeline %u: build_tcs_spv failed",p); goto fallback; }
 
             /* Build base TES, then patch it for stereo */
