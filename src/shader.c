@@ -774,7 +774,7 @@ stereo_CreateGraphicsPipelines(
             ia_mods[p].primitiveRestartEnable = 0;
 
             /* Tessellation state */
-            ts_mods[p].sType = 20; /* VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO */
+            ts_mods[p].sType = 21; /* VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO */
             ts_mods[p].pNext = NULL;
             ts_mods[p].flags = 0;
             ts_mods[p].patchControlPoints = 3;
