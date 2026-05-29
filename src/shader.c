@@ -695,7 +695,9 @@ stereo_CreateGraphicsPipelines(
 
             /* Build base TES, then patch it for stereo */
             uint32_t *base_tes=NULL; size_t base_c=0;
-            if (!build_base_tes_spv(&base_tes, &base_c)) {
+            if (!build_base_tes_spv(vs_e ? vs_e->spv : NULL,
+                         vs_e ? vs_e->words : 0,
+                         &base_tes, &base_c)) {
                 free(tcs_spv); STEREO_LOG("Pipeline %u: build_base_tes failed",p);
                 goto fallback; }
 
