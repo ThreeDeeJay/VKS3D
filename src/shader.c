@@ -748,11 +748,40 @@ stereo_CreateGraphicsPipelines(
                 sd->tmp_modules[sd->tmp_module_count++] = tes_mod;
             }
 
-            /* Build extended stage array: original stages + TCS + TES */
+            /* For VS-only pipelines (no GS): inject pass-through GS after TES.
+             * On NVIDIA 426.06, gl_ViewIndex in TES is only populated when a GS
+             * follows.  The pass-through GS also writes gl_Layer=gl_ViewIndex
+             * explicitly for correct multiview layer routing. */
+            VkShaderModule gs_pt_mod = VK_NULL_HANDLE;
+            uint32_t extra_stages = 2; /* TCS + TES */
+            if (!has_gs) {
+                uint32_t *gs_spv = NULL; size_t gs_c = 0;
+                if (build_passthrough_gs_spv(vs_e ? vs_e->spv : NULL,
+                                             vs_e ? vs_e->words : 0,
+                                             &gs_spv, &gs_c)) {
+                    VkShaderModuleCreateInfo gs_smci = {
+                        VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                        NULL, 0, gs_c*4, gs_spv};
+                    if (sd->real.CreateShaderModule(sd->real_device, &gs_smci,
+                                                    NULL, &gs_pt_mod) == VK_SUCCESS) {
+                        extra_stages = 3; /* TCS + TES + passthrough GS */
+                        STEREO_LOG("Pipeline %u: passthrough GS %p (gl_ViewIndex fix)",
+                                   p, (void*)(uintptr_t)gs_pt_mod);
+                    }
+                    free(gs_spv);
+                }
+                if (!gs_pt_mod)
+                    STEREO_LOG("Pipeline %u: passthrough GS build failed, TES only", p);
+            }
+
+            /* Build extended stage array: original stages + TCS + TES [+ GS] */
             uint32_t orig_sc = ci->stageCount;
             VkPipelineShaderStageCreateInfo *st =
-                malloc((orig_sc + 2) * sizeof(*st));
-            if (!st) goto fallback;
+                malloc((orig_sc + extra_stages) * sizeof(*st));
+            if (!st) {
+                if (gs_pt_mod) sd->real.DestroyShaderModule(sd->real_device,gs_pt_mod,NULL);
+                goto fallback;
+            }
             memcpy(st, ci->pStages, orig_sc * sizeof(*st));
 
             VkPipelineShaderStageCreateInfo tcs_stage = {
@@ -769,6 +798,17 @@ stereo_CreateGraphicsPipelines(
             };
             st[orig_sc]     = tcs_stage;
             st[orig_sc + 1] = tes_stage_info;
+            if (gs_pt_mod) {
+                VkPipelineShaderStageCreateInfo gs_pt_stage = {
+                    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    NULL, 0,
+                    VK_SHADER_STAGE_GEOMETRY_BIT,
+                    gs_pt_mod, "main", NULL
+                };
+                st[orig_sc + 2] = gs_pt_stage;
+                if (sd->tmp_module_count < MAX_TMP_MODULES)
+                    sd->tmp_modules[sd->tmp_module_count++] = gs_pt_mod;
+            }
 
             /* Modified input assembly: PATCH_LIST */
             ia_mods[p] = *ci->pInputAssemblyState;
@@ -776,12 +816,12 @@ stereo_CreateGraphicsPipelines(
             ia_mods[p].primitiveRestartEnable = 0;
 
             /* Tessellation state */
-            ts_mods[p].sType = 21; /* VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO */
+            ts_mods[p].sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
             ts_mods[p].pNext = NULL;
             ts_mods[p].flags = 0;
             ts_mods[p].patchControlPoints = 3;
 
-            infos[p].stageCount          = orig_sc + 2;
+            infos[p].stageCount          = orig_sc + extra_stages;
             infos[p].pStages             = st;
             infos[p].pInputAssemblyState = &ia_mods[p];
             infos[p].pTessellationState  = &ts_mods[p];

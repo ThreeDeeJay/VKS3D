@@ -12,3 +12,11 @@ bool build_tcs_spv(const uint32_t *vs_spv, size_t vs_wc,
  * vs_spv/vs_wc: VS SPIR-V to scan for user-defined Output varyings. */
 bool build_base_tes_spv(const uint32_t *vs_spv, size_t vs_wc,
                         uint32_t **out, size_t *out_c);
+
+/* Build minimal pass-through GS (triangles→triangle_strip, 3 vertices).
+ * Writes gl_Layer=gl_ViewIndex explicitly for correct multiview layer routing.
+ * Passes gl_Position and all user-defined varyings from TES output to FS input.
+ * Inject for VS-only TRIANGLE_LIST pipelines where TES gl_ViewIndex needs GS
+ * to be populated correctly (NVIDIA 426.06 driver requirement). */
+bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
+                              uint32_t **out, size_t *out_c);
