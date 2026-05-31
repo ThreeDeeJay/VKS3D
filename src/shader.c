@@ -288,7 +288,10 @@ bool spirv_patch_stereo_vertex(
      * gl_ViewIndex during multiview rendering.  Instead, write both eye
      * positions to gl_PositionPerViewNV[0/1] in a single invocation and let
      * the driver distribute them per-view.  TES keeps gl_ViewIndex (works). */
-    bool use_pvna = (m.exec_model == SpvExecVertex || m.exec_model == SpvExecGeometry);
+    /* VS now uses gl_ViewIndex (same as TES). 
+     * PVNA does not work on NVIDIA 426.06 for any stage.
+     * Only GS keeps PVNA as a last resort (also non-functional but harmless). */
+    bool use_pvna = false;
 
     /* ── Allocate shared IDs ─────────────────────────────────────────────── */
     uint32_t nid = m.bound;
@@ -676,7 +679,11 @@ stereo_CreateGraphicsPipelines(
 
         /* ── Path B: inject TCS+TES for VS/GS triangle pipelines ─────────── *
          * Only for TRIANGLE_LIST — other topologies can't use triangle tess. */
-        if (has_vs && !has_tcs && !has_tes && is_triangle_list) {
+        /* Path B: TCS+TES injection.
+         * Only for VS+GS pipelines (original GS present).
+         * For VS-only pipelines, fall through to Path C which patches
+         * the VS directly with gl_ViewIndex — simpler and works on 426.06. */\n
+        if (has_vs && has_gs && !has_tcs && !has_tes && is_triangle_list) {
             /* Find the VS cache entry to replicate its gl_PerVertex layout */
             VkShaderModule vs_mod_handle = VK_NULL_HANDLE;
             for (uint32_t s = 0; s < ci->stageCount; s++) {
