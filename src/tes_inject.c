@@ -698,6 +698,7 @@ bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
 
     /* Variables */
     uint32_t id_gl_in=nid++, id_gl_out=nid++;
+    uint32_t id_vi_var=nid++;  /* gl_ViewIndex — declared for multiview signalling, not read in body */
 
     /* Constants */
     uint32_t id_i0=nid++, id_i1=nid++, id_i2=nid++;
@@ -741,20 +742,25 @@ bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
     sb_p(&b,0x07230203u); sb_p(&b,0x00010000u);
     sb_p(&b,0x56533344u); sb_p(&b,bound); sb_p(&b,0u);
 
-    /* Capabilities: Shader + Geometry only (no MultiView — don't touch gl_Layer) */
-    {uint32_t w[]={OP(17,2),1}; sb_pn(&b,w,2);}   /* Shader    */
-    {uint32_t w[]={OP(17,2),2}; sb_pn(&b,w,2);}   /* Geometry  */
+    /* Capabilities: Shader + Geometry + MultiView.
+     * MultiView signals to the driver that TES should run per-view,
+     * giving correct gl_ViewIndex to our TES stereo patcher.
+     * We declare gl_ViewIndex in the GS interface but never READ it
+     * (to avoid gl_Layer=0 for both views). */
+    {uint32_t w[]={OP(17,2),1}; sb_pn(&b,w,2);}    /* Shader    */
+    {uint32_t w[]={OP(17,2),2}; sb_pn(&b,w,2);}    /* Geometry  */
+    {uint32_t w[]={OP(17,2),5296}; sb_pn(&b,w,2);} /* MultiView */
 
     /* MemoryModel */
     {uint32_t w[]={OP(14,3),0,1}; sb_pn(&b,w,3);}
 
     /* EntryPoint: Geometry=3, id_main, "main\0", gl_in, gl_out, user in/out */
     {
-        uint32_t ifc = 2 + (uint32_t)(n_uvars*2);
+        uint32_t ifc = 3 + (uint32_t)(n_uvars*2); /* +1 for id_vi_var */
         sb_p(&b, OP(15, 5+ifc));
         sb_p(&b, 3); sb_p(&b, id_main);
         sb_p(&b, 0x6E69616Du); sb_p(&b, 0x00000000u);
-        sb_p(&b, id_gl_in); sb_p(&b, id_gl_out);
+        sb_p(&b, id_gl_in); sb_p(&b, id_gl_out); sb_p(&b, id_vi_var);
         for(int u=0;u<n_uvars;u++){ sb_p(&b,id_uvi[u]); sb_p(&b,id_uvo[u]); }
     }
 
@@ -772,6 +778,8 @@ bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
         {uint32_t w[]={OP(71,4),id_uvi[u],30,uvars[u].location}; sb_pn(&b,w,4);}
         {uint32_t w[]={OP(71,4),id_uvo[u],30,uvars[u].location}; sb_pn(&b,w,4);}
     }
+    /* gl_ViewIndex BuiltIn — declared for driver multiview signalling */
+    {uint32_t w[]={OP(71,4),id_vi_var,11,4440}; sb_pn(&b,w,4);}
 
     /* Types */
     {uint32_t w[]={OP(19,2),id_void}; sb_pn(&b,w,2);}
@@ -805,9 +813,14 @@ bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
         {uint32_t w[]={OP(32,4),id_pI_uarr3[vs],1,id_uarr3[vs]}; sb_pn(&b,w,4);}
     }
 
+    /* ptr Input int for gl_ViewIndex (declared once) */
+    uint32_t id_pIint_gs=nid++;
+    {uint32_t w[]={OP(32,4),id_pIint_gs,1,id_int}; sb_pn(&b,w,4);}
+
     /* Variables */
     {uint32_t w[]={OP(59,4),id_pIarr,id_gl_in,1}; sb_pn(&b,w,4);}
     {uint32_t w[]={OP(59,4),id_pOPV,id_gl_out,3}; sb_pn(&b,w,4);}
+    {uint32_t w[]={OP(59,4),id_pIint_gs,id_vi_var,1}; sb_pn(&b,w,4);}  /* gl_ViewIndex Input */
     for(int u=0;u<n_uvars;u++){
         uint32_t vs=uvars[u].vec_size, pO=(vs==4)?id_pOv4:id_pO_uvec[vs];
         {uint32_t w[]={OP(59,4),id_pI_uarr3[vs],id_uvi[u],1}; sb_pn(&b,w,4);}
