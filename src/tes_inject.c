@@ -752,7 +752,7 @@ bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
 
     /* EntryPoint: Geometry=3, main, "main", all interface vars */
     {
-        uint32_t ifc = 4 + (uint32_t)(n_uvars*2); /* gl_in,gl_out,viv,gl_Layer(in pv_out) */
+        uint32_t ifc = 3 + (uint32_t)(n_uvars*2); /* gl_in, gl_out, viv (gl_Layer is member of gl_out, not a separate var) */
         sb_p(&b,OP(15,5+ifc)); sb_p(&b,3); sb_p(&b,id_main);
         sb_p(&b,0x6E69616Du); sb_p(&b,0x00000000u);
         sb_p(&b,id_gl_in); sb_p(&b,id_gl_out); sb_p(&b,id_viv);
