@@ -693,6 +693,21 @@ stereo_CreateGraphicsPipelines(
             }
             StereoShaderCache *vs_e = vs_mod_handle ? cache_find(sd, vs_mod_handle) : NULL;
 
+            /* Dump original GS SPIR-V for comparison with synthetic GS */
+            if (dump && has_gs) {
+                for (uint32_t _s=0; _s<ci->stageCount; _s++) {
+                    if (ci->pStages[_s].stage == VK_SHADER_STAGE_GEOMETRY_BIT) {
+                        StereoShaderCache *_ge = cache_find(sd, ci->pStages[_s].module);
+                        if (_ge && _ge->spv) {
+                            char _gp[512];
+                            _snprintf(_gp,sizeof(_gp)-1,"%s\\\\pipe%04d_orig_gs.spv",dump,dump_n);
+                            FILE *_gf=fopen(_gp,"wb");
+                            if(_gf){fwrite(_ge->spv,4,_ge->words,_gf);fclose(_gf);}
+                        }
+                        break;
+                    }
+                }
+            }
             /* Build pass-through TCS matching VS output block */
             uint32_t *tcs_spv=NULL; size_t tcs_c=0;
             if (!build_tcs_spv(vs_e ? vs_e->spv : NULL,
@@ -773,7 +788,13 @@ stereo_CreateGraphicsPipelines(
                                                     NULL, &gs_pt_mod) == VK_SUCCESS) {
                         extra_stages = 3; /* TCS + TES + passthrough GS */
                         STEREO_LOG("Pipeline %u: passthrough GS %p (gl_ViewIndex fix)",
-                                   p, (void*)(uintptr_t)gs_pt_mod);
+                       p, (void*)(uintptr_t)gs_pt_mod);
+                    if (dump && gs_spv) {
+                        char _gsp[512];
+                        _snprintf(_gsp,sizeof(_gsp)-1,"%s\\\\pipe%04d_synth_gs.spv",dump,dump_n);
+                        FILE *_gf=fopen(_gsp,"wb");
+                        if(_gf){fwrite(gs_spv,4,gs_c,_gf);fclose(_gf);}
+                    }
                     }
                     free(gs_spv);
                 }
