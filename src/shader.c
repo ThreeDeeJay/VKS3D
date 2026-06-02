@@ -682,7 +682,7 @@ stereo_CreateGraphicsPipelines(
         /* Path B: TCS+TES injection.
          * Only for VS+GS pipelines (original GS present).
          * For VS-only pipelines, fall through to Path C which patches
-         * the VS directly with gl_ViewIndex — simpler and works on 426.06. */\n
+         * the VS directly with gl_ViewIndex — simpler and works on 426.06. */
         if (has_vs && has_gs && !has_tcs && !has_tes && is_triangle_list) {
             /* Find the VS cache entry to replicate its gl_PerVertex layout */
             VkShaderModule vs_mod_handle = VK_NULL_HANDLE;
