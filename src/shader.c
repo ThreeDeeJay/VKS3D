@@ -1,35 +1,18 @@
 /*
  * shader.c — SPIR-V stereo injection, deferred to pipeline creation
  *
- * Architecture
- * ─────────────
- * Patching VS at CreateShaderModule time is wrong when a GS follows: the GS
- * recomputes gl_Position from scratch, silently discarding the VS offset.
+ * Strategy
+ * ─────────
+ * Path A (only active path):
+ *   Pipeline already has app-provided TCS+TES: patch the TES with gl_ViewIndex
+ *   stereo.  Confirmed working on 426.06 for tessellation pipelines.
  *
- * Fix: cache original SPIR-V at CreateShaderModule; at CreateGraphicsPipelines
- * inspect the stage list, select the last pre-rast stage (GS > TES > VS), and
- * patch only that stage's SPIR-V with a temporary VkShaderModule.
- *
- * GS injection point (key fix vs. prior iteration)
- * ─────────────────────────────────────────────────
- * Injecting before OpReturn is WRONG for GS: OpEmitVertex already fired and
- * consumed gl_Position.  Instead we inject a fresh offset-block (with unique
- * SSA IDs) immediately before EVERY OpEmitVertex instruction.  Each block:
- *   1. OpAccessChain / direct ptr  → pointer to gl_Position output
- *   2. OpLoad                      → current gl_Position
- *   3. OpLoad gl_ViewIndex         → view index (0=left, 1=right)
- *   4. OpIEqual + OpSelect         → pick left or right float offset
- *   5. OpCompositeExtract .w       → perspective divisor
- *   6. OpFMul                      → delta = offset * w
- *   7. OpCompositeExtract .x       → current x
- *   8. OpFAdd                      → new x
- *   9. OpCompositeInsert           → patched position
- *  10. OpStore                     → write back before emit
- *
- * VS/TES injection is a single instance of the same block, inserted either
- * after the last OpStore to pos_var (path A) or before OpReturn (path B).
- *
- * Stage priority:  GS (prio 2) > TES (prio 1) > VS (prio 0)
+ * Paths B and C (disabled):
+ *   gl_ViewIndex injection was attempted in synthesized TES (Path B) and
+ *   directly in VS/GS (Path C).  Neither works on NVIDIA 426.06 — both views
+ *   always receive gl_ViewIndex=0, producing identical layers.  These paths
+ *   are removed.  Non-TES pipelines rely on image-space horizontal-shift
+ *   stereo applied in compose_present (present_alt.c).
  */
 
 #include <stdio.h>
@@ -75,10 +58,10 @@
 #define SpvExecGeometry 3
 
 #define SpvOpTypeArray    28
-#define SpvCapPVNA       5260   /* PerViewAttributesNV — write both eye positions at once */
-#define SpvBuiltInPVNV   5261   /* PositionPerViewNV builtin */
+#define SpvCapPVNA       5260
+#define SpvBuiltInPVNV   5261
 
-#define SpvCapMV 5296   /* MultiView */
+#define SpvCapMV 5296
 
 #define SPIRV_MAGIC 0x07230203u
 
@@ -98,20 +81,18 @@ typedef struct {
     const uint32_t *words; size_t count;
     uint32_t  bound;
     bool      is_patchable, has_mv_cap;
-    int       exec_model;          /* SpvExecVertex / TessEval / Geometry */
+    int       exec_model;
 
-    /* gl_Position */
-    uint32_t  pos_var;             /* direct variable (path A)            */
-    bool      pos_is_block;        /* block member (path B)               */
+    uint32_t  pos_var;
+    bool      pos_is_block;
     uint32_t  pos_block_type, pos_member_idx, pos_ptr_type;
 
-    /* supporting types */
     uint32_t  view_var;
-    uint32_t  ft, v4t, it, bt;    /* float32, vec4, int32, bool types    */
-    uint32_t  ptr_out_v4;          /* existing OpTypePointer Output vec4  */
-    uint32_t  ptr_in_int;          /* existing OpTypePointer Input  int   */
-    size_t    fn_word;             /* offset of first OpFunction          */
-    uint32_t  emit_count;          /* number of OpEmitVertex in body (GS) */
+    uint32_t  ft, v4t, it, bt;
+    uint32_t  ptr_out_v4;
+    uint32_t  ptr_in_int;
+    size_t    fn_word;
+    uint32_t  emit_count;
 } SpvMod;
 
 static void do_scan(SpvMod *m, bool p2)
@@ -158,32 +139,24 @@ static void spv_scan(SpvMod *m)
 /* ── Shared state for body emission ──────────────────────────────────────── */
 typedef struct {
     SpvMod  *m;
-    bool     have_view;   /* gl_ViewIndex available (existing or injected) */
-    uint32_t uv4;         /* ptr type: Output vec4   (shared across insts) */
-    uint32_t uint_;       /* ptr type: Input  int    (shared)               */
-    uint32_t bt;          /* bool type               (shared)               */
-    uint32_t cz;          /* const int  0            (shared)               */
-    uint32_t cl, cr;      /* const float left/right  (shared)               */
-    /* PVNA mode: write both eye positions to gl_PositionPerViewNV[] instead
-     * of reading gl_ViewIndex.  Used for VS/GS where driver 426.06 does not
-     * populate gl_ViewIndex, but does honour per-view attribute outputs.    */
-    bool     pvna;        /* true → use PositionPerViewNV, false → ViewIndex */
-    uint32_t pvnv_var;    /* gl_PositionPerViewNV Output variable ID         */
-    uint32_t c1;          /* const int 1 (for pvnv[1] access)                */
+    bool     have_view;
+    uint32_t uv4;
+    uint32_t uint_;
+    uint32_t bt;
+    uint32_t cz;
+    uint32_t cl, cr;
+    bool     pvna;
+    uint32_t pvnv_var;
+    uint32_t c1;
 } BodyCtx;
 
-/* Emit one instance of the stereo-offset body.
- * All SSA result IDs are freshly allocated from *nid to avoid duplicates
- * when called multiple times (once per OpEmitVertex in a GS). */
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m = c->m;
 
-    /* Allocate per-instance IDs (shared by both paths) */
-    uint32_t ch   = (*nid)++;   /* AccessChain result (block path only) */
-    uint32_t lp   = (*nid)++;   /* loaded gl_Position                   */
+    uint32_t ch   = (*nid)++;
+    uint32_t lp   = (*nid)++;
 
-    /* Pointer to gl_Position */
     uint32_t pptr;
     if (m->pos_is_block) {
         uint32_t member_idx_id;
@@ -198,23 +171,19 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out,a,5); pptr=ch;
     } else { pptr=m->pos_var; }
 
-    /* Load gl_Position */
     { uint32_t w[]={op_(SpvOpLoad,4),m->v4t,lp,pptr}; sb_push_n(out,w,4); }
 
     if (c->pvna && c->pvnv_var) {
-        /* ── PVNA path: compute both eye positions, write to pvnv[0]/[1] ──── *
-         * The driver picks pvnv[view_index] for each view automatically.      *
-         * No need for gl_ViewIndex at all — works on NVIDIA 426.06 VS/GS.    */
-        uint32_t pw   = (*nid)++;   /* pos.w                             */
-        uint32_t lox  = (*nid)++;   /* left  delta x = left_offset  * w  */
-        uint32_t rox  = (*nid)++;   /* right delta x = right_offset * w  */
-        uint32_t px   = (*nid)++;   /* pos.x                             */
-        uint32_t lx   = (*nid)++;   /* left  eye x                       */
-        uint32_t rx   = (*nid)++;   /* right eye x                       */
-        uint32_t lpos = (*nid)++;   /* full left  eye vec4               */
-        uint32_t rpos = (*nid)++;   /* full right eye vec4               */
-        uint32_t p0   = (*nid)++;   /* &pvnv[0]                          */
-        uint32_t p1   = (*nid)++;   /* &pvnv[1]                          */
+        uint32_t pw   = (*nid)++;
+        uint32_t lox  = (*nid)++;
+        uint32_t rox  = (*nid)++;
+        uint32_t px   = (*nid)++;
+        uint32_t lx   = (*nid)++;
+        uint32_t rx   = (*nid)++;
+        uint32_t lpos = (*nid)++;
+        uint32_t rpos = (*nid)++;
+        uint32_t p0   = (*nid)++;
+        uint32_t p1   = (*nid)++;
 
         { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,pw,lp,3u};   sb_push_n(out,w,5); }
         { uint32_t w[]={op_(SpvOpFMul,5),m->ft,lox,c->cl,pw};           sb_push_n(out,w,5); }
@@ -224,15 +193,12 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         { uint32_t w[]={op_(SpvOpFAdd,5),m->ft,rx,px,rox};              sb_push_n(out,w,5); }
         { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,lpos,lx,lp,0u}; sb_push_n(out,w,6); }
         { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,rpos,rx,lp,0u}; sb_push_n(out,w,6); }
-        /* pvnv[0] = left eye position */
         { uint32_t w[]={op_(SpvOpAccessChain,5),c->uv4,p0,c->pvnv_var,c->cz}; sb_push_n(out,w,5); }
         { uint32_t w[]={op_(SpvOpStore,3),p0,lpos};                     sb_push_n(out,w,3); }
-        /* pvnv[1] = right eye position */
         { uint32_t w[]={op_(SpvOpAccessChain,5),c->uv4,p1,c->pvnv_var,c->c1}; sb_push_n(out,w,5); }
         { uint32_t w[]={op_(SpvOpStore,3),p1,rpos};                     sb_push_n(out,w,3); }
 
     } else {
-        /* ── gl_ViewIndex path (TES, or any stage where it works) ─────────── */
         uint32_t lv   = c->have_view ? (*nid)++ : 0;
         uint32_t isl  = c->have_view ? (*nid)++ : 0;
         uint32_t sel  = (*nid)++;
@@ -247,8 +213,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
             { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cl,c->cr}; sb_push_n(out,w,6); }
         } else {
-            STEREO_LOG("emit_body: no view index (have_view=%d view_var=%u it=%u bt=%u) — using constant left offset",
-                       (int)c->have_view, m->view_var, m->it, (unsigned)(uintptr_t)c->bt);
             sel=c->cl;
         }
 
@@ -268,56 +232,36 @@ bool spirv_patch_stereo_vertex(
     float lo, float ro, float conv, bool inj_vi)
 {
     (void)conv;
-    if (!in||in_c<5||in[0]!=SPIRV_MAGIC) {
-        STEREO_LOG("Shader: bad header in=%p in_c=%zu magic=0x%x (expected 0x%x)",
-                   (void*)in, in_c, in ? in[0] : 0u, SPIRV_MAGIC);
-        return false;
-    }
+    if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
 
     SpvMod m={0}; m.words=in; m.count=in_c;
     spv_scan(&m);
 
-    if (!m.is_patchable) { STEREO_LOG("Shader: not patchable (model=%d)",m.exec_model); return false; }
-    if (!m.pos_var)       { STEREO_LOG("Shader: gl_Position not found");                return false; }
-    STEREO_LOG("Shader patch: model=%d block=%d pos_var=%u view_var=%u emit_count=%u bound=%u",
-               m.exec_model,(int)m.pos_is_block,m.pos_var,m.view_var,m.emit_count,m.bound);
+    if (!m.is_patchable) return false;
+    if (!m.pos_var)       return false;
+
+    /* gl_ViewIndex path only — PVNA non-functional on 426.06 */
+    bool use_pvna = false;
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
-    /* PVNA (PerViewAttributesNV): VS and GS on NVIDIA 426.06 do not populate
-     * gl_ViewIndex during multiview rendering.  Instead, write both eye
-     * positions to gl_PositionPerViewNV[0/1] in a single invocation and let
-     * the driver distribute them per-view.  TES keeps gl_ViewIndex (works). */
-    /* VS now uses gl_ViewIndex (same as TES). 
-     * PVNA does not work on NVIDIA 426.06 for any stage.
-     * Only GS keeps PVNA as a last resort (also non-functional but harmless). */
-    bool use_pvna = false;
-
-    /* ── Allocate shared IDs ─────────────────────────────────────────────── */
     uint32_t nid = m.bound;
 
-    /* Optional: new ptr types if not already declared */
-    uint32_t id_ptr_v4  = nid++;   /* OpTypePointer Output vec4 (if needed) */
-    uint32_t id_ptr_int = nid++;   /* OpTypePointer Input  int  (if needed) */
+    uint32_t id_ptr_v4  = nid++;
+    uint32_t id_ptr_int = nid++;
 
-    /* Bug fix: simple VS shaders may have no integer type at all (no int ops).
-     * Without m.it we cannot declare gl_ViewIndex (an int builtin) nor create
-     * the comparison constants.  Create a signed int32 type when missing so
-     * that view-index injection works even in the simplest MVP vertex shader. */
     uint32_t id_new_it = 0;
     if (!m.it && inj_vi && !m.view_var) {
-        id_new_it = nid++;     /* will emit OpTypeInt 32 1 (signed) */
-        m.it      = id_new_it; /* from this point m.it is usable    */
-        STEREO_LOG("Shader: no int type found — creating id=%u for gl_ViewIndex", id_new_it);
+        id_new_it = nid++;
+        m.it      = id_new_it;
     }
 
-    /* PVNA-specific IDs (VS/GS only) */
-    uint32_t id_uint_type  = 0; /* OpTypeInt 32 0 (unsigned, for array size)  */
-    uint32_t id_const_2    = 0; /* OpConstant uint 2 (array length)           */
-    uint32_t id_v4arr2     = 0; /* OpTypeArray vec4 2                         */
-    uint32_t id_ptr_v4arr2 = 0; /* OpTypePointer Output (array)               */
-    uint32_t id_pvnv_var   = 0; /* gl_PositionPerViewNV Output variable       */
-    uint32_t id_const_1    = 0; /* OpConstant int 1 (for pvnv[1] index)       */
+    uint32_t id_uint_type  = 0;
+    uint32_t id_const_2    = 0;
+    uint32_t id_v4arr2     = 0;
+    uint32_t id_ptr_v4arr2 = 0;
+    uint32_t id_pvnv_var   = 0;
+    uint32_t id_const_1    = 0;
     if (use_pvna) {
         id_uint_type  = nid++;
         id_const_2    = nid++;
@@ -327,29 +271,23 @@ bool spirv_patch_stereo_vertex(
         id_const_1    = nid++;
     }
 
-    /* gl_ViewIndex injection (TES only — not used in PVNA mode) */
     bool     will_inj_vi = !use_pvna && inj_vi && !m.view_var && m.it;
     uint32_t id_inj_view = will_inj_vi ? nid++ : 0;
     bool     have_view   = !use_pvna && (m.view_var || will_inj_vi);
-    /* Optional: new bool type (for gl_ViewIndex IEqual result) */
     uint32_t id_new_bt = 0;
     if (!use_pvna && !m.bt && have_view && m.it) { id_new_bt=nid++; }
 
-    /* Shared constants */
-    uint32_t id_cz = nid++; /* const int  0 */
-    uint32_t id_cl = nid++; /* const float left_offset  */
-    uint32_t id_cr = nid++; /* const float right_offset */
+    uint32_t id_cz = nid++;
+    uint32_t id_cl = nid++;
+    uint32_t id_cr = nid++;
 
-    /* Resolved shared IDs */
     uint32_t uv4   = m.ptr_out_v4  ? m.ptr_out_v4  : id_ptr_v4;
     uint32_t uint_ = m.ptr_in_int   ? m.ptr_in_int   : id_ptr_int;
     uint32_t bt    = m.bt           ? m.bt           : id_new_bt;
 
-    /* ── Build type_extras (emitted once before first OpFunction) ─────────── */
     SpvBuf te; if (!sb_init(&te,64)) return false;
 
     if (id_new_it) {
-        /* OpTypeInt 32 1  (signed 32-bit integer, for gl_ViewIndex) */
         uint32_t w[]={op_(SpvOpTypeInt,4),id_new_it,32,1}; sb_push_n(&te,w,4); }
     if (!m.ptr_out_v4) {
         uint32_t w[]={op_(SpvOpTypePointer,4),id_ptr_v4,SpvStorageOutput,m.v4t};
@@ -363,25 +301,16 @@ bool spirv_patch_stereo_vertex(
     { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cl,0}; memcpy(&w[3],&lo,4); sb_push_n(&te,w,4); }
     { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cr,0}; memcpy(&w[3],&ro,4); sb_push_n(&te,w,4); }
 
-    /* PVNA declarations: array type + variable for gl_PositionPerViewNV */
     if (use_pvna) {
-        /* unsigned int (for array length constant) */
         { uint32_t w[]={op_(SpvOpTypeInt,4),id_uint_type,32,0};            sb_push_n(&te,w,4); }
-        /* const uint 2 (array length) */
         { uint32_t w[]={op_(SpvOpConstant,4),id_uint_type,id_const_2,2};  sb_push_n(&te,w,4); }
-        /* OpTypeArray vec4 2 */
         { uint32_t w[]={op_(SpvOpTypeArray,4),id_v4arr2,m.v4t,id_const_2}; sb_push_n(&te,w,4); }
-        /* OpTypePointer Output (OpTypeArray vec4 2) */
         { uint32_t w[]={op_(SpvOpTypePointer,4),id_ptr_v4arr2,SpvStorageOutput,id_v4arr2}; sb_push_n(&te,w,4); }
-        /* OpDecorate pvnv_var BuiltIn PositionPerViewNV */
         { uint32_t w[]={op_(SpvOpDecorate,4),id_pvnv_var,SpvDecorationBuiltIn,SpvBuiltInPVNV}; sb_push_n(&te,w,4); }
-        /* OpVariable (pointer) pvnv_var Output */
         { uint32_t w[]={op_(SpvOpVariable,4),id_ptr_v4arr2,id_pvnv_var,SpvStorageOutput}; sb_push_n(&te,w,4); }
-        /* const int 1 (for pvnv[1] access index) */
         if (m.it) { uint32_t w[]={op_(SpvOpConstant,4),m.it,id_const_1,1}; sb_push_n(&te,w,4); }
     }
 
-    /* Optional gl_ViewIndex variable injection (TES path, goes in type section) */
     uint32_t inj_view_id = 0;
     if (will_inj_vi) {
         uint32_t d[]={op_(SpvOpDecorate,4),id_inj_view,SpvDecorationBuiltIn,SpvBuiltInViewIndex};
@@ -391,30 +320,24 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view; inj_view_id=id_inj_view;
     }
 
-    /* ── Body context (shared data for emit_body) ─────────────────────────── */
     BodyCtx bc = { &m, have_view, uv4, uint_, bt, id_cz, id_cl, id_cr,
                    use_pvna, id_pvnv_var, id_const_1 };
 
-    /* For GS we need emit_count * ~10 body IDs.  For VS/TES we need ~10. */
     uint32_t instances = is_gs ? (m.emit_count > 0 ? m.emit_count : 1) : 1;
-    /* Reserve body ID space: ~12 IDs per instance should be plenty */
-    (void)instances; /* nid is incremented inside emit_body per call */
+    (void)instances;
 
-    /* ── Find VS/TES single-body insertion point (not used for GS) ─────────── */
-    size_t ins_t = 0; /* insert type_extras before first OpFunction  */
-    size_t ins_b = 0; /* VS/TES: insert body before this word offset */
+    size_t ins_t = 0;
+    size_t ins_b = 0;
     for (size_t i=5; i<in_c; ) {
         uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
         if (!wcx||i+wcx>in_c) break;
         if (opx==SpvOpFunction && !ins_t) ins_t=i;
-        /* Path A: inject after last OpStore to pos_var */
         if (!m.pos_is_block && opx==SpvOpStore && wcx>=3 && in[i+1]==m.pos_var)
             ins_b=i+wcx;
         i+=wcx;
     }
     if (!ins_t) { sb_free(&te); return false; }
 
-    /* Path B fallback: inject before first OpReturn */
     if (!m.pos_is_block && ins_b==0 && !is_gs) {
         for (size_t i=5; i<in_c; ) {
             uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
@@ -424,7 +347,6 @@ bool spirv_patch_stereo_vertex(
         }
     }
     if (m.pos_is_block && !is_gs) {
-        /* Block path for VS/TES: inject before first OpReturn */
         for (size_t i=5; i<in_c; ) {
             uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
             if (!wcx) break;
@@ -435,61 +357,50 @@ bool spirv_patch_stereo_vertex(
     if (!is_gs && !ins_b) { sb_free(&te); return false; }
     if (!is_gs && ins_b < ins_t) { sb_free(&te); return false; }
 
-    /* ── Pass 2: Rebuild output ───────────────────────────────────────────── */
     bool need_mv_cap  = inj_view_id && !m.has_mv_cap;
-    bool need_pvna_cap = use_pvna;   /* always inject PerViewAttributesNV for VS/GS */
+    bool need_pvna_cap = use_pvna;
     bool mv_done      = false;
     bool pvna_done    = false;
     bool te_done      = false;
     bool vs_body_done = false;
 
     SpvBuf ob;
-    /* Estimate output size: in_c + type_extras + bodies */
     size_t est = in_c + te.n + instances*32 + 32;
     if (!sb_init(&ob, est)) { sb_free(&te); return false; }
     sb_push_n(&ob, in, 5);
-    ob.w[3] = nid + instances*12 + (use_pvna ? 16 : 0); /* upper bound; corrected below */
+    ob.w[3] = nid + instances*12 + (use_pvna ? 16 : 0);
 
     for (size_t i=5; i<in_c; ) {
-        /* Inject OpCapability MultiView before first instruction */
         if (!mv_done && need_mv_cap) {
             uint32_t c[]={op_(SpvOpCapability,2),SpvCapMV}; sb_push_n(&ob,c,2); mv_done=true; }
-        /* Inject OpCapability PerViewAttributesNV for VS/GS */
         if (!pvna_done && need_pvna_cap) {
             uint32_t c[]={op_(SpvOpCapability,2),SpvCapPVNA}; sb_push_n(&ob,c,2); pvna_done=true; }
 
-        /* Inject type_extras before first OpFunction */
         if (!te_done && i==ins_t) {
             sb_push_n(&ob,te.w,te.n); te_done=true; }
 
         uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
         if (!wcx||i+wcx>in_c) break;
 
-        /* Extend OpEntryPoint interface for injected view var (TES path) */
         if (opx==SpvOpEntryPoint && wcx>=4 && inj_view_id &&
             (in[i+1]==SpvExecVertex||in[i+1]==SpvExecGeometry||in[i+1]==SpvExecTessEval)) {
             sb_push(&ob, ((wcx+1)<<16)|SpvOpEntryPoint);
             sb_push_n(&ob, &in[i+1], wcx-1);
             sb_push(&ob, inj_view_id);
-            STEREO_LOG("OpEntryPoint extended: added view_var=%u", inj_view_id);
             i+=wcx; continue;
         }
-        /* Extend OpEntryPoint interface for pvnv_var (PVNA path: VS/GS) */
         if (opx==SpvOpEntryPoint && wcx>=4 && use_pvna && id_pvnv_var &&
             (in[i+1]==SpvExecVertex||in[i+1]==SpvExecGeometry||in[i+1]==SpvExecTessEval)) {
             sb_push(&ob, ((wcx+1)<<16)|SpvOpEntryPoint);
             sb_push_n(&ob, &in[i+1], wcx-1);
             sb_push(&ob, id_pvnv_var);
-            STEREO_LOG("OpEntryPoint extended: added pvnv_var=%u", id_pvnv_var);
             i+=wcx; continue;
         }
 
-        /* GS: inject fresh body before each OpEmitVertex */
         if (is_gs && opx==SpvOpEmitVertex) {
             emit_body(&ob, &bc, &nid);
         }
 
-        /* VS/TES: inject body at single insertion point */
         if (!is_gs && !vs_body_done && i==ins_b) {
             emit_body(&ob, &bc, &nid);
             vs_body_done=true;
@@ -498,15 +409,13 @@ bool spirv_patch_stereo_vertex(
         sb_push_n(&ob, &in[i], wcx);
         i+=wcx;
     }
-    /* Flush residuals */
     if (!te_done) sb_push_n(&ob,te.w,te.n);
     sb_free(&te);
 
-    /* Correct the ID bound now that we know the final nid */
     ob.w[3] = nid;
 
     *out=ob.w; *out_c=ob.n;
-    STEREO_LOG("Patched: model=%d  %zu→%zu words  bound=%u  vi=%d  pvna=%d  gs_inj=%u",
+    STEREO_LOG("Patched: model=%d  %zu->%zu words  bound=%u  vi=%d  pvna=%d  gs_inj=%u",
                m.exec_model, in_c, ob.n, nid, (int)(inj_view_id!=0),
                (int)use_pvna, is_gs?m.emit_count:1);
     return true;
@@ -558,7 +467,7 @@ static void cache_remove(StereoDevice *sd, VkShaderModule h)
             return; }
 }
 
-/* ── vkCreateShaderModule: cache patchable stages, pass through unmodified ── */
+/* ── vkCreateShaderModule: cache patchable stages ────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateShaderModule(
     VkDevice device, const VkShaderModuleCreateInfo *pCI,
@@ -581,20 +490,13 @@ stereo_CreateShaderModule(
 
 /* ── vkCreateGraphicsPipelines ──────────────────────────────────────────────
  *
- * Strategy (in priority order):
+ * Path A (ACTIVE): pipeline has app-provided TCS+TES → patch TES with
+ *   gl_ViewIndex.  Confirmed working on 426.06.
  *
- * 1. Pipeline already has TCS+TES (app-provided tessellation):
- *    Patch the TES with gl_ViewIndex stereo — CONFIRMED WORKING on 426.06.
- *
- * 2. Pipeline is VS-only or VS+GS, topology == TRIANGLE_LIST:
- *    Inject our own pass-through TCS + stereo TES between VS and the
- *    rasterizer (or between VS and GS).  The TES uses the same confirmed-
- *    working gl_ViewIndex path.  Tessellation level-1 = exact passthrough;
- *    no visual change except each vertex now gets the correct per-view
- *    position from the TES stage where gl_ViewIndex IS populated.
- *
- * 3. Fallback (non-triangle topology, or injection fails):
- *    PVNA / gl_ViewIndex attempt (produces mono on 426.06 but is harmless).
+ * Paths B+C (REMOVED): gl_ViewIndex injection in synthesized TES+GS or
+ *   directly in VS/GS produces mono output (gl_ViewIndex=0 for all views
+ *   on NVIDIA 426.06).  Non-TES pipelines use image-space horizontal-shift
+ *   stereo applied in compose_present (present_alt.c).
  */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(
@@ -609,18 +511,11 @@ stereo_CreateGraphicsPipelines(
     if (!sd->stereo.enabled)
         return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
 
-    /* Per-pipeline scratch — one entry per pipeline in the batch */
     VkShaderModule               *tmods  = calloc(N, sizeof(VkShaderModule));
     VkPipelineShaderStageCreateInfo **tst = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo    *infos = malloc(N * sizeof(*infos));
-    /* Per-pipeline modified IA/tess state for TCS+TES injection path */
-    VkPipelineInputAssemblyStateCreateInfo *ia_mods =
-        calloc(N, sizeof(*ia_mods));
-    VkPipelineTessellationStateCreateInfo  *ts_mods =
-        calloc(N, sizeof(*ts_mods));
-
-    if (!tmods||!tst||!infos||!ia_mods||!ts_mods) {
-        free(tmods); free(tst); free(infos); free(ia_mods); free(ts_mods);
+    if (!tmods||!tst||!infos) {
+        free(tmods); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
@@ -631,32 +526,37 @@ stereo_CreateGraphicsPipelines(
     for (uint32_t p = 0; p < N; p++) {
         const VkGraphicsPipelineCreateInfo *ci = &pCI[p];
 
-        /* ── Detect stage composition ──────────────────────────────────────── */
-        bool has_vs=false, has_gs=false, has_tcs=false, has_tes=false;
+        /* Detect tessellation evaluation stage */
+        bool has_tes = false;
         uint32_t tes_stage = ~0u;
         for (uint32_t s = 0; s < ci->stageCount; s++) {
-            VkShaderStageFlagBits sf = ci->pStages[s].stage;
-            if (sf == VK_SHADER_STAGE_VERTEX_BIT)                   has_vs  = true;
-            if (sf == VK_SHADER_STAGE_GEOMETRY_BIT)                 has_gs  = true;
-            if (sf == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)     has_tcs = true;
-            if (sf == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
+            if (ci->pStages[s].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
                 has_tes = true; tes_stage = s;
             }
         }
 
-        bool is_triangle_list = (ci->pInputAssemblyState &&
-            ci->pInputAssemblyState->topology == 3 /* TRIANGLE_LIST */);
-
-        /* ── Path A: existing TES → patch it (confirmed working) ──────────── */
+        /* ── Path A: existing app TES → patch with gl_ViewIndex ───────────── */
         if (has_tes && tes_stage != ~0u) {
             StereoShaderCache *e = cache_find(sd, ci->pStages[tes_stage].module);
-            if (!e) { STEREO_LOG("Pipeline %u: TES not cached — passthrough",p); continue; }
+            if (!e) {
+                STEREO_LOG("Pipeline %u: TES not cached — passthrough", p);
+                continue;
+            }
 
             uint32_t *patched=NULL; size_t pc2=0;
             if (!spirv_patch_stereo_vertex(e->spv, e->words, &patched, &pc2,
                     sd->stereo.left_eye_offset, sd->stereo.right_eye_offset,
-                    sd->stereo.convergence, /*inj_vi=*/true))
-                { STEREO_LOG("Pipeline %u: TES patch failed",p); continue; }
+                    sd->stereo.convergence, /*inj_vi=*/true)) {
+                STEREO_LOG("Pipeline %u: TES patch failed", p);
+                continue;
+            }
+
+            if (dump) {
+                char path[512];
+                _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_tes.spv",dump,dump_n++);
+                FILE *f=fopen(path,"wb");
+                if(f){fwrite(patched,4,pc2,f);fclose(f);}
+            }
 
             VkShaderModuleCreateInfo smci = {
                 VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,NULL,0,pc2*4,patched};
@@ -664,7 +564,9 @@ stereo_CreateGraphicsPipelines(
             VkResult mr = sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
             spirv_patched_free(patched);
             if (mr != VK_SUCCESS) {
-                STEREO_ERR("Pipeline %u: TES tmp module failed %d",p,mr); continue; }
+                STEREO_ERR("Pipeline %u: TES tmp module failed %d",p,mr);
+                continue;
+            }
 
             uint32_t sc = ci->stageCount;
             VkPipelineShaderStageCreateInfo *st = malloc(sc * sizeof(*st));
@@ -672,247 +574,20 @@ stereo_CreateGraphicsPipelines(
             memcpy(st, ci->pStages, sc * sizeof(*st));
             st[tes_stage].module = tmp;
             infos[p].pStages = st; tmods[p] = tmp; tst[p] = st;
-            STEREO_LOG("Pipeline %u: TES stereo patched → tmp=%p",
+            STEREO_LOG("Pipeline %u: Path A — TES stereo patched → tmp=%p",
                        p, (void*)(uintptr_t)tmp);
             continue;
         }
 
-        /* ── Path B: inject TCS+TES for VS/GS triangle pipelines ─────────── *
-         * Only for TRIANGLE_LIST — other topologies can't use triangle tess. */
-        /* Path B: TCS+TES injection.
-         * Only for VS+GS pipelines (original GS present).
-         * For VS-only pipelines, fall through to Path C which patches
-         * the VS directly with gl_ViewIndex — simpler and works on 426.06. */
-        if (has_vs && has_gs && !has_tcs && !has_tes && is_triangle_list) {
-            /* Find the VS cache entry to replicate its gl_PerVertex layout */
-            VkShaderModule vs_mod_handle = VK_NULL_HANDLE;
-            for (uint32_t s = 0; s < ci->stageCount; s++) {
-                if (ci->pStages[s].stage == VK_SHADER_STAGE_VERTEX_BIT) {
-                    vs_mod_handle = ci->pStages[s].module; break;
-                }
-            }
-            StereoShaderCache *vs_e = vs_mod_handle ? cache_find(sd, vs_mod_handle) : NULL;
-
-            /* Dump original GS SPIR-V for comparison with synthetic GS */
-            if (dump && has_gs) {
-                for (uint32_t _s=0; _s<ci->stageCount; _s++) {
-                    if (ci->pStages[_s].stage == VK_SHADER_STAGE_GEOMETRY_BIT) {
-                        StereoShaderCache *_ge = cache_find(sd, ci->pStages[_s].module);
-                        if (_ge && _ge->spv) {
-                            char _gp[512];
-                            _snprintf(_gp,sizeof(_gp)-1,"%s\\\\pipe%04d_orig_gs.spv",dump,dump_n);
-                            FILE *_gf=fopen(_gp,"wb");
-                            if(_gf){fwrite(_ge->spv,4,_ge->words,_gf);fclose(_gf);}
-                        }
-                        break;
-                    }
-                }
-            }
-            /* Build pass-through TCS matching VS output block */
-            uint32_t *tcs_spv=NULL; size_t tcs_c=0;
-            if (!build_tcs_spv(vs_e ? vs_e->spv : NULL,
-                               vs_e ? vs_e->words : 0,
-                               &tcs_spv, &tcs_c)) {
-                STEREO_LOG("Pipeline %u: build_tcs_spv failed",p); goto fallback; }
-
-            /* Build base TES, then patch it for stereo */
-            uint32_t *base_tes=NULL; size_t base_c=0;
-            if (!build_base_tes_spv(vs_e ? vs_e->spv : NULL,
-                         vs_e ? vs_e->words : 0,
-                         &base_tes, &base_c)) {
-                free(tcs_spv); STEREO_LOG("Pipeline %u: build_base_tes failed",p);
-                goto fallback; }
-
-            uint32_t *tes_patched=NULL; size_t tes_pc=0;
-            if (!spirv_patch_stereo_vertex(base_tes, base_c, &tes_patched, &tes_pc,
-                    sd->stereo.left_eye_offset, sd->stereo.right_eye_offset,
-                    sd->stereo.convergence, /*inj_vi=*/true)) {
-                free(tcs_spv); free(base_tes);
-                STEREO_LOG("Pipeline %u: TES stereo patch failed",p); goto fallback; }
-            free(base_tes);
-
-            if (dump) {
-                char path[512];
-                _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_tcs.spv",dump,dump_n);
-                FILE *f=fopen(path,"wb");
-                if(f){fwrite(tcs_spv,4,tcs_c,f);fclose(f);}
-                _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_tes.spv",dump,dump_n++);
-                f=fopen(path,"wb");
-                if(f){fwrite(tes_patched,4,tes_pc,f);fclose(f);}
-            }
-
-            VkShaderModule tcs_mod=VK_NULL_HANDLE, tes_mod=VK_NULL_HANDLE;
-            {
-                VkShaderModuleCreateInfo smci = {
-                    VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,NULL,0,
-                    tcs_c*4, tcs_spv};
-                sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tcs_mod);
-                free(tcs_spv);
-            }
-            {
-                VkShaderModuleCreateInfo smci = {
-                    VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,NULL,0,
-                    tes_pc*4, tes_patched};
-                sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tes_mod);
-                spirv_patched_free(tes_patched);
-            }
-
-            if (!tcs_mod || !tes_mod) {
-                if (tcs_mod) sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL);
-                if (tes_mod) sd->real.DestroyShaderModule(sd->real_device,tes_mod,NULL);
-                STEREO_LOG("Pipeline %u: TCS/TES module creation failed",p);
-                goto fallback;
-            }
-
-            /* Pool both modules for cleanup at DestroyDevice */
-            if (sd->tmp_module_count+1 < MAX_TMP_MODULES) {
-                sd->tmp_modules[sd->tmp_module_count++] = tcs_mod;
-                sd->tmp_modules[sd->tmp_module_count++] = tes_mod;
-            }
-
-            /* For VS-only pipelines (no GS): inject pass-through GS after TES.
-             * On NVIDIA 426.06, gl_ViewIndex in TES is only populated when a GS
-             * follows.  The pass-through GS also writes gl_Layer=gl_ViewIndex
-             * explicitly for correct multiview layer routing. */
-            VkShaderModule gs_pt_mod = VK_NULL_HANDLE;
-            uint32_t extra_stages = 2; /* TCS + TES */
-            if (!has_gs) {
-                uint32_t *gs_spv = NULL; size_t gs_c = 0;
-                if (build_passthrough_gs_spv(vs_e ? vs_e->spv : NULL,
-                                             vs_e ? vs_e->words : 0,
-                                             &gs_spv, &gs_c)) {
-                    VkShaderModuleCreateInfo gs_smci = {
-                        VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                        NULL, 0, gs_c*4, gs_spv};
-                    if (sd->real.CreateShaderModule(sd->real_device, &gs_smci,
-                                                    NULL, &gs_pt_mod) == VK_SUCCESS) {
-                        extra_stages = 3; /* TCS + TES + passthrough GS */
-                        STEREO_LOG("Pipeline %u: passthrough GS %p (gl_ViewIndex fix)",
-                       p, (void*)(uintptr_t)gs_pt_mod);
-                    if (dump && gs_spv) {
-                        char _gsp[512];
-                        _snprintf(_gsp,sizeof(_gsp)-1,"%s\\\\pipe%04d_synth_gs.spv",dump,dump_n);
-                        FILE *_gf=fopen(_gsp,"wb");
-                        if(_gf){fwrite(gs_spv,4,gs_c,_gf);fclose(_gf);}
-                    }
-                    free(gs_spv);
-                }
-                if (!gs_pt_mod)
-                    STEREO_LOG("Pipeline %u: passthrough GS build failed, TES only", p);
-            }
-
-            /* Build extended stage array: original stages + TCS + TES [+ GS] */
-            uint32_t orig_sc = ci->stageCount;
-            VkPipelineShaderStageCreateInfo *st =
-                malloc((orig_sc + extra_stages) * sizeof(*st));
-            if (!st) {
-                if (gs_pt_mod) sd->real.DestroyShaderModule(sd->real_device,gs_pt_mod,NULL);
-                goto fallback;
-            }
-            memcpy(st, ci->pStages, orig_sc * sizeof(*st));
-
-            VkPipelineShaderStageCreateInfo tcs_stage = {
-                VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                NULL, 0,
-                VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
-                tcs_mod, "main", NULL
-            };
-            VkPipelineShaderStageCreateInfo tes_stage_info = {
-                VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                NULL, 0,
-                VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
-                tes_mod, "main", NULL
-            };
-            st[orig_sc]     = tcs_stage;
-            st[orig_sc + 1] = tes_stage_info;
-            if (gs_pt_mod) {
-                VkPipelineShaderStageCreateInfo gs_pt_stage = {
-                    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                    NULL, 0,
-                    VK_SHADER_STAGE_GEOMETRY_BIT,
-                    gs_pt_mod, "main", NULL
-                };
-                st[orig_sc + 2] = gs_pt_stage;
-                if (sd->tmp_module_count < MAX_TMP_MODULES)
-                    sd->tmp_modules[sd->tmp_module_count++] = gs_pt_mod;
-            }
-
-            /* Modified input assembly: PATCH_LIST */
-            ia_mods[p] = *ci->pInputAssemblyState;
-            ia_mods[p].topology = 10; /* VK_PRIMITIVE_TOPOLOGY_PATCH_LIST */
-            ia_mods[p].primitiveRestartEnable = 0;
-
-            /* Tessellation state */
-            ts_mods[p].sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
-            ts_mods[p].pNext = NULL;
-            ts_mods[p].flags = 0;
-            ts_mods[p].patchControlPoints = 3;
-
-            infos[p].stageCount          = orig_sc + extra_stages;
-            infos[p].pStages             = st;
-            infos[p].pInputAssemblyState = &ia_mods[p];
-            infos[p].pTessellationState  = &ts_mods[p];
-            tst[p] = st; /* track for free() */
-
-            STEREO_LOG("Pipeline %u: injected TCS+TES (TRIANGLE_LIST→PATCH_LIST, "
-                       "tcs=%p tes=%p)",
-                       p, (void*)(uintptr_t)tcs_mod, (void*)(uintptr_t)tes_mod);
-            continue;
-        }
-
-        fallback:
-        /* ── Path C: PVNA / gl_ViewIndex attempt (fallback, usually mono) ── */
-        {
-            /* Find last pre-rast stage: GS(2)>TES(1)>VS(0) */
-            int best=-1; uint32_t bst=~0u;
-            for (uint32_t s=0;s<ci->stageCount;s++) {
-                VkShaderStageFlagBits sf=ci->pStages[s].stage;
-                int pr=(sf==VK_SHADER_STAGE_GEOMETRY_BIT)               ?2:
-                       (sf==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)?1:
-                       (sf==VK_SHADER_STAGE_VERTEX_BIT)                 ?0:-1;
-                if(pr>best){best=pr;bst=s;}
-            }
-            if (bst==~0u) continue;
-
-            StereoShaderCache *e=cache_find(sd,ci->pStages[bst].module);
-            if (!e){ STEREO_LOG("Pipeline %u: stage %u not cached",p,bst); continue; }
-
-            uint32_t *patched=NULL; size_t pc2=0;
-            if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
-                    sd->stereo.left_eye_offset,sd->stereo.right_eye_offset,
-                    sd->stereo.convergence,sd->stereo.multiview))
-                { STEREO_LOG("Pipeline %u: patch failed",p); continue; }
-
-            if (dump) {
-                char path[512];
-                _snprintf(path,sizeof(path)-1,"%s\\pipe%04d_s%u.spv",dump,dump_n++,bst);
-                FILE *f=fopen(path,"wb");
-                if(f){fwrite(patched,4,pc2,f);fclose(f);}
-            }
-
-            VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                NULL,0,pc2*4,patched};
-            VkShaderModule tmp=VK_NULL_HANDLE;
-            VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
-            spirv_patched_free(patched);
-            if (mr!=VK_SUCCESS) {
-                STEREO_ERR("Pipeline %u: tmp module failed %d",p,mr); continue; }
-
-            uint32_t sc=ci->stageCount;
-            VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
-            if(!st){sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue;}
-            memcpy(st,ci->pStages,sc*sizeof(*st));
-            st[bst].module=tmp;
-            infos[p].pStages=st; tmods[p]=tmp; tst[p]=st;
-            STEREO_LOG("Pipeline %u: fallback patch stage %u → tmp=%p",
-                       p,bst,(void*)(uintptr_t)tmp);
-        }
+        /* Paths B and C removed: gl_ViewIndex injection non-functional on 426.06.
+         * Non-TES pipelines use image-space stereo in compose_present. */
+        STEREO_LOG("Pipeline %u: no app TES — image-space stereo via compose_present", p);
     }
 
     VkResult res = sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG("CreateGraphicsPipelines result=%d", res);
 
-    /* Pool all tmp modules — driver 426.06 holds SPIR-V refs past Create */
+    /* Pool tmp modules — driver 426.06 holds SPIR-V refs past Create */
     for (uint32_t p=0;p<N;p++) {
         if (tmods[p]) {
             if (sd->tmp_module_count < MAX_TMP_MODULES)
@@ -924,7 +599,7 @@ stereo_CreateGraphicsPipelines(
         }
         free(tst[p]);
     }
-    free(tmods); free(tst); free(infos); free(ia_mods); free(ts_mods);
+    free(tmods); free(tst); free(infos);
     return res;
 }
 
