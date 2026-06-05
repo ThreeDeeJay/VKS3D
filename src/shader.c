@@ -465,54 +465,71 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             StereoShaderCache *vs_e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!vs_e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); goto skip_b; }
 
-            /* Build TCS */
             uint32_t *tcs_spv=NULL; size_t tcs_c=0;
-            if (!build_tcs_spv(vs_e->spv, vs_e->words, &tcs_spv, &tcs_c)) {
-                STEREO_LOG("Pipe %u PathB: build_tcs_spv failed",p); goto skip_b; }
+            if (!build_tcs_spv(vs_e->spv, vs_e->words, &tcs_spv, &tcs_c))
+                { STEREO_LOG("Pipe %u PathB: TCS failed",p); goto skip_b; }
 
-            /* Build base TES */
             uint32_t *base_tes=NULL; size_t base_c=0;
-            if (!build_base_tes_spv(vs_e->spv, vs_e->words, &base_tes, &base_c)) {
-                free(tcs_spv); STEREO_LOG("Pipe %u PathB: build_base_tes_spv failed",p); goto skip_b; }
+            if (!build_base_tes_spv(vs_e->spv, vs_e->words, &base_tes, &base_c))
+                { free(tcs_spv); STEREO_LOG("Pipe %u PathB: TES base failed",p); goto skip_b; }
 
-            /* Patch TES:
-             * VS-only (no GS): PVNA — inj_vi=false → use_pvna=true for TES
-             * VS+GS          : gl_ViewIndex — inj_vi=true, original GS ensures it works */
-            bool tes_inj_vi = has_gs;
+            /* Always use gl_ViewIndex in TES.
+             * VS+GS: original GS follows → confirmed working on 426.06.
+             * VS-only: synthetic GS follows (with OpExtInstImport "GLSL.std.450" added
+             *   to signal GLSL origin to driver — experimental). */
             uint32_t *tes_p=NULL; size_t tes_pc=0;
-            if (!spirv_patch_stereo_vertex(base_tes,base_c,&tes_p,&tes_pc,
-                    lo,ro,conv,tes_inj_vi)) {
-                free(tcs_spv); free(base_tes);
-                STEREO_LOG("Pipe %u PathB: TES patch failed",p); goto skip_b; }
+            if (!spirv_patch_stereo_vertex(base_tes,base_c,&tes_p,&tes_pc,lo,ro,conv,true))
+                { free(tcs_spv); free(base_tes); goto skip_b; }
             free(base_tes);
+
+            /* For VS-only: build synthetic passthrough GS (has OpExtInstImport) */
+            uint32_t *gs_spv=NULL; size_t gs_c=0;
+            if (!has_gs && !build_passthrough_gs_spv(vs_e->spv, vs_e->words, &gs_spv, &gs_c))
+                { free(tcs_spv); spirv_patched_free(tes_p); goto skip_b; }
 
             if (dump) {
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_b_tcs.spv",dump,dump_n);
+                _snprintf(dp,sizeof(dp)-1,"%s\\\\pipe%04d_b_tcs.spv",dump,dump_n);
                 FILE *f=fopen(dp,"wb"); if(f){fwrite(tcs_spv,4,tcs_c,f);fclose(f);}
-                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_b_tes.spv",dump,dump_n++);
+                _snprintf(dp,sizeof(dp)-1,"%s\\\\pipe%04d_b_tes.spv",dump,dump_n);
                 f=fopen(dp,"wb"); if(f){fwrite(tes_p,4,tes_pc,f);fclose(f);}
+                if (gs_spv) {
+                    _snprintf(dp,sizeof(dp)-1,"%s\\\\pipe%04d_b_synth_gs.spv",dump,dump_n);
+                    f=fopen(dp,"wb"); if(f){fwrite(gs_spv,4,gs_c,f);fclose(f);}
+                }
+                dump_n++;
             }
 
-            /* Create modules */
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-            VkShaderModule tcs_mod=VK_NULL_HANDLE, tes_mod=VK_NULL_HANDLE;
+            VkShaderModule tcs_mod=VK_NULL_HANDLE, tes_mod=VK_NULL_HANDLE, gs_mod=VK_NULL_HANDLE;
             smci.codeSize=tcs_c*4; smci.pCode=tcs_spv;
             VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tcs_mod);
             free(tcs_spv);
-            if (mr!=VK_SUCCESS) { spirv_patched_free(tes_p); goto skip_b; }
+            if (mr!=VK_SUCCESS) { spirv_patched_free(tes_p); free(gs_spv); goto skip_b; }
             smci.codeSize=tes_pc*4; smci.pCode=tes_p;
             mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tes_mod);
             spirv_patched_free(tes_p);
             if (mr!=VK_SUCCESS) {
-                sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL); goto skip_b; }
+                sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL);
+                free(gs_spv); goto skip_b;
+            }
+            if (gs_spv) {
+                smci.codeSize=gs_c*4; smci.pCode=gs_spv;
+                mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&gs_mod);
+                free(gs_spv);
+                if (mr!=VK_SUCCESS) {
+                    sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL);
+                    sd->real.DestroyShaderModule(sd->real_device,tes_mod,NULL);
+                    goto skip_b;
+                }
+            }
 
-            /* Build stage array: original stages + TCS + TES */
-            uint32_t orig_sc=ci->stageCount, new_sc=orig_sc+2;
-            VkPipelineShaderStageCreateInfo *st=malloc(new_sc*sizeof(*st));
+            uint32_t orig_sc=ci->stageCount, extra=2+(gs_mod?1:0);
+            VkPipelineShaderStageCreateInfo *st=malloc((orig_sc+extra)*sizeof(*st));
             if (!st) {
                 sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL);
                 sd->real.DestroyShaderModule(sd->real_device,tes_mod,NULL);
+                if (gs_mod) sd->real.DestroyShaderModule(sd->real_device,gs_mod,NULL);
                 goto skip_b;
             }
             memcpy(st,ci->pStages,orig_sc*sizeof(*st));
@@ -522,19 +539,25 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             st[orig_sc+1]=(VkPipelineShaderStageCreateInfo){
                 VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,
                 VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,tes_mod,"main",NULL};
+            if (gs_mod)
+                st[orig_sc+2]=(VkPipelineShaderStageCreateInfo){
+                    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,
+                    VK_SHADER_STAGE_GEOMETRY_BIT,gs_mod,"main",NULL};
 
-            /* Patch IA topology → PATCH_LIST */
-            if (ci->pInputAssemblyState)
-                ia_arr[p]=*ci->pInputAssemblyState;
+            if (ci->pInputAssemblyState) ia_arr[p]=*ci->pInputAssemblyState;
             ia_arr[p].topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
-
-            infos[p].stageCount=new_sc;
+            infos[p].stageCount=orig_sc+extra;
             infos[p].pStages=st;
             infos[p].pTessellationState=&s_tess3;
             infos[p].pInputAssemblyState=&ia_arr[p];
             tst[p]=st; tmp_tes[p]=tes_mod; tmp_tcs[p]=tcs_mod;
-            STEREO_LOG("Pipe %u: Path B — TCS+TES injected (%s), has_gs=%d",
-                       p, tes_inj_vi?"gl_ViewIndex":"PVNA", (int)has_gs);
+            if (gs_mod) {
+                if (sd->tmp_module_count<MAX_TMP_MODULES)
+                    sd->tmp_modules[sd->tmp_module_count++]=gs_mod;
+                else sd->real.DestroyShaderModule(sd->real_device,gs_mod,NULL);
+            }
+            STEREO_LOG("Pipe %u: Path B — TCS+TES%s (gl_ViewIndex, has_gs=%d)",
+                       p, gs_mod?"+synthGS_ExtInstImport":"", (int)has_gs);
             continue;
         }
 

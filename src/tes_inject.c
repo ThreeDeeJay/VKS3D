@@ -682,6 +682,7 @@ bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
 
     /* ── ID allocation ─────────────────────────────────────────────────── */
     uint32_t nid=1;
+    uint32_t id_glsl_std=nid++;  /* GLSL.std.450 import — always in GLSL-compiled shaders */
     uint32_t id_void=nid++, id_int=nid++, id_uint=nid++;
     uint32_t id_float=nid++, id_v4=nid++;
 
@@ -750,6 +751,9 @@ bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
     {uint32_t w[]={OP(17,2),1}; sb_pn(&b,w,2);}    /* Shader    */
     {uint32_t w[]={OP(17,2),2}; sb_pn(&b,w,2);}    /* Geometry  */
     {uint32_t w[]={OP(17,2),5296}; sb_pn(&b,w,2);} /* MultiView */
+    /* OpExtInstImport "GLSL.std.450": signals GLSL origin to NVIDIA driver,
+     * which may be required for correct per-view TES execution on 426.06. */
+    {uint32_t w[]={OP(11,6),id_glsl_std,0x4C534C47u,0x6474732Eu,0x3035342Eu,0x00000000u}; sb_pn(&b,w,6);}
 
     /* MemoryModel */
     {uint32_t w[]={OP(14,3),0,1}; sb_pn(&b,w,3);}
