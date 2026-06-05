@@ -4,18 +4,14 @@
  * Path A  — pipeline has existing app TCS+TES: patch TES with gl_ViewIndex.
  *            Confirmed working on 426.06.
  *
- * Path B  — VS-only TRIANGLE_LIST: inject TCS + TES, patch TES with PVNA
- *              (gl_PositionPerViewNV[0/1]).  TES is last pre-rast stage.
- *              PVNA in TES-as-last-stage is untested; gl_ViewIndex in VS and
- *              in synthetic-GS pipelines is confirmed non-functional.
- *
- *          — VS+GS TRIANGLE_LIST: inject TCS + TES before the existing GS,
+ * Path B  — VS+GS TRIANGLE_LIST: inject TCS+TES before the existing GS,
  *              patch TES with gl_ViewIndex (inj_vi=true).
- *              CONFIRMED working on 426.06: TES gl_ViewIndex is valid when
- *              a GLSL-compiled original GS follows.
+ *              CONFIRMED working on 426.06.
  *
- * Paths B+C using synthetic passthrough GS: removed.  gl_ViewIndex in a
- * hand-assembled GS does not work on 426.06 (both views always 0).
+ *          — VS-only TRIANGLE_LIST: inject TCS+TES (no GS), patch TES with
+ *              gl_ViewIndex. TES-as-last-stage gl_ViewIndex: untested on 426.06.
+ *              Note: PVNA in TES-as-last-stage crashes on this driver.
+ *              Note: synthetic GS (hand-assembled) + TCS+TES also crashes.
  */
 
 #include <stdio.h>
@@ -25,7 +21,6 @@
 #include "stereo_icd.h"
 #include "tes_inject.h"
 
-/* ── SPIR-V opcodes ───────────────────────────────────────────────────────── */
 #define SpvOpCapability       17
 #define SpvOpEntryPoint       15
 #define SpvOpTypeBool         20
@@ -63,7 +58,6 @@
 #define SpvCapMV             5296
 #define SPIRV_MAGIC  0x07230203u
 
-/* ── Dynamic word buffer ──────────────────────────────────────────────────── */
 typedef struct { uint32_t *w; size_t n, cap; } SpvBuf;
 static bool sb_init(SpvBuf *b, size_t c)
     { b->w=malloc(c*4); b->n=0; b->cap=c; return !!b->w; }
@@ -76,7 +70,6 @@ static bool sb_push_n(SpvBuf *b, const uint32_t *v, size_t c)
     { for(size_t i=0;i<c;i++) if(!sb_push(b,v[i])) return false; return true; }
 static inline uint32_t op_(uint32_t op, uint32_t wc) { return (wc<<16)|op; }
 
-/* ── Module info ──────────────────────────────────────────────────────────── */
 typedef struct {
     const uint32_t *words; size_t count;
     uint32_t bound;
@@ -133,7 +126,6 @@ static void do_scan(SpvMod *m, bool p2)
 static void spv_scan(SpvMod *m)
     { m->bound=m->words[3]; do_scan(m,false); if(m->pos_is_block) do_scan(m,true); }
 
-/* ── Body context ─────────────────────────────────────────────────────────── */
 typedef struct {
     SpvMod  *m;
     bool     have_view, pvna;
@@ -190,7 +182,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
 }
 
-/* ── SPIR-V patcher ─────────────────────────────────────────────────────── */
 bool spirv_patch_stereo_vertex(
     const uint32_t *in, size_t in_c,
     uint32_t **out, size_t *out_c,
@@ -202,9 +193,8 @@ bool spirv_patch_stereo_vertex(
     spv_scan(&m);
     if (!m.is_patchable||!m.pos_var) return false;
 
-    /* PVNA for TES-as-last-stage (inj_vi=false).
-     * gl_ViewIndex injection for everything else (VS, GS, TES with GS). */
-    bool use_pvna = (m.exec_model == SpvExecTessEval && !inj_vi);
+    /* PVNA crashes on 426.06 for all stages tested. Use gl_ViewIndex everywhere. */
+    bool use_pvna = false;
     bool is_gs    = (m.exec_model == SpvExecGeometry);
 
     uint32_t nid=m.bound;
@@ -214,10 +204,7 @@ bool spirv_patch_stereo_vertex(
 
     uint32_t id_uint_type=0,id_const_2=0,id_v4arr2=0,id_ptr_v4arr2=0,
              id_pvnv_var=0,id_const_1=0;
-    if (use_pvna) {
-        id_uint_type=nid++; id_const_2=nid++; id_v4arr2=nid++;
-        id_ptr_v4arr2=nid++; id_pvnv_var=nid++; id_const_1=nid++;
-    }
+    /* use_pvna always false — no PVNA allocation needed */
 
     bool     will_inj_vi = !use_pvna && inj_vi && !m.view_var && m.it;
     uint32_t id_inj_view = will_inj_vi ? nid++ : 0;
@@ -241,25 +228,16 @@ bool spirv_patch_stereo_vertex(
     { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cl,0}; memcpy(&w[3],&lo,4); sb_push_n(&te,w,4); }
     { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cr,0}; memcpy(&w[3],&ro,4); sb_push_n(&te,w,4); }
 
-    if (use_pvna) {
-        { uint32_t w[]={op_(SpvOpTypeInt,4),id_uint_type,32,0};                     sb_push_n(&te,w,4); }
-        { uint32_t w[]={op_(SpvOpConstant,4),id_uint_type,id_const_2,2};            sb_push_n(&te,w,4); }
-        { uint32_t w[]={op_(SpvOpTypeArray,4),id_v4arr2,m.v4t,id_const_2};         sb_push_n(&te,w,4); }
-        { uint32_t w[]={op_(SpvOpTypePointer,4),id_ptr_v4arr2,SpvStorageOutput,id_v4arr2}; sb_push_n(&te,w,4); }
-        { uint32_t w[]={op_(SpvOpDecorate,4),id_pvnv_var,SpvDecorationBuiltIn,SpvBuiltInPVNV}; sb_push_n(&te,w,4); }
-        { uint32_t w[]={op_(SpvOpVariable,4),id_ptr_v4arr2,id_pvnv_var,SpvStorageOutput}; sb_push_n(&te,w,4); }
-        if (m.it) { uint32_t w[]={op_(SpvOpConstant,4),m.it,id_const_1,1}; sb_push_n(&te,w,4); }
-    }
+    uint32_t inj_view_id = 0;
     if (will_inj_vi) {
         { uint32_t d[]={op_(SpvOpDecorate,4),id_inj_view,SpvDecorationBuiltIn,SpvBuiltInViewIndex}; sb_push_n(&te,d,4); }
         { uint32_t v[]={op_(SpvOpVariable,4),uint_,id_inj_view,SpvStorageInput}; sb_push_n(&te,v,4); }
-        m.view_var=id_inj_view;
+        m.view_var=id_inj_view; inj_view_id=id_inj_view;
     }
 
     BodyCtx bc={&m, have_view, uv4, uint_, bt, id_cz, id_cl, id_cr,
-                use_pvna, id_pvnv_var, id_const_1};
+                false, 0, 0};
 
-    /* Find function start and injection point */
     size_t ins_t=0, ins_b=0;
     for (size_t i=5;i<in_c;) {
         uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
@@ -284,29 +262,26 @@ bool spirv_patch_stereo_vertex(
     if (!is_gs && !ins_b) { sb_free(&te); return false; }
     if (!is_gs && ins_b < ins_t) { sb_free(&te); return false; }
 
-    bool need_mv_cap   = id_inj_view && !m.has_mv_cap;
-    bool need_pvna_cap = use_pvna;
-    bool mv_done=false, pvna_done=false, te_done=false, body_done=false;
+    bool need_mv_cap = inj_view_id && !m.has_mv_cap;
+    bool mv_done=false, te_done=false, body_done=false;
 
     SpvBuf ob;
     if (!sb_init(&ob, in_c + te.n + 64)) { sb_free(&te); return false; }
     sb_push_n(&ob, in, 5);
 
     for (size_t i=5;i<in_c;) {
-        if (!mv_done   && need_mv_cap)   { uint32_t c[]={op_(SpvOpCapability,2),SpvCapMV};   sb_push_n(&ob,c,2); mv_done=true; }
-        if (!pvna_done && need_pvna_cap) { uint32_t c[]={op_(SpvOpCapability,2),SpvCapPVNA}; sb_push_n(&ob,c,2); pvna_done=true; }
+        if (!mv_done && need_mv_cap) {
+            uint32_t c[]={op_(SpvOpCapability,2),SpvCapMV}; sb_push_n(&ob,c,2); mv_done=true; }
         if (!te_done && i==ins_t) { sb_push_n(&ob,te.w,te.n); te_done=true; }
 
         uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
         if (!wcx||i+wcx>in_c) break;
 
-        /* Extend OpEntryPoint interface for injected variable */
-        uint32_t inj_id = id_inj_view ? id_inj_view : (use_pvna ? id_pvnv_var : 0);
-        if (inj_id && opx==SpvOpEntryPoint && wcx>=4 &&
+        if (inj_view_id && opx==SpvOpEntryPoint && wcx>=4 &&
             (in[i+1]==SpvExecVertex||in[i+1]==SpvExecGeometry||in[i+1]==SpvExecTessEval)) {
             sb_push(&ob, ((wcx+1)<<16)|SpvOpEntryPoint);
             sb_push_n(&ob, &in[i+1], wcx-1);
-            sb_push(&ob, inj_id);
+            sb_push(&ob, inj_view_id);
             i+=wcx; continue;
         }
 
@@ -320,15 +295,13 @@ bool spirv_patch_stereo_vertex(
     sb_free(&te);
     ob.w[3]=nid;
     *out=ob.w; *out_c=ob.n;
-    STEREO_LOG("Patched: model=%d  %zu->%zu words  bound=%u  vi=%d  pvna=%d  gs_inj=%u",
+    STEREO_LOG("Patched: model=%d  %zu->%zu words  bound=%u  vi=%d  pvna=0  gs_inj=%u",
                m.exec_model, in_c, ob.n, nid,
-               (int)(id_inj_view!=0), (int)use_pvna,
-               is_gs?m.emit_count:1u);
+               (int)(inj_view_id!=0), is_gs?m.emit_count:1u);
     return true;
 }
 void spirv_patched_free(uint32_t *w) { free(w); }
 
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
 static bool is_patchable_spv(const uint32_t *w, size_t c)
 {
     if (c<5||w[0]!=SPIRV_MAGIC) return false;
@@ -361,7 +334,6 @@ static void cache_remove(StereoDevice *sd, VkShaderModule h) {
             sd->shader_cache[i]=sd->shader_cache[--sd->shader_cache_count]; return; }
 }
 
-/* ── vkCreateShaderModule ────────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
                           const VkAllocationCallbacks *pAlloc, VkShaderModule *pSM)
@@ -377,7 +349,6 @@ stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
     return VK_SUCCESS;
 }
 
-/* ── vkCreateGraphicsPipelines ──────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     uint32_t N, const VkGraphicsPipelineCreateInfo *pCI,
@@ -389,7 +360,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     if (!sd->stereo.enabled)
         return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
 
-    /* Per-pipeline temporaries */
     VkShaderModule               *tmp_tes  = calloc(N, sizeof(VkShaderModule));
     VkShaderModule               *tmp_tcs  = calloc(N, sizeof(VkShaderModule));
     VkPipelineShaderStageCreateInfo **tst  = calloc(N, sizeof(void*));
@@ -404,7 +374,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     static const VkPipelineTessellationStateCreateInfo s_tess3 = {
         VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO, NULL, 0, 3 };
 
-    const char *dump  = stereo_getenv("VKS3D_DUMP_SPIRV");
+    const char *dump = stereo_getenv("VKS3D_DUMP_SPIRV");
     static int  dump_n = 0;
     float lo=sd->stereo.left_eye_offset, ro=sd->stereo.right_eye_offset,
           conv=sd->stereo.convergence;
@@ -412,24 +382,19 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
 
-        /* Detect stages */
         bool has_vs=false, has_gs=false, has_tcs=false, has_tes=false;
         bool is_tri_list = ci->pInputAssemblyState &&
                            ci->pInputAssemblyState->topology==3;
         uint32_t vs_stage=~0u, tes_stage=~0u;
         for (uint32_t s=0;s<ci->stageCount;s++) {
             VkShaderStageFlagBits st=ci->pStages[s].stage;
-            if (st==VK_SHADER_STAGE_VERTEX_BIT)
-                { has_vs=true; vs_stage=s; }
-            if (st==VK_SHADER_STAGE_GEOMETRY_BIT)
-                has_gs=true;
-            if (st==VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)
-                has_tcs=true;
-            if (st==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
-                { has_tes=true; tes_stage=s; }
+            if (st==VK_SHADER_STAGE_VERTEX_BIT)                      { has_vs=true; vs_stage=s; }
+            if (st==VK_SHADER_STAGE_GEOMETRY_BIT)                      has_gs=true;
+            if (st==VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)          has_tcs=true;
+            if (st==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)   { has_tes=true; tes_stage=s; }
         }
 
-        /* ── Path A: existing app TES ──────────────────────────────────── */
+        /* ── Path A: existing app TCS+TES ─────────────────────────────── */
         if (has_tes && tes_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[tes_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
@@ -446,7 +411,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             VkShaderModule tmp=VK_NULL_HANDLE;
             VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
             spirv_patched_free(patched);
-            if (mr!=VK_SUCCESS) { STEREO_ERR("Pipe %u PathA: tmp module err %d",p,mr); continue; }
+            if (mr!=VK_SUCCESS) { STEREO_ERR("Pipe %u PathA: tmp err %d",p,mr); continue; }
             uint32_t sc=ci->stageCount;
             VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
@@ -457,10 +422,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             continue;
         }
 
-        /* ── Path B: inject TCS+TES for TRIANGLE_LIST pipelines ─────────
-         * VS-only: TES patched with PVNA (inj_vi=false) — TES is last pre-rast.
-         * VS+GS  : TES patched with gl_ViewIndex (inj_vi=true) — original GS
-         *          follows, confirmed working on 426.06.                  */
+        /* ── Path B: inject TCS+TES for TRIANGLE_LIST ──────────────────
+         * VS+GS : TES gets gl_ViewIndex, original GS follows → CONFIRMED WORKING.
+         * VS-only: TES gets gl_ViewIndex, TES is last pre-rast → UNTESTED.
+         *   - Synthetic GS crashes on 426.06 regardless of content.
+         *   - PVNA also crashes on 426.06.
+         *   - gl_ViewIndex in TES-as-last-stage: unknown, worth trying.  */
         if (has_vs && !has_tcs && is_tri_list && vs_stage!=~0u) {
             StereoShaderCache *vs_e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!vs_e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); goto skip_b; }
@@ -471,65 +438,42 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
             uint32_t *base_tes=NULL; size_t base_c=0;
             if (!build_base_tes_spv(vs_e->spv, vs_e->words, &base_tes, &base_c))
-                { free(tcs_spv); STEREO_LOG("Pipe %u PathB: TES base failed",p); goto skip_b; }
+                { free(tcs_spv); goto skip_b; }
 
-            /* Always use gl_ViewIndex in TES.
-             * VS+GS: original GS follows → confirmed working on 426.06.
-             * VS-only: synthetic GS follows (with OpExtInstImport "GLSL.std.450" added
-             *   to signal GLSL origin to driver — experimental). */
+            /* gl_ViewIndex in TES (inj_vi=true).
+             * For VS+GS: original GS ensures gl_ViewIndex works in TES (confirmed).
+             * For VS-only: TES-as-last-stage with gl_ViewIndex — untested on 426.06. */
             uint32_t *tes_p=NULL; size_t tes_pc=0;
-            if (!spirv_patch_stereo_vertex(base_tes,base_c,&tes_p,&tes_pc,lo,ro,conv,true))
-                { free(tcs_spv); free(base_tes); goto skip_b; }
+            if (!spirv_patch_stereo_vertex(base_tes,base_c,&tes_p,&tes_pc,
+                    lo,ro,conv,/*inj_vi=*/true)) {
+                free(tcs_spv); free(base_tes); goto skip_b; }
             free(base_tes);
-
-            /* For VS-only: build synthetic passthrough GS (has OpExtInstImport) */
-            uint32_t *gs_spv=NULL; size_t gs_c=0;
-            if (!has_gs && !build_passthrough_gs_spv(vs_e->spv, vs_e->words, &gs_spv, &gs_c))
-                { free(tcs_spv); spirv_patched_free(tes_p); goto skip_b; }
 
             if (dump) {
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\\\pipe%04d_b_tcs.spv",dump,dump_n);
+                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_b_tcs.spv",dump,dump_n);
                 FILE *f=fopen(dp,"wb"); if(f){fwrite(tcs_spv,4,tcs_c,f);fclose(f);}
-                _snprintf(dp,sizeof(dp)-1,"%s\\\\pipe%04d_b_tes.spv",dump,dump_n);
+                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_b_tes.spv",dump,dump_n++);
                 f=fopen(dp,"wb"); if(f){fwrite(tes_p,4,tes_pc,f);fclose(f);}
-                if (gs_spv) {
-                    _snprintf(dp,sizeof(dp)-1,"%s\\\\pipe%04d_b_synth_gs.spv",dump,dump_n);
-                    f=fopen(dp,"wb"); if(f){fwrite(gs_spv,4,gs_c,f);fclose(f);}
-                }
-                dump_n++;
             }
 
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-            VkShaderModule tcs_mod=VK_NULL_HANDLE, tes_mod=VK_NULL_HANDLE, gs_mod=VK_NULL_HANDLE;
+            VkShaderModule tcs_mod=VK_NULL_HANDLE, tes_mod=VK_NULL_HANDLE;
             smci.codeSize=tcs_c*4; smci.pCode=tcs_spv;
             VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tcs_mod);
             free(tcs_spv);
-            if (mr!=VK_SUCCESS) { spirv_patched_free(tes_p); free(gs_spv); goto skip_b; }
+            if (mr!=VK_SUCCESS) { spirv_patched_free(tes_p); goto skip_b; }
             smci.codeSize=tes_pc*4; smci.pCode=tes_p;
             mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tes_mod);
             spirv_patched_free(tes_p);
             if (mr!=VK_SUCCESS) {
-                sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL);
-                free(gs_spv); goto skip_b;
-            }
-            if (gs_spv) {
-                smci.codeSize=gs_c*4; smci.pCode=gs_spv;
-                mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&gs_mod);
-                free(gs_spv);
-                if (mr!=VK_SUCCESS) {
-                    sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL);
-                    sd->real.DestroyShaderModule(sd->real_device,tes_mod,NULL);
-                    goto skip_b;
-                }
-            }
+                sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL); goto skip_b; }
 
-            uint32_t orig_sc=ci->stageCount, extra=2+(gs_mod?1:0);
-            VkPipelineShaderStageCreateInfo *st=malloc((orig_sc+extra)*sizeof(*st));
+            uint32_t orig_sc=ci->stageCount;
+            VkPipelineShaderStageCreateInfo *st=malloc((orig_sc+2)*sizeof(*st));
             if (!st) {
                 sd->real.DestroyShaderModule(sd->real_device,tcs_mod,NULL);
                 sd->real.DestroyShaderModule(sd->real_device,tes_mod,NULL);
-                if (gs_mod) sd->real.DestroyShaderModule(sd->real_device,gs_mod,NULL);
                 goto skip_b;
             }
             memcpy(st,ci->pStages,orig_sc*sizeof(*st));
@@ -539,38 +483,28 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             st[orig_sc+1]=(VkPipelineShaderStageCreateInfo){
                 VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,
                 VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,tes_mod,"main",NULL};
-            if (gs_mod)
-                st[orig_sc+2]=(VkPipelineShaderStageCreateInfo){
-                    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,NULL,0,
-                    VK_SHADER_STAGE_GEOMETRY_BIT,gs_mod,"main",NULL};
 
             if (ci->pInputAssemblyState) ia_arr[p]=*ci->pInputAssemblyState;
             ia_arr[p].topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
-            infos[p].stageCount=orig_sc+extra;
+            infos[p].stageCount=orig_sc+2;
             infos[p].pStages=st;
             infos[p].pTessellationState=&s_tess3;
             infos[p].pInputAssemblyState=&ia_arr[p];
             tst[p]=st; tmp_tes[p]=tes_mod; tmp_tcs[p]=tcs_mod;
-            if (gs_mod) {
-                if (sd->tmp_module_count<MAX_TMP_MODULES)
-                    sd->tmp_modules[sd->tmp_module_count++]=gs_mod;
-                else sd->real.DestroyShaderModule(sd->real_device,gs_mod,NULL);
-            }
-            STEREO_LOG("Pipe %u: Path B — TCS+TES%s (gl_ViewIndex, has_gs=%d)",
-                       p, gs_mod?"+synthGS_ExtInstImport":"", (int)has_gs);
+            STEREO_LOG("Pipe %u: Path B — TCS+TES (gl_ViewIndex, has_gs=%d)",
+                       p, (int)has_gs);
             continue;
         }
 
-        STEREO_LOG("Pipe %u: no TES/TRIANGLE_LIST — image-space stereo only",p);
+        STEREO_LOG("Pipe %u: no TES/TRIANGLE_LIST — image-space stereo",p);
         continue;
 skip_b:
-        STEREO_LOG("Pipe %u: Path B failed — passthrough",p);
+        STEREO_LOG("Pipe %u: Path B failed — image-space stereo",p);
     }
 
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG("CreateGraphicsPipelines result=%d",res);
 
-    /* Pool temp modules */
     for (uint32_t p=0;p<N;p++) {
         if (tmp_tcs[p]) {
             if (sd->tmp_module_count<MAX_TMP_MODULES)
@@ -588,7 +522,6 @@ skip_b:
     return res;
 }
 
-/* ── vkDestroyShaderModule ───────────────────────────────────────────────── */
 VKAPI_ATTR void VKAPI_CALL
 stereo_DestroyShaderModule(VkDevice device, VkShaderModule sm,
                            const VkAllocationCallbacks *pAlloc)
