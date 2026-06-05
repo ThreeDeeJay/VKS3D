@@ -422,13 +422,13 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             continue;
         }
 
-        /* ── Path B: inject TCS+TES for TRIANGLE_LIST ──────────────────
-         * VS+GS : TES gets gl_ViewIndex, original GS follows → CONFIRMED WORKING.
-         * VS-only: TES gets gl_ViewIndex, TES is last pre-rast → UNTESTED.
-         *   - Synthetic GS crashes on 426.06 regardless of content.
-         *   - PVNA also crashes on 426.06.
-         *   - gl_ViewIndex in TES-as-last-stage: unknown, worth trying.  */
-        if (has_vs && !has_tcs && is_tri_list && vs_stage!=~0u) {
+        /* ── Path B: inject TCS+TES for VS+GS TRIANGLE_LIST ───────────
+         * Requires an original app GS: driver only supports multiview+tess when
+         * GS follows TES on 426.06.  All other combinations crash:
+         *   - TES-as-last-stage (no GS): crashes, both PVNA and gl_ViewIndex
+         *   - Synthetic GS + TES: crashes regardless of GS content
+         * VS-only pipelines fall through to image-space stereo.            */
+        if (has_vs && has_gs && !has_tcs && is_tri_list && vs_stage!=~0u) {
             StereoShaderCache *vs_e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!vs_e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); goto skip_b; }
 
@@ -491,8 +491,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pTessellationState=&s_tess3;
             infos[p].pInputAssemblyState=&ia_arr[p];
             tst[p]=st; tmp_tes[p]=tes_mod; tmp_tcs[p]=tcs_mod;
-            STEREO_LOG("Pipe %u: Path B — TCS+TES (gl_ViewIndex, has_gs=%d)",
-                       p, (int)has_gs);
+            STEREO_LOG("Pipe %u: Path B — TCS+TES+origGS (gl_ViewIndex)",p);
             continue;
         }
 
