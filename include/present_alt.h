@@ -57,6 +57,15 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
                      uint32_t wait_sem_count,
                      const VkSemaphore *wait_sems);
 
+/* ── GPU blit compose (SBS / TAB) ─────────────────────────────────────────
+ * Creates a real VkSwapchainKHR and blits both eye layers on the GPU.
+ * Replaces the CPU readback + GDI path for 2 orders of magnitude better perf. */
+bool     gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR surface);
+void     gpu_compose_sc_destroy(StereoDevice *sd, StereoSwapchain *sc);
+VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
+                             VkQueue queue, uint32_t wait_sem_count,
+                             const VkSemaphore *wait_sems);
+
 /* ── Compose modes (SBS / TAB / Interlaced) ─────────────────────────────── */
 
 /* Initialise DXGI windowed swap chain for composed output on sc->hwnd.

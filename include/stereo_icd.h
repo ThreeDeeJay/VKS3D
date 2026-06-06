@@ -391,6 +391,11 @@ typedef struct StereoSwapchain {
     VkCommandBuffer  *barrier_cmds;
     VkFence          *barrier_fences;
     uint32_t          acquire_idx;
+    /* GPU blit compose — replaces CPU readback + GDI for SBS/TAB */
+    VkImage    *comp_sc_images;     /* real output swapchain images  */
+    uint32_t    comp_sc_count;
+    VkSemaphore comp_acquire_sem;   /* image-available semaphore     */
+    VkSemaphore comp_blit_done_sem; /* blit-complete semaphore       */
     VkImage          *sbs_images;
     uint32_t          sbs_width;
     StereoPresentMode present_mode;
