@@ -651,78 +651,63 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
 
     uint32_t w = sc->app_width, h = sc->app_height;
 
-    /* Layer 0 is the only valid layer — gl_ViewIndex is non-functional on
-     * NVIDIA 426.06, so both layers contain the same rendered image.
-     * Image-space stereo: apply a horizontal pixel shift to create genuine
-     * binocular disparity without relying on per-vertex gl_ViewIndex.      */
-    const uint8_t *src = (const uint8_t *)sc->cpu_map;   /* layer 0 */
+    /* When gl_ViewIndex worked correctly, both layers contain unique per-view
+     * renders: layer 0 = left eye, layer 1 = right eye.  Use them directly.
+     * Fall back to image-space shift of layer 0 when only one layer is valid
+     * (e.g. multiview disabled, or driver did not populate gl_ViewIndex).   */
+    bool two_layers = sd->stereo.multiview && sd->multiview_pass_exists;
+    const uint8_t *left_eye  = (const uint8_t *)sc->cpu_map;
+    const uint8_t *right_eye = two_layers ? left_eye + sc->cpu_eye_bytes : left_eye;
     uint8_t *out = (uint8_t *)sd->comp_composed;
 
     switch (mode) {
 
     case STEREO_PRESENT_SBS: {
-        /* shift_px: how many source pixels to shift per eye.
-         * separation is in NDC clip-space units; map to pixels at half-width.
-         * Left  eye: sample from src[x + shift_px]  → content shifts left
-         *            (simulates camera moved to the right).
-         * Right eye: sample from src[x - shift_px]  → content shifts right
-         *            (simulates camera moved to the left).
-         * Binocular disparity = 2 * shift_px pixels at every depth.        */
         uint32_t hw = w / 2;
-        int shift_px = (int)(sd->stereo.separation * (float)w * 0.5f);
-        STEREO_LOG("[Compose SBS] shift_px=%d  separation=%.4f  w=%u",
-                   shift_px, sd->stereo.separation, w);
+        /* two_layers: no shift needed — each layer is a distinct eye render.
+         * single layer: apply image-space shift to fake depth from screen plane. */
+        int shift_px = two_layers ? 0 : (int)(sd->stereo.separation * (float)w * 0.5f);
+        STEREO_LOG("[Compose SBS] two_layers=%d  shift_px=%d  sep=%.4f  w=%u",
+                   (int)two_layers, shift_px, sd->stereo.separation, w);
         for (uint32_t y = 0; y < h; y++) {
-            const uint8_t *row  = src + y * w * 4;
+            const uint8_t *lrow = left_eye  + y * w * 4;
+            const uint8_t *rrow = right_eye + y * w * 4;
             uint8_t       *orow = out + y * w * 4;
             for (uint32_t x = 0; x < hw; x++) {
-                /* Scale output x [0, hw) → source x [0, w) */
                 int sx = (int)((uint32_t)x * w / hw);
-
-                /* Left eye: shift right in source */
-                int sl = sx + shift_px;
-                if (sl >= (int)w) sl = (int)w - 1;
-
-                /* Right eye: shift left in source */
-                int sr = sx - shift_px;
-                if (sr < 0) sr = 0;
-
-                memcpy(orow + x * 4,        row + sl * 4, 4);
-                memcpy(orow + (hw + x) * 4, row + sr * 4, 4);
+                int sl = sx + shift_px; if (sl >= (int)w) sl = (int)w - 1;
+                int sr = sx - shift_px; if (sr < 0) sr = 0;
+                memcpy(orow + x * 4,        lrow + sl * 4, 4);
+                memcpy(orow + (hw + x) * 4, rrow + sr * 4, 4);
             }
         }
         break;
     }
 
     case STEREO_PRESENT_TAB: {
-        /* Top-and-bottom: same image-space approach, vertical shift. */
         uint32_t hh = h / 2;
-        int shift_py = (int)(sd->stereo.separation * (float)h * 0.5f);
+        int shift_py = two_layers ? 0 : (int)(sd->stereo.separation * (float)h * 0.5f);
         for (uint32_t y = 0; y < hh; y++) {
             int sy = (int)((uint32_t)y * h / hh);
-
             int sl = sy + shift_py; if (sl >= (int)h) sl = (int)h - 1;
             int sr = sy - shift_py; if (sr < 0) sr = 0;
-
-            memcpy(out + y * w * 4,        src + sl * w * 4, w * 4);
-            memcpy(out + (hh + y) * w * 4, src + sr * w * 4, w * 4);
+            memcpy(out + y * w * 4,        left_eye  + sl * w * 4, w * 4);
+            memcpy(out + (hh + y) * w * 4, right_eye + sr * w * 4, w * 4);
         }
         break;
     }
 
     case STEREO_PRESENT_INTERLACED:
     default: {
-        /* Row-interleaved: alternate rows from left/right-shifted source. */
-        int shift_px = (int)(sd->stereo.separation * (float)w * 0.5f);
+        int shift_px = two_layers ? 0 : (int)(sd->stereo.separation * (float)w * 0.5f);
         for (uint32_t y = 0; y < h; y++) {
-            const uint8_t *row  = src + y * w * 4;
+            const uint8_t *erow = ((y & 1) ? right_eye : left_eye) + y * w * 4;
             uint8_t       *orow = out + y * w * 4;
-            int shift = (y & 1) ? -shift_px : shift_px;
+            int shift = two_layers ? 0 : ((y & 1) ? -shift_px : shift_px);
             for (uint32_t x = 0; x < w; x++) {
                 int sx = (int)x + shift;
-                if (sx < 0) sx = 0;
-                if (sx >= (int)w) sx = (int)w - 1;
-                memcpy(orow + x * 4, row + sx * 4, 4);
+                if (sx < 0) sx = 0; if (sx >= (int)w) sx = (int)w - 1;
+                memcpy(orow + x * 4, erow + sx * 4, 4);
             }
         }
         break;
