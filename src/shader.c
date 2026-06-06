@@ -152,18 +152,21 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     } else { pptr=m->pos_var; }
     { uint32_t w[]={op_(SpvOpLoad,4),m->v4t,lp,pptr}; sb_push_n(out,w,4); }
 
+    /* Depth-varying stereo: add a constant to clip-space x.
+     * After perspective divide by w, this becomes offset/w — near vertices
+     * get more parallax than far vertices, giving true 3D depth perception.
+     * (The old offset*w formula produced constant NDC shift at all depths,
+     * making every surface appear at the same flat stereo depth plane.)    */
     uint32_t lv=c->have_view?(*nid)++:0, isl=c->have_view?(*nid)++:0,
-             sel=(*nid)++, pw=(*nid)++, dlt=(*nid)++,
+             sel=(*nid)++,
              px=(*nid)++, nx=(*nid)++, np=(*nid)++;
     if (c->have_view && m->view_var && m->it && c->bt) {
         { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
         { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
         { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cl,c->cr}; sb_push_n(out,w,6); }
     } else { sel=c->cl; }
-    { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,pw,lp,3u};    sb_push_n(out,w,5); }
-    { uint32_t w[]={op_(SpvOpFMul,5),m->ft,dlt,sel,pw};              sb_push_n(out,w,5); }
     { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u};    sb_push_n(out,w,5); }
-    { uint32_t w[]={op_(SpvOpFAdd,5),m->ft,nx,px,dlt};               sb_push_n(out,w,5); }
+    { uint32_t w[]={op_(SpvOpFAdd,5),m->ft,nx,px,sel};               sb_push_n(out,w,5); }
     { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
     { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
 }
