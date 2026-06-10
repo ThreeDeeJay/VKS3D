@@ -381,6 +381,27 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 { has_tes=true; tes_stage=s; }
         }
 
+        /* ── Determine if this pipeline's render pass has multiview ──────
+         * gl_ViewIndex is 0 in non-multiview passes.  Patching VS/TES there
+         * bakes in left_eye_offset for ALL draws → deferred G-buffer / shadow
+         * passes render from left-eye-only perspective → monoscopic output.
+         * Leave non-multiview pass shaders unpatched so G-buffer, shadow maps,
+         * and post-fx all render from the CENTER perspective; the multiview
+         * final (swapchain) pass applies per-eye shift → image-space stereo
+         * for deferred content with shadows/lights/bloom properly aligned.   */
+        bool in_mv_rp = false;
+        if (ci->renderPass != VK_NULL_HANDLE) {
+            StereoRenderPassInfo *rpi = stereo_rp_lookup(sd, ci->renderPass);
+            in_mv_rp = (rpi != NULL && rpi->has_multiview);
+        }
+        if (!in_mv_rp) {
+            uint32_t att = ci->pColorBlendState ? ci->pColorBlendState->attachmentCount : 0;
+            STEREO_LOG("Pipe %u: rp=%p NOT multiview (attachments~%u) "
+                       "— center perspective (deferred/shadow/post-fx alignment)",
+                       p, (void*)(uintptr_t)ci->renderPass, att);
+            continue;
+        }
+
         /* ── Path A: patch existing TES ──────────────────────────────── */
         if (has_tes && tes_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[tes_stage].module);
@@ -444,7 +465,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             continue;
         }
 
-        STEREO_LOG("Pipe %u: no patchable stage found",p);
+        STEREO_LOG("Pipe %u: no patchable VS/TES stage (stageCount=%u has_vs=%d has_tes=%d has_tcs=%d) — not patched",
+                   p, ci->stageCount, has_vs, has_tes, has_tcs);
     }
 
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
