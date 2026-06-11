@@ -434,6 +434,10 @@ typedef struct StereoDevice {
 
     VkImage                intercepted_depth[MAX_DEPTH_IMAGES];
     uint32_t               intercepted_depth_count;
+    /* Color attachment images also upgraded to arrayLayers=2 for deferred stereo */
+#define MAX_COLOR_IMAGES        2048
+    VkImage                intercepted_color[MAX_COLOR_IMAGES];
+    uint32_t               intercepted_color_count;
     uint32_t               stereo_w, stereo_h;
     stereo_mutex_t         lock;
 

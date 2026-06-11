@@ -1,32 +1,19 @@
 /*
- * render_pass.c — Multiview render pass injection
+ * render_pass.c — Multiview render pass injection (ALL passes)
  *
- * Injects VK_KHR_multiview (viewMask=0x3) into swapchain output render
- * passes so the GPU renders both eye layers in a single geometry pass.
+ * Injects VK_KHR_multiview (viewMask=0x3) into EVERY render pass so the GPU
+ * renders both eye layers in a single geometry pass for complete deferred
+ * stereo support (G-buffer, shadow, lighting, post-FX, swapchain).
  *
- * A render pass is identified as a "swapchain output pass" when any
- * attachment has finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR.
- * Those attachments are simultaneously patched to COLOR_ATTACHMENT_OPTIMAL
- * because our render target is a plain VkImage, not a swapchain image, and
- * transitioning it to PRESENT_SRC_KHR is undefined behaviour.
+ * Combined with:
+ *   stereo_CreateImage     : ALL 2D attachment images upgraded to arrayLayers=2
+ *   stereo_CreateImageView : ALL attachment views upgraded to VK_IMAGE_VIEW_TYPE_2D_ARRAY
+ *   shader.c geometry path : VS patched with gl_ViewIndex (per-eye geometry)
+ *   shader.c quad path     : FS patched with sampler2DArray + gl_ViewIndex
+ *                            (deferred/post-fx passes read correct eye layer)
  *
- * Offscreen passes (shadow maps, cubemaps, G-buffers) never have
- * PRESENT_SRC_KHR and pass through unchanged.
- *
- * REQUIREMENT: All framebuffer attachments must have arrayLayers >= 2.
- * Color attachments: guaranteed by alloc_external_stereo_image (arrayLayers=2).
- * Depth/stencil attachments: guaranteed by stereo_CreateImage intercept,
- *   which upgrades matching depth images to arrayLayers=2 before the app
- *   creates its framebuffers.
- *
- * sd->multiview_pass_exists is set to true the first time we successfully
- * inject multiview into a render pass.  This flag is read by alt_cpu_readback
- * in present_alt.c to decide how many layers to read back:
- *   - false → only layer 0 was rendered (multiview not injected, e.g. DXVK
- *             render passes that don't use PRESENT_SRC_KHR final layout) →
- *             read layer_count=1, use same image for both eyes (no stereo but
- *             not black / not a GPU crash from reading UNDEFINED layer 1).
- *   - true  → both layers were rendered → read layer_count=2.
+ * PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL layout patch still applied to
+ * any attachment that uses it (the final swapchain pass).
  */
 
 #include <stdio.h>
@@ -34,7 +21,6 @@
 #include <string.h>
 #include "stereo_icd.h"
 
-/* viewMask bit 0 = view 0 (left), bit 1 = view 1 (right) */
 #define STEREO_VIEW_MASK        0x3u
 #define STEREO_CORRELATION_MASK 0x3u
 
@@ -48,80 +34,93 @@ stereo_CreateRenderPass(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("stereo_CreateRenderPass: attachments=%u", pCreateInfo ? pCreateInfo->attachmentCount : 0);
+    STEREO_LOG("stereo_CreateRenderPass: attachments=%u",
+               pCreateInfo ? pCreateInfo->attachmentCount : 0);
 
-    /* Detect swapchain output pass */
-    bool is_swapchain_pass = false;
-    if (sd->stereo.enabled && pCreateInfo->attachmentCount > 0) {
-        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
-            if (pCreateInfo->pAttachments[i].finalLayout
-                    == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-                is_swapchain_pass = true;
-                break;
-            }
+    /* If stereo disabled or multiview disabled: still patch PRESENT_SRC_KHR
+     * layout (required so our plain VkImage render target can accept it),
+     * but skip multiview injection. */
+    if (!sd->stereo.enabled || !sd->stereo.multiview) {
+        /* Check if any attachment needs layout patch */
+        bool needs_patch = false;
+        for (uint32_t i = 0; pCreateInfo && i < pCreateInfo->attachmentCount; i++) {
+            if (pCreateInfo->pAttachments[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                { needs_patch = true; break; }
         }
-    }
-
-    if (!is_swapchain_pass) {
-        VkResult res = sd->real.CreateRenderPass(
-            sd->real_device, pCreateInfo, pAllocator, pRenderPass);
+        if (!needs_patch) {
+            VkResult res = sd->real.CreateRenderPass(
+                sd->real_device, pCreateInfo, pAllocator, pRenderPass);
+            if (res == VK_SUCCESS && sd->render_pass_count < MAX_RENDER_PASSES) {
+                StereoRenderPassInfo *rpi = &sd->render_passes[sd->render_pass_count++];
+                rpi->handle = *pRenderPass; rpi->has_multiview = false;
+                rpi->view_mask = 0; rpi->subpass_count = pCreateInfo->subpassCount;
+            }
+            return res;
+        }
+        VkAttachmentDescription *pa =
+            malloc(pCreateInfo->attachmentCount * sizeof(VkAttachmentDescription));
+        if (!pa) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            pa[i] = pCreateInfo->pAttachments[i];
+            if (pa[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                pa[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        }
+        VkRenderPassCreateInfo mod = *pCreateInfo;
+        mod.pAttachments = pa;
+        VkResult res = sd->real.CreateRenderPass(sd->real_device, &mod, pAllocator, pRenderPass);
+        free(pa);
         if (res == VK_SUCCESS && sd->render_pass_count < MAX_RENDER_PASSES) {
             StereoRenderPassInfo *rpi = &sd->render_passes[sd->render_pass_count++];
-            rpi->handle        = *pRenderPass;
-            rpi->has_multiview = false;
-            rpi->view_mask     = 0;
-            rpi->subpass_count = pCreateInfo->subpassCount;
+            rpi->handle = *pRenderPass; rpi->has_multiview = false;
+            rpi->view_mask = 0; rpi->subpass_count = pCreateInfo->subpassCount;
         }
         return res;
     }
 
-    /* ── Patch PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL ─────────────────
-     * Our stereo render target is a plain VkImage (not a real swapchain image)
-     * so it cannot transition to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR.          */
-    VkAttachmentDescription *patched =
-        malloc(pCreateInfo->attachmentCount * sizeof(VkAttachmentDescription));
-    if (!patched) return VK_ERROR_OUT_OF_HOST_MEMORY;
-
-    for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
-        patched[i] = pCreateInfo->pAttachments[i];
-        if (patched[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-            patched[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    /* ── Multiview injection for ALL render passes ─────────────────────────
+     * Patch PRESENT_SRC_KHR → COLOR_ATTACHMENT_OPTIMAL for any attachment
+     * that has it (the swapchain output attachment).  All other attachments
+     * (G-buffer, shadow map, lighting output) keep their original layouts.  */
+    VkAttachmentDescription *patched = NULL;
+    if (pCreateInfo->attachmentCount > 0) {
+        patched = malloc(pCreateInfo->attachmentCount * sizeof(VkAttachmentDescription));
+        if (!patched) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            patched[i] = pCreateInfo->pAttachments[i];
+            if (patched[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                patched[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        }
     }
 
     VkRenderPassCreateInfo modified = *pCreateInfo;
-    modified.pAttachments = patched;
+    if (patched) modified.pAttachments = patched;
 
-    uint32_t *view_masks = NULL, *corr_masks = NULL;
-    int32_t  *view_offsets = NULL;
-    VkRenderPassMultiviewCreateInfo mv;
+    uint32_t sc = pCreateInfo->subpassCount;
+    uint32_t *view_masks   = malloc(sc * sizeof(uint32_t));
+    uint32_t *corr_masks   = malloc(sc * sizeof(uint32_t));
+    int32_t  *view_offsets = pCreateInfo->dependencyCount
+        ? calloc(pCreateInfo->dependencyCount, sizeof(int32_t)) : NULL;
 
-    if (sd->stereo.multiview) {
-        uint32_t sc = pCreateInfo->subpassCount;
-        view_masks   = malloc(sc * sizeof(uint32_t));
-        corr_masks   = malloc(sc * sizeof(uint32_t));
-        view_offsets = pCreateInfo->dependencyCount
-            ? calloc(pCreateInfo->dependencyCount, sizeof(int32_t)) : NULL;
-        if (!view_masks || !corr_masks ||
-            (pCreateInfo->dependencyCount && !view_offsets)) {
-            free(patched); free(view_masks); free(corr_masks); free(view_offsets);
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-        for (uint32_t i = 0; i < sc; i++) {
-            view_masks[i] = STEREO_VIEW_MASK;
-            corr_masks[i] = STEREO_CORRELATION_MASK;
-        }
-        mv = (VkRenderPassMultiviewCreateInfo){
-            .sType                = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
-            .pNext                = pCreateInfo->pNext,
-            .subpassCount         = sc,
-            .pViewMasks           = view_masks,
-            .dependencyCount      = pCreateInfo->dependencyCount,
-            .pViewOffsets         = view_offsets,
-            .correlationMaskCount = sc,
-            .pCorrelationMasks    = corr_masks,
-        };
-        modified.pNext = &mv;
+    if (!view_masks || !corr_masks ||
+        (pCreateInfo->dependencyCount && !view_offsets)) {
+        free(patched); free(view_masks); free(corr_masks); free(view_offsets);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
+    for (uint32_t i = 0; i < sc; i++) {
+        view_masks[i] = STEREO_VIEW_MASK;
+        corr_masks[i] = STEREO_CORRELATION_MASK;
+    }
+    VkRenderPassMultiviewCreateInfo mv = {
+        .sType                = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
+        .pNext                = pCreateInfo->pNext,
+        .subpassCount         = sc,
+        .pViewMasks           = view_masks,
+        .dependencyCount      = pCreateInfo->dependencyCount,
+        .pViewOffsets         = view_offsets,
+        .correlationMaskCount = sc,
+        .pCorrelationMasks    = corr_masks,
+    };
+    modified.pNext = &mv;
 
     VkResult res = sd->real.CreateRenderPass(
         sd->real_device, &modified, pAllocator, pRenderPass);
@@ -131,22 +130,16 @@ stereo_CreateRenderPass(
     if (res == VK_SUCCESS && sd->render_pass_count < MAX_RENDER_PASSES) {
         StereoRenderPassInfo *rpi = &sd->render_passes[sd->render_pass_count++];
         rpi->handle        = *pRenderPass;
-        rpi->has_multiview = sd->stereo.multiview;
-        rpi->view_mask     = sd->stereo.multiview ? STEREO_VIEW_MASK : 0;
-        rpi->subpass_count = pCreateInfo->subpassCount;
-
-        if (sd->stereo.multiview) {
-            /* Signal to present_alt.c that at least one multiview pass exists.
-             * alt_cpu_readback uses this to decide layer_count (1 vs 2).     */
-            sd->multiview_pass_exists = true;
-            STEREO_LOG("RenderPass %p: multiview injected (viewMask=0x%x, %u subpasses) "
-                       "[INI: multiview=1] → multiview_pass_exists=true",
-                       (void*)*pRenderPass, STEREO_VIEW_MASK, pCreateInfo->subpassCount);
-        } else {
-            STEREO_LOG("RenderPass %p: finalLayout patched (multiview disabled — "
-                       "set multiview=1 in vks3d.ini to enable)",
-                       (void*)*pRenderPass);
-        }
+        rpi->has_multiview = true;
+        rpi->view_mask     = STEREO_VIEW_MASK;
+        rpi->subpass_count = sc;
+        sd->multiview_pass_exists = true;
+        STEREO_LOG("RenderPass %p: multiview injected (viewMask=0x%x, %u att, %u subpasses)",
+                   (void*)*pRenderPass, STEREO_VIEW_MASK,
+                   pCreateInfo->attachmentCount, sc);
+    } else if (res != VK_SUCCESS) {
+        STEREO_ERR("RenderPass: multiview injection failed: %d (att=%u)", res,
+                   pCreateInfo->attachmentCount);
     }
     return res;
 }
@@ -162,30 +155,13 @@ stereo_CreateRenderPass2KHR(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-
     if (!sd->real.CreateRenderPass2KHR)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-
-    /* Detect swapchain output pass */
-    bool is_swapchain_pass = false;
-    if (sd->stereo.enabled && pCreateInfo->attachmentCount > 0) {
-        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
-            if (pCreateInfo->pAttachments[i].finalLayout
-                    == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-                is_swapchain_pass = true;
-                break;
-            }
-        }
-    }
-
-    if (!is_swapchain_pass) {
-        return sd->real.CreateRenderPass2KHR(
-            sd->real_device, pCreateInfo, pAllocator, pRenderPass);
-    }
 
     uint32_t ac = pCreateInfo->attachmentCount;
     uint32_t sc = pCreateInfo->subpassCount;
 
+    /* Patch PRESENT_SRC_KHR layouts */
     VkAttachmentDescription2 *patched_atts = NULL;
     if (ac > 0) {
         patched_atts = malloc(ac * sizeof(VkAttachmentDescription2));
@@ -196,56 +172,47 @@ stereo_CreateRenderPass2KHR(
                 patched_atts[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
     }
-
     VkRenderPassCreateInfo2 modified = *pCreateInfo;
     if (patched_atts) modified.pAttachments = patched_atts;
 
-    if (sd->stereo.multiview) {
-        VkSubpassDescription2 *subpasses = malloc(sc * sizeof(VkSubpassDescription2));
-        uint32_t *corr = malloc(sc * sizeof(uint32_t));
-        if (!subpasses || !corr) {
-            free(patched_atts); free(subpasses); free(corr);
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-        for (uint32_t i = 0; i < sc; i++) {
-            subpasses[i]          = pCreateInfo->pSubpasses[i];
-            subpasses[i].viewMask = STEREO_VIEW_MASK;
-            corr[i]               = STEREO_CORRELATION_MASK;
-        }
-        modified.pSubpasses              = subpasses;
-        modified.correlatedViewMaskCount = sc;
-        modified.pCorrelatedViewMasks    = corr;
-
+    if (!sd->stereo.enabled || !sd->stereo.multiview) {
         VkResult res = sd->real.CreateRenderPass2KHR(
             sd->real_device, &modified, pAllocator, pRenderPass);
-        free(patched_atts); free(subpasses); free(corr);
+        free(patched_atts);
         if (res == VK_SUCCESS && sd->render_pass_count < MAX_RENDER_PASSES) {
             StereoRenderPassInfo *rpi = &sd->render_passes[sd->render_pass_count++];
-            rpi->handle        = *pRenderPass;
-            rpi->has_multiview = true;
-            rpi->view_mask     = STEREO_VIEW_MASK;
-            rpi->subpass_count = sc;
-            sd->multiview_pass_exists = true;
-            STEREO_LOG("RenderPass2 %p: multiview injected (viewMask=0x%x) "
-                       "[INI: multiview=1] → multiview_pass_exists=true",
-                       (void*)*pRenderPass, STEREO_VIEW_MASK);
+            rpi->handle = *pRenderPass; rpi->has_multiview = false;
+            rpi->view_mask = 0; rpi->subpass_count = sc;
         }
         return res;
     }
 
+    VkSubpassDescription2 *subpasses = malloc(sc * sizeof(VkSubpassDescription2));
+    uint32_t *corr = malloc(sc * sizeof(uint32_t));
+    if (!subpasses || !corr) {
+        free(patched_atts); free(subpasses); free(corr);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    for (uint32_t i = 0; i < sc; i++) {
+        subpasses[i]          = pCreateInfo->pSubpasses[i];
+        subpasses[i].viewMask = STEREO_VIEW_MASK;
+        corr[i]               = STEREO_CORRELATION_MASK;
+    }
+    modified.pSubpasses              = subpasses;
+    modified.correlatedViewMaskCount = sc;
+    modified.pCorrelatedViewMasks    = corr;
+
     VkResult res = sd->real.CreateRenderPass2KHR(
         sd->real_device, &modified, pAllocator, pRenderPass);
-
-    free(patched_atts);
+    free(patched_atts); free(subpasses); free(corr);
 
     if (res == VK_SUCCESS && sd->render_pass_count < MAX_RENDER_PASSES) {
         StereoRenderPassInfo *rpi = &sd->render_passes[sd->render_pass_count++];
-        rpi->handle        = *pRenderPass;
-        rpi->has_multiview = false;
-        rpi->view_mask     = 0;
-        rpi->subpass_count = pCreateInfo->subpassCount;
-        STEREO_LOG("RenderPass2 %p: finalLayout patched (multiview disabled)",
-                   (void*)*pRenderPass);
+        rpi->handle = *pRenderPass; rpi->has_multiview = true;
+        rpi->view_mask = STEREO_VIEW_MASK; rpi->subpass_count = sc;
+        sd->multiview_pass_exists = true;
+        STEREO_LOG("RenderPass2 %p: multiview injected (viewMask=0x%x, %u att)",
+                   (void*)*pRenderPass, STEREO_VIEW_MASK, ac);
     }
     return res;
 }

@@ -497,22 +497,44 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    bool intercept = sd->stereo.enabled && sd->stereo.multiview
+    bool base = sd->stereo.enabled && sd->stereo.multiview
         && pCreateInfo
-        && is_depth_format(pCreateInfo->format)
         && pCreateInfo->imageType   == VK_IMAGE_TYPE_2D
         && pCreateInfo->arrayLayers == 1
-        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT
+        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT;
+
+    /* Depth/stencil attachments — upgraded for multiview depth per eye */
+    bool intercept_depth = base
         && (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-    if (!intercept)
+    /* Color attachments that are also sampled (render-to-texture G-buffers,
+     * shadow-color, lighting output, post-fx targets).  mipLevels==1 and
+     * extent > 1x1 to avoid upgrading LUTs or procedural textures.
+     * Also intercept non-sampled color attachments (needed so every
+     * framebuffer attachment has 2 layers for the multiview render pass). */
+    bool intercept_color = base
+        && pCreateInfo->mipLevels == 1
+        && pCreateInfo->extent.width  > 1
+        && pCreateInfo->extent.height > 1
+        && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+
+    if (!intercept_depth && !intercept_color)
         return sd->real.CreateImage(sd->real_device, pCreateInfo, pAllocator, pImage);
 
     VkImageCreateInfo modified = *pCreateInfo;
     modified.arrayLayers = 2;
     VkResult res = sd->real.CreateImage(sd->real_device, &modified, pAllocator, pImage);
-    if (res == VK_SUCCESS && sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
-        sd->intercepted_depth[sd->intercepted_depth_count++] = *pImage;
+    if (res == VK_SUCCESS) {
+        if (intercept_depth && sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
+            sd->intercepted_depth[sd->intercepted_depth_count++] = *pImage;
+        if (intercept_color && sd->intercepted_color_count < MAX_COLOR_IMAGES)
+            sd->intercepted_color[sd->intercepted_color_count++] = *pImage;
+        STEREO_LOG("stereo_CreateImage: upgraded %p → arrayLayers=2 (%s) [%ux%u mip=%u]",
+                   (void*)*pImage,
+                   intercept_depth ? "depth" : "color",
+                   pCreateInfo->extent.width, pCreateInfo->extent.height,
+                   pCreateInfo->mipLevels);
+    }
     return res;
 }
 
@@ -535,6 +557,8 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     }
     for (uint32_t i = 0; i < sd->intercepted_depth_count && !needs_upgrade; i++)
         if (sd->intercepted_depth[i] == pCreateInfo->image) needs_upgrade = true;
+    for (uint32_t i = 0; i < sd->intercepted_color_count && !needs_upgrade; i++)
+        if (sd->intercepted_color[i] == pCreateInfo->image) needs_upgrade = true;
 
     if (!needs_upgrade)
         return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
