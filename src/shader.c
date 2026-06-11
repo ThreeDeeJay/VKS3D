@@ -561,7 +561,7 @@ static bool is_patchable_spv(const uint32_t *w, size_t c)
         uint32_t op=w[i]&0xffff, wc=w[i]>>16; if (!wc||i+wc>c) break;
         if (op==SpvOpEntryPoint&&wc>=2) {
             uint32_t e=w[i+1];
-            return e==SpvExecVertex||e==SpvExecGeometry||e==SpvExecTessEval;
+            return e==SpvExecVertex||e==SpvExecGeometry||e==SpvExecTessEval||e==4/*Fragment*/;
         }
         i+=wc;
     }
