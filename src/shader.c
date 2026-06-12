@@ -664,6 +664,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             continue;
         }
 
+        /* Substitute multiview render pass for pipeline compilation.
+         * Pipelines must be compiled against the MV render pass so the driver
+         * enables multiview optimisation and gl_ViewIndex receives the real
+         * per-view index (0 or 1).  Render-pass compatibility rules allow these
+         * pipelines to be used with both MV and non-MV framebuffers since
+         * viewMask is not part of the compatibility criteria. */
+        if (rpi && rpi->mv_handle)
+            infos[p].renderPass = rpi->mv_handle;
+
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
          * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from

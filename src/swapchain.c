@@ -497,11 +497,18 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
+    /* Only upgrade images at EXACTLY the swapchain extent.
+     * Shadow maps (2048x2048), environment probes (1284x1284), and other
+     * auxiliary images at different sizes are left at arrayLayers=1 so
+     * their framebuffers remain non-multiview (no per-eye shadow artifacts). */
     bool base = sd->stereo.enabled && sd->stereo.multiview
         && pCreateInfo
         && pCreateInfo->imageType   == VK_IMAGE_TYPE_2D
         && pCreateInfo->arrayLayers == 1
-        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT;
+        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT
+        && sd->stereo_w > 0 /* swapchain must be created first */
+        && pCreateInfo->extent.width  == sd->stereo_w
+        && pCreateInfo->extent.height == sd->stereo_h;
 
     /* Depth/stencil attachments — upgraded for multiview depth per eye */
     bool intercept_depth = base
@@ -570,5 +577,9 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         upgraded.subresourceRange.layerCount = 2;
     STEREO_LOG("stereo_CreateImageView: upgraded %p → 2D_ARRAY/layerCount=2 [multiview=1]",
                (void*)(uintptr_t)pCreateInfo->image);
-    return sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
+    VkResult _r = sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
+    /* Track upgraded views for framebuffer multiview detection */
+    if (_r == VK_SUCCESS && sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
+        sd->upgraded_views[sd->upgraded_view_count++] = *pView;
+    return _r;
 }

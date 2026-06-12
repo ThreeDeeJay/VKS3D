@@ -414,6 +414,7 @@ typedef struct StereoRenderPassInfo {
     bool          has_multiview;
     uint32_t      view_mask;
     uint32_t      subpass_count;
+    VkRenderPass  mv_handle;     /* multiview version � VK_NULL_HANDLE until framebuffer confirms */
 } StereoRenderPassInfo;
 
 typedef struct StereoDevice {
@@ -439,6 +440,15 @@ typedef struct StereoDevice {
     VkImage                intercepted_color[MAX_COLOR_IMAGES];
     uint32_t               intercepted_color_count;
     uint32_t               stereo_w, stereo_h;
+    /* Upgraded image-view tracking for per-framebuffer multiview decision */
+#define MAX_UPGRADED_VIEWS     4096
+    VkImageView            upgraded_views[MAX_UPGRADED_VIEWS];
+    uint32_t               upgraded_view_count;
+    /* Per-framebuffer: which render pass (multiview version) was used */
+#define MAX_FB_TRACK           512
+    VkFramebuffer          fb_track_handles[MAX_FB_TRACK];
+    VkRenderPass           fb_track_mv_rps [MAX_FB_TRACK];
+    uint32_t               fb_track_count;
     stereo_mutex_t         lock;
 
     /* ── Multiview render pass tracking ─────────────────────────────────── *

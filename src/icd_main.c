@@ -192,6 +192,12 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_DestroyDevice;
     if (!strcmp(name, "vkCreateImageView"))
         return (PFN_vkVoidFunction)stereo_CreateImageView;
+    if (!strcmp(name, "vkCreateFramebuffer"))
+        return (PFN_vkVoidFunction)stereo_CreateFramebuffer;
+    if (!strcmp(name, "vkDestroyFramebuffer"))
+        return (PFN_vkVoidFunction)stereo_DestroyFramebuffer;
+    if (!strcmp(name, "vkCmdBeginRenderPass"))
+        return (PFN_vkVoidFunction)stereo_CmdBeginRenderPass;
     if (!strcmp(name, "vkCreateRenderPass"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass;
 #ifdef VK_KHR_create_renderpass2
@@ -263,6 +269,12 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
         return (PFN_vkVoidFunction)stereo_CreateImage;
     if (!strcmp(pName, "vkCreateImageView"))
         return (PFN_vkVoidFunction)stereo_CreateImageView;
+    if (!strcmp(pName, "vkCreateFramebuffer"))
+        return (PFN_vkVoidFunction)stereo_CreateFramebuffer;
+    if (!strcmp(pName, "vkDestroyFramebuffer"))
+        return (PFN_vkVoidFunction)stereo_DestroyFramebuffer;
+    if (!strcmp(pName, "vkCmdBeginRenderPass"))
+        return (PFN_vkVoidFunction)stereo_CmdBeginRenderPass;
     if (!strcmp(pName, "vkCreateRenderPass"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass;
 #ifdef VK_KHR_create_renderpass2

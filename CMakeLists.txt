@@ -52,6 +52,7 @@ set(STEREO_SOURCES
     src/swapchain.c
     src/present.c
     src/present_alt.c
+    src/framebuffer.c
     src/dxgi_output.c
     src/ini.c
     src/tes_inject.c
