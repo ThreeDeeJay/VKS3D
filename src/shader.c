@@ -653,9 +653,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * and post-fx all render from the CENTER perspective; the multiview
          * final (swapchain) pass applies per-eye shift → image-space stereo
          * for deferred content with shadows/lights/bloom properly aligned.   */
+        StereoRenderPassInfo *rpi = NULL;
         bool in_mv_rp = false;
         if (ci->renderPass != VK_NULL_HANDLE) {
-            StereoRenderPassInfo *rpi = stereo_rp_lookup(sd, ci->renderPass);
+            rpi = stereo_rp_lookup(sd, ci->renderPass);
             in_mv_rp = (rpi != NULL && rpi->has_multiview);
         }
         if (!in_mv_rp) {

@@ -612,6 +612,10 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDevice(VkPhysicalDevice, const VkDev
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyDevice(VkDevice, const VkAllocationCallbacks*);
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL stereo_GetDeviceProcAddr(VkDevice, const char*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImageView(VkDevice, const VkImageViewCreateInfo*, const VkAllocationCallbacks*, VkImageView*);
+/* ── framebuffer.c ──────────────────────────────────────────────────────── */
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateFramebuffer(VkDevice, const VkFramebufferCreateInfo *, const VkAllocationCallbacks *, VkFramebuffer *);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyFramebuffer(VkDevice, VkFramebuffer, const VkAllocationCallbacks *);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRenderPass(VkCommandBuffer, const VkRenderPassBeginInfo *, VkSubpassContents);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImage(VkDevice, const VkImageCreateInfo*, const VkAllocationCallbacks*, VkImage*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(VkDevice, const VkRenderPassCreateInfo*, const VkAllocationCallbacks*, VkRenderPass*);
 #ifdef VK_KHR_create_renderpass2
