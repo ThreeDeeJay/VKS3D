@@ -171,7 +171,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
 }
 
-/* ── Public patcher ──────────────────────────────────────────────────────── */
+/* ── Public patcher ──────────────────────────────────────────────────────── *[...]
 bool spirv_patch_stereo_vertex(
     const uint32_t *in, size_t in_c,
     uint32_t **out, size_t *out_c,
@@ -289,9 +289,9 @@ bool spirv_patch_stereo_vertex(
 }
 void spirv_patched_free(uint32_t *w) { free(w); }
 
-/* ══════════════════════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════[...]
  * FS SPIR-V patcher — sampler2D → sampler2DArray + gl_ViewIndex layer
- * ══════════════════════════════════════════════════════════════════════════
+ * ════════════════════════════════════════════════════════════════[...]
  *
  * Called for FULL-SCREEN QUAD pipelines (vertexBindingDescriptionCount == 0)
  * in multiview render passes.  All VkImage 2D attachments are upgraded to
@@ -553,7 +553,7 @@ bool spirv_patch_stereo_fs(
     return true;
 }
 
-/* ── Helpers ─────────────────────────────────────────────────────────────── */
+/* ── Helpers ───────────────────────────────────────────────────────────[...]
 static bool is_patchable_spv(const uint32_t *w, size_t c)
 {
     if (c<5||w[0]!=SPIRV_MAGIC) return false;
@@ -654,8 +654,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * final (swapchain) pass applies per-eye shift → image-space stereo
          * for deferred content with shadows/lights/bloom properly aligned.   */
         bool in_mv_rp = false;
+        StereoRenderPassInfo *rpi = NULL;
         if (ci->renderPass != VK_NULL_HANDLE) {
-            StereoRenderPassInfo *rpi = stereo_rp_lookup(sd, ci->renderPass);
+            rpi = stereo_rp_lookup(sd, ci->renderPass);
             in_mv_rp = (rpi != NULL && rpi->has_multiview);
         }
         if (!in_mv_rp) {
