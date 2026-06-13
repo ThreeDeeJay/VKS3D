@@ -507,7 +507,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
       && pCreateInfo->arrayLayers == 1
       && pCreateInfo->samples == VK_SAMPLE_COUNT_1_BIT
       && (pCreateInfo->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
-      && pCreateInfo->extent  == sd->stereo_w/stereo_h;
+      && pCreateInfo->extent  == stereo_w/stereo_h;
 
     /* Depth/stencil attachments — upgraded for multiview depth per eye */
     bool intercept_depth = base
