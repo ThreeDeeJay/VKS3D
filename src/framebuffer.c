@@ -12,6 +12,7 @@
  *   substitute the render pass in VkRenderPassBeginInfo.
  */
 
+#include <stdio.h>
 #include <string.h>
 #include "stereo_icd.h"
 
@@ -32,10 +33,15 @@ stereo_CreateFramebuffer(
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
         /* All attachments must be in sd->upgraded_views[] (2-layer 2D_ARRAY) */
         bool all = true;
-        for (uint32_t i = 0; i < pCreateInfo->attachmentCount && all; i++) {
+        STEREO_LOG("CreateFramebuffer: examining %u attachments for fb template %p",
+                   pCreateInfo->attachmentCount, (void*)pCreateInfo->renderPass);
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            VkImageView av = pCreateInfo->pAttachments[i];
             bool found = false;
-            for (uint32_t k = 0; k < sd->upgraded_view_count && !found; k++)
-                if (sd->upgraded_views[k] == pCreateInfo->pAttachments[i]) found = true;
+            for (uint32_t k = 0; k < sd->upgraded_view_count && !found; k++) {
+                if (sd->upgraded_views[k] == av) found = true;
+            }
+            STEREO_LOG("  att[%u] = %p  -> %s", i, (void*)(uintptr_t)av, found ? "UPGRADED" : "original");
             if (!found) all = false;
         }
         if (all) {
@@ -45,6 +51,9 @@ stereo_CreateFramebuffer(
                 use_mv         = rpi->mv_handle;
                 STEREO_LOG("CreateFramebuffer: all %u att upgraded → mv_rp=%p",
                            pCreateInfo->attachmentCount, (void*)use_mv);
+            } else {
+                STEREO_LOG("CreateFramebuffer: all att upgraded but no mv_handle for rp %p",
+                           (void*)pCreateInfo->renderPass);
             }
         } else {
             STEREO_LOG("CreateFramebuffer: non-upgraded att present → original rp (att=%u)",
@@ -56,7 +65,13 @@ stereo_CreateFramebuffer(
     if (res == VK_SUCCESS && use_mv && sd->fb_track_count < MAX_FB_TRACK) {
         sd->fb_track_handles[sd->fb_track_count] = *pFramebuffer;
         sd->fb_track_mv_rps [sd->fb_track_count] = use_mv;
+        STEREO_LOG("CreateFramebuffer: tracked fb=%p -> mv_rp=%p (track idx=%u)",
+                   (void*)(uintptr_t)*pFramebuffer, (void*)use_mv, sd->fb_track_count);
         sd->fb_track_count++;
+    } else if (res == VK_SUCCESS) {
+        STEREO_LOG("CreateFramebuffer: created fb=%p (mv=%p)", (void*)(uintptr_t)*pFramebuffer, (void*)use_mv);
+    } else {
+        STEREO_ERR("CreateFramebuffer: real.CreateFramebuffer failed: %d", res);
     }
     return res;
 }
@@ -75,6 +90,7 @@ stereo_DestroyFramebuffer(
             uint32_t last = --sd->fb_track_count;
             sd->fb_track_handles[i] = sd->fb_track_handles[last];
             sd->fb_track_mv_rps [i] = sd->fb_track_mv_rps [last];
+            STEREO_LOG("DestroyFramebuffer: removed tracked fb=%p (idx=%u)", (void*)(uintptr_t)framebuffer, i);
             break;
         }
     }
@@ -111,6 +127,12 @@ stereo_CmdBeginRenderPass(
         }
     }
     if (!sd) return;
+
+    STEREO_LOG("CmdBeginRenderPass: cb=%p fb=%p rp=%p mv_rp=%p",
+               (void*)(uintptr_t)commandBuffer,
+               (void*)(uintptr_t)pRenderPassBegin->framebuffer,
+               (void*)(uintptr_t)pRenderPassBegin->renderPass,
+               (void*)mv_rp);
 
     if (mv_rp) {
         VkRenderPassBeginInfo modified = *pRenderPassBegin;
