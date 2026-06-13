@@ -632,7 +632,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
-
+        STEREO_LOG("Pipe %u: orig_rp=%p stageCount=%u", p,
+                   (void*)(uintptr_t)ci->renderPass, ci->stageCount);
         bool has_vs=false, has_tcs=false, has_tes=false;
         uint32_t vs_stage=~0u, tes_stage=~0u;
         for (uint32_t s=0;s<ci->stageCount;s++) {
@@ -664,6 +665,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                        p, (void*)(uintptr_t)ci->renderPass);
             continue;
         }
+        STEREO_LOG("Pipe %u: rpi=%p rpi->handle=%p mv_handle=%p in_mv_rp=%d",
+           p,
+           (void*)(uintptr_t)rpi,
+           (void*)(uintptr_t)(rpi ? rpi->handle : 0),
+           (void*)(uintptr_t)(rpi ? rpi->mv_handle : 0),
+           in_mv_rp ? 1 : 0);
 
         /* Substitute multiview render pass for pipeline compilation.
          * Pipelines must be compiled against the MV render pass so the driver
@@ -673,6 +680,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * viewMask is not part of the compatibility criteria. */
         if (rpi && rpi->mv_handle)
             infos[p].renderPass = rpi->mv_handle;
+        if (rpi && rpi->mv_handle)
+            STEREO_LOG("Pipe %u: substituted renderPass -> mv_handle=%p", p, (void*)(uintptr_t)rpi->mv_handle);
 
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
@@ -724,6 +733,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             memcpy(st,ci->pStages,sc2*sizeof(*st));
             st[fs_s].module=tmp;
             infos[p].pStages=st; tmp_mod[p]=tmp; tst[p]=st;
+            STEREO_LOG("Pipe %u: created tmp FS module=%p (quad FS patch)", p, (void*)(uintptr_t)tmp);
             STEREO_LOG("Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",p,sc2);
             continue;
         }
@@ -754,6 +764,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             memcpy(st,ci->pStages,sc*sizeof(*st));
             st[tes_stage].module=tmp;
             infos[p].pStages=st; tmp_mod[p]=tmp; tst[p]=st;
+            STEREO_LOG("Pipe %u: created tmp TES module=%p (quad TES patch)", p, (void*)(uintptr_t)tmp);
             STEREO_LOG("Pipe %u: Path A — TES patched (gl_ViewIndex)",p);
             continue;
         }
@@ -787,6 +798,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             memcpy(st,ci->pStages,sc*sizeof(*st));
             st[vs_stage].module=tmp;
             infos[p].pStages=st; tmp_mod[p]=tmp; tst[p]=st;
+            STEREO_LOG("Pipe %u: created tmp VS module=%p (quad VS patch)", p, (void*)(uintptr_t)tmp);
             STEREO_LOG("Pipe %u: Path B — VS gl_ViewIndex patch",p);
             continue;
         }
