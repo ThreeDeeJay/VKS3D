@@ -502,13 +502,11 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
      * auxiliary images at different sizes are left at arrayLayers=1 so
      * their framebuffers remain non-multiview (no per-eye shadow artifacts). */
     bool base = sd->stereo.enabled && sd->stereo.multiview
-        && pCreateInfo
-        && pCreateInfo->imageType   == VK_IMAGE_TYPE_2D
-        && pCreateInfo->arrayLayers == 1
-        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT
-        && sd->stereo_w > 0 /* swapchain must be created first */
-        && pCreateInfo->extent.width  == sd->stereo_w
-        && pCreateInfo->extent.height == sd->stereo_h;
+      && pCreateInfo
+      && pCreateInfo->imageType == VK_IMAGE_TYPE_2D
+      && pCreateInfo->arrayLayers == 1
+      && pCreateInfo->samples == VK_SAMPLE_COUNT_1_BIT
+      && (pCreateInfo->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
 
     /* Depth/stencil attachments — upgraded for multiview depth per eye */
     bool intercept_depth = base
