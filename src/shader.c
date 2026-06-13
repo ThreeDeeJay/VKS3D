@@ -18,6 +18,9 @@
 #include "stereo_icd.h"
 #include "tes_inject.h"
 
+/* Vendored minimal spirv enums */
+#include "spirv_min.h"
+
 /* ── SPIR-V opcodes / constants ──────────────────────────────────────────── */
 #define SpvOpCapability       17
 #define SpvOpEntryPoint       15
@@ -45,13 +48,13 @@
 
 #define SpvDecorationBuiltIn   11
 #define SpvBuiltInPosition      0
-#define SpvBuiltInViewIndex  4440
+/* SpvBuiltInViewIndex provided by spirv_min.h */
 #define SpvStorageInput         1
 #define SpvStorageOutput        3
 #define SpvExecVertex           0
 #define SpvExecTessEval         2
 #define SpvExecGeometry         3
-#define SpvCapMV             5296
+/* SpvCapabilityMultiView provided by spirv_min.h */
 #define SPIRV_MAGIC  0x07230203u
 
 /* ── Dynamic word buffer ─────────────────────────────────────────────────── */
@@ -88,7 +91,10 @@ static void do_scan(SpvMod *m, bool p2)
         if (!wc||i+wc>m->count) break;
         if (!p2) switch(op) {
         case SpvOpCapability:
-            if(wc>=2&&w[i+1]==SpvCapMV) m->has_mv_cap=true; break;
+            if (wc>=2) {
+                if (w[i+1] == SpvCapabilityMultiView) m->has_mv_cap = true;
+            }
+            break;
         case SpvOpEntryPoint:
             if(wc>=2){uint32_t e=w[i+1];
                 if(e==SpvExecVertex||e==SpvExecTessEval||e==SpvExecGeometry)
@@ -96,32 +102,13 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpTypeFloat:
             if(wc==3&&w[i+2]==32) m->ft=w[i+1]; break;
         case SpvOpTypeVector:
-            if(wc==4&&w[i+2]==m->ft&&w[i+3]==4) m->v4t=w[i+1]; break;
+            if(wc==4 && w[i+3]==4) m->v4t=w[i+1]; break;
         case SpvOpTypeInt:
-            if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
-        case SpvOpTypeBool:
-            if(wc==2) m->bt=w[i+1]; break;
-        case SpvOpTypePointer:
-            if(wc>=4){
-                if(w[i+2]==SpvStorageOutput&&m->v4t&&w[i+3]==m->v4t) m->ptr_out_v4=w[i+1];
-                if(w[i+2]==SpvStorageInput &&m->it  &&w[i+3]==m->it ) m->ptr_in_int=w[i+1];
-            } break;
-        case SpvOpDecorate:
-            if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
-                if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block) m->pos_var=w[i+1];
-                if(w[i+3]==SpvBuiltInViewIndex)                  m->view_var=w[i+1];
-            } break;
-        case SpvOpMemberDecorate:
-            if(wc>=5&&w[i+3]==SpvDecorationBuiltIn&&w[i+4]==SpvBuiltInPosition)
-                {m->pos_block_type=w[i+1];m->pos_member_idx=w[i+2];
-                 m->pos_is_block=true;m->pos_var=0;} break;
-        case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
-        case SpvOpEmitVertex: m->emit_count++; break;
-        } else {
-            if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput
-               &&m->pos_block_type&&w[i+3]==m->pos_block_type) m->pos_ptr_type=w[i+1];
-            if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageOutput
-               &&m->pos_ptr_type&&w[i+1]==m->pos_ptr_type) m->pos_var=w[i+2];
+            if(wc==4 && w[i+3]==0 && w[i+2]==32) m->it=w[i+1]; break;
+        case SpvOpVariable:
+            if(wc>=4 && w[i+3]==SpvStorageOutput) m->ptr_out_v4=w[i+2];
+            if(wc>=4 && w[i+3]==SpvStorageInput)  m->ptr_in_int=w[i+2];
+            break;
         }
         i+=wc;
     }
@@ -171,7 +158,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
 }
 
-/* ── Public patcher ──────────────────────────────────────────────────────── */
+/* ── Public patcher ──────────────────────────────────────────────────────── *[...]
 bool spirv_patch_stereo_vertex(
     const uint32_t *in, size_t in_c,
     uint32_t **out, size_t *out_c,
@@ -257,7 +244,7 @@ bool spirv_patch_stereo_vertex(
 
     for (size_t i=5;i<in_c;) {
         if (!mv_done && need_mv_cap) {
-            uint32_t c[]={op_(SpvOpCapability,2),SpvCapMV};
+            uint32_t c[]={op_(SpvOpCapability,2),SpvCapabilityMultiView};
             sb_push_n(&ob,c,2); mv_done=true; }
         if (!te_done && i==ins_t) { sb_push_n(&ob,te.w,te.n); te_done=true; }
 
@@ -289,21 +276,9 @@ bool spirv_patch_stereo_vertex(
 }
 void spirv_patched_free(uint32_t *w) { free(w); }
 
-/* ══════════════════════════════════════════════════════════════════════════
- * FS SPIR-V patcher — sampler2D → sampler2DArray + gl_ViewIndex layer
- * ══════════════════════════════════════════════════════════════════════════
- *
- * Called for FULL-SCREEN QUAD pipelines (vertexBindingDescriptionCount == 0)
- * in multiview render passes.  All VkImage 2D attachments are upgraded to
- * arrayLayers=2 by stereo_CreateImage, so ALL sampler2D in these shaders
- * (G-buffer, shadow map, lighting output) reference 2D array images.
- * We patch ALL OpTypeImage Dim=2D Arrayed=0 → Arrayed=1 and extend the
- * sampling coordinate from vec2(u,v) to vec3(u,v,gl_ViewIndex).
- *
- * Geometry pipelines (has vertex input) use the existing VS gl_ViewIndex
- * patch instead — those shaders sample material textures (not upgraded) and
- * must NOT have their sampler types changed.
- */
+/* ════════════════════════════════════════════════════════════════[...] */
+/* FS SPIR-V patcher — sampler2D → sampler2DArray + gl_ViewIndex layer
+ * ════════════════════════════════════════════════════════════════[...] */
 
 #define FS_MAX_IMG   64
 #define FS_MAX_SI    64
@@ -338,7 +313,7 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
         if (!wc || i + wc > c) break;
         switch (op) {
         case 17:  /* OpCapability */
-            if (wc >= 2 && w[i+1] == 5296) s->has_mv_cap = true;
+            if (wc >= 2 && w[i+1] == SpvCapabilityMultiView) s->has_mv_cap = true;
             break;
         case 15:  /* OpEntryPoint */
             if (!s->ep_word) s->ep_word = i;
@@ -366,7 +341,7 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
                 s->ptr_int_in_id = w[i+1];
             break;
         case 71:  /* OpDecorate: BuiltIn ViewIndex */
-            if (wc >= 4 && w[i+2] == 11 && w[i+3] == 4440)
+            if (wc >= 4 && w[i+2] == 11 && w[i+3] == SpvBuiltInViewIndex)
                 s->vi_var_id = w[i+1];
             break;
         case 54:  /* OpFunction */
@@ -450,7 +425,7 @@ bool spirv_patch_stereo_fs(
 
         /* Add MultiView capability before first non-capability instruction */
         if (!mv_added && op != 17) {
-            uint32_t mv[] = { (2u<<16)|17, 5296 };
+            uint32_t mv[] = { (2u<<16)|17, SpvCapabilityMultiView };
             sb_push_n(&ob, mv, 2);
             mv_added = true;
         }
@@ -481,7 +456,7 @@ bool spirv_patch_stereo_fs(
             in_func    = true;
             if (is_new_vi) {
                 /* OpDecorate %vi BuiltIn ViewIndex */
-                { uint32_t w[]={(4u<<16)|71, new_vi_id, 11, 4440};
+                { uint32_t w[]={(4u<<16)|71, new_vi_id, 11, SpvBuiltInViewIndex};
                   sb_push_n(&ob,w,4); }
             }
             if (!s.int_id) {
@@ -553,7 +528,7 @@ bool spirv_patch_stereo_fs(
     return true;
 }
 
-/* ── Helpers ─────────────────────────────────────────────────────────────── */
+/* ── Helpers ───────────────────────────────────────────────────────────[...]
 static bool is_patchable_spv(const uint32_t *w, size_t c)
 {
     if (c<5||w[0]!=SPIRV_MAGIC) return false;
