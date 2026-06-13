@@ -111,41 +111,30 @@ stereo_CreateRenderPass(
 
     /* Step 2: create the multiview version (stored, not returned to app) */
     if (sd->stereo.enabled && sd->stereo.multiview) {
-        /* Only create MV version for renderpasses that include a PRESENT/SWAPCHAIN attachment.
-         * This avoids making shadow/probe/aux passes multiview and prevents per-pass
-         * duplication/overlap regressions where both eye geometries appear in both views.
-         */
-        bool has_present = false;
-        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
-            if (pCreateInfo->pAttachments[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) { has_present = true; break; }
-        }
-        if (has_present) {
-            VkRenderPass mv = VK_NULL_HANDLE;
-            if (create_mv_rp(sd, pCreateInfo, pAllocator, &mv) == VK_SUCCESS && mv) {
-                rpi->mv_handle     = mv;
-                rpi->has_multiview = true;
-                rpi->view_mask     = STEREO_VIEW_MASK;
-                sd->multiview_pass_exists = true;
-                STEREO_LOG("RenderPass %p: original=returned, mv=%p (att=%u, sub=%u)",
-                           (void*)*pRenderPass, (void*)mv,
-                           pCreateInfo->attachmentCount, pCreateInfo->subpassCount);
-            } else {
-                STEREO_ERR("RenderPass %p: mv creation failed", (void*)*pRenderPass);
-            }
+        VkRenderPass mv = VK_NULL_HANDLE;
+        if (create_mv_rp(sd, pCreateInfo, pAllocator, &mv) == VK_SUCCESS && mv) {
+            rpi->mv_handle     = mv;
+            rpi->has_multiview = true;
+            rpi->view_mask     = STEREO_VIEW_MASK;
+            sd->multiview_pass_exists = true;
+            STEREO_LOG("RenderPass %p: original=returned, mv=%p (att=%u, sub=%u)",
+                       (void*)*pRenderPass, (void*)mv,
+                       pCreateInfo->attachmentCount, pCreateInfo->subpassCount);
         } else {
-            STEREO_LOG("RenderPass %p: mv version skipped (no PRESENT attachment)", (void*)*pRenderPass);
+            STEREO_ERR("RenderPass %p: mv creation failed", (void*)*pRenderPass);
         }
     }
     return VK_SUCCESS;
 }
 
 /* ── vkCreateRenderPass2KHR ─────────────────────────────────────────────── */
+#ifdef VK_KHR_create_renderpass2
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateRenderPass2KHR(
-    VkDevice                        device,
-    const VkRenderPassCreateInfo2  *pCreateInfo,
-    const VkAllocationCallbacks    *pAllocator,
-    VkRenderPass                   *pRenderPass)
+    VkDevice                         device,
+    const VkRenderPassCreateInfo2   *pCreateInfo,
+    const VkAllocationCallbacks     *pAllocator,
+    VkRenderPass                    *pRenderPass)
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
@@ -177,48 +166,40 @@ stereo_CreateRenderPass2KHR(
     rpi->has_multiview = false; rpi->view_mask = 0; rpi->subpass_count = sc;
 
     if (sd->stereo.enabled && sd->stereo.multiview) {
-        /* Only create MV version for renderpasses that include a PRESENT/SWAPCHAIN attachment. */
-        bool has_present = false;
-        for (uint32_t i = 0; i < ac; i++) {
-            if (pCreateInfo->pAttachments[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) { has_present = true; break; }
-        }
-        if (has_present) {
-            /* Build multiview subpasses */
-            VkAttachmentDescription2 *pa2 = NULL;
-            if (ac > 0) {
-                pa2 = malloc(ac * sizeof(*pa2));
-                if (!pa2) return VK_SUCCESS;
-                for (uint32_t i = 0; i < ac; i++) {
-                    pa2[i] = pCreateInfo->pAttachments[i];
-                    if (pa2[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-                        pa2[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                }
+        /* Build multiview subpasses */
+        VkAttachmentDescription2 *pa2 = NULL;
+        if (ac > 0) {
+            pa2 = malloc(ac * sizeof(*pa2));
+            if (!pa2) return VK_SUCCESS;
+            for (uint32_t i = 0; i < ac; i++) {
+                pa2[i] = pCreateInfo->pAttachments[i];
+                if (pa2[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                    pa2[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             }
-            VkSubpassDescription2 *subs = malloc(sc * sizeof(*subs));
-            uint32_t *corr = malloc(sc * sizeof(*corr));
-            if (subs && corr) {
-                for (uint32_t i = 0; i < sc; i++) {
-                    subs[i] = pCreateInfo->pSubpasses[i];
-                    subs[i].viewMask = STEREO_VIEW_MASK;
-                    corr[i] = STEREO_CORRELATION_MASK;
-                }
-                VkRenderPassCreateInfo2 mv2 = *pCreateInfo;
-                if (pa2) mv2.pAttachments = pa2;
-                mv2.pSubpasses = subs;
-                mv2.correlatedViewMaskCount = sc;
-                mv2.pCorrelatedViewMasks    = corr;
-                VkRenderPass mv = VK_NULL_HANDLE;
-                if (sd->real.CreateRenderPass2KHR(sd->real_device, &mv2, pAllocator, &mv) == VK_SUCCESS && mv) {
-                    rpi->mv_handle = mv; rpi->has_multiview = true;
-                    rpi->view_mask = STEREO_VIEW_MASK;
-                    sd->multiview_pass_exists = true;
-                    STEREO_LOG("RenderPass2 %p: mv=%p (att=%u)", (void*)*pRenderPass, (void*)mv, ac);
-                }
-            }
-            free(pa2); free(subs); free(corr);
-        } else {
-            STEREO_LOG("RenderPass2 %p: mv version skipped (no PRESENT attachment)", (void*)*pRenderPass);
         }
+        VkSubpassDescription2 *subs = malloc(sc * sizeof(*subs));
+        uint32_t *corr = malloc(sc * sizeof(*corr));
+        if (subs && corr) {
+            for (uint32_t i = 0; i < sc; i++) {
+                subs[i] = pCreateInfo->pSubpasses[i];
+                subs[i].viewMask = STEREO_VIEW_MASK;
+                corr[i] = STEREO_CORRELATION_MASK;
+            }
+            VkRenderPassCreateInfo2 mv2 = *pCreateInfo;
+            if (pa2) mv2.pAttachments = pa2;
+            mv2.pSubpasses = subs;
+            mv2.correlatedViewMaskCount = sc;
+            mv2.pCorrelatedViewMasks    = corr;
+            VkRenderPass mv = VK_NULL_HANDLE;
+            if (sd->real.CreateRenderPass2KHR(sd->real_device, &mv2, pAllocator, &mv) == VK_SUCCESS && mv) {
+                rpi->mv_handle = mv; rpi->has_multiview = true;
+                rpi->view_mask = STEREO_VIEW_MASK;
+                sd->multiview_pass_exists = true;
+                STEREO_LOG("RenderPass2 %p: mv=%p (att=%u)", (void*)*pRenderPass, (void*)mv, ac);
+            }
+        }
+        free(pa2); free(subs); free(corr);
     }
     return VK_SUCCESS;
 }
+#endif
