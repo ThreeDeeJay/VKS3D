@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stereo_icd.h"
+#include "spirv_min.h"
 #include "tes_inject.h"
 
 /* ── SPIR-V word buffer ───────────────────────────────────────────────────── */
