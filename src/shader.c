@@ -718,7 +718,13 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (dump) {
                 char dp[512];
                 _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_fs.spv",dump,dump_n++);
-                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
+                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);
+                    STEREO_LOG("Pipe %u: Wrote patched FS SPIR-V to %s", p, dp);
+                } else {
+                    STEREO_ERR("Pipe %u: Failed to write patched FS SPIR-V to %s", p, dp);
+                }
+            } else {
+                STEREO_LOG("Pipe %u: VKS3D_DUMP_SPIRV not set; skipped writing patched FS SPIR-V", p);
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
@@ -749,7 +755,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (dump) {
                 char dp[512];
                 _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_a_tes.spv",dump,dump_n++);
-                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
+                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);
+                    STEREO_LOG("Pipe %u: Wrote patched TES SPIR-V to %s", p, dp);
+                } else {
+                    STEREO_ERR("Pipe %u: Failed to write patched TES SPIR-V to %s", p, dp);
+                }
+            } else {
+                STEREO_LOG("Pipe %u: VKS3D_DUMP_SPIRV not set; skipped writing patched TES SPIR-V", p);
+            }
+            if (dump) {
+                char dp[512];
+                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_a_tes.spv",dump,dump_n++);
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
@@ -783,7 +799,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (dump) {
                 char dp[512];
                 _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_b_vs.spv",dump,dump_n++);
-                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
+                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);
+                    STEREO_LOG("Pipe %u: Wrote patched VS SPIR-V to %s", p, dp);
+                } else {
+                    STEREO_ERR("Pipe %u: Failed to write patched VS SPIR-V to %s", p, dp);
+                }
+            } else {
+                STEREO_LOG("Pipe %u: VKS3D_DUMP_SPIRV not set; skipped writing patched VS SPIR-V", p);
+            }
+            if (dump) {
+                char dp[512];
+                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_b_vs.spv",dump,dump_n++);
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
