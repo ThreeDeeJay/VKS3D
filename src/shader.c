@@ -528,7 +528,7 @@ bool spirv_patch_stereo_fs(
     return true;
 }
 
-/* ── Helpers ───────────────────────────────────────────────────────────[...]
+/* ── Helpers ───────────────────────────────────────────────────────────*/
 static bool is_patchable_spv(const uint32_t *w, size_t c)
 {
     if (c<5||w[0]!=SPIRV_MAGIC) return false;
