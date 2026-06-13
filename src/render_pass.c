@@ -1,4 +1,4 @@
-/*
+/* 
  * render_pass.c — Dual render pass strategy for per-framebuffer multiview
  *
  * stereo_CreateRenderPass creates TWO versions of every render pass:
@@ -109,8 +109,17 @@ stereo_CreateRenderPass(
     rpi->view_mask     = 0;
     rpi->subpass_count = pCreateInfo->subpassCount;
 
-    /* Step 2: create the multiview version (stored, not returned to app) */
-    if (sd->stereo.enabled && sd->stereo.multiview) {
+    /* Step 2: create the multiview version (stored, not returned to app)
+     * Only create MV variant when the render pass contains a PRESENT attachment
+     * — avoid stereoizing shadow maps / auxiliary passes that do not present. */
+    bool has_present = false;
+    for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+        if (pCreateInfo->pAttachments[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+            has_present = true; break;
+        }
+    }
+
+    if (sd->stereo.enabled && sd->stereo.multiview && has_present) {
         VkRenderPass mv = VK_NULL_HANDLE;
         if (create_mv_rp(sd, pCreateInfo, pAllocator, &mv) == VK_SUCCESS && mv) {
             rpi->mv_handle     = mv;
@@ -123,6 +132,8 @@ stereo_CreateRenderPass(
         } else {
             STEREO_ERR("RenderPass %p: mv creation failed", (void*)*pRenderPass);
         }
+    } else {
+        STEREO_LOG("RenderPass %p: mv version skipped (no PRESENT attachment)", (void*)*pRenderPass);
     }
     return VK_SUCCESS;
 }
@@ -165,7 +176,13 @@ stereo_CreateRenderPass2KHR(
     rpi->handle = *pRenderPass; rpi->mv_handle = VK_NULL_HANDLE;
     rpi->has_multiview = false; rpi->view_mask = 0; rpi->subpass_count = sc;
 
-    if (sd->stereo.enabled && sd->stereo.multiview) {
+    /* Only build multiview version when this pass contains a PRESENT attachment */
+    bool has_present2 = false;
+    for (uint32_t i = 0; i < ac; i++) {
+        if (pCreateInfo->pAttachments[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) { has_present2 = true; break; }
+    }
+
+    if (sd->stereo.enabled && sd->stereo.multiview && has_present2) {
         /* Build multiview subpasses */
         VkAttachmentDescription2 *pa2 = NULL;
         if (ac > 0) {
