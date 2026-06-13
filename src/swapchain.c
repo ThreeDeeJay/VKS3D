@@ -517,15 +517,15 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         && pCreateInfo->extent.width  == sd->stereo_w
         && pCreateInfo->extent.height == sd->stereo_h;
 
-    /* Color attachments that are also sampled (render-to-texture G-buffers,
-     * shadow-color, lighting output, post-fx targets).  mipLevels==1 and
-     * extent > 1x1 to avoid upgrading LUTs or procedural textures.
-     * Also intercept non-sampled color attachments (needed so every
-     * framebuffer attachment has 2 layers for the multiview render pass). */
+    /* Color attachments (G-buffer, lighting targets) — only upgrade scene-sized
+     * color attachments (matching swapchain extent). This avoids upgrading
+     * shadow maps or probes at different resolutions (e.g. 2048x2048).
+     */
     bool intercept_color = base
         && pCreateInfo->mipLevels == 1
-        && pCreateInfo->extent.width  > 1
-        && pCreateInfo->extent.height > 1
+        && sd->stereo_w > 0
+        && pCreateInfo->extent.width  == sd->stereo_w
+        && pCreateInfo->extent.height == sd->stereo_h
         && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
     if (!intercept_depth && !intercept_color)
