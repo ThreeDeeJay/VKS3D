@@ -508,9 +508,14 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         && pCreateInfo->arrayLayers == 1
         && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT;
 
-    /* Depth/stencil attachments — upgraded for multiview depth per eye */
+    /* Depth/stencil attachments — upgraded for multiview depth per eye. */
+    /* Only upgrade depth attachments that match the swapchain extent (scene depth),
+     * so shadow maps (different extents, e.g. 2048x2048) remain non-multiview. */
     bool intercept_depth = base
-        && (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        && (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+        && sd->stereo_w > 0
+        && pCreateInfo->extent.width  == sd->stereo_w
+        && pCreateInfo->extent.height == sd->stereo_h;
 
     /* Color attachments that are also sampled (render-to-texture G-buffers,
      * shadow-color, lighting output, post-fx targets).  mipLevels==1 and
