@@ -748,7 +748,7 @@ bool build_passthrough_gs_spv(const uint32_t *vs_spv, size_t vs_wc,
      * (to avoid gl_Layer=0 for both views). */
     {uint32_t w[]={OP(17,2),1}; sb_pn(&b,w,2);}    /* Shader    */
     {uint32_t w[]={OP(17,2),2}; sb_pn(&b,w,2);}    /* Geometry  */
-    {uint32_t w[]={OP(17,2),5296}; sb_pn(&b,w,2);} /* MultiView */
+    {uint32_t w[]={OP(17,2),4439}; sb_pn(&b,w,2);} /* MultiView */
 
     /* MemoryModel */
     {uint32_t w[]={OP(14,3),0,1}; sb_pn(&b,w,3);}

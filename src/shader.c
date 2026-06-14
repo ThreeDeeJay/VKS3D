@@ -51,7 +51,7 @@
 #define SpvExecVertex           0
 #define SpvExecTessEval         2
 #define SpvExecGeometry         3
-#define SpvCapMV             5296
+#define SpvCapabilityMultiView  4439
 #define SPIRV_MAGIC  0x07230203u
 
 /* ── Dynamic word buffer ─────────────────────────────────────────────────── */
@@ -88,7 +88,7 @@ static void do_scan(SpvMod *m, bool p2)
         if (!wc||i+wc>m->count) break;
         if (!p2) switch(op) {
         case SpvOpCapability:
-            if(wc>=2&&w[i+1]==SpvCapMV) m->has_mv_cap=true; break;
+            if(wc>=2&&w[i+1]==SpvCapabilityMultiView) m->has_mv_cap=true; break;
         case SpvOpEntryPoint:
             if(wc>=2){uint32_t e=w[i+1];
                 if(e==SpvExecVertex||e==SpvExecTessEval||e==SpvExecGeometry)
@@ -257,7 +257,7 @@ bool spirv_patch_stereo_vertex(
 
     for (size_t i=5;i<in_c;) {
         if (!mv_done && need_mv_cap) {
-            uint32_t c[]={op_(SpvOpCapability,2),SpvCapMV};
+            uint32_t c[]={op_(SpvOpCapability,2),SpvCapabilityMultiView};
             sb_push_n(&ob,c,2); mv_done=true; }
         if (!te_done && i==ins_t) { sb_push_n(&ob,te.w,te.n); te_done=true; }
 
@@ -338,7 +338,7 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
         if (!wc || i + wc > c) break;
         switch (op) {
         case 17:  /* OpCapability */
-            if (wc >= 2 && w[i+1] == 5296) s->has_mv_cap = true;
+            if (wc >= 2 && w[i+1] == 4439) s->has_mv_cap = true;
             break;
         case 15:  /* OpEntryPoint */
             if (!s->ep_word) s->ep_word = i;
@@ -450,7 +450,7 @@ bool spirv_patch_stereo_fs(
 
         /* Add MultiView capability before first non-capability instruction */
         if (!mv_added && op != 17) {
-            uint32_t mv[] = { (2u<<16)|17, 5296 };
+            uint32_t mv[] = { (2u<<16)|17, 4439 };
             sb_push_n(&ob, mv, 2);
             mv_added = true;
         }
