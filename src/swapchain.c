@@ -497,18 +497,16 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    /* Only upgrade images at EXACTLY the swapchain extent.
-     * Shadow maps (2048x2048), environment probes (1284x1284), and other
-     * auxiliary images at different sizes are left at arrayLayers=1 so
-     * their framebuffers remain non-multiview (no per-eye shadow artifacts). */
+    /* Upgrade images used as color/depth attachments (G-buffer and scene depth)
+     * so multiview pipelines and framebuffers align.  This uses usage flags
+     * rather than strictly matching the swapchain extent, preventing the
+     * per-pass MV mismatch that caused overlapping geometry.
+     */
     bool base = sd->stereo.enabled && sd->stereo.multiview
         && pCreateInfo
         && pCreateInfo->imageType   == VK_IMAGE_TYPE_2D
         && pCreateInfo->arrayLayers == 1
-        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT
-        && sd->stereo_w > 0 /* swapchain must be created first */
-        && pCreateInfo->extent.width  == sd->stereo_w
-        && pCreateInfo->extent.height == sd->stereo_h;
+        && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT;
 
     /* Depth/stencil attachments — upgraded for multiview depth per eye */
     bool intercept_depth = base
