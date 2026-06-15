@@ -84,7 +84,12 @@ typedef struct {
     bool has_matrix_ops;
 
     int  exec_model;
-    uint32_t pos_var, pos_block_type, pos_member_idx, pos_ptr_type;
+    uint32_t pos_var, pos_member_idx, pos_ptr_type;
+
+    /* TES shaders may contain both an input gl_in[] Position block
+       and an output gl_PerVertex Position block. */
+    uint32_t pos_block_type[8];
+    uint32_t pos_block_count;
     bool     pos_is_block;
     uint32_t view_var, ft, v4t, it, bt, ptr_out_v4, ptr_in_int;
     size_t   fn_word;
@@ -145,20 +150,12 @@ static void do_scan(SpvMod *m, bool p2)
                 w[i+3] == SpvDecorationBuiltIn &&
                 w[i+4] == SpvBuiltInPosition)
             {
-                /* Keep the first Position block we see.
-                   In TES shaders this is the output gl_PerVertex.
-                   Later Position blocks are typically the input
-                   gl_in[] interface and must not overwrite it. */
-                if (!m->pos_is_block)
-                {
-                    m->pos_block_type = w[i+1];
-                    m->pos_member_idx = w[i+2];
-                    m->pos_is_block   = true;
-                }
-                STEREO_LOG(
-                    "Position member decorate: struct=%u member=%u",
-                    w[i+1],
-                    w[i+2]);
+                if (m->pos_block_count < 8)
+                    m->pos_block_type[m->pos_block_count++] = w[i+1];
+
+                m->pos_member_idx = w[i+2];
+                m->pos_is_block   = true;
+                m->pos_var        = 0;
             }
             break;
         case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
@@ -167,19 +164,16 @@ static void do_scan(SpvMod *m, bool p2)
             m->has_emit_vertex = true;
             break;
         } else {
-            if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput)
+            if(op==SpvOpTypePointer && wc>=4 &&
+               w[i+2]==SpvStorageOutput)
             {
-                STEREO_LOG(
-                    "TES ptr: result=%u target=%u pos_block=%u",
-                    w[i+1],
-                    w[i+3],
-                    m->pos_block_type);
-
-                if(m->pos_block_type &&
-                   w[i+3]==m->pos_block_type)
+                for(uint32_t k=0;k<m->pos_block_count;k++)
                 {
-                    STEREO_LOG("TES matched block pointer");
-                    m->pos_ptr_type=w[i+1];
+                    if(w[i+3]==m->pos_block_type[k])
+                    {
+                        m->pos_ptr_type=w[i+1];
+                        break;
+                    }
                 }
             }
             if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageOutput)
