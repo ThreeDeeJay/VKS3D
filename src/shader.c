@@ -447,16 +447,35 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
                 s->v3float_id = w[i+1];
             break;
         case 25:  /* OpTypeImage */
-            if (wc >= 9 && w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
+        {
+            if (wc >= 9)
             {
                 STEREO_LOG(
-                    "FS discovered image type id=%u depth=%u arrayed=%u",
+                    "FS image type: id=%u dim=%u depth=%u arrayed=%u sampled=%u format=%u",
                     w[i+1],
+                    w[i+3],
                     w[i+4],
-                    w[i+5]);
-                s->img_ids[s->n_img++] = w[i+1];
+                    w[i+5],
+                    w[i+7],
+                    w[i+8]);
+
+                /* Existing path */
+                if (w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
+                {
+                    STEREO_LOG("FS accepted image type %u", w[i+1]);
+                    s->img_ids[s->n_img++] = w[i+1];
+                }
+                else
+                {
+                    STEREO_LOG(
+                        "FS rejected image type %u dim=%u sampled=%u",
+                        w[i+1],
+                        w[i+3],
+                        w[i+7]);
+                }
             }
-            break;
+        }
+        break;
         case 27:  /* OpTypeSampledImage: [1]=id [2]=image_type */
             if (wc >= 3 && fs_id_in(s->img_ids, s->n_img, w[i+2]) && s->n_si < FS_MAX_SI)
                 s->si_ids[s->n_si++] = w[i+1];
@@ -541,10 +560,18 @@ static uint32_t fs_count_patches(const FsScan *s, const uint32_t *w, size_t c)
     for (size_t i = 5; i < c; ) {
         uint32_t op = w[i] & 0xffff, wc = w[i] >> 16;
         if (!wc || i + wc > c) break;
-        if (op == 54) in_func = true;
-        if (in_func && wc >= 5 &&
-            (op == 87 || op == 88 || op == 89 || op == 90) && /* sample ops */
+
+        if (op == 54)
+            in_func = true;
+
+        if (in_func &&
+            wc >= 5 &&
+            (op == 87 || op == 88 || op == 89 || op == 90) &&
             fs_id_in(s->load_ids, s->n_load, w[i+3]))
+            count++;
+
+        /* OpImageFetch */
+        if (in_func && op == 95 && wc >= 5)
             count++;
         i += wc;
     }
@@ -568,6 +595,7 @@ bool spirv_patch_stereo_fs(
     uint32_t nid           = in[3];
     uint32_t new_int_id    = s.int_id        ? s.int_id        : nid++;
     uint32_t new_v3f_id    = s.v3float_id    ? s.v3float_id    : nid++;
+    uint32_t new_v3i_id    = nid++;
     uint32_t new_pin_id    = s.ptr_int_in_id ? s.ptr_int_in_id : nid++;
     uint32_t new_vi_id     = s.vi_var_id     ? s.vi_var_id     : nid++;
     bool     is_new_vi     = (s.vi_var_id == 0);
@@ -614,6 +642,13 @@ bool spirv_patch_stereo_fs(
         if (op == 25 && wc >= 9 && fs_id_in(s.img_ids, s.n_img, in[i+1])) {
 
             STEREO_LOG(
+                "FS discovered image type id=%u depth=%u arrayed=%u sampled=%u",
+                in[i+1],
+                in[i+4],
+                in[i+5],
+                in[i+7]);
+
+            STEREO_LOG(
                 "FS converting image type id=%u depth=%u arrayed=%u",
                 in[i+1],
                 in[i+4],
@@ -640,6 +675,10 @@ bool spirv_patch_stereo_fs(
             if (!s.v3float_id) {
                 uint32_t w[]={(4u<<16)|23, new_v3f_id, s.float_id, 3};
                 sb_push_n(&ob,w,4); }
+            {
+                uint32_t w[]={(4u<<16)|23, new_v3i_id, new_int_id, 3};
+                sb_push_n(&ob,w,4);
+            }
             if (!s.ptr_int_in_id) {
                 uint32_t w[]={(4u<<16)|32, new_pin_id, 1, new_int_id};
                 sb_push_n(&ob,w,4); }
@@ -695,6 +734,42 @@ bool spirv_patch_stereo_fs(
             sb_push(&ob, id_c3);          /* new 3D coordinate */
             if (wc > 5) sb_push_n(&ob, &in[i+5], wc-5); /* image operands */
             i += wc; continue;
+        }
+
+        /* Extend OpImageFetch ivec2 -> ivec3(x,y,ViewIndex) */
+        if (in_func && op == 95 && wc >= 5)
+        {
+            uint32_t coord_id = in[i+4];
+
+            uint32_t id_lv = samp_nid++;
+            uint32_t id_x  = samp_nid++;
+            uint32_t id_y  = samp_nid++;
+            uint32_t id_c3 = samp_nid++;
+
+            { uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, new_vi_id};
+              sb_push_n(&ob,w,4); }
+
+            { uint32_t w[]={(5u<<16)|81, new_int_id, id_x, coord_id, 0};
+              sb_push_n(&ob,w,5); }
+
+            { uint32_t w[]={(5u<<16)|81, new_int_id, id_y, coord_id, 1};
+              sb_push_n(&ob,w,5); }
+
+            { uint32_t w[]={(6u<<16)|80, new_v3i_id, id_c3,
+                            id_x, id_y, id_lv};
+              sb_push_n(&ob,w,6); }
+
+            sb_push(&ob, in[i]);
+            sb_push(&ob, in[i+1]);
+            sb_push(&ob, in[i+2]);
+            sb_push(&ob, in[i+3]);
+            sb_push(&ob, id_c3);
+
+            if (wc > 5)
+                sb_push_n(&ob, &in[i+5], wc - 5);
+
+            i += wc;
+            continue;
         }
 
         sb_push_n(&ob, &in[i], wc);
@@ -816,9 +891,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             in_mv_rp = (rpi != NULL && rpi->has_multiview);
         }
         if (!in_mv_rp) {
-            STEREO_LOG("Pipe %u: rp=%p not multiview — skip",
-                       p, (void*)(uintptr_t)ci->renderPass);
-            continue;
+            STEREO_LOG(
+                "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
+                p,
+                (void*)(uintptr_t)ci->renderPass,
+                has_vs,
+                has_tes,
+                ci->stageCount);
+
+            /* TEMP: continue removed for diagnostics */
         }
 
         /* Substitute multiview render pass for pipeline compilation.
