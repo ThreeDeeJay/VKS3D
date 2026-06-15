@@ -25,7 +25,6 @@
 #define SpvOpTypeInt          21
 #define SpvOpTypeFloat        22
 #define SpvOpTypeVector       23
-#define SpvOpTypeMatrix       24
 #define SpvOpTypePointer      32
 #define SpvOpTypeArray        28
 #define SpvOpConstant         43
@@ -41,8 +40,6 @@
 #define SpvOpCompositeInsert  82
 #define SpvOpFAdd             129
 #define SpvOpFMul             133
-#define SpvOpMatrixTimesVector 145
-#define SpvOpMatrixTimesMatrix 146
 #define SpvOpIEqual           170
 #define SpvOpSelect           169
 
@@ -80,9 +77,6 @@ typedef struct {
     bool has_emit_vertex;
     bool has_viewindex_builtin;
 
-    /* Geometry classification */
-    bool has_matrix_ops;
-
     int  exec_model;
     uint32_t pos_var, pos_block_type, pos_member_idx, pos_ptr_type;
     bool     pos_is_block;
@@ -110,14 +104,8 @@ static void do_scan(SpvMod *m, bool p2)
             if(wc==4&&w[i+2]==m->ft&&w[i+3]==4) m->v4t=w[i+1]; break;
         case SpvOpTypeInt:
             if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
-        case SpvOpTypeMatrix:
-            m->has_matrix_ops = true;
-            break;
-
-        case SpvOpMatrixTimesVector:
-        case SpvOpMatrixTimesMatrix:
-            m->has_matrix_ops = true;
-            break;
+        case SpvOpTypeBool:
+            if(wc==2) m->bt=w[i+1]; break;
         case SpvOpTypePointer:
             if(wc>=4){
                 if(w[i+2]==SpvStorageOutput&&m->v4t&&w[i+3]==m->v4t) m->ptr_out_v4=w[i+1];
@@ -208,27 +196,15 @@ bool spirv_patch_stereo_vertex(
     spv_scan(&m);
 
     STEREO_LOG(
-        "SPIRV scan: exec=%d pos=%u view=%u emits=%u mvcap=%d matrix=%d",
+        "SPIRV scan: exec=%d pos=%u view=%u emits=%u mvcap=%d",
         m.exec_model,
         m.pos_var,
         m.view_var,
         (unsigned)m.emit_count,
-        m.has_mv_cap,
-        m.has_matrix_ops);
+        m.has_mv_cap);
 
     if (!m.is_patchable || !m.pos_var)
         return false;
-
-    /* Avoid stereoizing helper/fullscreen shaders that directly
-     * write clip-space positions. These are responsible for the
-     * duplicated shadow/composite artifacts seen in deferredshadows.
-     */
-    if (!m.has_matrix_ops)
-    {
-        STEREO_LOG(
-            "Skipping stereo patch: no matrix operations detected");
-        return false;
-    }
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
