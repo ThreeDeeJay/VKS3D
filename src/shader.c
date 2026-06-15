@@ -72,6 +72,11 @@ typedef struct {
     const uint32_t *words; size_t count;
     uint32_t bound;
     bool is_patchable, has_mv_cap;
+
+    /* Diagnostics */
+    bool has_emit_vertex;
+    bool has_viewindex_builtin;
+
     int  exec_model;
     uint32_t pos_var, pos_block_type, pos_member_idx, pos_ptr_type;
     bool     pos_is_block;
@@ -108,15 +113,23 @@ static void do_scan(SpvMod *m, bool p2)
             } break;
         case SpvOpDecorate:
             if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
-                if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block) m->pos_var=w[i+1];
-                if(w[i+3]==SpvBuiltInViewIndex)                  m->view_var=w[i+1];
+                if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
+                    m->pos_var=w[i+1];
+
+                if(w[i+3]==SpvBuiltInViewIndex) {
+                    m->view_var = w[i+1];
+                    m->has_viewindex_builtin = true;
+                }
             } break;
         case SpvOpMemberDecorate:
             if(wc>=5&&w[i+3]==SpvDecorationBuiltIn&&w[i+4]==SpvBuiltInPosition)
                 {m->pos_block_type=w[i+1];m->pos_member_idx=w[i+2];
                  m->pos_is_block=true;m->pos_var=0;} break;
         case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
-        case SpvOpEmitVertex: m->emit_count++; break;
+        case SpvOpEmitVertex:
+            m->emit_count++;
+            m->has_emit_vertex = true;
+            break;
         } else {
             if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput
                &&m->pos_block_type&&w[i+3]==m->pos_block_type) m->pos_ptr_type=w[i+1];
@@ -181,7 +194,17 @@ bool spirv_patch_stereo_vertex(
     if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
     SpvMod m={0}; m.words=in; m.count=in_c;
     spv_scan(&m);
-    if (!m.is_patchable||!m.pos_var) return false;
+
+    STEREO_LOG(
+        "SPIRV scan: exec=%d pos=%u view=%u emits=%u mvcap=%d",
+        m.exec_model,
+        m.pos_var,
+        m.view_var,
+        (unsigned)m.emit_count,
+        m.has_mv_cap);
+
+    if (!m.is_patchable || !m.pos_var)
+        return false;
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
