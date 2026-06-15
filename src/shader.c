@@ -25,6 +25,7 @@
 #define SpvOpTypeInt          21
 #define SpvOpTypeFloat        22
 #define SpvOpTypeVector       23
+#define SpvOpTypeMatrix       24
 #define SpvOpTypePointer      32
 #define SpvOpTypeArray        28
 #define SpvOpConstant         43
@@ -40,6 +41,8 @@
 #define SpvOpCompositeInsert  82
 #define SpvOpFAdd             129
 #define SpvOpFMul             133
+#define SpvOpMatrixTimesVector 145
+#define SpvOpMatrixTimesMatrix 146
 #define SpvOpIEqual           170
 #define SpvOpSelect           169
 
@@ -72,6 +75,14 @@ typedef struct {
     const uint32_t *words; size_t count;
     uint32_t bound;
     bool is_patchable, has_mv_cap;
+
+    /* Diagnostics */
+    bool has_emit_vertex;
+    bool has_viewindex_builtin;
+
+    /* Geometry classification */
+    bool has_matrix_ops;
+
     int  exec_model;
     uint32_t pos_var, pos_block_type, pos_member_idx, pos_ptr_type;
     bool     pos_is_block;
@@ -99,8 +110,14 @@ static void do_scan(SpvMod *m, bool p2)
             if(wc==4&&w[i+2]==m->ft&&w[i+3]==4) m->v4t=w[i+1]; break;
         case SpvOpTypeInt:
             if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
-        case SpvOpTypeBool:
-            if(wc==2) m->bt=w[i+1]; break;
+        case SpvOpTypeMatrix:
+            m->has_matrix_ops = true;
+            break;
+
+        case SpvOpMatrixTimesVector:
+        case SpvOpMatrixTimesMatrix:
+            m->has_matrix_ops = true;
+            break;
         case SpvOpTypePointer:
             if(wc>=4){
                 if(w[i+2]==SpvStorageOutput&&m->v4t&&w[i+3]==m->v4t) m->ptr_out_v4=w[i+1];
@@ -108,15 +125,23 @@ static void do_scan(SpvMod *m, bool p2)
             } break;
         case SpvOpDecorate:
             if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
-                if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block) m->pos_var=w[i+1];
-                if(w[i+3]==SpvBuiltInViewIndex)                  m->view_var=w[i+1];
+                if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
+                    m->pos_var=w[i+1];
+
+                if(w[i+3]==SpvBuiltInViewIndex) {
+                    m->view_var = w[i+1];
+                    m->has_viewindex_builtin = true;
+                }
             } break;
         case SpvOpMemberDecorate:
             if(wc>=5&&w[i+3]==SpvDecorationBuiltIn&&w[i+4]==SpvBuiltInPosition)
                 {m->pos_block_type=w[i+1];m->pos_member_idx=w[i+2];
                  m->pos_is_block=true;m->pos_var=0;} break;
         case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
-        case SpvOpEmitVertex: m->emit_count++; break;
+        case SpvOpEmitVertex:
+            m->emit_count++;
+            m->has_emit_vertex = true;
+            break;
         } else {
             if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput
                &&m->pos_block_type&&w[i+3]==m->pos_block_type) m->pos_ptr_type=w[i+1];
@@ -181,7 +206,29 @@ bool spirv_patch_stereo_vertex(
     if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
     SpvMod m={0}; m.words=in; m.count=in_c;
     spv_scan(&m);
-    if (!m.is_patchable||!m.pos_var) return false;
+
+    STEREO_LOG(
+        "SPIRV scan: exec=%d pos=%u view=%u emits=%u mvcap=%d matrix=%d",
+        m.exec_model,
+        m.pos_var,
+        m.view_var,
+        (unsigned)m.emit_count,
+        m.has_mv_cap,
+        m.has_matrix_ops);
+
+    if (!m.is_patchable || !m.pos_var)
+        return false;
+
+    /* Avoid stereoizing helper/fullscreen shaders that directly
+     * write clip-space positions. These are responsible for the
+     * duplicated shadow/composite artifacts seen in deferredshadows.
+     */
+    if (!m.has_matrix_ops)
+    {
+        STEREO_LOG(
+            "Skipping stereo patch: no matrix operations detected");
+        return false;
+    }
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
@@ -310,9 +357,15 @@ void spirv_patched_free(uint32_t *w) { free(w); }
 #define FS_MAX_LOADS 512
 
 typedef struct {
-    uint32_t img_ids[FS_MAX_IMG];    uint32_t n_img;
-    uint32_t si_ids[FS_MAX_SI];      uint32_t n_si;
-    uint32_t load_ids[FS_MAX_LOADS]; uint32_t n_load;
+    uint32_t img_ids[FS_MAX_IMG];       uint32_t n_img;
+    uint32_t img_depth[FS_MAX_IMG];
+    uint32_t img_arrayed[FS_MAX_IMG];
+
+    uint32_t si_ids[FS_MAX_SI];         uint32_t n_si;
+
+    uint32_t load_ids[FS_MAX_LOADS];
+    uint32_t load_bindings[FS_MAX_LOADS];
+    uint32_t n_load;
     uint32_t float_id;
     uint32_t int_id;
     uint32_t v3float_id;
@@ -353,9 +406,16 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
             if (wc >= 4 && s->float_id && w[i+2] == s->float_id && w[i+3] == 3)
                 s->v3float_id = w[i+1];
             break;
-        case 25:  /* OpTypeImage: [0]=op [1]=id [2]=sampledtype [3]=Dim [4]=Depth [5]=Arrayed */
+        case 25:  /* OpTypeImage */
             if (wc >= 9 && w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
+            {
+                STEREO_LOG(
+                    "FS discovered image type id=%u depth=%u arrayed=%u",
+                    w[i+1],
+                    w[i+4],
+                    w[i+5]);
                 s->img_ids[s->n_img++] = w[i+1];
+            }
             break;
         case 27:  /* OpTypeSampledImage: [1]=id [2]=image_type */
             if (wc >= 3 && fs_id_in(s->img_ids, s->n_img, w[i+2]) && s->n_si < FS_MAX_SI)
@@ -365,9 +425,29 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
             if (wc >= 4 && w[i+2] == 1 && s->int_id && w[i+3] == s->int_id)
                 s->ptr_int_in_id = w[i+1];
             break;
-        case 71:  /* OpDecorate: BuiltIn ViewIndex */
-            if (wc >= 4 && w[i+2] == 11 && w[i+3] == 4440)
-                s->vi_var_id = w[i+1];
+        case 71:  /* OpDecorate */
+            if (wc >= 4) {
+
+                /* BuiltIn ViewIndex */
+                if (w[i+2] == 11 && w[i+3] == 4440)
+                    s->vi_var_id = w[i+1];
+
+                /* Descriptor binding */
+                if (w[i+2] == 33) {
+                    STEREO_LOG(
+                        "FS binding: id=%u binding=%u",
+                        w[i+1],
+                        w[i+3]);
+                }
+
+                /* Descriptor set */
+                if (w[i+2] == 34) {
+                    STEREO_LOG(
+                        "FS set: id=%u set=%u",
+                        w[i+1],
+                        w[i+3]);
+                }
+            }
             break;
         case 54:  /* OpFunction */
             if (!s->fn_word) s->fn_word = i;
@@ -375,16 +455,38 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
             break;
         default:
             if (in_func) {
+
                 /* OpLoad of patched sampled-image type */
                 if (op == 61 && wc >= 4 &&
                     fs_id_in(s->si_ids, s->n_si, w[i+1]) &&
                     s->n_load < FS_MAX_LOADS)
-                    s->load_ids[s->n_load++] = w[i+2]; /* result id */
+                {
+                    uint32_t idx = s->n_load++;
+
+                    s->load_ids[idx] = w[i+2];
+
+                    STEREO_LOG(
+                        "FS OpLoad: type=%u result=%u",
+                        w[i+1],
+                        w[i+2]);
+                }
+
                 /* OpSampledImage combining a patched image+sampler */
                 if (op == 86 && wc >= 5 &&
                     fs_id_in(s->si_ids, s->n_si, w[i+1]) &&
                     s->n_load < FS_MAX_LOADS)
-                    s->load_ids[s->n_load++] = w[i+2];
+                {
+                    uint32_t idx = s->n_load++;
+
+                    s->load_ids[idx] = w[i+2];
+
+                    STEREO_LOG(
+                        "FS OpSampledImage: type=%u result=%u image=%u sampler=%u",
+                        w[i+1],
+                        w[i+2],
+                        w[i+3],
+                        w[i+4]);
+                }
             }
             break;
         }
@@ -470,9 +572,17 @@ bool spirv_patch_stereo_fs(
 
         /* Patch OpTypeImage: Dim=2D Arrayed=0 → Arrayed=1 (in-place word change) */
         if (op == 25 && wc >= 9 && fs_id_in(s.img_ids, s.n_img, in[i+1])) {
+
+            STEREO_LOG(
+                "FS converting image type id=%u depth=%u arrayed=%u",
+                in[i+1],
+                in[i+4],
+                in[i+5]);
+
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 5] = 1; /* Arrayed */
-            i += wc; continue;
+            i += wc;
+            continue;
         }
 
         /* Inject new types + gl_ViewIndex variable before first OpFunction */
@@ -508,6 +618,12 @@ bool spirv_patch_stereo_fs(
             (op == 87 || op == 88 || op == 89 || op == 90) &&
             fs_id_in(s.load_ids, s.n_load, in[i+3]))
         {
+            STEREO_LOG(
+                "FS extending sample: op=%u sampledImage=%u coord=%u result=%u",
+                op,
+                in[i+3],
+                in[i+4],
+                in[i+2]);
             uint32_t coord_id = in[i+4];
             uint32_t id_lv  = samp_nid++;
             uint32_t id_cvt = samp_nid++;

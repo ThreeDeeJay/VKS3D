@@ -48,6 +48,28 @@ static VkResult create_patched_rp(StereoDevice *sd,
     free(pa);  return res;
 }
 
+static bool is_depth_only_renderpass(
+    const VkRenderPassCreateInfo *pCI)
+{
+    if (!pCI || pCI->attachmentCount != 1)
+        return false;
+
+    VkFormat fmt = pCI->pAttachments[0].format;
+
+    switch (fmt) {
+    case VK_FORMAT_D16_UNORM:
+    case VK_FORMAT_X8_D24_UNORM_PACK32:
+    case VK_FORMAT_D32_SFLOAT:
+    case VK_FORMAT_S8_UINT:
+    case VK_FORMAT_D16_UNORM_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /* ── Helper: create multiview version (PRESENT_SRC_KHR patched + viewMask) */
 static VkResult create_mv_rp(StereoDevice *sd,
     const VkRenderPassCreateInfo *pCI, const VkAllocationCallbacks *pA,
@@ -110,7 +132,17 @@ stereo_CreateRenderPass(
     rpi->subpass_count = pCreateInfo->subpassCount;
 
     /* Step 2: create the multiview version (stored, not returned to app) */
-    if (sd->stereo.enabled && sd->stereo.multiview) {
+    bool depth_only = is_depth_only_renderpass(pCreateInfo);
+
+    STEREO_LOG(
+        "RenderPass classify: depth_only=%d attachments=%u",
+        depth_only,
+        pCreateInfo->attachmentCount);
+
+    if (sd->stereo.enabled &&
+        sd->stereo.multiview &&
+        !depth_only)
+    {
         VkRenderPass mv = VK_NULL_HANDLE;
         if (create_mv_rp(sd, pCreateInfo, pAllocator, &mv) == VK_SUCCESS && mv) {
             rpi->mv_handle     = mv;
