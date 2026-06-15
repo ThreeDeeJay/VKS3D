@@ -25,17 +25,6 @@
 #define STEREO_VIEW_MASK        0x3u
 #define STEREO_CORRELATION_MASK 0x3u
 
-/* Diagnostic: only enable MV for passes that present to swapchain */
-static bool is_swapchain_renderpass(const VkRenderPassCreateInfo *pCI)
-{
-    for (uint32_t i = 0; i < pCI->attachmentCount; i++) {
-        if (pCI->pAttachments[i].finalLayout ==
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-            return true;
-    }
-    return false;
-}
-
 /* ── Helper: create render pass, patching PRESENT_SRC_KHR → COLOR_ATTACHMENT */
 static VkResult create_patched_rp(StereoDevice *sd,
     const VkRenderPassCreateInfo *pCI, const VkAllocationCallbacks *pA,
@@ -120,16 +109,8 @@ stereo_CreateRenderPass(
     rpi->view_mask     = 0;
     rpi->subpass_count = pCreateInfo->subpassCount;
 
-    STEREO_LOG(
-        "RenderPass candidate: swapchain=%d attachments=%u",
-        is_swapchain_renderpass(pCreateInfo),
-        pCreateInfo->attachmentCount);
-
     /* Step 2: create the multiview version (stored, not returned to app) */
-    if (sd->stereo.enabled &&
-        sd->stereo.multiview &&
-        is_swapchain_renderpass(pCreateInfo))
-    {
+    if (sd->stereo.enabled && sd->stereo.multiview) {
         VkRenderPass mv = VK_NULL_HANDLE;
         if (create_mv_rp(sd, pCreateInfo, pAllocator, &mv) == VK_SUCCESS && mv) {
             rpi->mv_handle     = mv;
