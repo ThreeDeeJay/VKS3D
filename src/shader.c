@@ -136,7 +136,7 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpMemberDecorate:
             if(wc>=5&&w[i+3]==SpvDecorationBuiltIn&&w[i+4]==SpvBuiltInPosition)
                 {m->pos_block_type=w[i+1];m->pos_member_idx=w[i+2];
-                 m->pos_is_block=true;m->pos_var=0;} break;
+                 m->pos_is_block=true;} break;
         case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
         case SpvOpEmitVertex:
             m->emit_count++;
