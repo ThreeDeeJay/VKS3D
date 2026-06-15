@@ -560,33 +560,19 @@ static uint32_t fs_count_patches(const FsScan *s, const uint32_t *w, size_t c)
     for (size_t i = 5; i < c; ) {
         uint32_t op = w[i] & 0xffff, wc = w[i] >> 16;
         if (!wc || i + wc > c) break;
-        if (op == 54) in_func = true;
-        if (in_func && wc >= 4)
-        {
-            for (uint32_t k = 0; k < s->n_load; k++)
-            {
-                uint32_t id = s->load_ids[k];
 
-                for (uint32_t j = 1; j < wc; j++)
-                {
-                    if (w[i+j] == id)
-                    {
-                    if (op == 100)
-                    {
-                        STEREO_LOG(
-                            "FS op100: wc=%u a=%u b=%u c=%u d=%u e=%u",
-                            wc,
-                            wc > 1 ? w[i+1] : 0,
-                            wc > 2 ? w[i+2] : 0,
-                            wc > 3 ? w[i+3] : 0,
-                            wc > 4 ? w[i+4] : 0,
-                            wc > 5 ? w[i+5] : 0);
-                    }
-                        break;
-                    }
-                }
-            }
-        }
+        if (op == 54)
+            in_func = true;
+
+        if (in_func &&
+            wc >= 5 &&
+            (op == 87 || op == 88 || op == 89 || op == 90) &&
+            fs_id_in(s->load_ids, s->n_load, w[i+3]))
+            count++;
+
+        /* OpImageFetch */
+        if (in_func && op == 95 && wc >= 5)
+            count++;
         i += wc;
     }
     return count;
@@ -609,6 +595,7 @@ bool spirv_patch_stereo_fs(
     uint32_t nid           = in[3];
     uint32_t new_int_id    = s.int_id        ? s.int_id        : nid++;
     uint32_t new_v3f_id    = s.v3float_id    ? s.v3float_id    : nid++;
+    uint32_t new_v3i_id    = nid++;
     uint32_t new_pin_id    = s.ptr_int_in_id ? s.ptr_int_in_id : nid++;
     uint32_t new_vi_id     = s.vi_var_id     ? s.vi_var_id     : nid++;
     bool     is_new_vi     = (s.vi_var_id == 0);
@@ -688,6 +675,10 @@ bool spirv_patch_stereo_fs(
             if (!s.v3float_id) {
                 uint32_t w[]={(4u<<16)|23, new_v3f_id, s.float_id, 3};
                 sb_push_n(&ob,w,4); }
+            {
+                uint32_t w[]={(4u<<16)|23, new_v3i_id, new_int_id, 3};
+                sb_push_n(&ob,w,4);
+            }
             if (!s.ptr_int_in_id) {
                 uint32_t w[]={(4u<<16)|32, new_pin_id, 1, new_int_id};
                 sb_push_n(&ob,w,4); }
@@ -743,6 +734,42 @@ bool spirv_patch_stereo_fs(
             sb_push(&ob, id_c3);          /* new 3D coordinate */
             if (wc > 5) sb_push_n(&ob, &in[i+5], wc-5); /* image operands */
             i += wc; continue;
+        }
+
+        /* Extend OpImageFetch ivec2 -> ivec3(x,y,ViewIndex) */
+        if (in_func && op == 95 && wc >= 5)
+        {
+            uint32_t coord_id = in[i+4];
+
+            uint32_t id_lv = samp_nid++;
+            uint32_t id_x  = samp_nid++;
+            uint32_t id_y  = samp_nid++;
+            uint32_t id_c3 = samp_nid++;
+
+            { uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, new_vi_id};
+              sb_push_n(&ob,w,4); }
+
+            { uint32_t w[]={(5u<<16)|81, new_int_id, id_x, coord_id, 0};
+              sb_push_n(&ob,w,5); }
+
+            { uint32_t w[]={(5u<<16)|81, new_int_id, id_y, coord_id, 1};
+              sb_push_n(&ob,w,5); }
+
+            { uint32_t w[]={(6u<<16)|80, new_v3i_id, id_c3,
+                            id_x, id_y, id_lv};
+              sb_push_n(&ob,w,6); }
+
+            sb_push(&ob, in[i]);
+            sb_push(&ob, in[i+1]);
+            sb_push(&ob, in[i+2]);
+            sb_push(&ob, in[i+3]);
+            sb_push(&ob, id_c3);
+
+            if (wc > 5)
+                sb_push_n(&ob, &in[i+5], wc - 5);
+
+            i += wc;
+            continue;
         }
 
         sb_push_n(&ob, &in[i], wc);
