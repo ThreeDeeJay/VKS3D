@@ -451,12 +451,13 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
             if (wc >= 9)
             {
                 STEREO_LOG(
-                    "FS image type: id=%u dim=%u depth=%u arrayed=%u sampled=%u",
+                    "FS image type: id=%u dim=%u depth=%u arrayed=%u sampled=%u format=%u",
                     w[i+1],
                     w[i+3],
                     w[i+4],
                     w[i+5],
-                    w[i+7]);
+                    w[i+7],
+                    w[i+8]);
 
                 if (w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
                     s->img_ids[s->n_img++] = w[i+1];
