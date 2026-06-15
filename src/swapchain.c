@@ -508,9 +508,15 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         && pCreateInfo->arrayLayers == 1
         && pCreateInfo->samples     == VK_SAMPLE_COUNT_1_BIT;
 
-    /* Depth/stencil attachments — upgraded for multiview depth per eye */
-    bool intercept_depth = base
-        && (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    /* Do NOT stereoize generic depth attachments.
+     *
+     * Shadow maps are depth-only passes rendered from the light's POV.
+     * Converting them to multiview causes duplicate/ghost shadows.
+     *
+     * The main scene depth buffer can still participate in multiview via
+     * upgraded color attachments causing framebuffer promotion.
+     */
+    bool intercept_depth = false;
 
     /* Color attachments that are also sampled (render-to-texture G-buffers,
      * shadow-color, lighting output, post-fx targets).  mipLevels==1 and
