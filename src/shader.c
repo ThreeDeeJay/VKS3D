@@ -447,16 +447,22 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
                 s->v3float_id = w[i+1];
             break;
         case 25:  /* OpTypeImage */
-            if (wc >= 9 && w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
+        {
+            if (wc >= 9)
             {
                 STEREO_LOG(
-                    "FS discovered image type id=%u depth=%u arrayed=%u",
+                    "FS image type: id=%u dim=%u depth=%u arrayed=%u sampled=%u",
                     w[i+1],
+                    w[i+3],
                     w[i+4],
-                    w[i+5]);
-                s->img_ids[s->n_img++] = w[i+1];
+                    w[i+5],
+                    w[i+7]);
+
+                if (w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
+                    s->img_ids[s->n_img++] = w[i+1];
             }
-            break;
+        }
+        break;
         case 27:  /* OpTypeSampledImage: [1]=id [2]=image_type */
             if (wc >= 3 && fs_id_in(s->img_ids, s->n_img, w[i+2]) && s->n_si < FS_MAX_SI)
                 s->si_ids[s->n_si++] = w[i+1];
