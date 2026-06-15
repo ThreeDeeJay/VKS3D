@@ -362,7 +362,10 @@ typedef struct {
     uint32_t img_arrayed[FS_MAX_IMG];
 
     uint32_t si_ids[FS_MAX_SI];         uint32_t n_si;
-    uint32_t load_ids[FS_MAX_LOADS]; uint32_t n_load;
+
+    uint32_t load_ids[FS_MAX_LOADS];
+    uint32_t load_bindings[FS_MAX_LOADS];
+    uint32_t n_load;
     uint32_t float_id;
     uint32_t int_id;
     uint32_t v3float_id;
@@ -422,9 +425,29 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
             if (wc >= 4 && w[i+2] == 1 && s->int_id && w[i+3] == s->int_id)
                 s->ptr_int_in_id = w[i+1];
             break;
-        case 71:  /* OpDecorate: BuiltIn ViewIndex */
-            if (wc >= 4 && w[i+2] == 11 && w[i+3] == 4440)
-                s->vi_var_id = w[i+1];
+        case 71:  /* OpDecorate */
+            if (wc >= 4) {
+
+                /* BuiltIn ViewIndex */
+                if (w[i+2] == 11 && w[i+3] == 4440)
+                    s->vi_var_id = w[i+1];
+
+                /* Descriptor binding */
+                if (w[i+2] == 33) {
+                    STEREO_LOG(
+                        "FS binding: id=%u binding=%u",
+                        w[i+1],
+                        w[i+3]);
+                }
+
+                /* Descriptor set */
+                if (w[i+2] == 34) {
+                    STEREO_LOG(
+                        "FS set: id=%u set=%u",
+                        w[i+1],
+                        w[i+3]);
+                }
+            }
             break;
         case 54:  /* OpFunction */
             if (!s->fn_word) s->fn_word = i;
@@ -432,16 +455,38 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
             break;
         default:
             if (in_func) {
+
                 /* OpLoad of patched sampled-image type */
                 if (op == 61 && wc >= 4 &&
                     fs_id_in(s->si_ids, s->n_si, w[i+1]) &&
                     s->n_load < FS_MAX_LOADS)
-                    s->load_ids[s->n_load++] = w[i+2]; /* result id */
+                {
+                    uint32_t idx = s->n_load++;
+
+                    s->load_ids[idx] = w[i+2];
+
+                    STEREO_LOG(
+                        "FS OpLoad: type=%u result=%u",
+                        w[i+1],
+                        w[i+2]);
+                }
+
                 /* OpSampledImage combining a patched image+sampler */
                 if (op == 86 && wc >= 5 &&
                     fs_id_in(s->si_ids, s->n_si, w[i+1]) &&
                     s->n_load < FS_MAX_LOADS)
-                    s->load_ids[s->n_load++] = w[i+2];
+                {
+                    uint32_t idx = s->n_load++;
+
+                    s->load_ids[idx] = w[i+2];
+
+                    STEREO_LOG(
+                        "FS OpSampledImage: type=%u result=%u image=%u sampler=%u",
+                        w[i+1],
+                        w[i+2],
+                        w[i+3],
+                        w[i+4]);
+                }
             }
             break;
         }
@@ -574,10 +619,11 @@ bool spirv_patch_stereo_fs(
             fs_id_in(s.load_ids, s.n_load, in[i+3]))
         {
             STEREO_LOG(
-                "FS extending sample: op=%u sampledImage=%u coord=%u",
+                "FS extending sample: op=%u sampledImage=%u coord=%u result=%u",
                 op,
                 in[i+3],
-                in[i+4]);
+                in[i+4],
+                in[i+2]);
             uint32_t coord_id = in[i+4];
             uint32_t id_lv  = samp_nid++;
             uint32_t id_cvt = samp_nid++;
