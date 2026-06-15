@@ -706,6 +706,11 @@ bool spirv_patch_stereo_fs(
     *out_c = ob.n;
     STEREO_LOG("FS patched: %u 2D img types→arr, %u samples extended, bound %u→%u",
                s.n_img, n_patches, in[3], ob.w[3]);
+    STEREO_LOG(
+        "FS converting image type id=%u depth=%u arrayed=%u",
+        image_id,
+        depth,
+        arrayed);
     return true;
 }
 
