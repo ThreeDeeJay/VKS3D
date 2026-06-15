@@ -542,10 +542,19 @@ static uint32_t fs_count_patches(const FsScan *s, const uint32_t *w, size_t c)
         uint32_t op = w[i] & 0xffff, wc = w[i] >> 16;
         if (!wc || i + wc > c) break;
         if (op == 54) in_func = true;
-        if (in_func && wc >= 5 &&
-            (op == 87 || op == 88 || op == 89 || op == 90) && /* sample ops */
-            fs_id_in(s->load_ids, s->n_load, w[i+3]))
-            count++;
+        if (in_func && wc >= 5)
+        {
+            if (fs_id_in(s->load_ids, s->n_load, w[i+3]))
+            {
+                STEREO_LOG(
+                    "FS candidate opcode=%u sampled=%u",
+                    op,
+                    w[i+3]);
+
+                if (op == 87 || op == 88 || op == 89 || op == 90)
+                    count++;
+            }
+        }
         i += wc;
     }
     return count;
