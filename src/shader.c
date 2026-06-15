@@ -333,8 +333,11 @@ void spirv_patched_free(uint32_t *w) { free(w); }
 #define FS_MAX_LOADS 512
 
 typedef struct {
-    uint32_t img_ids[FS_MAX_IMG];    uint32_t n_img;
-    uint32_t si_ids[FS_MAX_SI];      uint32_t n_si;
+    uint32_t img_ids[FS_MAX_IMG];       uint32_t n_img;
+    uint32_t img_depth[FS_MAX_IMG];
+    uint32_t img_arrayed[FS_MAX_IMG];
+
+    uint32_t si_ids[FS_MAX_SI];         uint32_t n_si;
     uint32_t load_ids[FS_MAX_LOADS]; uint32_t n_load;
     uint32_t float_id;
     uint32_t int_id;
@@ -376,9 +379,16 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
             if (wc >= 4 && s->float_id && w[i+2] == s->float_id && w[i+3] == 3)
                 s->v3float_id = w[i+1];
             break;
-        case 25:  /* OpTypeImage: [0]=op [1]=id [2]=sampledtype [3]=Dim [4]=Depth [5]=Arrayed */
+        case 25:  /* OpTypeImage */
             if (wc >= 9 && w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
+            {
+                STEREO_LOG(
+                    "FS discovered image type id=%u depth=%u arrayed=%u",
+                    w[i+1],
+                    w[i+4],
+                    w[i+5]);
                 s->img_ids[s->n_img++] = w[i+1];
+            }
             break;
         case 27:  /* OpTypeSampledImage: [1]=id [2]=image_type */
             if (wc >= 3 && fs_id_in(s->img_ids, s->n_img, w[i+2]) && s->n_si < FS_MAX_SI)
@@ -493,9 +503,17 @@ bool spirv_patch_stereo_fs(
 
         /* Patch OpTypeImage: Dim=2D Arrayed=0 → Arrayed=1 (in-place word change) */
         if (op == 25 && wc >= 9 && fs_id_in(s.img_ids, s.n_img, in[i+1])) {
+
+            STEREO_LOG(
+                "FS converting image type id=%u depth=%u arrayed=%u",
+                in[i+1],
+                in[i+4],
+                in[i+5]);
+
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 5] = 1; /* Arrayed */
-            i += wc; continue;
+            i += wc;
+            continue;
         }
 
         /* Inject new types + gl_ViewIndex variable before first OpFunction */
@@ -531,6 +549,11 @@ bool spirv_patch_stereo_fs(
             (op == 87 || op == 88 || op == 89 || op == 90) &&
             fs_id_in(s.load_ids, s.n_load, in[i+3]))
         {
+            STEREO_LOG(
+                "FS extending sample: op=%u sampledImage=%u coord=%u",
+                op,
+                in[i+3],
+                in[i+4]);
             uint32_t coord_id = in[i+4];
             uint32_t id_lv  = samp_nid++;
             uint32_t id_cvt = samp_nid++;
