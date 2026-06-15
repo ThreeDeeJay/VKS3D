@@ -134,9 +134,21 @@ static void do_scan(SpvMod *m, bool p2)
                 }
             } break;
         case SpvOpMemberDecorate:
-            if(wc>=5&&w[i+3]==SpvDecorationBuiltIn&&w[i+4]==SpvBuiltInPosition)
-                {m->pos_block_type=w[i+1];m->pos_member_idx=w[i+2];
-                 m->pos_is_block=true;} break;
+            if (wc >= 5 &&
+                w[i+3] == SpvDecorationBuiltIn &&
+                w[i+4] == SpvBuiltInPosition)
+            {
+                m->pos_block_type = w[i+1];
+                m->pos_member_idx = w[i+2];
+                m->pos_is_block   = true;
+
+                /* TES shaders using gl_PerVertex blocks may never
+                   satisfy the later pointer matching logic. Treat
+                   the block itself as a valid Position source. */
+                if (!m->pos_var)
+                    m->pos_var = w[i+1];
+            }
+            break;
         case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
         case SpvOpEmitVertex:
             m->emit_count++;
@@ -256,7 +268,13 @@ bool spirv_patch_stereo_vertex(
         m.has_mv_cap,
         m.has_matrix_ops);
 
-    if (!m.is_patchable || !m.pos_var)
+    if (!m.is_patchable)
+        return false;
+
+    /* TES gl_PerVertex blocks may not resolve to a concrete
+       output variable during scanning. Allow patching to
+       continue when a Position block was discovered. */
+    if (!m.pos_var && !m.pos_is_block)
         return false;
 
     /* Avoid stereoizing helper/fullscreen shaders that directly
