@@ -552,12 +552,17 @@ static uint32_t fs_count_patches(const FsScan *s, const uint32_t *w, size_t c)
                 {
                     if (w[i+j] == id)
                     {
+                    if (op == 100)
+                    {
                         STEREO_LOG(
-                            "FS uses tracked id=%u op=%u wc=%u",
-                            id,
-                            op,
-                            wc);
-
+                            "FS op100: wc=%u a=%u b=%u c=%u d=%u e=%u",
+                            wc,
+                            wc > 1 ? w[i+1] : 0,
+                            wc > 2 ? w[i+2] : 0,
+                            wc > 3 ? w[i+3] : 0,
+                            wc > 4 ? w[i+4] : 0,
+                            wc > 5 ? w[i+5] : 0);
+                    }
                         break;
                     }
                 }
