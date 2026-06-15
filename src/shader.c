@@ -152,7 +152,20 @@ static void do_scan(SpvMod *m, bool p2)
     }
 }
 static void spv_scan(SpvMod *m)
-    { m->bound=m->words[3]; do_scan(m,false); if(m->pos_is_block) do_scan(m,true); }
+{
+    m->bound = m->words[3];
+
+    /* First pass: discover decorations/types. */
+    do_scan(m,false);
+
+    /* Run again now that block Position info is known.
+       Some TES shaders declare OpTypePointer before
+       the OpMemberDecorate(BuiltIn Position). */
+    do_scan(m,false);
+
+    if (m->pos_is_block)
+        do_scan(m,true);
+}
 
 /* ── Stereo offset injection body ────────────────────────────────────────── */
 typedef struct {
