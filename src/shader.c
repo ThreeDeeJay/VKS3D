@@ -143,8 +143,21 @@ static void do_scan(SpvMod *m, bool p2)
             m->has_emit_vertex = true;
             break;
         } else {
-            if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput
-               &&m->pos_block_type&&w[i+3]==m->pos_block_type) m->pos_ptr_type=w[i+1];
+            if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput)
+            {
+                STEREO_LOG(
+                    "TES ptr: result=%u target=%u pos_block=%u",
+                    w[i+1],
+                    w[i+3],
+                    m->pos_block_type);
+
+                if(m->pos_block_type &&
+                   w[i+3]==m->pos_block_type)
+                {
+                    STEREO_LOG("TES matched block pointer");
+                    m->pos_ptr_type=w[i+1];
+                }
+            }
             if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageOutput
                &&m->pos_ptr_type&&w[i+1]==m->pos_ptr_type) m->pos_var=w[i+2];
         }
