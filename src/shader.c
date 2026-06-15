@@ -84,7 +84,12 @@ typedef struct {
     bool has_matrix_ops;
 
     int  exec_model;
-    uint32_t pos_var, pos_block_type, pos_member_idx, pos_ptr_type;
+    uint32_t pos_var, pos_member_idx, pos_ptr_type;
+
+    /* TES shaders may contain both an input gl_in[] Position block
+       and an output gl_PerVertex Position block. */
+    uint32_t pos_block_type[8];
+    uint32_t pos_block_count;
     bool     pos_is_block;
     uint32_t view_var, ft, v4t, it, bt, ptr_out_v4, ptr_in_int;
     size_t   fn_word;
@@ -127,32 +132,69 @@ static void do_scan(SpvMod *m, bool p2)
             if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                 if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                     m->pos_var=w[i+1];
-
                 if(w[i+3]==SpvBuiltInViewIndex) {
                     m->view_var = w[i+1];
                     m->has_viewindex_builtin = true;
                 }
             } break;
         case SpvOpMemberDecorate:
-            if(wc>=5&&w[i+3]==SpvDecorationBuiltIn&&w[i+4]==SpvBuiltInPosition)
-                {m->pos_block_type=w[i+1];m->pos_member_idx=w[i+2];
-                 m->pos_is_block=true;m->pos_var=0;} break;
+            if (wc >= 5 &&
+                w[i+3] == SpvDecorationBuiltIn &&
+                w[i+4] == SpvBuiltInPosition)
+            {
+                if (m->pos_block_count < 8)
+                    m->pos_block_type[m->pos_block_count++] = w[i+1];
+
+                m->pos_member_idx = w[i+2];
+                m->pos_is_block   = true;
+                m->pos_var        = 0;
+            }
+            break;
         case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
         case SpvOpEmitVertex:
             m->emit_count++;
             m->has_emit_vertex = true;
             break;
         } else {
-            if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput
-               &&m->pos_block_type&&w[i+3]==m->pos_block_type) m->pos_ptr_type=w[i+1];
-            if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageOutput
-               &&m->pos_ptr_type&&w[i+1]==m->pos_ptr_type) m->pos_var=w[i+2];
+            if(op==SpvOpTypePointer && wc>=4 &&
+               w[i+2]==SpvStorageOutput)
+            {
+                for(uint32_t k=0;k<m->pos_block_count;k++)
+                {
+                    if(w[i+3]==m->pos_block_type[k])
+                    {
+                        m->pos_ptr_type=w[i+1];
+                        break;
+                    }
+                }
+            }
+            if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageOutput)
+            {
+                if(m->pos_ptr_type &&
+                   w[i+1]==m->pos_ptr_type)
+                {
+                    m->pos_var=w[i+2];
+                }
+            }
         }
         i+=wc;
     }
 }
 static void spv_scan(SpvMod *m)
-    { m->bound=m->words[3]; do_scan(m,false); if(m->pos_is_block) do_scan(m,true); }
+{
+    m->bound = m->words[3];
+
+    /* First pass: discover decorations/types. */
+    do_scan(m,false);
+
+    /* Run again now that block Position info is known.
+       Some TES shaders declare OpTypePointer before
+       the OpMemberDecorate(BuiltIn Position). */
+    do_scan(m,false);
+
+    if (m->pos_is_block)
+        do_scan(m,true);
+}
 
 /* ── Stereo offset injection body ────────────────────────────────────────── */
 typedef struct {
@@ -223,12 +265,10 @@ bool spirv_patch_stereo_vertex(
      * write clip-space positions. These are responsible for the
      * duplicated shadow/composite artifacts seen in deferredshadows.
      */
-    if (!m.has_matrix_ops)
-    {
-        STEREO_LOG(
-            "Skipping stereo patch: no matrix operations detected");
-        return false;
-    }
+/*     if (!m.has_matrix_ops && m.exec_model != SpvExecutionModelVertex) {*/
+/*         STEREO_LOG("Skipping stereo patch: no matrix operations detected");*/
+/*         return false;*/
+/*     }*/
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
@@ -850,8 +890,32 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
-                    lo,ro,conv,true)) {
-                STEREO_LOG("Pipe %u PathA: patch failed",p); continue; }
+                    lo,ro,conv,true))
+            {
+                STEREO_LOG("TES patch failed");
+
+                if (dump)
+                {
+                    char dp[512];
+
+                    _snprintf(
+                        dp,
+                        sizeof(dp)-1,
+                        "%s\\pipe%04d_a_tes_failed.spv",
+                        dump,
+                        dump_n++);
+
+                    FILE *f = fopen(dp, "wb");
+                    if (f)
+                    {
+                        fwrite(e->spv, 4, e->words, f);
+                        fclose(f);
+                    }
+                }
+
+                STEREO_LOG("Pipe %u PathA: patch failed",p);
+                continue;
+            }
             if (dump) {
                 char dp[512];
                 _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_a_tes.spv",dump,dump_n++);
