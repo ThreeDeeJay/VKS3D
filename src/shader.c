@@ -849,7 +849,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             uint32_t *patched=NULL; size_t pc2=0;
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
                     lo,ro,conv,true)) {
-                STEREO_LOG("Pipe %u PathA: patch failed",p); continue; }
+                STEREO_LOG(
+                    "TES fail details: exec=%d pos=%u words=%zu",
+                    m.exec_model,
+                    m.pos_var,
+                    codeSizeWords);
+                STEREO_LOG("Pipe %u PathA: patch failed",p);
+                continue;
+            }
             if (dump) {
                 char dp[512];
                 _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_a_tes.spv",dump,dump_n++);
