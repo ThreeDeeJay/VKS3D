@@ -614,6 +614,13 @@ bool spirv_patch_stereo_fs(
         if (op == 25 && wc >= 9 && fs_id_in(s.img_ids, s.n_img, in[i+1])) {
 
             STEREO_LOG(
+                "FS discovered image type id=%u depth=%u arrayed=%u sampled=%u",
+                in[i+1],
+                in[i+4],
+                in[i+5],
+                in[i+7]);
+
+            STEREO_LOG(
                 "FS converting image type id=%u depth=%u arrayed=%u",
                 in[i+1],
                 in[i+4],
