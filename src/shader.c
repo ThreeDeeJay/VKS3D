@@ -128,6 +128,13 @@ static void do_scan(SpvMod *m, bool p2)
                 if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                     m->pos_var=w[i+1];
 
+                if (wc >= 3)
+                {
+                    STEREO_LOG(
+                        "Decorate: id=%u dec=%u",
+                        w[i+1],
+                        w[i+2]);
+                }
                 if(w[i+3]==SpvBuiltInViewIndex) {
                     m->view_var = w[i+1];
                     m->has_viewindex_builtin = true;
@@ -136,6 +143,10 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpMemberDecorate:
             if(wc>=5&&w[i+3]==SpvDecorationBuiltIn&&w[i+4]==SpvBuiltInPosition)
                 {m->pos_block_type=w[i+1];m->pos_member_idx=w[i+2];
+                STEREO_LOG(
+                    "Position member decorate: struct=%u member=%u",
+                    w[i+1],
+                    w[i+2]);
                  m->pos_is_block=true;} break;
         case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
         case SpvOpEmitVertex:
