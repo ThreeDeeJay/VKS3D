@@ -845,9 +845,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             in_mv_rp = (rpi != NULL && rpi->has_multiview);
         }
         if (!in_mv_rp) {
-            STEREO_LOG("Pipe %u: rp=%p not multiview — skip",
-                       p, (void*)(uintptr_t)ci->renderPass);
-            continue;
+            STEREO_LOG(
+                "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
+                p,
+                (void*)(uintptr_t)ci->renderPass,
+                has_vs,
+                has_tes,
+                ci->stageCount);
+
+            /* TEMP: continue removed for diagnostics */
         }
 
         /* Substitute multiview render pass for pipeline compilation.
