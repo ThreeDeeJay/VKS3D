@@ -459,8 +459,20 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
                     w[i+7],
                     w[i+8]);
 
+                /* Existing path */
                 if (w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
+                {
+                    STEREO_LOG("FS accepted image type %u", w[i+1]);
                     s->img_ids[s->n_img++] = w[i+1];
+                }
+                else
+                {
+                    STEREO_LOG(
+                        "FS rejected image type %u dim=%u sampled=%u",
+                        w[i+1],
+                        w[i+3],
+                        w[i+7]);
+                }
             }
         }
         break;
