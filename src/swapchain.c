@@ -522,6 +522,15 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         && pCreateInfo->extent.width  > 1
         && pCreateInfo->extent.height > 1
         && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    if (base &&
+        (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) &&
+        !(pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+    {
+        STEREO_LOG(
+            "stereo_CreateImage: depth-only attachment left mono [%ux%u]",
+            pCreateInfo->extent.width,
+            pCreateInfo->extent.height);
+    }
 
     if (!intercept_depth && !intercept_color)
         return sd->real.CreateImage(sd->real_device, pCreateInfo, pAllocator, pImage);
