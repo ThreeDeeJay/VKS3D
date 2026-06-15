@@ -377,34 +377,9 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
                 s->v3float_id = w[i+1];
             break;
         case 25:  /* OpTypeImage: [0]=op [1]=id [2]=sampledtype [3]=Dim [4]=Depth [5]=Arrayed */
-        {
-            bool is_2d      = (w[i+3] == 1);
-            bool is_depth   = (w[i+4] == 1);
-            bool is_arrayed = (w[i+5] != 0);
-            if (wc >= 9 && w[i+3] == 1 && w[i+4] == 1)
-            {
-                STEREO_LOG(
-                    "FS shadow/depth image skipped: id=%u",
-                    w[i+1]);
-            }
-            /* Do not stereoize shadow/depth-comparison textures.
-             * Those are typically sampled from mono shadow maps.
-             */
-            if (wc >= 9 &&
-                is_2d &&
-                !is_depth &&
-                !is_arrayed &&
-                s->n_img < FS_MAX_IMG)
-            {
-                STEREO_LOG(
-                    "FS candidate image type: id=%u depth=%u arrayed=%u",
-                    w[i+1],
-                    w[i+4],
-                    w[i+5]);
+            if (wc >= 9 && w[i+3] == 1 && w[i+5] == 0 && s->n_img < FS_MAX_IMG)
                 s->img_ids[s->n_img++] = w[i+1];
-            }
             break;
-        }
         case 27:  /* OpTypeSampledImage: [1]=id [2]=image_type */
             if (wc >= 3 && fs_id_in(s->img_ids, s->n_img, w[i+2]) && s->n_si < FS_MAX_SI)
                 s->si_ids[s->n_si++] = w[i+1];
