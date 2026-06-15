@@ -850,11 +850,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
                     lo,ro,conv,true))
             {
-                STEREO_LOG(
-                    "TES fail details: exec=%d pos=%u words=%zu",
-                    m.exec_model,
-                    m.pos_var,
-                    codeSizeWords);
+                STEREO_LOG("TES patch failed");
 
                 if (dump)
                 {
