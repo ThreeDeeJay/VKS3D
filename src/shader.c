@@ -132,14 +132,6 @@ static void do_scan(SpvMod *m, bool p2)
             if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                 if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                     m->pos_var=w[i+1];
-
-                if (wc >= 3)
-                {
-                    STEREO_LOG(
-                        "Decorate: id=%u dec=%u",
-                        w[i+1],
-                        w[i+2]);
-                }
                 if(w[i+3]==SpvBuiltInViewIndex) {
                     m->view_var = w[i+1];
                     m->has_viewindex_builtin = true;
@@ -178,17 +170,9 @@ static void do_scan(SpvMod *m, bool p2)
             }
             if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageOutput)
             {
-                STEREO_LOG(
-                    "TES var: type=%u result=%u storage=%u pos_ptr=%u",
-                    w[i+1],
-                    w[i+2],
-                    w[i+3],
-                    m->pos_ptr_type);
-
                 if(m->pos_ptr_type &&
                    w[i+1]==m->pos_ptr_type)
                 {
-                    STEREO_LOG("TES matched output variable");
                     m->pos_var=w[i+2];
                 }
             }
