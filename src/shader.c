@@ -848,8 +848,33 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
-                    lo,ro,conv,true)) {
-                STEREO_LOG("TES patch failed");
+                    lo,ro,conv,true))
+            {
+                STEREO_LOG(
+                    "TES fail details: exec=%d pos=%u words=%zu",
+                    m.exec_model,
+                    m.pos_var,
+                    codeSizeWords);
+
+                if (dump)
+                {
+                    char dp[512];
+
+                    _snprintf(
+                        dp,
+                        sizeof(dp)-1,
+                        "%s\\pipe%04d_a_tes_failed.spv",
+                        dump,
+                        dump_n++);
+
+                    FILE *f = fopen(dp, "wb");
+                    if (f)
+                    {
+                        fwrite(e->spv, 4, e->words, f);
+                        fclose(f);
+                    }
+                }
+
                 STEREO_LOG("Pipe %u PathA: patch failed",p);
                 continue;
             }
