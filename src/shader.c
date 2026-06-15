@@ -223,10 +223,10 @@ bool spirv_patch_stereo_vertex(
      * write clip-space positions. These are responsible for the
      * duplicated shadow/composite artifacts seen in deferredshadows.
      */
-    if (!m.has_matrix_ops && m.exec_model != SpvExecutionModelVertex) {
-        STEREO_LOG("Skipping stereo patch: no matrix operations detected");
-        return false;
-    }
+/*     if (!m.has_matrix_ops && m.exec_model != SpvExecutionModelVertex) {*/
+/*         STEREO_LOG("Skipping stereo patch: no matrix operations detected");*/
+/*         return false;*/
+/*     }*/
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
