@@ -228,19 +228,19 @@ void stereo_config_init(StereoConfig *cfg)
 
 void stereo_config_compute_offsets(StereoConfig *cfg)
 {
-    /* Off-axis stereo eye offsets in clip-space X.
-     *
-     * left_eye_offset  = -(half_sep) + (half_conv)
-     * right_eye_offset = +(half_sep) - (half_conv)
-     *
-     * separation  — full inter-ocular distance in NDC (typ. 0.06).
-     * convergence — toe-in correction that shifts both images toward centre
-     *               (typ. 0.0–0.06).  Reduces apparent depth at the cost of
-     *               narrowing the depth window.  Zero = parallel-axis cameras.
-     *
-     * When sep == conv the net offset is zero (infinite convergence distance).
-     * Keep sep > conv for a visible stereo effect.  The shipped vks3d.ini
-     * defaults (sep=0.065, conv=0.030) are deliberately asymmetric.         */
+    /* Stereo eye offsets.
+
+       Parallel:
+           left  = -(sep/2) + (conv/2)
+           right = +(sep/2) - (conv/2)
+
+       Off-axis:
+           left  = -(sep/2)
+           right = +(sep/2)
+
+       In off-axis mode convergence is applied later during
+       projection/frustum adjustment, not in the eye offsets.
+    */
     float half_sep = cfg->separation * 0.5f;
 
     if (cfg->projection == STEREO_PROJECTION_PARALLEL)
@@ -250,15 +250,8 @@ void stereo_config_compute_offsets(StereoConfig *cfg)
         cfg->left_eye_offset  = -half_sep + half_conv;
         cfg->right_eye_offset =  half_sep - half_conv;
     }
-    else
+    else /* off-axis */
     {
-        /* Off-axis:
-         *
-         * Keep physical eye separation.
-         * Convergence becomes zero-parallax distance control.
-         *
-         * Actual frustum shift is injected in shader.c.
-         */
         cfg->left_eye_offset  = -half_sep;
         cfg->right_eye_offset =  half_sep;
     }
