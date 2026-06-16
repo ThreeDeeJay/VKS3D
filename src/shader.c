@@ -246,27 +246,9 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
     else
     {
-        uint32_t pw = (*nid)++;
-        uint32_t sx = (*nid)++;
-
-        /* pw = clip.w * eyeOffset */
-        {
-            uint32_t w[]={op_(SpvOpCompositeExtract,5),
-                          m->ft,pw,lp,3u};
-            sb_push_n(out,w,5);
-        }
-
-        {
-            uint32_t w[]={op_(SpvOpFMul,5),
-                          m->ft,sx,pw,sel};
-            sb_push_n(out,w,5);
-        }
-
-        {
-            uint32_t w[]={op_(SpvOpFAdd,5),
-                          m->ft,nx,px,sx};
-            sb_push_n(out,w,5);
-        }
+        uint32_t w[]={op_(SpvOpFAdd,5),
+                      m->ft,nx,px,sel};
+        sb_push_n(out,w,5);
     }
     { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
     { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
@@ -333,7 +315,7 @@ bool spirv_patch_stereo_vertex(
     uint32_t id_cz=nid++, id_cl=nid++, id_cr=nid++;
     uint32_t uv4  = m.ptr_out_v4 ? m.ptr_out_v4 : id_ptr_v4;
     uint32_t uint_= m.ptr_in_int  ? m.ptr_in_int  : id_ptr_int;
-    uint32_t bt   = m.bt          ? m.bt          : id_new_bt;
+    uint32_t bt   = m.bt  B        ? m.bt          : id_new_bt;
 
     SpvBuf te; if (!sb_init(&te,96)) return false;
     if (id_new_it) { uint32_t w[]={op_(SpvOpTypeInt,4),id_new_it,32,1}; sb_push_n(&te,w,4); }
