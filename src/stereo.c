@@ -250,9 +250,6 @@ void stereo_config_compute_offsets(StereoConfig *cfg)
      * When sep == conv the net offset is zero (infinite convergence distance).
      * Keep sep > conv for a visible stereo effect.  The shipped vks3d.ini
      * defaults (sep=0.065, conv=0.030) are deliberately asymmetric.         */
-    float half_sep  = cfg->separation  / 2.0f;
-    float half_conv = cfg->convergence / 2.0f;
-    if (!cfg->flip_eyes) {
     float half_sep = cfg->separation * 0.5f;
 
     if (cfg->projection == STEREO_PROJECTION_PARALLEL)
