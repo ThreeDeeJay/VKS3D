@@ -498,13 +498,25 @@ static bool dx9_create_stereo_surface(StereoDevice *sd, uint32_t w, uint32_t h)
         return false;
     }
 
+    STEREO_LOG(
+        "[DX9] CreateRenderTarget OK surf=%p size=%ux%u",
+        pSurf,
+        w * 2,
+        h + 1);
+
     D3DLOCKED_RECT_ lr;
     typedef HRESULT (WINAPI *PFN_LR)(void*, D3DLOCKED_RECT_*, const RECT*, DWORD);
     typedef HRESULT (WINAPI *PFN_ULR)(void*);
     PFN_LR  fnLock   = (PFN_LR) (*(void***)pSurf)[D3DSURF_LockRect];
     PFN_ULR fnUnlock = (PFN_ULR)(*(void***)pSurf)[D3DSURF_UnlockRect];
 
-    if (SUCCEEDED(fnLock(pSurf, &lr, NULL, 0))) {
+    HRESULT hrLock = fnLock(pSurf, &lr, NULL, 0);
+
+    STEREO_LOG(
+        "[DX9] create-surface LockRect hr=0x%08x",
+        (unsigned)hrLock);
+
+    if (SUCCEEDED(hrLock)) {
         uint8_t *data = (uint8_t *)lr.pBits;
         memset(data, 0, (size_t)lr.Pitch * h);
         NVSTEREOIMAGEHEADER_ *hdr =
@@ -514,6 +526,11 @@ static bool dx9_create_stereo_surface(StereoDevice *sd, uint32_t w, uint32_t h)
         hdr->dwHeight    = h;
         hdr->dwBPP       = 32;
         hdr->dwFlags     = 0;
+        STEREO_LOG(
+            "[DX9] NV header written sig=0x%08x w=%u h=%u",
+            hdr->dwSignature,
+            hdr->dwWidth,
+            hdr->dwHeight);
         fnUnlock(pSurf);
     }
 
@@ -551,7 +568,14 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
         PFN_ULR fnUnlock = (PFN_ULR)(*(void***)pSurf)[D3DSURF_UnlockRect];
 
         D3DLOCKED_RECT_ locked;
-        if (SUCCEEDED(fnLock(pSurf, &locked, NULL, 0))) {
+        HRESULT hrLock = fnLock(pSurf, &locked, NULL, 0);
+
+        STEREO_LOG(
+            "[DX9] LockRect hr=0x%08x pitch=%d",
+            (unsigned)hrLock,
+            SUCCEEDED(hrLock) ? locked.Pitch : 0);
+
+        if (SUCCEEDED(hrLock)) {
             uint8_t *dst = (uint8_t *)locked.pBits;
             size_t row_bytes = (size_t)w * 4;
             size_t stride_out = (size_t)locked.Pitch;
@@ -570,12 +594,26 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
     ((PFN_GBB)(*(void***)pDev)[D3DDEV9_GetBackBuffer])(pDev, 0, 0, 0, &pBB);
     if (pBB) {
         typedef HRESULT (WINAPI *PFN_SR)(void*, void*, const RECT*, void*, const RECT*, UINT);
-        ((PFN_SR)(*(void***)pDev)[D3DDEV9_StretchRect])(pDev, pSurf, NULL, pBB, NULL, 2);
+        HRESULT hrStretch =
+            ((PFN_SR)(*(void***)pDev)[D3DDEV9_StretchRect])(
+                pDev, pSurf, NULL, pBB, NULL, 2);
+
+        STEREO_LOG(
+            "[DX9] StretchRect hr=0x%08x",
+            (unsigned)hrStretch);
         ((void(WINAPI*)(void*))(*(void***)pBB)[D3DSURF_Release])(pBB);
     }
 
     typedef HRESULT (WINAPI *PFN_PR)(void*, const RECT*, const RECT*, HWND, void*);
-    HRESULT hr = ((PFN_PR)(*(void***)pDev)[D3DDEV9_Present])(pDev, NULL, NULL, NULL, NULL);
+    STEREO_LOG("[DX9] before Present");
+
+    HRESULT hr =
+        ((PFN_PR)(*(void***)pDev)[D3DDEV9_Present])(
+            pDev, NULL, NULL, NULL, NULL);
+
+    STEREO_LOG(
+        "[DX9] Present hr=0x%08x",
+        (unsigned)hr);
     if (FAILED(hr)) STEREO_ERR("[DX9] Present failed: 0x%x", (unsigned)hr);
 
     if (sd->stereo.half_fps) Sleep(16);
