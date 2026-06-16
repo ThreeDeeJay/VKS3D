@@ -350,7 +350,7 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view;
     }
 
-    BodyCtx bc={&m, have_view, uv4, uint_, bt, id_cz, id_cl, id_cr};
+    BodyCtx bc={&m, have_view, uv4, uint_, bt, id_cz, id_cl, id_cr, projection_mode};
 
     size_t ins_t=0, ins_b=0;
     for (size_t i=5;i<in_c;) {
