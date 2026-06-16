@@ -278,12 +278,16 @@ bool spirv_patch_stereo_vertex(
     uint32_t **out, size_t *out_c,
     float lo, float ro,
     float conv,
-    bool inj_vi);
+    bool inj_vi)
 {
     const int projection_mode = STEREO_PROJECTION_OFF_AXIS;
+
     (void)conv;
     if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
-    SpvMod m={0}; m.words=in; m.count=in_c;
+
+    SpvMod m={0};
+    m.words=in;
+    m.count=in_c;
     spv_scan(&m);
 
     STEREO_LOG(
