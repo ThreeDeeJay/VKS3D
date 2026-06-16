@@ -315,7 +315,7 @@ bool spirv_patch_stereo_vertex(
     uint32_t id_cz=nid++, id_cl=nid++, id_cr=nid++;
     uint32_t uv4  = m.ptr_out_v4 ? m.ptr_out_v4 : id_ptr_v4;
     uint32_t uint_= m.ptr_in_int  ? m.ptr_in_int  : id_ptr_int;
-    uint32_t bt   = m.bt  B        ? m.bt          : id_new_bt;
+    uint32_t bt   = m.bt          ? m.bt          : id_new_bt;
 
     SpvBuf te; if (!sb_init(&te,96)) return false;
     if (id_new_it) { uint32_t w[]={op_(SpvOpTypeInt,4),id_new_it,32,1}; sb_push_n(&te,w,4); }
