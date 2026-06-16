@@ -205,6 +205,7 @@ typedef struct {
     uint32_t cz;
     uint32_t cl;
     uint32_t cr;
+    uint32_t cc;   /* convergence */
 
     uint32_t projection_mode;
 } BodyCtx;
@@ -246,25 +247,26 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
     else
     {
-        uint32_t pw = (*nid)++;
-        uint32_t sx = (*nid)++;
+        uint32_t sx   = (*nid)++;
+        uint32_t conv = (*nid)++;
 
-        /* pw = clip.w * eyeOffset */
+        /* eye separation */
         {
-            uint32_t w[]={op_(SpvOpCompositeExtract,5),
-                          m->ft,pw,lp,3u};
-            sb_push_n(out,w,5);
+            uint32_t w[]={op_(SpvOpCopyObject,4),
+                          m->ft,sx,sel};
+            sb_push_n(out,w,4);
         }
 
+        /* subtract convergence term */
         {
-            uint32_t w[]={op_(SpvOpFMul,5),
-                          m->ft,sx,pw,sel};
+            uint32_t w[]={op_(SpvOpFSub,5),
+                          m->ft,conv,sx,c->cc};
             sb_push_n(out,w,5);
         }
 
         {
             uint32_t w[]={op_(SpvOpFAdd,5),
-                          m->ft,nx,px,sx};
+                          m->ft,nx,px,conv};
             sb_push_n(out,w,5);
         }
     }
@@ -324,7 +326,10 @@ bool spirv_patch_stereo_vertex(
     uint32_t id_new_bt=0;
     if (!m.bt && have_view && m.it) id_new_bt=nid++;
 
-    uint32_t id_cz=nid++, id_cl=nid++, id_cr=nid++;
+    uint32_t id_cz=nid++;
+    uint32_t id_cl=nid++;
+    uint32_t id_cr=nid++;
+    uint32_t id_cc=nid++;
     uint32_t uv4  = m.ptr_out_v4 ? m.ptr_out_v4 : id_ptr_v4;
     uint32_t uint_= m.ptr_in_int  ? m.ptr_in_int  : id_ptr_int;
     uint32_t bt   = m.bt          ? m.bt          : id_new_bt;
@@ -341,6 +346,9 @@ bool spirv_patch_stereo_vertex(
     if (m.it) { uint32_t w[]={op_(SpvOpConstant,4),m.it,id_cz,0}; sb_push_n(&te,w,4); }
     { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cl,0}; memcpy(&w[3],&lo,4); sb_push_n(&te,w,4); }
     { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cr,0}; memcpy(&w[3],&ro,4); sb_push_n(&te,w,4); }
+    { uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cc,0};
+      memcpy(&w[3],&conv,4);
+      sb_push_n(&te,w,4); }
 
     if (will_inj_vi) {
         { uint32_t d[]={op_(SpvOpDecorate,4),id_inj_view,SpvDecorationBuiltIn,SpvBuiltInViewIndex};
@@ -350,7 +358,9 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view;
     }
 
-    BodyCtx bc={&m, have_view, uv4, uint_, bt, id_cz, id_cl, id_cr, projection_mode};
+    BodyCtx bc={&m, have_view, uv4, uint_, bt,
+                id_cz, id_cl, id_cr, id_cc,
+                projection_mode};
 
     size_t ins_t=0, ins_b=0;
     for (size_t i=5;i<in_c;) {
