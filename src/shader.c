@@ -274,7 +274,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 
         /* nx = tmp - conv */
         {
-            uint32_t w[]={op_(SpvOpFSub,5),
+            uint32_t w[]={op_(131,5),
                           m->ft,nx,tmp,conv};
             sb_push_n(out,w,5);
         }
