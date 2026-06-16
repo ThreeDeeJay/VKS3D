@@ -14,7 +14,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_icd.h>
 
-/* ── Self-contained fallbacks for external memory extensions ─────────────── */
+/* -- Self-contained fallbacks for external memory extensions --------------- */
 #if !defined(VK_KHR_external_memory)
 #define VK_KHR_external_memory 1
 typedef struct VkExternalMemoryImageCreateInfo {
@@ -96,10 +96,10 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #include <stdint.h>
 #include <stdbool.h>
 
-/* ── Loader/ICD interface version ─────────────────────────────────────────── */
+/* -- Loader/ICD interface version ------------------------------------------- */
 #define STEREO_ICD_INTERFACE_VERSION 7
 
-/* ── Maximum tracked objects ─────────────────────────────────────────────── */
+/* -- Maximum tracked objects ----------------------------------------------- */
 #define MAX_INSTANCES           8
 #define MAX_PHYSICAL_DEVICES    16
 #define MAX_DEVICES             32
@@ -107,7 +107,7 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
 #define MAX_SWAPCHAINS          64
 #define MAX_DEPTH_IMAGES        256
 
-/* ── Shader module cache ──────────────────────────────────────────────────── *
+/* -- Shader module cache ---------------------------------------------------- *
  * Stores original (unpatched) SPIR-V for vertex/geometry/tesseval shaders.   *
  * Used by stereo_CreateGraphicsPipelines to patch the correct stage.          *
  * Fragment and compute shaders are never cached.                              */
@@ -118,7 +118,7 @@ typedef struct {
     size_t          words;
 } StereoShaderCache;
 
-/* ── Stereo presentation mode ─────────────────────────────────────────────── */
+/* -- Stereo presentation mode ----------------------------------------------- */
 typedef enum StereoPresentMode {
     STEREO_PRESENT_AUTO       = 0,
     STEREO_PRESENT_DXGI       = 1,
@@ -160,7 +160,7 @@ extern char g_exe_dir[512];
 extern char g_global_ini[512];
 extern char g_local_ini[512];
 
-/* ── Dispatch tables ─────────────────────────────────────────────────────── */
+/* -- Dispatch tables ------------------------------------------------------- */
 typedef struct RealInstanceDispatch {
     PFN_vkDestroyInstance                     DestroyInstance;
     PFN_vkEnumeratePhysicalDevices            EnumeratePhysicalDevices;
@@ -350,7 +350,7 @@ typedef struct RealDeviceDispatch {
     PFN_vkGetMemoryWin32HandlePropertiesKHR GetMemoryWin32HandlePropertiesKHR;
 } RealDeviceDispatch;
 
-/* ── Object wrappers ─────────────────────────────────────────────────────── */
+/* -- Object wrappers ------------------------------------------------------- */
 
 #define MAX_SURFACES 16
 typedef struct StereoSurfaceHWND { VkSurfaceKHR surface; HWND hwnd; } StereoSurfaceHWND;
@@ -457,7 +457,7 @@ typedef struct StereoDevice {
     uint32_t               fb_track_count;
     stereo_mutex_t         lock;
 
-    /* ── Multiview render pass tracking ─────────────────────────────────── *
+    /* -- Multiview render pass tracking ----------------------------------- *
      * Set to true when stereo_CreateRenderPass successfully injects          *
      * viewMask=0x3 into a swapchain output render pass.                      *
      * alt_cpu_readback uses this to decide layer_count (1 vs 2):             *
@@ -467,7 +467,7 @@ typedef struct StereoDevice {
      *           both eyes (2D, not black, not a GPU TDR).                    */
     bool                   multiview_pass_exists;
 
-    /* ── Shader module cache for deferred SPIR-V patching ───────────────── *
+    /* -- Shader module cache for deferred SPIR-V patching ----------------- *
      * stereo_CreateShaderModule stores original SPIR-V here for VS/GS/TES.  *
      * stereo_CreateGraphicsPipelines picks the last pre-rast stage, patches  *
      * it, creates a temporary VkShaderModule, builds the pipeline, then      *
@@ -476,7 +476,7 @@ typedef struct StereoDevice {
     StereoShaderCache      shader_cache[MAX_SHADER_CACHE];
     uint32_t               shader_cache_count;
 
-    /* ── Temporary patched shader modules (alive until DestroyDevice) ───── *
+    /* -- Temporary patched shader modules (alive until DestroyDevice) ----- *
      * Driver 426.06 holds a reference to module SPIR-V even after           *
      * CreateGraphicsPipelines returns, so we must not destroy the temp      *
      * module immediately.  Pool them here and destroy in stereo_DestroyDevice */
@@ -484,40 +484,40 @@ typedef struct StereoDevice {
     VkShaderModule         tmp_modules[MAX_TMP_MODULES];
     uint32_t               tmp_module_count;
 
-    /* ── D3D11 / DXGI stereo output ──────────────────────────────────────── */
+    /* -- D3D11 / DXGI stereo output ---------------------------------------- */
     bool                   d3d11_ok, dxgi_init_in_progress;
     void                  *d3d11_dev, *d3d11_ctx, *nvapi_stereo, *nvapi_lib, *d3d11_lib;
 
-    /* ── Graphics queue ───────────────────────────────────────────────────── */
+    /* -- Graphics queue ----------------------------------------------------- */
     VkQueue                gfx_queue;
     uint32_t               gfx_qf;
 
-    /* ── INI file paths ───────────────────────────────────────────────────── */
+    /* -- INI file paths ----------------------------------------------------- */
     char                   global_ini[512];
     char                   local_ini[512];
 
-    /* ── Hotkey debounce ──────────────────────────────────────────────────── */
+    /* -- Hotkey debounce ---------------------------------------------------- */
     uint32_t               hotkey_prev;
 
-    /* ── D3D9 direct-mode state ───────────────────────────────────────────── */
+    /* -- D3D9 direct-mode state --------------------------------------------- */
     bool                   dx9_ok;
     void                  *dx9_lib, *dx9_d3d, *dx9_dev, *dx9_surf, *dx9_nvstereo;
 
-    /* ── Compose swap chain state ─────────────────────────────────────────── */
+    /* -- Compose swap chain state ------------------------------------------- */
     bool                   comp_ok;
     HWND                   comp_hwnd;
     void                  *comp_composed;
     uint32_t               comp_w, comp_h;
 } StereoDevice;
 
-/* ── Stereo UBO layout ───────────────────────────────────────────────────── */
+/* -- Stereo UBO layout ----------------------------------------------------- */
 typedef struct StereoUBO {
     float eye_offset[2];
     float convergence;
     float _pad;
 } StereoUBO;
 
-/* ── Object lookup helpers ───────────────────────────────────────────────── */
+/* -- Object lookup helpers ------------------------------------------------- */
 StereoInstance  *stereo_instance_from_handle(VkInstance h);
 StereoInstance  *stereo_si_from_physdev(VkPhysicalDevice pd);
 StereoPhysdev   *stereo_physdev_get_or_create(VkPhysicalDevice real_pd, StereoInstance *si);
@@ -529,7 +529,7 @@ PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
 void             stereo_instance_free(VkInstance h);
 StereoDevice    *stereo_device_alloc(void);
 
-/* ── Forward declarations ────────────────────────────────────────────────── */
+/* -- Forward declarations -------------------------------------------------- */
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyInstance(VkInstance, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumeratePhysicalDevices(VkInstance, uint32_t*, VkPhysicalDevice*);
@@ -618,7 +618,7 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDevice(VkPhysicalDevice, const VkDev
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyDevice(VkDevice, const VkAllocationCallbacks*);
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL stereo_GetDeviceProcAddr(VkDevice, const char*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImageView(VkDevice, const VkImageViewCreateInfo*, const VkAllocationCallbacks*, VkImageView*);
-/* ── framebuffer.c ──────────────────────────────────────────────────────── */
+/* -- framebuffer.c -------------------------------------------------------- */
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateFramebuffer(VkDevice, const VkFramebufferCreateInfo *, const VkAllocationCallbacks *, VkFramebuffer *);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyFramebuffer(VkDevice, VkFramebuffer, const VkAllocationCallbacks *);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRenderPass(VkCommandBuffer, const VkRenderPassBeginInfo *, VkSubpassContents);
