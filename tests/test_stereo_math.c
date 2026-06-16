@@ -152,6 +152,7 @@ static void test_zero_separation_zero_offset(void)
     cfg.separation  = 0.0f;
     cfg.convergence = 0.0f;
     cfg.flip_eyes   = false;
+    cfg.projection = STEREO_PROJECTION_PARALLEL;
     stereo_config_compute_offsets(&cfg);
 
     if (!approx_eq(cfg.left_eye_offset, 0.0f, EPSILON) ||
@@ -170,6 +171,7 @@ static void test_left_negative_right_positive(void)
     cfg.separation  = 0.065f;
     cfg.convergence = 0.0f;
     cfg.flip_eyes   = false;
+    cfg.projection = STEREO_PROJECTION_PARALLEL;
     stereo_config_compute_offsets(&cfg);
 
     if (cfg.left_eye_offset >= 0.0f) {
@@ -189,6 +191,7 @@ static void test_convergence_direction(void)
     cfg.separation  = 0.065f;
     cfg.convergence = 0.020f;
     cfg.flip_eyes   = false;
+    cfg.projection = STEREO_PROJECTION_PARALLEL;
     stereo_config_compute_offsets(&cfg);
 
     /* With convergence, the right eye should be less positive */
@@ -211,6 +214,7 @@ static void test_offset_formula(void)
     cfg.separation  = 0.060f;
     cfg.convergence = 0.020f;
     cfg.flip_eyes   = false;
+    cfg.projection = STEREO_PROJECTION_PARALLEL;
     stereo_config_compute_offsets(&cfg);
 
     float expected_left  = -(0.060f / 2.0f) + (0.020f / 2.0f);
@@ -237,6 +241,7 @@ static void test_extreme_separation(void)
     cfg.separation  = 1.0f;
     cfg.convergence = 0.0f;
     cfg.flip_eyes   = false;
+    cfg.projection = STEREO_PROJECTION_PARALLEL;
     stereo_config_compute_offsets(&cfg);
 
     if (!isfinite(cfg.left_eye_offset) || !isfinite(cfg.right_eye_offset)) {
