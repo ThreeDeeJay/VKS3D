@@ -282,7 +282,13 @@ bool spirv_patch_stereo_vertex(
 {
     const int projection_mode = STEREO_PROJECTION_OFF_AXIS;
 
-    (void)conv;
+    STEREO_LOG(
+        "Projection=%s lo=%f ro=%f conv=%f",
+        projection_mode == STEREO_PROJECTION_OFF_AXIS ?
+            "off-axis" : "parallel",
+        lo,
+        ro,
+        conv);
     if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
 
     SpvMod m={0};
