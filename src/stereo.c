@@ -200,16 +200,25 @@ void stereo_config_init(StereoConfig *cfg)
     /* multiview: off by default — most apps have single-layer depth buffers
      * which cause VK_ERROR_DEVICE_LOST when multiview tries to write layer 1.
      * Set multiview=1 in vks3d.ini [global] only for apps that support it. */
-    cfg->multiview       = cfg_bool("multiview", false);
+    cfg->multiview = cfg_bool("multiview", false);
+
+    cfg->projection = STEREO_PROJECTION_OFF_AXIS;
 
     /* ── hotkey steps ── */
     cfg->step_separation  = cfg_float("step_separation",  0.005f);
     cfg->step_convergence = cfg_float("step_convergence", 0.005f);
 
     stereo_config_compute_offsets(cfg);
-    STEREO_LOG("Stereo config: enabled=%d  separation=%.4f  convergence=%.4f  flip=%d  mode=%d",
-               cfg->enabled, cfg->separation, cfg->convergence,
-               cfg->flip_eyes, (int)cfg->present_mode);
+    STEREO_LOG(
+        "Stereo config: enabled=%d separation=%.4f convergence=%.4f "
+        "projection=%s flip=%d mode=%d",
+        cfg->enabled,
+        cfg->separation,
+        cfg->convergence,
+        cfg->projection == STEREO_PROJECTION_OFF_AXIS ?
+            "off-axis" : "parallel",
+        cfg->flip_eyes,
+        (int)cfg->present_mode);
     STEREO_LOG("  res_override=%ux%u  refresh=%uHz  half_fps=%d  hotkey_step_sep=%.4f  hotkey_step_conv=%.4f",
                cfg->override_width, cfg->override_height, cfg->refresh_rate,
                cfg->half_fps, cfg->step_separation, cfg->step_convergence);
@@ -219,27 +228,39 @@ void stereo_config_init(StereoConfig *cfg)
 
 void stereo_config_compute_offsets(StereoConfig *cfg)
 {
-    /* Off-axis stereo eye offsets in clip-space X.
-     *
-     * left_eye_offset  = -(half_sep) + (half_conv)
-     * right_eye_offset = +(half_sep) - (half_conv)
-     *
-     * separation  — full inter-ocular distance in NDC (typ. 0.06).
-     * convergence — toe-in correction that shifts both images toward centre
-     *               (typ. 0.0–0.06).  Reduces apparent depth at the cost of
-     *               narrowing the depth window.  Zero = parallel-axis cameras.
-     *
-     * When sep == conv the net offset is zero (infinite convergence distance).
-     * Keep sep > conv for a visible stereo effect.  The shipped vks3d.ini
-     * defaults (sep=0.065, conv=0.030) are deliberately asymmetric.         */
-    float half_sep  = cfg->separation  / 2.0f;
-    float half_conv = cfg->convergence / 2.0f;
-    if (!cfg->flip_eyes) {
+    /* Stereo eye offsets.
+
+       Parallel:
+           left  = -(sep/2) + (conv/2)
+           right = +(sep/2) - (conv/2)
+
+       Off-axis:
+           left  = -(sep/2)
+           right = +(sep/2)
+
+       In off-axis mode convergence is applied later during
+       projection/frustum adjustment, not in the eye offsets.
+    */
+    float half_sep = cfg->separation * 0.5f;
+
+    if (cfg->projection == STEREO_PROJECTION_PARALLEL)
+    {
+        float half_conv = cfg->convergence * 0.5f;
+
         cfg->left_eye_offset  = -half_sep + half_conv;
-        cfg->right_eye_offset = +half_sep - half_conv;
-    } else {
-        cfg->left_eye_offset  = +half_sep - half_conv;
-        cfg->right_eye_offset = -half_sep + half_conv;
+        cfg->right_eye_offset =  half_sep - half_conv;
+    }
+    else /* off-axis */
+    {
+        cfg->left_eye_offset  = -half_sep;
+        cfg->right_eye_offset =  half_sep;
+    }
+
+    if (cfg->flip_eyes)
+    {
+        float t = cfg->left_eye_offset;
+        cfg->left_eye_offset  = cfg->right_eye_offset;
+        cfg->right_eye_offset = t;
     }
 }
 

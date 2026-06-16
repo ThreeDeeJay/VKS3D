@@ -129,21 +129,27 @@ typedef enum StereoPresentMode {
     STEREO_PRESENT_MONO       = 6,
 } StereoPresentMode;
 
+typedef enum StereoProjectionMode {
+    STEREO_PROJECTION_PARALLEL = 0,
+    STEREO_PROJECTION_OFF_AXIS = 1
+} StereoProjectionMode;
+
 typedef struct StereoConfig {
-    bool              enabled;
-    float             separation;
-    float             convergence;
-    bool              flip_eyes;
-    float             left_eye_offset;
-    float             right_eye_offset;
-    StereoPresentMode present_mode;
-    uint32_t          override_width;
-    uint32_t          override_height;
-    uint32_t          refresh_rate;
-    bool              half_fps;
-    bool              multiview;
-    float             step_separation;
-    float             step_convergence;
+    bool                    enabled;
+    float                   separation;
+    float                   convergence;
+    bool                    flip_eyes;
+    float                   left_eye_offset;
+    float                   right_eye_offset;
+    StereoPresentMode       present_mode;
+    uint32_t                override_width;
+    uint32_t                override_height;
+    uint32_t                refresh_rate;
+    bool                    half_fps;
+    bool                    multiview;
+    StereoProjectionMode    projection;
+    float                   step_separation;
+    float                   step_convergence;
 } StereoConfig;
 
 void stereo_config_init(StereoConfig *cfg);
@@ -630,9 +636,12 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(VkDevice, VkSwapchai
 VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 
-bool spirv_patch_stereo_vertex(const uint32_t *in, size_t in_c,
+bool spirv_patch_stereo_vertex(
+    const uint32_t *in, size_t in_c,
     uint32_t **out, size_t *out_c,
-    float lo, float ro, float conv, bool inj_vi);
+    float lo, float ro,
+    float conv,
+    bool inj_vi);
 void spirv_patched_free(uint32_t *w);
 
 VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*,
