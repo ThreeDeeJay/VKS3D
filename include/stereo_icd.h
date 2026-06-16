@@ -641,7 +641,6 @@ bool spirv_patch_stereo_vertex(
     uint32_t **out, size_t *out_c,
     float lo, float ro,
     float conv,
-    int projection_mode,
     bool inj_vi);
 void spirv_patched_free(uint32_t *w);
 

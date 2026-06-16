@@ -202,16 +202,7 @@ void stereo_config_init(StereoConfig *cfg)
      * Set multiview=1 in vks3d.ini [global] only for apps that support it. */
     cfg->multiview = cfg_bool("multiview", false);
 
-    {
-        char proj[32] = "off-axis";
-
-        cfg_string("projection", proj, sizeof(proj));
-
-        if (_stricmp(proj, "parallel") == 0)
-            cfg->projection = STEREO_PROJECTION_PARALLEL;
-        else
-            cfg->projection = STEREO_PROJECTION_OFF_AXIS;
-    }
+    cfg->projection = STEREO_PROJECTION_OFF_AXIS;
 
     /* ── hotkey steps ── */
     cfg->step_separation  = cfg_float("step_separation",  0.005f);

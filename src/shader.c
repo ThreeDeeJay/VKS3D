@@ -200,10 +200,12 @@ static void spv_scan(SpvMod *m)
 typedef struct {
     SpvMod  *m;
     bool     have_view;
+
     uint32_t uv4, uint_, bt;
     uint32_t cz;
     uint32_t cl;
     uint32_t cr;
+
     uint32_t projection_mode;
 } BodyCtx;
 
@@ -276,9 +278,9 @@ bool spirv_patch_stereo_vertex(
     uint32_t **out, size_t *out_c,
     float lo, float ro,
     float conv,
-    int projection_mode,
     bool inj_vi);
 {
+    const int projection_mode = STEREO_PROJECTION_OFF_AXIS;
     (void)conv;
     if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
     SpvMod m={0}; m.words=in; m.count=in_c;
