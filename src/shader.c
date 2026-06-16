@@ -200,7 +200,11 @@ static void spv_scan(SpvMod *m)
 typedef struct {
     SpvMod  *m;
     bool     have_view;
-    uint32_t uv4, uint_, bt, cz, cl, cr;
+    uint32_t uv4, uint_, bt;
+    uint32_t cz;
+    uint32_t cl;
+    uint32_t cr;
+    uint32_t projection_mode;
 } BodyCtx;
 
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
@@ -233,7 +237,35 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cl,c->cr}; sb_push_n(out,w,6); }
     } else { sel=c->cl; }
     { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u};    sb_push_n(out,w,5); }
-    { uint32_t w[]={op_(SpvOpFAdd,5),m->ft,nx,px,sel};               sb_push_n(out,w,5); }
+    if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
+    {
+        uint32_t w[]={op_(SpvOpFAdd,5),m->ft,nx,px,sel};
+        sb_push_n(out,w,5);
+    }
+    else
+    {
+        uint32_t pw = (*nid)++;
+        uint32_t sx = (*nid)++;
+
+        /* pw = clip.w * eyeOffset */
+        {
+            uint32_t w[]={op_(SpvOpCompositeExtract,5),
+                          m->ft,pw,lp,3u};
+            sb_push_n(out,w,5);
+        }
+
+        {
+            uint32_t w[]={op_(SpvOpFMul,5),
+                          m->ft,sx,pw,sel};
+            sb_push_n(out,w,5);
+        }
+
+        {
+            uint32_t w[]={op_(SpvOpFAdd,5),
+                          m->ft,nx,px,sx};
+            sb_push_n(out,w,5);
+        }
+    }
     { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
     { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
 }
@@ -242,7 +274,10 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 bool spirv_patch_stereo_vertex(
     const uint32_t *in, size_t in_c,
     uint32_t **out, size_t *out_c,
-    float lo, float ro, float conv, bool inj_vi)
+    float lo, float ro,
+    float conv,
+    int projection_mode,
+    bool inj_vi);
 {
     (void)conv;
     if (!in||in_c<5||in[0]!=SPIRV_MAGIC) return false;
