@@ -77,6 +77,8 @@ static uint32_t find_memory_type(
     return UINT32_MAX;
 }
 
+extern "C" {
+
 bool nv3d_init(
     StereoDevice *sd,
     uint32_t width,
@@ -87,6 +89,8 @@ if (sd->nv3d_ok &&
     sd->nv3d_height == height)
 {
     return true;
+}
+
 }
 
 nv3d_destroy(sd);
