@@ -44,12 +44,7 @@ typedef struct VkExternalMemoryImageCreateInfo {
     ((VkExternalSemaphoreHandleTypeFlagBits)0x00000008)
 #endif
 
-typedef enum VkExternalSemaphoreHandleTypeFlagBits {
-    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT            = 0x00000001,
-    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT         = 0x00000002,
-    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT     = 0x00000004,
-    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT          = 0x00000008
-} VkExternalSemaphoreHandleTypeFlagBits;
+#ifndef VK_KHR_external_semaphore_win32
 
 typedef struct VkImportSemaphoreWin32HandleInfoKHR {
     VkStructureType                           sType;
@@ -60,6 +55,8 @@ typedef struct VkImportSemaphoreWin32HandleInfoKHR {
     HANDLE                                    handle;
     LPCWSTR                                   name;
 } VkImportSemaphoreWin32HandleInfoKHR;
+
+#endif
 
 typedef struct VkImportMemoryWin32HandleInfoKHR {
     VkStructureType                          sType;
@@ -83,6 +80,14 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetMemoryWin32HandlePropertiesKHR)(
     VkExternalMemoryHandleTypeFlagBits    handleType,
     HANDLE                                handle,
     VkMemoryWin32HandlePropertiesKHR     *pMemoryWin32HandleProperties);
+typedef VkResult (VKAPI_PTR *PFN_vkImportMemoryWin32HandleKHR)(
+    VkDevice device,
+    const VkImportMemoryWin32HandleInfoKHR *pImportMemoryWin32HandleInfo);
+
+typedef VkResult (VKAPI_PTR *PFN_vkImportSemaphoreWin32HandleKHR)(
+    VkDevice device,
+    const VkImportSemaphoreWin32HandleInfoKHR *pImportSemaphoreWin32HandleInfo);
+
 #endif /* VK_KHR_external_memory_win32 */
 
 /* VkPhysicalDeviceToolProperties compat shim */
