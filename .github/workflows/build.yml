@@ -70,7 +70,7 @@ jobs:
       run: >
         msbuild
         /m "third_party\NV3D-Lib\NV3DLib.sln"
-        /p:Configuration="${{matrix.Configuration}}"
+        /p:Configuration="${{matrix.Configuration}}-MT"
         /p:Platform="${{matrix.Settings.Architecture}}"
         /p:PlatformToolset=v143
 
