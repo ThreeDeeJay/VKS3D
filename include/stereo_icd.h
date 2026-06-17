@@ -718,6 +718,18 @@ void spirv_patched_free(uint32_t *w);
 VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*,
     uint32_t, uint32_t, const VkSemaphore*);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool nv3d_init(
+    StereoDevice*,
+    uint32_t,
+    uint32_t);
+
+void nv3d_destroy(
+    StereoDevice*);
+
 VkResult nv3d_present(
     StereoDevice*,
     StereoSwapchain*,
@@ -725,10 +737,6 @@ VkResult nv3d_present(
     uint32_t,
     const VkSemaphore*);
 
-bool nv3d_init(
-    StereoDevice*,
-    uint32_t width,
-    uint32_t height);
-
-void nv3d_destroy(
-    StereoDevice*);
+#ifdef __cplusplus
+}
+#endif
