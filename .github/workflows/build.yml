@@ -79,8 +79,8 @@ jobs:
     - name: Collect dependencies
       run: |
         move "third_party\NV3D-Lib\NV3DLib\lib\x${{matrix.Settings.Bits}}\Release-MD\NV3DLib-md.lib" "third_party\NV3D-Lib\NV3DLib\lib\NV3DLib.lib"
+        curl --ssl-revoke-best-effort --create-dirs -L "https://raw.githubusercontent.com/NVIDIA/nvapi/refs/heads/main/x86/nvapi.lib"     -o "third_party\nvapi\lib\nvapi.lib"
         curl --ssl-revoke-best-effort --create-dirs -L "https://raw.githubusercontent.com/NVIDIA/nvapi/refs/heads/main/amd64/nvapi64.lib" -o "third_party\nvapi\lib\nvapi64.lib"
-        curl --ssl-revoke-best-effort --create-dirs -L "https://raw.githubusercontent.com/NVIDIA/nvapi/refs/heads/main/x86/nvapi.lib" -o "third_party\nvapi\lib\nvapi.lib"
 
     - name: List files
       run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
