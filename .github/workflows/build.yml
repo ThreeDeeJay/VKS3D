@@ -78,7 +78,7 @@ jobs:
 
     - name: List files
       run: |
-        move "third_party\NV3D-Lib\NV3DLib\lib\x${{matrix.Settings.Bits}}\Release-MT\NV3DLib-mt.lib" "NV3DLib.lib"
+        move "third_party\NV3D-Lib\NV3DLib\lib\x${{matrix.Settings.Bits}}\Release-MT\NV3DLib-mt.lib" "third_party\NV3D-Lib\NV3DLib\lib\NV3DLib.lib"
 
     - name: List files
       run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
