@@ -4,7 +4,8 @@
 
 bool nv3d_init(
     StereoDevice *sd,
-    StereoSwapchain *sc);
+    uint32_t width,
+    uint32_t height);
 
 void nv3d_destroy(
     StereoDevice *sd);
