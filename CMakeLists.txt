@@ -165,8 +165,6 @@ if(WIN32)
         dxgi.lib
         d3d11.lib
         d3d9.lib
-        nvapi64.lib
-        nvapi.lib
         )
     target_compile_definitions(${TARGET_NAME} PRIVATE
         WIN32_LEAN_AND_MEAN
