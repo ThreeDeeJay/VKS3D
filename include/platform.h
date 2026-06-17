@@ -420,16 +420,15 @@ static inline char *stereo_find_opengl_driver_icd(void)
  *   - WriteFile is atomic for small writes (no extra lock needed)
  */
 
-/* Defined once in stereo.c — extern so all translation units share the
- * same state.  (Declaring them static here would give each .c file its own
- * copy, so DllMain's vks3d_log_open() would only enable logging in stereo.c
- * while every other file's g_vks3d_log_enabled remained 0.) */
-#ifdef STEREO_LOG_DEFINE_GLOBALS
-HANDLE g_vks3d_log_handle  = INVALID_HANDLE_VALUE;
-int    g_vks3d_log_enabled = 0;
-#else
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern HANDLE g_vks3d_log_handle;
 extern int    g_vks3d_log_enabled;
+
+#ifdef __cplusplus
+}
 #endif
 
 /*

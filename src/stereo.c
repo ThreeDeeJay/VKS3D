@@ -20,6 +20,11 @@
  * Must appear before the first #include that pulls in platform.h. */
 #define STEREO_LOG_DEFINE_GLOBALS
 
+#include "platform.h"
+
+HANDLE g_vks3d_log_handle  = INVALID_HANDLE_VALUE;
+int    g_vks3d_log_enabled = 0;
+
 /* Version/commit baked in by CMake.  Fallbacks for manual builds. */
 #ifndef VKS3D_VERSION
 #  define VKS3D_VERSION   "1.0.0"
