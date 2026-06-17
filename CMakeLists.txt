@@ -49,6 +49,7 @@ set(STEREO_SOURCES
     src/physdev_ext.c
     src/render_pass.c
     src/shader.c
+    src/present_nv3d.c
     src/swapchain.c
     src/present.c
     src/present_alt.c
