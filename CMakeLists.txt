@@ -117,7 +117,8 @@ target_include_directories(${TARGET_NAME} PRIVATE
     include
     ${Vulkan_INCLUDE_DIRS}
 )
-target_include_directories(vks3d PRIVATE
+add_subdirectory(third_party/NV3D-Lib)
+target_include_directories(${TARGET_NAME} PRIVATE
     third_party/NV3D-Lib/NV3DLib/include)
 
 # ── Version string: embed git commit hash + build date ───────────────────────
@@ -153,7 +154,7 @@ if(WIN32)
     target_link_libraries(${TARGET_NAME} PRIVATE
         advapi32    # RegOpenKeyEx, RegEnumValue
     )
-    target_link_libraries(vks3d PRIVATE NV3DLib)
+    target_link_libraries(${TARGET_NAME} PRIVATE NV3DLib)
     target_compile_definitions(${TARGET_NAME} PRIVATE
         WIN32_LEAN_AND_MEAN
         NOMINMAX
@@ -214,9 +215,6 @@ option(VKS3D_BUILD_DEMO  "Build integration demo" ON)
 # rendering and is useful even in release builds / installed alongside the DLL.
 enable_testing()
 add_subdirectory(tests)
-
-#NV3DLib
-add_subdirectory(third_party/NV3D-Lib)
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 message(STATUS "")
