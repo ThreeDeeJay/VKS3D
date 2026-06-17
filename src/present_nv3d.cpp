@@ -317,7 +317,7 @@ return true;
 
 /* ------------------------------------------------------------------------- */
 
-extern "C" void  nv3d_destroy(
+extern "C" void nv3d_destroy(
     StereoDevice *sd)
 {
 if (!sd)
