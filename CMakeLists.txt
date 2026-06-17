@@ -14,6 +14,10 @@ endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# ── Policy: present_nv3d.cpp requires C20 via /std:c++20 ─────────────────────────────────
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # ── Determine bitness from generator/toolchain ──────────────────────────────
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(STEREO_BITS 64)
