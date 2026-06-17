@@ -89,6 +89,17 @@ typedef VkResult (VKAPI_PTR *PFN_vkImportSemaphoreWin32HandleKHR)(
     const VkImportSemaphoreWin32HandleInfoKHR *pImportSemaphoreWin32HandleInfo);
 
 #endif /* VK_KHR_external_memory_win32 */
+#ifndef PFN_vkImportMemoryWin32HandleKHR
+typedef VkResult (VKAPI_PTR *PFN_vkImportMemoryWin32HandleKHR)(
+    VkDevice device,
+    const VkImportMemoryWin32HandleInfoKHR *pImportMemoryWin32HandleInfo);
+#endif
+
+#ifndef PFN_vkImportSemaphoreWin32HandleKHR
+typedef VkResult (VKAPI_PTR *PFN_vkImportSemaphoreWin32HandleKHR)(
+    VkDevice device,
+    const VkImportSemaphoreWin32HandleInfoKHR *pImportSemaphoreWin32HandleInfo);
+#endif
 
 /* VkPhysicalDeviceToolProperties compat shim */
 #ifndef VK_MAX_EXTENSION_NAME_SIZE
@@ -381,11 +392,13 @@ typedef struct RealDeviceDispatch {
     PFN_vkAcquireNextImageKHR        AcquireNextImageKHR;
     PFN_vkQueuePresentKHR            QueuePresentKHR;
     PFN_vkGetMemoryWin32HandlePropertiesKHR GetMemoryWin32HandlePropertiesKHR;
-    PFN_vkImportMemoryWin32HandleKHR
-        ImportMemoryWin32HandleKHR;
+    VkResult (VKAPI_PTR *ImportMemoryWin32HandleKHR)(
+        VkDevice,
+        const VkImportMemoryWin32HandleInfoKHR *);
 
-    PFN_vkImportSemaphoreWin32HandleKHR
-        ImportSemaphoreWin32HandleKHR;
+    VkResult (VKAPI_PTR *ImportSemaphoreWin32HandleKHR)(
+        VkDevice,
+        const VkImportSemaphoreWin32HandleInfoKHR *);
 
 } RealDeviceDispatch;
 
