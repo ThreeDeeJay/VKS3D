@@ -63,6 +63,17 @@ jobs:
       run: |
         echo "VULKAN_SDK=C:\VulkanSDK\1.3.296.0" >> $env:GITHUB_ENV
 
+    - name: Build NV3DLib
+      run: >
+        msbuild
+        /m "third_party\NV3D-Lib\NV3DLib.sln"
+        /p:Configuration="${{matrix.Configuration}}"
+        /p:Platform="${{matrix.Settings.Platform}}"
+        /p:PlatformToolset=v143
+
+    - name: List files
+      run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
+
     - name: Configure
       run: >
         cmake
@@ -72,9 +83,6 @@ jobs:
         -DVKS3D_BUILD_TESTS=ON
         -DVKS3D_BUILD_DEMO=ON
         -DSTEREO_BUILD_DEMO=ON
-
-    - name: List files
-      run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
 
     - name: Build
       run: cmake --build "${{github.workspace}}/build" --config "${{matrix.Configuration}}"
