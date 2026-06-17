@@ -127,6 +127,7 @@ typedef enum StereoPresentMode {
     STEREO_PRESENT_TAB        = 4,
     STEREO_PRESENT_INTERLACED = 5,
     STEREO_PRESENT_MONO       = 6,
+    STEREO_PRESENT_NV3DLIB    = 7,
 } StereoPresentMode;
 
 typedef enum StereoProjectionMode {
@@ -348,6 +349,12 @@ typedef struct RealDeviceDispatch {
     PFN_vkAcquireNextImageKHR        AcquireNextImageKHR;
     PFN_vkQueuePresentKHR            QueuePresentKHR;
     PFN_vkGetMemoryWin32HandlePropertiesKHR GetMemoryWin32HandlePropertiesKHR;
+    PFN_vkImportMemoryWin32HandleKHR
+        ImportMemoryWin32HandleKHR;
+
+    PFN_vkImportSemaphoreWin32HandleKHR
+        ImportSemaphoreWin32HandleKHR;
+
 } RealDeviceDispatch;
 
 /* -- Object wrappers ------------------------------------------------------- */
@@ -503,6 +510,22 @@ typedef struct StereoDevice {
     bool                   dx9_ok;
     void                  *dx9_lib, *dx9_d3d, *dx9_dev, *dx9_surf, *dx9_nvstereo;
 
+    /* -- NV3D-Lib direct stereo output ------------------------------------- */
+    bool                   nv3d_ok;
+    void                  *nv3d_iface;
+
+    VkImage                nv3d_image;
+    VkDeviceMemory         nv3d_memory;
+
+    VkSemaphore            nv3d_timeline;
+    uint64_t               nv3d_value;
+
+    HANDLE                 nv3d_mem_handle;
+    HANDLE                 nv3d_fence_handle;
+
+    uint32_t               nv3d_width;
+    uint32_t               nv3d_height;
+
     /* -- Compose swap chain state ------------------------------------------- */
     bool                   comp_ok;
     HWND                   comp_hwnd;
@@ -646,3 +669,18 @@ void spirv_patched_free(uint32_t *w);
 
 VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*,
     uint32_t, uint32_t, const VkSemaphore*);
+
+VkResult nv3d_present(
+    StereoDevice*,
+    StereoSwapchain*,
+    VkQueue,
+    uint32_t,
+    const VkSemaphore*);
+
+bool nv3d_init(
+    StereoDevice*,
+    uint32_t width,
+    uint32_t height);
+
+void nv3d_destroy(
+    StereoDevice*);

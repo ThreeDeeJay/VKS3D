@@ -18,6 +18,7 @@
 #include "stereo_icd.h"
 #include "dxgi_output.h"
 #include "present_alt.h"
+#include "present_nv3d.h"
 
 /* ── Helper: find suitable memory type ──────────────────────────────────── */
 static uint32_t find_memory_type(StereoDevice *sd, uint32_t type_bits,
@@ -458,6 +459,14 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
             break;
         case STEREO_PRESENT_DX9:
             pr = dx9_present(sd, sc_i, queue, wcount, wsems);
+            break;
+        case STEREO_PRESENT_NV3DLIB:
+            pr = nv3d_present(
+                sd,
+                sc_i,
+                queue,
+                wcount,
+                wsems);
             break;
         case STEREO_PRESENT_SBS:
         case STEREO_PRESENT_TAB:
