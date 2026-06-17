@@ -77,9 +77,9 @@ static uint32_t find_memory_type(
 }
 
 bool nv3d_init(
-StereoDevice *sd,
-uint32_t width,
-uint32_t height)
+    StereoDevice *sd,
+    uint32_t width,
+    uint32_t height);
 {
 if (sd->nv3d_ok &&
 sd->nv3d_width  == width &&
@@ -292,7 +292,8 @@ return true;
 
 /* ------------------------------------------------------------------------- */
 
-void nv3d_destroy(StereoDevice *sd)
+void nv3d_destroy(
+    StereoDevice *sd);
 {
 if (!sd)
 return;
@@ -342,11 +343,11 @@ sd->nv3d_ok = false;
 /* ------------------------------------------------------------------------- */
 
 VkResult nv3d_present(
-StereoDevice      *sd,
-StereoSwapchain   *sc,
-VkQueue            queue,
-uint32_t           wait_sem_count,
-const VkSemaphore *wait_sems)
+    StereoDevice *sd,
+    StereoSwapchain *sc,
+    VkQueue queue,
+    uint32_t wait_sem_count,
+    const VkSemaphore *wait_sems);
 {
 if (!nv3d_init(
 sd,
