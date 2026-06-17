@@ -75,6 +75,10 @@ jobs:
         /p:PlatformToolset=v143
 
     - name: List files
+      run: |
+        move "third_party\NV3D-Lib\NV3DLib\lib\${{matrix.Settings.Architecture}}\Release-MT\NV3DLib-mt.lib" "NV3DLib.lib"
+
+    - name: List files
       run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
 
     - name: Configure
