@@ -160,8 +160,8 @@ if(WIN32)
     )
     target_link_libraries(${TARGET_NAME} PRIVATE 
         ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/NV3DLib/lib/NV3DLib.lib
-        ${CMAKE_SOURCE_DIR}/third_party/nvapi/lib/nvapi.lib
-        ${CMAKE_SOURCE_DIR}/third_party/nvapi/lib/nvapi64.lib
+        ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/external/nvapi/x86/nvapi.lib
+        ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/external/nvapi/amd64/nvapi64.lib
         dxgi.lib
         d3d11.lib
         d3d9.lib
