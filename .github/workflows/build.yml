@@ -10,6 +10,8 @@ env:
 on:
   push:
     Branches: $Branch
+    tags-ignore:
+      - '**'
   pull_request:
     Branches: $Branch
   workflow_dispatch:
@@ -71,7 +73,7 @@ jobs:
         msbuild
         /m "third_party\NV3D-Lib\NV3DLib.sln"
         /p:Configuration="${{matrix.Configuration}}"
-        /p:Platform="${{matrix.Settings.Platform}}"
+        /p:Platform="${{matrix.Settings.Architecture}}"
         /p:PlatformToolset=v143
 
     - name: List files
