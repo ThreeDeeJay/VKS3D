@@ -77,7 +77,7 @@ static uint32_t find_memory_type(
     return UINT32_MAX;
 }
 
-extern "C" bool nv3d_init(
+bool nv3d_init(
     StereoDevice *sd,
     uint32_t width,
     uint32_t height)
@@ -317,7 +317,7 @@ return true;
 
 /* ------------------------------------------------------------------------- */
 
-extern "C" void nv3d_destroy(
+void nv3d_destroy(
     StereoDevice *sd)
 {
 if (!sd)
@@ -370,7 +370,7 @@ sd->nv3d_value  = 0;
 /* Present                                                                    */
 /* ------------------------------------------------------------------------- */
 
-extern "C" VkResult nv3d_present(
+VkResult nv3d_present(
     StereoDevice *sd,
     StereoSwapchain *sc,
     VkQueue queue,

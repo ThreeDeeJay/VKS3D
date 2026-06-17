@@ -1,7 +1,3 @@
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 bool nv3d_init(
     StereoDevice* sd,
     uint32_t width,
@@ -16,7 +12,3 @@ VkResult nv3d_present(
     VkQueue queue,
     uint32_t wait_sem_count,
     const VkSemaphore* wait_sems);
-
-#ifdef __cplusplus
-}
-#endif
