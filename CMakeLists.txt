@@ -163,16 +163,16 @@ if(WIN32)
         dxgi.lib
         d3d11.lib
         d3d9.lib
-        if(STEREO_BITS EQUAL 64)
-            target_link_libraries(${TARGET_NAME} PRIVATE
-                ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/external/nvapi/amd64/nvapi64.lib
-            )
-        else()
-            target_link_libraries(${TARGET_NAME} PRIVATE
-                ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/external/nvapi/x86/nvapi.lib
-            )
-        endif()
         )
+    if(STEREO_BITS EQUAL 64)
+        target_link_libraries(${TARGET_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/external/nvapi/amd64/nvapi64.lib
+        )
+    else()
+        target_link_libraries(${TARGET_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/external/nvapi/x86/nvapi.lib
+        )
+    endif()
     target_compile_definitions(${TARGET_NAME} PRIVATE
         WIN32_LEAN_AND_MEAN
         NOMINMAX
