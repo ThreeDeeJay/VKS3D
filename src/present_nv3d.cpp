@@ -77,8 +77,6 @@ static uint32_t find_memory_type(
     return UINT32_MAX;
 }
 
-extern "C" {
-
 bool nv3d_init(
     StereoDevice *sd,
     uint32_t width,
@@ -89,8 +87,6 @@ if (sd->nv3d_ok &&
     sd->nv3d_height == height)
 {
     return true;
-}
-
 }
 
 nv3d_destroy(sd);
@@ -153,13 +149,6 @@ if (FAILED(hr))
     iface->Delete();
     return false;
 }
-
-sd->nv3d_iface        = iface;
-sd->nv3d_mem_handle   = mem_handle;
-sd->nv3d_fence_handle = fence_handle;
-sd->nv3d_width        = width * 2;
-sd->nv3d_height       = height;
-sd->nv3d_value        = 0;
 
 STEREO_LOG(
     "[NV3D] imported image %ux%u",
