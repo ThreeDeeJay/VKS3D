@@ -117,7 +117,6 @@ target_include_directories(${TARGET_NAME} PRIVATE
     include
     ${Vulkan_INCLUDE_DIRS}
 )
-add_subdirectory(third_party/NV3D-Lib)
 target_include_directories(${TARGET_NAME} PRIVATE
     third_party/NV3D-Lib/NV3DLib/include)
 
