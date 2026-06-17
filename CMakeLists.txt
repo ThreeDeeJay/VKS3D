@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(VKS3D
     VERSION 1.0.0
-    LANGUAGES C
+    LANGUAGES C CXX
     DESCRIPTION "Vulkan Stereoscopic 3D ICD"
 )
 
@@ -49,7 +49,7 @@ set(STEREO_SOURCES
     src/physdev_ext.c
     src/render_pass.c
     src/shader.c
-    src/present_nv3d.c
+    src/present_nv3d.cpp
     src/swapchain.c
     src/present.c
     src/present_alt.c
