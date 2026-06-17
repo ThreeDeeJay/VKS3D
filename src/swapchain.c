@@ -182,6 +182,16 @@ stereo_CreateSwapchainKHR(VkDevice device,
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
     sc->app_height = app_h;
+    if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
+    {
+        if (!nv3d_init(sd,
+                       sc->app_width,
+                       sc->app_height))
+        {
+            STEREO_ERR("NV3D init failed");
+            return VK_ERROR_INITIALIZATION_FAILED;
+        }
+    }
     sc->format     = pCreateInfo->imageFormat;
     sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
 
@@ -339,6 +349,8 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         if (sc->barrier_pool)
             sd->real.DestroyCommandPool(sd->real_device, sc->barrier_pool, NULL);
+        if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
+            nv3d_destroy(sd);
 
         gpu_compose_sc_destroy(sd, sc);     /* semaphores + comp_sc_images array */
         alt_cpu_staging_destroy(sd, sc);    /* DX9 CPU staging (no-op if unused) */

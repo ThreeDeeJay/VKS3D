@@ -34,6 +34,33 @@ typedef struct VkExternalMemoryImageCreateInfo {
     ((VkExternalMemoryHandleTypeFlagBits)0x00000008)
 #endif
 
+#ifndef VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_WIN32_HANDLE_INFO_KHR
+#define VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_WIN32_HANDLE_INFO_KHR \
+    ((VkStructureType)1000078000)
+#endif
+
+#ifndef VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT
+#define VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT \
+    ((VkExternalSemaphoreHandleTypeFlagBits)0x00000008)
+#endif
+
+typedef enum VkExternalSemaphoreHandleTypeFlagBits {
+    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT            = 0x00000001,
+    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT         = 0x00000002,
+    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT     = 0x00000004,
+    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT          = 0x00000008
+} VkExternalSemaphoreHandleTypeFlagBits;
+
+typedef struct VkImportSemaphoreWin32HandleInfoKHR {
+    VkStructureType                           sType;
+    const void                               *pNext;
+    VkSemaphore                               semaphore;
+    VkSemaphoreImportFlags                    flags;
+    VkExternalSemaphoreHandleTypeFlagBits     handleType;
+    HANDLE                                    handle;
+    LPCWSTR                                   name;
+} VkImportSemaphoreWin32HandleInfoKHR;
+
 typedef struct VkImportMemoryWin32HandleInfoKHR {
     VkStructureType                          sType;
     const void                              *pNext;
@@ -420,6 +447,9 @@ typedef struct StereoSwapchain {
     VkDeviceMemory    cpu_mem;
     void             *cpu_map;
     uint32_t          cpu_eye_bytes;
+    VkImage           nv3d_sbs_image;
+    VkDeviceMemory    nv3d_sbs_memory;
+    VkImageView       nv3d_sbs_view;
 } StereoSwapchain;
 
 typedef struct StereoRenderPassInfo {

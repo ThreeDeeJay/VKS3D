@@ -28,8 +28,12 @@ static const char *STEREO_CANDIDATE_EXTS[] = {
     "VK_KHR_maintenance2",
     "VK_KHR_create_renderpass2",
     "VK_NVX_multiview_per_view_attributes",
+
     "VK_KHR_external_memory",
     "VK_KHR_external_memory_win32",
+
+    "VK_KHR_external_semaphore",
+    "VK_KHR_external_semaphore_win32",
 };
 #define STEREO_CANDIDATE_EXT_COUNT \
     (sizeof(STEREO_CANDIDATE_EXTS) / sizeof(STEREO_CANDIDATE_EXTS[0]))

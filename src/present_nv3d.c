@@ -54,6 +54,28 @@ sd->real.CmdPipelineBarrier(
 /* NV3D resource creation                                                    */
 /* ------------------------------------------------------------------------- */
 
+static uint32_t find_memory_type(
+    StereoDevice *sd,
+    uint32_t type_bits,
+    VkMemoryPropertyFlags props)
+{
+    VkPhysicalDeviceMemoryProperties mp;
+    sd->si->real.GetPhysicalDeviceMemoryProperties(
+        sd->real_physdev,
+        &mp);
+
+    for (uint32_t i = 0; i < mp.memoryTypeCount; i++)
+    {
+        if ((type_bits & (1u << i)) &&
+            (mp.memoryTypes[i].propertyFlags & props) == props)
+        {
+            return i;
+        }
+    }
+
+    return UINT32_MAX;
+}
+
 bool nv3d_init(
 StereoDevice *sd,
 uint32_t width,
@@ -80,11 +102,16 @@ HANDLE fence_handle = NULL;
 
 HRESULT hr =
     iface->InitSharedResources(
-        width,
+        width * 2,
         height,
         87, /* DXGI_FORMAT_B8G8R8A8_UNORM */
         &mem_handle,
         &fence_handle);
+
+STEREO_LOG(
+    "[NV3D] imported image %ux%u",
+    sd->nv3d_width,
+    sd->nv3d_height);
 
 if (FAILED(hr))
 {
@@ -99,7 +126,7 @@ if (FAILED(hr))
 sd->nv3d_iface        = iface;
 sd->nv3d_mem_handle   = mem_handle;
 sd->nv3d_fence_handle = fence_handle;
-sd->nv3d_width        = width;
+sd->nv3d_width        = width * 2;
 sd->nv3d_height       = height;
 sd->nv3d_value        = 0;
 
@@ -118,16 +145,17 @@ VkImageCreateInfo ici = {
     .pNext         = &ext_img,
     .imageType     = VK_IMAGE_TYPE_2D,
     .format        = VK_FORMAT_B8G8R8A8_UNORM,
-    .extent        = { width, height, 1 },
+    .extent        = { width * 2, height, 1 },
     .mipLevels     = 1,
-    .arrayLayers   = 2,
+    .arrayLayers   = 1,
     .samples       = VK_SAMPLE_COUNT_1_BIT,
     .tiling        = VK_IMAGE_TILING_OPTIMAL,
-    .usage         =
+    .usage =
         VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_SAMPLED_BIT,
     .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
-    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
 };
 
 if (sd->real.CreateImage(
@@ -147,24 +175,36 @@ sd->real.GetImageMemoryRequirements(
     sd->nv3d_image,
     &mr);
 
-VkImportMemoryWin32HandleInfoKHR import_mem = {
+uint32_t mem_type =
+    find_memory_type(sd,
+                     mr.memoryTypeBits,
+                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+if (mem_type == UINT32_MAX)
+{
+    STEREO_ERR("[NV3D] no compatible memory type");
+    nv3d_destroy(sd);
+    return false;
+}
+
+VkImportMemoryWin32HandleInfoKHR import_info = {
     .sType      =
         VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR,
     .handleType =
         VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT,
-    .handle     = mem_handle,
+    .handle     = mem_handle
 };
 
-VkMemoryAllocateInfo mai = {
-    .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .pNext           = &import_mem,
+VkMemoryAllocateInfo ai = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .pNext = &import_info,
     .allocationSize  = mr.size,
-    .memoryTypeIndex = 0,
+    .memoryTypeIndex = mem_type,
 };
 
 if (sd->real.AllocateMemory(
         sd->real_device,
-        &mai,
+        &ai,
         NULL,
         &sd->nv3d_memory) != VK_SUCCESS)
 {
@@ -221,6 +261,14 @@ VkImportSemaphoreWin32HandleInfoKHR import_sem = {
     .handle =
         fence_handle,
 };
+
+if (!sd->real.ImportSemaphoreWin32HandleKHR)
+{
+    STEREO_ERR(
+        "[NV3D] ImportSemaphoreWin32HandleKHR not loaded");
+    nv3d_destroy(sd);
+    return false;
+}
 
 if (sd->real.ImportSemaphoreWin32HandleKHR(
         sd->real_device,
@@ -321,6 +369,7 @@ VkCommandBufferBeginInfo begin = {
 
 sd->real.BeginCommandBuffer(cmd, &begin);
 
+/* stereo render target -> transfer source */
 cmd_image_barrier(
     sd,
     cmd,
@@ -333,33 +382,40 @@ cmd_image_barrier(
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
     VK_PIPELINE_STAGE_TRANSFER_BIT);
 
+/* NV3D imported texture -> transfer destination */
 cmd_image_barrier(
     sd,
     cmd,
     sd->nv3d_image,
-    2,
-    VK_IMAGE_LAYOUT_UNDEFINED,
+    1,
+    VK_IMAGE_LAYOUT_GENERAL,
     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     0,
     VK_ACCESS_TRANSFER_WRITE_BIT,
     VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
     VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-VkImageCopy copy = {
-    .srcSubresource = {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .layerCount = 2,
-    },
-    .dstSubresource = {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .layerCount = 2,
-    },
-    .extent = {
-        sc->app_width,
-        sc->app_height,
-        1,
-    },
-};
+VkImageCopy copies[2];
+memset(copies, 0, sizeof(copies));
+
+/* left eye -> left half */
+copies[0].srcSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+copies[0].srcSubresource.baseArrayLayer = 0;
+copies[0].srcSubresource.layerCount     = 1;
+
+copies[0].dstSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+copies[0].dstSubresource.baseArrayLayer = 0;
+copies[0].dstSubresource.layerCount     = 1;
+
+copies[0].extent.width  = sc->app_width;
+copies[0].extent.height = sc->app_height;
+copies[0].extent.depth  = 1;
+
+/* right eye -> right half */
+copies[1] = copies[0];
+
+copies[1].srcSubresource.baseArrayLayer = 1;
+copies[1].dstOffset.x                   = (int32_t)sc->app_width;
 
 sd->real.CmdCopyImage(
     cmd,
@@ -367,8 +423,33 @@ sd->real.CmdCopyImage(
     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
     sd->nv3d_image,
     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    2,
+    copies);
+
+/* return imported texture to GENERAL for NV3D-Lib */
+cmd_image_barrier(
+    sd,
+    cmd,
+    sd->nv3d_image,
     1,
-    &copy);
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    VK_IMAGE_LAYOUT_GENERAL,
+    VK_ACCESS_TRANSFER_WRITE_BIT,
+    VK_ACCESS_MEMORY_READ_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT,
+    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+
+cmd_image_barrier(
+    sd,
+    cmd,
+    sc->stereo_images[0],
+    2,
+    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    VK_ACCESS_TRANSFER_READ_BIT,
+    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT,
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
 sd->real.EndCommandBuffer(cmd);
 
@@ -402,6 +483,10 @@ VkResult vr =
 
 if (vr != VK_SUCCESS)
     return vr;
+
+/* IMPORTANT: ONCE NV3D IS CONFIRMED WORKING, REMOVE THE NEXT AND THIS LINE TO REMOVE CPU BOTTLENECK */
+sd->real.QueueWaitIdle(queue);
+/* no QueueWaitIdle */
 
 HRESULT hr =
     ((InterfaceVulkan*)sd->nv3d_iface)
