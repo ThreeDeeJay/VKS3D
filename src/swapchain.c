@@ -197,6 +197,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
 
     StereoPresentMode req = sd->stereo.present_mode;
 
+    STEREO_LOG(
+        "CreateSwapchain: req=%d stereo.enabled=%d",
+        (int)req,
+        (int)sd->stereo.enabled);
+
     /* ── DXGI 1.2 + external memory ─────────────────────────────────── */
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DXGI) {
         bool dxgi_ok = false;
