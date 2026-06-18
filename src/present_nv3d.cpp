@@ -107,6 +107,17 @@ STEREO_LOG(
     sd->real_device,
     sd->gfx_qf);
 
+VkPhysicalDeviceProperties props = {};
+sd->si->real.GetPhysicalDeviceProperties(
+    sd->real_physdev,
+    &props);
+
+STEREO_LOG(
+    "[NV3D] GPU=%s vendor=%04X device=%04X",
+    props.deviceName,
+    props.vendorID,
+    props.deviceID);
+
 HRESULT hr =
     NV3D::CreateInterfaceVulkan(
         sd->si->real_instance,
