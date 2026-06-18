@@ -110,22 +110,6 @@ STEREO_LOG(
     sd->real_device,
     sd->gfx_qf);
 
-STEREO_LOG(
-    "[NV3D] ImportSemaphoreWin32HandleKHR=%p",
-    sd->real.ImportSemaphoreWin32HandleKHR);
-
-STEREO_LOG(
-    "[NV3D] GetSemaphoreCounterValueKHR=%p",
-    sd->real.GetSemaphoreCounterValueKHR);
-
-STEREO_LOG(
-    "[NV3D] WaitSemaphoresKHR=%p",
-    sd->real.WaitSemaphoresKHR);
-
-STEREO_LOG(
-    "[NV3D] SignalSemaphoreKHR=%p",
-    sd->real.SignalSemaphoreKHR);
-
 HRESULT hr =
     NV3D::CreateInterfaceVulkan(
         sd->si->real_instance,
