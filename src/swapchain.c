@@ -195,6 +195,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
     sc->format     = pCreateInfo->imageFormat;
     sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
 
+    STEREO_LOG(
+        "CreateSwapchain: enabled=%d present_mode=%d",
+        (int)sd->stereo.enabled,
+        (int)sd->stereo.present_mode);
+
     StereoPresentMode req = sd->stereo.present_mode;
 
     STEREO_LOG(
