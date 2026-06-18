@@ -82,10 +82,9 @@ extern "C" bool nv3d_init(
     uint32_t width,
     uint32_t height)
 {
-STEREO_LOG(
-    "[NV3D] nv3d_init(%u x %u)",
-    width,
-    height);
+STEREO_LOG("[NV3D] nv3d_init(%u x %u)", w, h);
+
+STEREO_LOG("[NV3D] step 1");
 
 if (sd->nv3d_ok &&
     sd->nv3d_width  == width * 2 &&
@@ -94,11 +93,19 @@ if (sd->nv3d_ok &&
     return true;
 }
 
+STEREO_LOG("[NV3D] step 2");
+
 nv3d_destroy(sd);
+
+STEREO_LOG("[NV3D] step 3");
 
 NV3D::InterfaceVulkan *iface = nullptr;
 
+STEREO_LOG("[NV3D] step 4");
+
 NV3D::InitParams params = {};
+
+STEREO_LOG("[NV3D] step 5");
 
 HRESULT hr =
     NV3D::CreateInterfaceVulkan(
@@ -109,10 +116,14 @@ HRESULT hr =
         &params,
         &iface);
 
+STEREO_LOG("[NV3D] step 6");
+
 STEREO_LOG(
     "[NV3D] CreateInterfaceVulkan hr=0x%08X iface=%p",
     (unsigned)hr,
     iface);
+
+STEREO_LOG("[NV3D] step 7");
 
 if (FAILED(hr) || !iface)
 {
@@ -125,6 +136,8 @@ if (FAILED(hr) || !iface)
 HANDLE mem_handle   = NULL;
 HANDLE fence_handle = NULL;
 
+STEREO_LOG("[NV3D] step 8");
+
 hr =
     iface->InitSharedResources(
         width * 2,
@@ -132,6 +145,7 @@ hr =
         87, /* DXGI_FORMAT_B8G8R8A8_UNORM */
         &mem_handle,
         &fence_handle);
+STEREO_LOG("[NV3D] step 9");
 STEREO_LOG(
     "[NV3D] InitSharedResources hr=0x%08X",
     (unsigned)hr);
@@ -153,6 +167,8 @@ sd->nv3d_width        = width * 2;
 sd->nv3d_height       = height;
 sd->nv3d_value        = 0;
 
+STEREO_LOG("[NV3D] step 10");
+
 if (FAILED(hr))
 {
     STEREO_ERR(
@@ -162,6 +178,8 @@ if (FAILED(hr))
     iface->Delete();
     return false;
 }
+
+STEREO_LOG("[NV3D] step 11");
 
 STEREO_LOG(
     "[NV3D] imported image %ux%u",
@@ -196,6 +214,8 @@ VkImageCreateInfo ici = {
     .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
 };
 
+STEREO_LOG("[NV3D] step 12");
+
 if (sd->real.CreateImage(
         sd->real_device,
         &ici,
@@ -207,17 +227,20 @@ if (sd->real.CreateImage(
     return false;
 }
 
+STEREO_LOG("[NV3D] step 13");
 VkMemoryRequirements mr;
 sd->real.GetImageMemoryRequirements(
     sd->real_device,
     sd->nv3d_image,
     &mr);
 
+STEREO_LOG("[NV3D] step 14");
 uint32_t mem_type =
     find_memory_type(sd,
                      mr.memoryTypeBits,
                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
+STEREO_LOG("[NV3D] step 15");
 if (mem_type == UINT32_MAX)
 {
     STEREO_ERR("[NV3D] no compatible memory type");
@@ -225,6 +248,7 @@ if (mem_type == UINT32_MAX)
     return false;
 }
 
+STEREO_LOG("[NV3D] step 16");
 VkImportMemoryWin32HandleInfoKHR import_info = {
     .sType      =
         VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR,
@@ -233,6 +257,7 @@ VkImportMemoryWin32HandleInfoKHR import_info = {
     .handle     = mem_handle
 };
 
+STEREO_LOG("[NV3D] step 17");
 VkMemoryAllocateInfo ai = {
     .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
     .pNext = &import_info,
@@ -240,6 +265,7 @@ VkMemoryAllocateInfo ai = {
     .memoryTypeIndex = mem_type,
 };
 
+STEREO_LOG("[NV3D] step 18");
 if (sd->real.AllocateMemory(
         sd->real_device,
         &ai,
@@ -251,6 +277,7 @@ if (sd->real.AllocateMemory(
     return false;
 }
 
+STEREO_LOG("[NV3D] step 19");
 if (sd->real.BindImageMemory(
         sd->real_device,
         sd->nv3d_image,
@@ -262,6 +289,7 @@ if (sd->real.BindImageMemory(
     return false;
 }
 
+STEREO_LOG("[NV3D] step 20");
 /* ------------------------------------------------------------- */
 /* Imported timeline semaphore                                   */
 /* ------------------------------------------------------------- */
@@ -278,6 +306,7 @@ VkSemaphoreCreateInfo sci = {
     .pNext = &sem_type,
 };
 
+STEREO_LOG("[NV3D] step 21");
 if (sd->real.CreateSemaphore(
         sd->real_device,
         &sci,
@@ -289,6 +318,7 @@ if (sd->real.CreateSemaphore(
     return false;
 }
 
+STEREO_LOG("[NV3D] step 22");
 VkImportSemaphoreWin32HandleInfoKHR import_sem = {
     .sType =
         VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_WIN32_HANDLE_INFO_KHR,
@@ -300,6 +330,7 @@ VkImportSemaphoreWin32HandleInfoKHR import_sem = {
         fence_handle,
 };
 
+STEREO_LOG("[NV3D] step 23");
 if (!sd->real.ImportSemaphoreWin32HandleKHR)
 {
     STEREO_ERR(
@@ -308,6 +339,7 @@ if (!sd->real.ImportSemaphoreWin32HandleKHR)
     return false;
 }
 
+STEREO_LOG("[NV3D] step 24");
 if (sd->real.ImportSemaphoreWin32HandleKHR(
         sd->real_device,
         &import_sem) != VK_SUCCESS)
@@ -317,8 +349,10 @@ if (sd->real.ImportSemaphoreWin32HandleKHR(
     return false;
 }
 
+STEREO_LOG("[NV3D] step 25");
 sd->nv3d_ok = true;
 
+STEREO_LOG("[NV3D] step 26");
 STEREO_LOG(
     "[NV3D] initialized imported texture %ux%u",
     width * 2,
@@ -326,6 +360,7 @@ STEREO_LOG(
 
 return true;
 
+STEREO_LOG("[NV3D] step 27");
 }
 
 /* ------------------------------------------------------------------------- */
