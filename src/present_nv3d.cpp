@@ -108,6 +108,7 @@ STEREO_LOG(
     sd->gfx_qf);
 
 VkPhysicalDeviceProperties props = {};
+
 sd->si->real.GetPhysicalDeviceProperties(
     sd->real_physdev,
     &props);
@@ -119,17 +120,8 @@ STEREO_LOG(
     props.deviceID);
 
 STEREO_LOG(
-    "[NV3D] si=%p real_instance=%p",
-    sd->si,
-    sd->si ? sd->si->real_instance : 0);
-
-STEREO_LOG(
-    "[NV3D] wrapper instance=%p",
-    (void*)sd->si);
-
-STEREO_LOG(
-    "[NV3D] real instance=%p",
-    (void*)sd->si->real_instance);
+    "[NV3D] si=%p",
+    sd->si);
 
 STEREO_LOG(
     "[NV3D] real_instance=%p",
@@ -139,14 +131,9 @@ STEREO_LOG(
     "[NV3D] real_physdev=%p",
     sd->real_physdev);
 
-VkPhysicalDeviceProperties props;
-sd->real.GetPhysicalDeviceProperties(
-    sd->real_physdev,
-    &props);
-
 STEREO_LOG(
-    "[NV3D] props.deviceName=%s",
-    props.deviceName);
+    "[NV3D] real_device=%p",
+    sd->real_device);
 
 NV3D::SetLogSink(
     [](NV3D::LogLevel lvl, const wchar_t* msg, void*)
@@ -166,6 +153,19 @@ NV3D::SetLogSink(
         STEREO_LOG("[NV3D] %s", utf8);
     },
     nullptr);
+
+
+STEREO_LOG(
+    "[NV3D] real_instance=%p wrapper=%p",
+    sd->si->real_instance,
+    sd->si);
+
+HMODULE vulkan =
+    GetModuleHandleW(L"vulkan-1.dll");
+
+STEREO_LOG(
+    "[NV3D] VKS3D vulkan-1.dll=%p",
+    vulkan);
 
 HRESULT hr =
     NV3D::CreateInterfaceVulkan(
