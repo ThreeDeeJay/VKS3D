@@ -100,6 +100,13 @@ NV3D::InterfaceVulkan *iface = nullptr;
 
 NV3D::InitParams params = {};
 
+STEREO_LOG(
+    "[NV3D] instance=%p physdev=%p device=%p gfx_qf=%u",
+    sd->si->real_instance,
+    sd->real_physdev,
+    sd->real_device,
+    sd->gfx_qf);
+
 HRESULT hr =
     NV3D::CreateInterfaceVulkan(
         sd->si->real_instance,
