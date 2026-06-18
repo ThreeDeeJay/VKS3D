@@ -98,7 +98,10 @@ nv3d_destroy(sd);
 
 NV3D::InterfaceVulkan *iface = nullptr;
 
-NV3D::InitParams params = {};
+memset(&params, 0, sizeof(params));
+STEREO_LOG(
+    "[NV3D] sizeof(InitParams)=%zu",
+    sizeof(NV3D::InitParams));
 
 STEREO_LOG(
     "[NV3D] instance=%p physdev=%p device=%p gfx_qf=%u",
