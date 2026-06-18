@@ -179,30 +179,10 @@ stereo_CreateSwapchainKHR(VkDevice device,
 
     StereoSwapchain *sc = &sd->swapchains[sd->swapchain_count];
     memset(sc, 0, sizeof(*sc));
+
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
     sc->app_height = app_h;
-    if (req == STEREO_PRESENT_NV3DLIB)
-    {
-        STEREO_LOG("[NV3D] requested");
-
-        if (!nv3d_init(sd,
-                       app_w,
-                       app_h))
-        {
-            STEREO_ERR("[NV3D] init failed");
-            return VK_ERROR_INITIALIZATION_FAILED;
-        }
-
-        STEREO_LOG("[NV3D] init succeeded");
-    }
-
-    if (req == STEREO_PRESENT_NV3DLIB)
-    {
-        STEREO_ERR(
-            "[NV3D] entering CreateSwapchain path");
-    }
-
     sc->format     = pCreateInfo->imageFormat;
     sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
 
@@ -212,6 +192,24 @@ stereo_CreateSwapchainKHR(VkDevice device,
         (int)sd->stereo.present_mode);
 
     StereoPresentMode req = sd->stereo.present_mode;
+
+    STEREO_LOG(
+        "CreateSwapchain: req=%d stereo.enabled=%d",
+        (int)req,
+        (int)sd->stereo.enabled);
+
+    if (req == STEREO_PRESENT_NV3DLIB)
+    {
+        STEREO_LOG("[NV3D] requested");
+
+        if (!nv3d_init(sd, app_w, app_h))
+        {
+            STEREO_ERR("[NV3D] init failed");
+            return VK_ERROR_INITIALIZATION_FAILED;
+        }
+
+        STEREO_LOG("[NV3D] init succeeded");
+}
 
     STEREO_LOG(
         "CreateSwapchain: req=%d stereo.enabled=%d",
