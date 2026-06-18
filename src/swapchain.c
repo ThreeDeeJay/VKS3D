@@ -186,11 +186,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
     sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
     StereoPresentMode req = sd->stereo.present_mode;
 
-    STEREO_LOG(
-        "CreateSwapchain: req=%d stereo.enabled=%d",
-        (int)req,
-        (int)sd->stereo.enabled);
-
     if (req == STEREO_PRESENT_NV3DLIB)
     {
         if (!nv3d_init(sd,
