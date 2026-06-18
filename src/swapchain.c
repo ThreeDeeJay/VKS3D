@@ -182,16 +182,27 @@ stereo_CreateSwapchainKHR(VkDevice device,
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
     sc->app_height = app_h;
-    if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
+    if (req == STEREO_PRESENT_NV3DLIB)
     {
+        STEREO_LOG("[NV3D] requested");
+
         if (!nv3d_init(sd,
-                       sc->app_width,
-                       sc->app_height))
+                       app_w,
+                       app_h))
         {
-            STEREO_ERR("NV3D init failed");
+            STEREO_ERR("[NV3D] init failed");
             return VK_ERROR_INITIALIZATION_FAILED;
         }
+
+        STEREO_LOG("[NV3D] init succeeded");
     }
+
+    if (req == STEREO_PRESENT_NV3DLIB)
+    {
+        STEREO_ERR(
+            "[NV3D] entering CreateSwapchain path");
+    }
+
     sc->format     = pCreateInfo->imageFormat;
     sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
 

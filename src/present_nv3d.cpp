@@ -82,6 +82,11 @@ extern "C" bool nv3d_init(
     uint32_t width,
     uint32_t height)
 {
+STEREO_LOG(
+    "[NV3D] nv3d_init(%u x %u)",
+    width,
+    height);
+
 if (sd->nv3d_ok &&
     sd->nv3d_width  == width * 2 &&
     sd->nv3d_height == height)
@@ -104,6 +109,11 @@ HRESULT hr =
         &params,
         &iface);
 
+STEREO_LOG(
+    "[NV3D] CreateInterfaceVulkan hr=0x%08X iface=%p",
+    (unsigned)hr,
+    iface);
+
 if (FAILED(hr) || !iface)
 {
     STEREO_ERR(
@@ -122,6 +132,9 @@ hr =
         87, /* DXGI_FORMAT_B8G8R8A8_UNORM */
         &mem_handle,
         &fence_handle);
+STEREO_LOG(
+    "[NV3D] InitSharedResources hr=0x%08X",
+    (unsigned)hr);
 
 if (FAILED(hr))
 {
