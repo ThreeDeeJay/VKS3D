@@ -82,7 +82,7 @@ extern "C" bool nv3d_init(
     uint32_t width,
     uint32_t height)
 {
-STEREO_LOG("[NV3D] nv3d_init(%u x %u)", w, h);
+STEREO_LOG("[NV3D] nv3d_init(%u x %u)", width, height);
 
 STEREO_LOG("[NV3D] step 1");
 
