@@ -182,7 +182,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
     sc->app_height = app_h;
-    if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
+    sc->format     = pCreateInfo->imageFormat;
+    sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
+    StereoPresentMode req = sd->stereo.present_mode;
+
+    if (req == STEREO_PRESENT_NV3DLIB)
     {
         if (!nv3d_init(sd,
                        sc->app_width,
@@ -192,10 +196,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
             return VK_ERROR_INITIALIZATION_FAILED;
         }
     }
-    sc->format     = pCreateInfo->imageFormat;
-    sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
-
-    StereoPresentMode req = sd->stereo.present_mode;
 
     /* ── DXGI 1.2 + external memory ─────────────────────────────────── */
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DXGI) {
@@ -349,7 +349,7 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         if (sc->barrier_pool)
             sd->real.DestroyCommandPool(sd->real_device, sc->barrier_pool, NULL);
-        if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
+        if (req == STEREO_PRESENT_NV3DLIB)
             nv3d_destroy(sd);
 
         gpu_compose_sc_destroy(sd, sc);     /* semaphores + comp_sc_images array */
