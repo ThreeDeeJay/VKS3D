@@ -148,6 +148,25 @@ STEREO_LOG(
     "[NV3D] props.deviceName=%s",
     props.deviceName);
 
+NV3D::SetLogSink(
+    [](NV3D::LogLevel lvl, const wchar_t* msg, void*)
+    {
+        char utf8[4096];
+
+        WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            msg,
+            -1,
+            utf8,
+            sizeof(utf8),
+            nullptr,
+            nullptr);
+
+        STEREO_LOG("[NV3D] %s", utf8);
+    },
+    nullptr);
+
 HRESULT hr =
     NV3D::CreateInterfaceVulkan(
         sd->si->real_instance,
