@@ -118,6 +118,36 @@ STEREO_LOG(
     props.vendorID,
     props.deviceID);
 
+STEREO_LOG(
+    "[NV3D] si=%p real_instance=%p",
+    sd->si,
+    sd->si ? sd->si->real_instance : 0);
+
+STEREO_LOG(
+    "[NV3D] wrapper instance=%p",
+    (void*)sd->si);
+
+STEREO_LOG(
+    "[NV3D] real instance=%p",
+    (void*)sd->si->real_instance);
+
+STEREO_LOG(
+    "[NV3D] real_instance=%p",
+    sd->si->real_instance);
+
+STEREO_LOG(
+    "[NV3D] real_physdev=%p",
+    sd->real_physdev);
+
+VkPhysicalDeviceProperties props;
+sd->real.GetPhysicalDeviceProperties(
+    sd->real_physdev,
+    &props);
+
+STEREO_LOG(
+    "[NV3D] props.deviceName=%s",
+    props.deviceName);
+
 HRESULT hr =
     NV3D::CreateInterfaceVulkan(
         sd->si->real_instance,
