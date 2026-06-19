@@ -157,6 +157,12 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
     res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
     if (res != VK_SUCCESS) return res;
 
+    STEREO_LOG(
+        "[NV3D TEST] alloc_alt_stereo_swapchain image=%p view=%p count=%u",
+        sc->stereo_images[0],
+        sc->stereo_views_arr[0],
+        sc->image_count);
+
     /* CPU staging NOT created here — caller adds it for DX9, not for GPU compose */
     return VK_SUCCESS;
 }
@@ -439,8 +445,11 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
 /* ── vkGetSwapchainImagesKHR ────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
-stereo_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
-                              pSwapchainImageCount, pSwapchainImages)
+stereo_GetSwapchainImagesKHR(
+    VkDevice device,
+    VkSwapchainKHR swapchain,
+    uint32_t *pCount,
+    VkImage *pImages)
 {
     STEREO_LOG(
         "GetSwapchainImagesKHR swapchain=%p count_ptr=%p images_ptr=%p",
@@ -462,7 +471,7 @@ stereo_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
     if (!pImages)
     {
         STEREO_LOG(
-            "GetSwapchainImagesKHR count query image_count=%u",
+            "[NV3D TEST] count query image_count=%u",
             sc->image_count);
 
         *pCount = sc->image_count;
@@ -478,7 +487,7 @@ stereo_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
         pImages[i] = sc->stereo_images[i];
 
         STEREO_LOG(
-            "GetSwapchainImagesKHR image[%u]=%p",
+            "[NV3D TEST] image[%u]=%p",
             i,
             (void*)pImages[i]);
     }
