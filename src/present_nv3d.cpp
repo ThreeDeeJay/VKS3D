@@ -485,15 +485,28 @@ extern "C" VkResult nv3d_present(
     uint32_t wait_sem_count,
     const VkSemaphore *wait_sems)
 {
-if (!nv3d_init(
-sd,
-sc->app_width,
-sc->app_height))
+STEREO_LOG(
+    "[NV3D] present iface=%p image=%p timeline=%p value=%llu",
+    sd->nv3d_iface,
+    sd->nv3d_image,
+    sd->nv3d_timeline,
+    (unsigned long long)sd->nv3d_value);
+if (!sd->nv3d_iface)
 {
-return VK_ERROR_INITIALIZATION_FAILED;
+    STEREO_LOG(
+        "[NV3D] present requested but nv3d_iface=NULL");
+
+    return VK_ERROR_INITIALIZATION_FAILED;
 }
 
 VkCommandBuffer cmd = sc->barrier_cmds[0];
+
+STEREO_LOG(
+    "[NV3D] cmd=%p stereoImage=%p",
+    cmd,
+    sc->stereo_images ?
+        sc->stereo_images[0] :
+        VK_NULL_HANDLE);
 
 sd->real.ResetCommandBuffer(cmd, 0);
 
