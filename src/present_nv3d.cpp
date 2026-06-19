@@ -167,6 +167,24 @@ STEREO_LOG(
     "[NV3D] VKS3D vulkan-1.dll=%p",
     vulkan);
 
+VkPhysicalDeviceProperties2 props2{};
+props2.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+
+VkPhysicalDeviceIDProperties id{};
+id.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+
+props2.pNext = &id;
+
+sd->si->real.GetPhysicalDeviceProperties2(
+    sd->real_physdev,
+    &props2);
+
+STEREO_LOG(
+    "[NV3D TEST] LUID valid=%u",
+    id.deviceLUIDValid);
+
 HRESULT hr =
     NV3D::CreateInterfaceVulkan(
         sd->si->real_instance,
