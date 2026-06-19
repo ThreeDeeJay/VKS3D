@@ -635,9 +635,18 @@ if (vr != VK_SUCCESS)
 sd->real.QueueWaitIdle(queue);
 /* no QueueWaitIdle */
 
+STEREO_LOG(
+    "[NV3D] Present begin value=%llu iface=%p",
+    (unsigned long long)sd->nv3d_value,
+    sd->nv3d_iface);
+
 HRESULT hr =
     ((NV3D::InterfaceVulkan*)sd->nv3d_iface)
         ->Present(sd->nv3d_value);
+
+STEREO_LOG(
+    "[NV3D] Present end hr=0x%08X",
+    (unsigned)hr);
 
 if (FAILED(hr))
 {

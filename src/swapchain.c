@@ -211,6 +211,26 @@ stereo_CreateSwapchainKHR(VkDevice device,
         STEREO_LOG("[NV3D] init succeeded");
 }
 
+        sc->present_mode  = STEREO_PRESENT_NV3DLIB;
+        sc->stereo_active = true;
+
+        sc->real_swapchain = VK_NULL_HANDLE;
+
+        sc->app_handle =
+            (VkSwapchainKHR)(uintptr_t)sc;
+
+        *pSwapchain =
+            sc->app_handle;
+
+        sd->swapchain_count++;
+
+        STEREO_LOG(
+            "[NV3D] RETURNING NV3D SWAPCHAIN handle=%p",
+            (void*)*pSwapchain);
+
+        return VK_SUCCESS;
+    }
+
     STEREO_LOG(
         "CreateSwapchain: req=%d stereo.enabled=%d",
         (int)req,
@@ -368,6 +388,10 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         if (sc->barrier_pool)
             sd->real.DestroyCommandPool(sd->real_device, sc->barrier_pool, NULL);
+        STEREO_LOG(
+            "[NV3D] QueuePresent mode=%d sc=%p",
+            (int)sc->present_mode,
+            sc);
         if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
             nv3d_destroy(sd);
 
