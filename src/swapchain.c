@@ -291,7 +291,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
             STEREO_LOG(
                 "[NV3D] fence0=%p",
                 sc->barrier_fences[0]);
-
+        }
         return VK_SUCCESS;
     }
 
