@@ -258,6 +258,18 @@ stereo_CreateSwapchainKHR(VkDevice device,
             "[NV3D] RETURNING NV3D SWAPCHAIN handle=%p",
             (void*)*pSwapchain);
 
+        STEREO_LOG(
+            "[NV3D] return cmds=%p fences=%p",
+            sc->barrier_cmds,
+            sc->barrier_fences);
+
+        if (sc->barrier_cmds)
+        {
+            STEREO_LOG(
+                "[NV3D] cmd0=%p",
+                sc->barrier_cmds[0]);
+        }
+
         return VK_SUCCESS;
     }
 
