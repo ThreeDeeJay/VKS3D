@@ -499,7 +499,21 @@ if (!sd->nv3d_iface)
     return VK_ERROR_INITIALIZATION_FAILED;
 }
 
+if (!sc->barrier_cmds)
+{
+    STEREO_ERR(
+        "[NV3D] barrier_cmds array is NULL");
+    return VK_ERROR_INITIALIZATION_FAILED;
+}
+
 VkCommandBuffer cmd = sc->barrier_cmds[0];
+
+if (!cmd)
+{
+    STEREO_ERR(
+        "[NV3D] barrier_cmds[0] is NULL");
+    return VK_ERROR_INITIALIZATION_FAILED;
+}
 
 STEREO_LOG(
     "[NV3D] cmd=%p stereoImage=%p",

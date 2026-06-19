@@ -235,6 +235,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
             sc->image_count,
             sc->stereo_images);
 
+        STEREO_LOG(
+            "[NV3D] after alloc cmds=%p fences=%p",
+            sc->barrier_cmds,
+            sc->barrier_fences);
+
         if (nvres != VK_SUCCESS)
         {
             STEREO_ERR(
