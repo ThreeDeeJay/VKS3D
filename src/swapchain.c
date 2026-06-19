@@ -440,6 +440,10 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 {
 
     StereoDevice *sd = stereo_device_from_handle(device);
+    STEREO_LOG(
+        "[NV3D] acquire queue=%p gfx_queue=%p",
+        queue,
+        sd ? sd->gfx_queue : NULL);
     if (!sd) return VK_ERROR_DEVICE_LOST;
     STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
 
@@ -456,23 +460,50 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
     {
         STEREO_LOG("[NV3D] AcquireNextImageKHR begin");
 
-        if (pImageIndex)
-        {
-            *pImageIndex = 0;
-
-            STEREO_LOG(
-                "[NV3D] imageIndex=%u",
-                *pImageIndex);
-        }
+    if (semaphore != VK_NULL_HANDLE)
+    {
+        VkSubmitInfo sig = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .signalSemaphoreCount = 1, 
+            .pSignalSemaphores = &semaphore,
+        };
 
         STEREO_LOG(
-            "[NV3D] semaphore=%p fence=%p",
-            (void*)semaphore,
-            (void*)fence);
+            "[NV3D] signaling acquire semaphore %p",
+            semaphore);
 
-        STEREO_LOG("[NV3D] AcquireNextImageKHR about to return");
+        sd->real.QueueSubmit(
+            sd->gfx_queue,
+            1,
+            &sig,
+            VK_NULL_HANDLE);
+    }
 
-        return VK_SUCCESS;
+    if (fence != VK_NULL_HANDLE)
+    {
+        sd->real.ResetFences(
+            sd->real_device,
+            1,
+            &fence);
+
+        sd->real.QueueSubmit(
+            sd->gfx_queue,
+            0,
+            NULL,
+            fence);
+
+        STEREO_LOG(
+            "[NV3D] signaling acquire fence %p",
+            fence);
+    }
+
+    if (pImageIndex)
+        *pImageIndex = 0;
+
+    STEREO_LOG(
+        "[NV3D] AcquireNextImageKHR return success");
+
+    return VK_SUCCESS;
     }
 
     if (!sc || !sc->stereo_active) {
