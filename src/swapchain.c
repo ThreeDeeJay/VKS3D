@@ -229,6 +229,17 @@ stereo_CreateSwapchainKHR(VkDevice device,
         VkResult nvres =
             alloc_alt_stereo_swapchain(sd, sc);
 
+        if (nvres == VK_SUCCESS)
+        {
+            if (!setup_barrier_resources(sd, sc))
+            {
+                STEREO_ERR(
+                    "[NV3D] setup_barrier_resources failed");
+
+                nvres = VK_ERROR_INITIALIZATION_FAILED;
+            }
+        }
+
         STEREO_LOG(
             "[NV3D] alloc_alt_stereo_swapchain=%d image_count=%u images=%p",
             nvres,
@@ -274,6 +285,12 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 "[NV3D] cmd0=%p",
                 sc->barrier_cmds[0]);
         }
+
+        if (sc->barrier_fences)
+        {
+            STEREO_LOG(
+                "[NV3D] fence0=%p",
+                sc->barrier_fences[0]);
 
         return VK_SUCCESS;
     }

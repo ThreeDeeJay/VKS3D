@@ -522,6 +522,14 @@ STEREO_LOG(
         sc->stereo_images[0] :
         VK_NULL_HANDLE);
 
+if (cmd == VK_NULL_HANDLE)
+{
+    STEREO_ERR(
+        "[NV3D] barrier_cmds[0] is NULL");
+
+    return VK_ERROR_INITIALIZATION_FAILED;
+}
+
 sd->real.ResetCommandBuffer(cmd, 0);
 
 VkCommandBufferBeginInfo begin = {
