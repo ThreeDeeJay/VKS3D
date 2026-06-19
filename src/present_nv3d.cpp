@@ -666,10 +666,6 @@ VkResult vr =
 if (vr != VK_SUCCESS)
     return vr;
 
-/* IMPORTANT: ONCE NV3D IS CONFIRMED WORKING, REMOVE THE NEXT AND THIS LINE TO REMOVE CPU BOTTLENECK */
-sd->real.QueueWaitIdle(queue);
-/* no QueueWaitIdle */
-
 STEREO_LOG(
     "[NV3D] Present begin value=%llu iface=%p",
     (unsigned long long)sd->nv3d_value,
