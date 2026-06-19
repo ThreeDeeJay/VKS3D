@@ -181,18 +181,40 @@ sd->si->real.GetPhysicalDeviceProperties2(
     sd->real_physdev,
     &props2);
 
-STEREO_LOG(
-    "[NV3D TEST] LUID valid=%u",
-    id.deviceLUIDValid);
+VkPhysicalDeviceIDProperties id = {};
+id.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
 
-HRESULT hr =
-    NV3D::CreateInterfaceVulkan(
-        sd->si->real_instance,
-        sd->real_physdev,
-        sd->real_device,
-        sd->gfx_qf,
-        &params,
-        &iface);
+VkPhysicalDeviceProperties2 props2 = {};
+props2.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+props2.pNext = &id;
+
+sd->si->real.GetPhysicalDeviceProperties2(
+    sd->real_physdev,
+    &props2);
+
+if (id.deviceLUIDValid)
+{
+    const uint8_t* l =
+        (const uint8_t*)id.deviceLUID;
+
+    STEREO_LOG(
+        "[NV3D TEST] LUID=%02X%02X%02X%02X-%02X%02X%02X%02X-%02X%02X%02X%02X-%02X%02X%02X%02X",
+        l[0],l[1],l[2],l[3],
+        l[4],l[5],l[6],l[7],
+        l[8],l[9],l[10],l[11],
+        l[12],l[13],l[14],l[15]);
+}
+
+CreateInterfaceVulkan(
+    instance,
+    phys,
+    device,
+    qf,
+    const LUID* adapter_luid,
+    params,
+    &iface);
 
 STEREO_LOG(
     "[NV3D] CreateInterfaceVulkan hr=0x%08X iface=%p",
