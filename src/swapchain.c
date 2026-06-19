@@ -438,6 +438,23 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
                             uint64_t timeout, VkSemaphore semaphore,
                             VkFence fence, uint32_t *pImageIndex)
 {
+    STEREO_LOG(
+        "stereo_AcquireNextImageKHR: sc=%p mode=%d real_sc=%p",
+        sc,
+        sc ? (int)sc->present_mode : -1,
+        sc ? (void*)sc->real_swapchain : 0);
+
+    if (sc &&
+        sc->present_mode == STEREO_PRESENT_NV3DLIB)
+    {
+        STEREO_LOG(
+            "[NV3D] AcquireNextImageKHR");
+
+        if (pImageIndex)
+            *pImageIndex = 0;
+
+        return VK_SUCCESS;
+    }
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
     STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
