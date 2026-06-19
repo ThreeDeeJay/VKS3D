@@ -454,11 +454,23 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
     if (sc &&
         sc->present_mode == STEREO_PRESENT_NV3DLIB)
     {
-        STEREO_LOG(
-            "[NV3D] AcquireNextImageKHR");
+        STEREO_LOG("[NV3D] AcquireNextImageKHR begin");
 
         if (pImageIndex)
+        {
             *pImageIndex = 0;
+
+            STEREO_LOG(
+                "[NV3D] imageIndex=%u",
+                *pImageIndex);
+        }
+
+        STEREO_LOG(
+            "[NV3D] semaphore=%p fence=%p",
+            (void*)semaphore,
+            (void*)fence);
+
+        STEREO_LOG("[NV3D] AcquireNextImageKHR about to return");
 
         return VK_SUCCESS;
     }
@@ -495,6 +507,11 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
+    STEREO_LOG(
+        "[NV3D] QueuePresentKHR queue=%p swapchains=%u",
+        queue,
+        pPresentInfo ?
+            pPresentInfo->swapchainCount : 0);
     STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
                (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
     extern StereoDevice g_devices[];
