@@ -438,6 +438,13 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
                             uint64_t timeout, VkSemaphore semaphore,
                             VkFence fence, uint32_t *pImageIndex)
 {
+
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd) return VK_ERROR_DEVICE_LOST;
+    STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
+
+    StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
+
     STEREO_LOG(
         "stereo_AcquireNextImageKHR: sc=%p mode=%d real_sc=%p",
         sc,
@@ -455,11 +462,7 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         return VK_SUCCESS;
     }
-    StereoDevice *sd = stereo_device_from_handle(device);
-    if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
 
-    StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
     if (!sc || !sc->stereo_active) {
         VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.AcquireNextImageKHR(sd->real_device, real,
