@@ -213,11 +213,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
             STEREO_ERR("[NV3D] init failed");
             return VK_ERROR_INITIALIZATION_FAILED;
         }
-
-        STEREO_LOG(
-            "[NV3D] stereo_images=%p count=%u",
-            sc->stereo_images,
-            sc->image_count);
         if (sc->stereo_images)
         {
             STEREO_LOG(
