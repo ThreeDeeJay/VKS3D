@@ -208,8 +208,33 @@ stereo_CreateSwapchainKHR(VkDevice device,
             return VK_ERROR_INITIALIZATION_FAILED;
         }
 
+        STEREO_LOG(
+            "[NV3D] stereo_images=%p count=%u",
+            sc->stereo_images,
+            sc->image_count);
+        if (sc->stereo_images)
+        {
+            STEREO_LOG(
+                "[NV3D] stereo_image[0]=%p",
+                sc->stereo_images[0]);
+        }
         STEREO_LOG("[NV3D] init succeeded");
 
+        VkResult nvres =
+            alloc_alt_stereo_swapchain(sd, sc);
+
+        STEREO_LOG(
+            "[NV3D] alloc_alt_stereo_swapchain=%d image_count=%u images=%p",
+            nvres,
+            sc->image_count,
+            sc->stereo_images);
+
+        if (nvres != VK_SUCCESS)
+        {
+            STEREO_ERR(
+                "[NV3D] alloc_alt_stereo_swapchain failed");
+            goto passthrough;
+        }
         sc->present_mode  = STEREO_PRESENT_NV3DLIB;
         sc->stereo_active = true;
 
@@ -415,8 +440,13 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 /* ── vkGetSwapchainImagesKHR ────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
-                              uint32_t *pCount, VkImage *pImages)
+                              pSwapchainImageCount, pSwapchainImages)
 {
+    STEREO_LOG(
+        "GetSwapchainImagesKHR swapchain=%p count_ptr=%p images_ptr=%p",
+        swapchain,
+        pCount,
+        pImages);
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
@@ -425,11 +455,36 @@ stereo_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
         VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.GetSwapchainImagesKHR(sd->real_device, real, pCount, pImages);
     }
-    if (!pImages) { *pCount = sc->image_count; return VK_SUCCESS; }
+    STEREO_LOG(
+        "GetSwapchainImagesKHR stereo=%d image_count=%u",
+        sc ? sc->stereo_active : 0,
+        sc ? sc->image_count : 0);
+    if (!pImages)
+    {
+        STEREO_LOG(
+            "GetSwapchainImagesKHR count query image_count=%u",
+            sc->image_count);
+
+        *pCount = sc->image_count;
+        return VK_SUCCESS;
+    }
     uint32_t copy = (*pCount < sc->image_count) ? *pCount : sc->image_count;
-    for (uint32_t i = 0; i < copy; i++) pImages[i] = sc->stereo_images[i];
+    STEREO_LOG(
+        "GetSwapchainImagesKHR returning %u images stereo_images=%p",
+        copy,
+        sc->stereo_images);
+    for (uint32_t i = 0; i < copy; i++)
+    {
+        pImages[i] = sc->stereo_images[i];
+
+        STEREO_LOG(
+            "GetSwapchainImagesKHR image[%u]=%p",
+            i,
+            (void*)pImages[i]);
+    }
     *pCount = copy;
     return (copy < sc->image_count) ? VK_INCOMPLETE : VK_SUCCESS;
+
 }
 
 /* ── vkAcquireNextImageKHR ───────────────────────────────────────────────── */
@@ -441,8 +496,7 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 
     StereoDevice *sd = stereo_device_from_handle(device);
     STEREO_LOG(
-        "[NV3D] acquire queue=%p gfx_queue=%p",
-        queue,
+        "[NV3D] acquire gfx_queue=%p",
         sd ? sd->gfx_queue : NULL);
     if (!sd) return VK_ERROR_DEVICE_LOST;
     STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
