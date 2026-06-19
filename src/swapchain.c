@@ -209,7 +209,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
         }
 
         STEREO_LOG("[NV3D] init succeeded");
-}
 
         sc->present_mode  = STEREO_PRESENT_NV3DLIB;
         sc->stereo_active = true;
