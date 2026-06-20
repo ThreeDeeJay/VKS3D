@@ -1155,6 +1155,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 ro,
                 conv,
                 sd->stereo.flip_eyes);
+            STEREO_LOG(
+                "[CALL B] multiview=%d pass_exists=%d",
+                sd->stereo.multiview,
+                sd->multiview_pass_exists);
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
                     lo,ro,conv,/*inj_vi=*/true)) {
                 STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
