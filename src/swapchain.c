@@ -472,7 +472,7 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, pAllocator);
             STEREO_LOG(
                 "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
-                sc->real_swafpchain);
+                sc->real_swapchain);
             sc->real_swapchain = VK_NULL_HANDLE;
 
         uint32_t idx = (uint32_t)(sc - sd->swapchains);
