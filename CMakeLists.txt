@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(VKS3D
     VERSION 1.0.0
-    LANGUAGES C
+    LANGUAGES C CXX
     DESCRIPTION "Vulkan Stereoscopic 3D ICD"
 )
 
@@ -13,6 +13,10 @@ endif()
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+
+# ── Policy: present_nv3d.cpp requires C20 via /std:c++20 ─────────────────────────────────
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ── Determine bitness from generator/toolchain ──────────────────────────────
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -49,6 +53,7 @@ set(STEREO_SOURCES
     src/physdev_ext.c
     src/render_pass.c
     src/shader.c
+    src/present_nv3d.cpp
     src/swapchain.c
     src/present.c
     src/present_alt.c
@@ -117,6 +122,8 @@ target_include_directories(${TARGET_NAME} PRIVATE
     include
     ${Vulkan_INCLUDE_DIRS}
 )
+target_include_directories(${TARGET_NAME} PRIVATE
+    third_party/NV3D-Lib/NV3DLib/include)
 
 # ── Version string: embed git commit hash + build date ───────────────────────
 # Baked in at configure time so it appears in the log without any runtime
@@ -151,6 +158,21 @@ if(WIN32)
     target_link_libraries(${TARGET_NAME} PRIVATE
         advapi32    # RegOpenKeyEx, RegEnumValue
     )
+    target_link_libraries(${TARGET_NAME} PRIVATE 
+        ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/NV3DLib/lib/NV3DLib.lib
+        dxgi.lib
+        d3d11.lib
+        d3d9.lib
+        )
+    if(STEREO_BITS EQUAL 64)
+        target_link_libraries(${TARGET_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/external/nvapi/amd64/nvapi64.lib
+        )
+    else()
+        target_link_libraries(${TARGET_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/third_party/NV3D-Lib/external/nvapi/x86/nvapi.lib
+        )
+    endif()
     target_compile_definitions(${TARGET_NAME} PRIVATE
         WIN32_LEAN_AND_MEAN
         NOMINMAX

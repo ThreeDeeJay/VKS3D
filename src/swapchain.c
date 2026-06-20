@@ -18,6 +18,7 @@
 #include "stereo_icd.h"
 #include "dxgi_output.h"
 #include "present_alt.h"
+#include "present_nv3d.h"
 
 /* ── Helper: find suitable memory type ──────────────────────────────────── */
 static uint32_t find_memory_type(StereoDevice *sd, uint32_t type_bits,
@@ -156,6 +157,12 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
     res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
     if (res != VK_SUCCESS) return res;
 
+    STEREO_LOG(
+        "[NV3D TEST] alloc_alt_stereo_swapchain image=%p view=%p count=%u",
+        sc->stereo_images[0],
+        sc->stereo_views_arr[0],
+        sc->image_count);
+
     /* CPU staging NOT created here — caller adds it for DX9, not for GPU compose */
     return VK_SUCCESS;
 }
@@ -178,13 +185,115 @@ stereo_CreateSwapchainKHR(VkDevice device,
 
     StereoSwapchain *sc = &sd->swapchains[sd->swapchain_count];
     memset(sc, 0, sizeof(*sc));
+
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
     sc->app_height = app_h;
     sc->format     = pCreateInfo->imageFormat;
     sc->hwnd       = stereo_si_hwnd_for_surface(sd->si, pCreateInfo->surface);
 
+    STEREO_LOG(
+        "CreateSwapchain: enabled=%d present_mode=%d",
+        (int)sd->stereo.enabled,
+        (int)sd->stereo.present_mode);
+
     StereoPresentMode req = sd->stereo.present_mode;
+
+    STEREO_LOG(
+        "CreateSwapchain: req=%d stereo.enabled=%d",
+        (int)req,
+        (int)sd->stereo.enabled);
+
+    if (req == STEREO_PRESENT_NV3DLIB)
+    {
+        STEREO_LOG("[NV3D] requested");
+
+        if (!nv3d_init(sd, app_w, app_h))
+        {
+            STEREO_ERR("[NV3D] init failed");
+            return VK_ERROR_INITIALIZATION_FAILED;
+        }
+        if (sc->stereo_images)
+        {
+            STEREO_LOG(
+                "[NV3D] stereo_image[0]=%p",
+                sc->stereo_images[0]);
+        }
+        STEREO_LOG("[NV3D] init succeeded");
+
+        VkResult nvres =
+            alloc_alt_stereo_swapchain(sd, sc);
+
+        if (nvres == VK_SUCCESS)
+        {
+            if (!setup_barrier_resources(sd, sc))
+            {
+                STEREO_ERR(
+                    "[NV3D] setup_barrier_resources failed");
+
+                nvres = VK_ERROR_INITIALIZATION_FAILED;
+            }
+        }
+
+        STEREO_LOG(
+            "[NV3D] alloc_alt_stereo_swapchain=%d image_count=%u images=%p",
+            nvres,
+            sc->image_count,
+            sc->stereo_images);
+
+        STEREO_LOG(
+            "[NV3D] after alloc cmds=%p fences=%p",
+            sc->barrier_cmds,
+            sc->barrier_fences);
+
+        if (nvres != VK_SUCCESS)
+        {
+            STEREO_ERR(
+                "[NV3D] alloc_alt_stereo_swapchain failed");
+            goto passthrough;
+        }
+        sc->present_mode  = STEREO_PRESENT_NV3DLIB;
+        sc->stereo_active = true;
+
+        sc->real_swapchain = VK_NULL_HANDLE;
+
+        sc->app_handle =
+            (VkSwapchainKHR)(uintptr_t)sc;
+
+        *pSwapchain =
+            sc->app_handle;
+
+        sd->swapchain_count++;
+
+        STEREO_LOG(
+            "[NV3D] RETURNING NV3D SWAPCHAIN handle=%p",
+            (void*)*pSwapchain);
+
+        STEREO_LOG(
+            "[NV3D] return cmds=%p fences=%p",
+            sc->barrier_cmds,
+            sc->barrier_fences);
+
+        if (sc->barrier_cmds)
+        {
+            STEREO_LOG(
+                "[NV3D] cmd0=%p",
+                sc->barrier_cmds[0]);
+        }
+
+        if (sc->barrier_fences)
+        {
+            STEREO_LOG(
+                "[NV3D] fence0=%p",
+                sc->barrier_fences[0]);
+        }
+        return VK_SUCCESS;
+    }
+
+    STEREO_LOG(
+        "CreateSwapchain: req=%d stereo.enabled=%d",
+        (int)req,
+        (int)sd->stereo.enabled);
 
     /* ── DXGI 1.2 + external memory ─────────────────────────────────── */
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DXGI) {
@@ -338,6 +447,12 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         if (sc->barrier_pool)
             sd->real.DestroyCommandPool(sd->real_device, sc->barrier_pool, NULL);
+        STEREO_LOG(
+            "[NV3D] QueuePresent mode=%d sc=%p",
+            (int)sc->present_mode,
+            sc);
+        if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
+            nv3d_destroy(sd);
 
         gpu_compose_sc_destroy(sd, sc);     /* semaphores + comp_sc_images array */
         alt_cpu_staging_destroy(sd, sc);    /* DX9 CPU staging (no-op if unused) */
@@ -359,9 +474,17 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
 /* ── vkGetSwapchainImagesKHR ────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
-stereo_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
-                              uint32_t *pCount, VkImage *pImages)
+stereo_GetSwapchainImagesKHR(
+    VkDevice device,
+    VkSwapchainKHR swapchain,
+    uint32_t *pCount,
+    VkImage *pImages)
 {
+    STEREO_LOG(
+        "GetSwapchainImagesKHR swapchain=%p count_ptr=%p images_ptr=%p",
+        swapchain,
+        pCount,
+        pImages);
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
@@ -370,11 +493,36 @@ stereo_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
         VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.GetSwapchainImagesKHR(sd->real_device, real, pCount, pImages);
     }
-    if (!pImages) { *pCount = sc->image_count; return VK_SUCCESS; }
+    STEREO_LOG(
+        "GetSwapchainImagesKHR stereo=%d image_count=%u",
+        sc ? sc->stereo_active : 0,
+        sc ? sc->image_count : 0);
+    if (!pImages)
+    {
+        STEREO_LOG(
+            "[NV3D TEST] count query image_count=%u",
+            sc->image_count);
+
+        *pCount = sc->image_count;
+        return VK_SUCCESS;
+    }
     uint32_t copy = (*pCount < sc->image_count) ? *pCount : sc->image_count;
-    for (uint32_t i = 0; i < copy; i++) pImages[i] = sc->stereo_images[i];
+    STEREO_LOG(
+        "GetSwapchainImagesKHR returning %u images stereo_images=%p",
+        copy,
+        sc->stereo_images);
+    for (uint32_t i = 0; i < copy; i++)
+    {
+        pImages[i] = sc->stereo_images[i];
+
+        STEREO_LOG(
+            "[NV3D TEST] image[%u]=%p",
+            i,
+            (void*)pImages[i]);
+    }
     *pCount = copy;
     return (copy < sc->image_count) ? VK_INCOMPLETE : VK_SUCCESS;
+
 }
 
 /* ── vkAcquireNextImageKHR ───────────────────────────────────────────────── */
@@ -383,11 +531,73 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
                             uint64_t timeout, VkSemaphore semaphore,
                             VkFence fence, uint32_t *pImageIndex)
 {
+
     StereoDevice *sd = stereo_device_from_handle(device);
+    STEREO_LOG(
+        "[NV3D] acquire gfx_queue=%p",
+        sd ? sd->gfx_queue : NULL);
     if (!sd) return VK_ERROR_DEVICE_LOST;
     STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
+
+    STEREO_LOG(
+        "stereo_AcquireNextImageKHR: sc=%p mode=%d real_sc=%p",
+        sc,
+        sc ? (int)sc->present_mode : -1,
+        sc ? (void*)sc->real_swapchain : 0);
+
+    if (sc &&
+        sc->present_mode == STEREO_PRESENT_NV3DLIB)
+    {
+        STEREO_LOG("[NV3D] AcquireNextImageKHR begin");
+
+    if (semaphore != VK_NULL_HANDLE)
+    {
+        VkSubmitInfo sig = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .signalSemaphoreCount = 1, 
+            .pSignalSemaphores = &semaphore,
+        };
+
+        STEREO_LOG(
+            "[NV3D] signaling acquire semaphore %p",
+            semaphore);
+
+        sd->real.QueueSubmit(
+            sd->gfx_queue,
+            1,
+            &sig,
+            VK_NULL_HANDLE);
+    }
+
+    if (fence != VK_NULL_HANDLE)
+    {
+        sd->real.ResetFences(
+            sd->real_device,
+            1,
+            &fence);
+
+        sd->real.QueueSubmit(
+            sd->gfx_queue,
+            0,
+            NULL,
+            fence);
+
+        STEREO_LOG(
+            "[NV3D] signaling acquire fence %p",
+            fence);
+    }
+
+    if (pImageIndex)
+        *pImageIndex = 0;
+
+    STEREO_LOG(
+        "[NV3D] AcquireNextImageKHR return success");
+
+    return VK_SUCCESS;
+    }
+
     if (!sc || !sc->stereo_active) {
         VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.AcquireNextImageKHR(sd->real_device, real,
@@ -420,6 +630,11 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
+    STEREO_LOG(
+        "[NV3D] QueuePresentKHR queue=%p swapchains=%u",
+        queue,
+        pPresentInfo ?
+            pPresentInfo->swapchainCount : 0);
     STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
                (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
     extern StereoDevice g_devices[];
@@ -458,6 +673,14 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
             break;
         case STEREO_PRESENT_DX9:
             pr = dx9_present(sd, sc_i, queue, wcount, wsems);
+            break;
+        case STEREO_PRESENT_NV3DLIB:
+            pr = nv3d_present(
+                sd,
+                sc_i,
+                queue,
+                wcount,
+                wsems);
             break;
         case STEREO_PRESENT_SBS:
         case STEREO_PRESENT_TAB:

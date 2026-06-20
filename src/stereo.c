@@ -20,6 +20,11 @@
  * Must appear before the first #include that pulls in platform.h. */
 #define STEREO_LOG_DEFINE_GLOBALS
 
+#include "platform.h"
+
+HANDLE g_vks3d_log_handle  = INVALID_HANDLE_VALUE;
+int    g_vks3d_log_enabled = 0;
+
 /* Version/commit baked in by CMake.  Fallbacks for manual builds. */
 #ifndef VKS3D_VERSION
 #  define VKS3D_VERSION   "1.0.0"
@@ -97,6 +102,7 @@ static StereoPresentMode parse_present_mode(const char *s)
     if (!_stricmp(s, "tab"))   return STEREO_PRESENT_TAB;
     if (!_stricmp(s, "interlaced")) return STEREO_PRESENT_INTERLACED;
     if (!_stricmp(s, "mono"))  return STEREO_PRESENT_MONO;
+    if (!_stricmp(s, "nv3dlib"))  return STEREO_PRESENT_NV3DLIB;
     return STEREO_PRESENT_AUTO;
 }
 
@@ -794,7 +800,16 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     /* VK_KHR_external_memory_win32 — optional, NULL if driver doesn't support */
     sd->real.GetMemoryWin32HandlePropertiesKHR =
         (PFN_vkGetMemoryWin32HandlePropertiesKHR)
-        g_real_giPA(real_inst, "vkGetMemoryWin32HandlePropertiesKHR");
+        g_real_giPA(real_inst, "vkGetMemoryWin32HandlePropertiesKHR");        
+    sd->real.ImportMemoryWin32HandleKHR =
+        (PFN_vkImportMemoryWin32HandleKHR)
+        g_real_giPA(real_inst,
+            "vkImportMemoryWin32HandleKHR");
+
+    sd->real.ImportSemaphoreWin32HandleKHR =
+        (PFN_vkImportSemaphoreWin32HandleKHR)
+        g_real_giPA(real_inst,
+            "vkImportSemaphoreWin32HandleKHR");
 #undef L
 }
 

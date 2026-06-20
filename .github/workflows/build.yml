@@ -25,12 +25,14 @@ jobs:
         - {
             Name: "Win32",
             Platform: "Win32",
-            Architecture: "x86"
+            Architecture: "x86",
+            Bits: "32"
           }
         - {
             Name: "Win64",
             Platform: "x64",
-            Architecture: "x64"
+            Architecture: "x64",
+            Bits: "64"
           }
 
     steps:
@@ -62,6 +64,24 @@ jobs:
       shell: powershell
       run: |
         echo "VULKAN_SDK=C:\VulkanSDK\1.3.296.0" >> $env:GITHUB_ENV
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.0.2
+
+    - name: Build NV3DLib
+      run: >
+        msbuild
+        /m "third_party\NV3D-Lib\NV3DLib.sln"
+        /p:Configuration="${{matrix.Configuration}}-MD"
+        /p:Platform="${{matrix.Settings.Architecture}}"
+        /p:PlatformToolset=v143
+
+    - name: Collect dependencies
+      run: |
+        move "third_party\NV3D-Lib\NV3DLib\lib\x${{matrix.Settings.Bits}}\Release-MD\NV3DLib-md.lib" "third_party\NV3D-Lib\NV3DLib\lib\NV3DLib.lib"
+
+    - name: List files
+      run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
 
     - name: Configure
       run: >

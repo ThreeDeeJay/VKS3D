@@ -44,6 +44,7 @@
 #define SpvOpMatrixTimesVector 145
 #define SpvOpMatrixTimesMatrix 146
 #define SpvOpIEqual           170
+#define SpvOpINotEqual        171
 #define SpvOpSelect           169
 
 #define SpvDecorationBuiltIn   11
@@ -209,11 +210,21 @@ typedef struct {
     uint32_t cc;
 
     uint32_t projection_mode;
+    /* diagnostics only */
+    float lo_dbg;
+    float ro_dbg;
+    int   flip_dbg;
 } BodyCtx;
 
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m=c->m;
+    STEREO_LOG(
+        "[EMIT] flip=%d lo=%f ro=%f proj=%d",
+        c->flip_dbg,
+        c->lo_dbg,
+        c->ro_dbg,
+        c->projection_mode);
     uint32_t ch=(*nid)++, lp=(*nid)++;
     uint32_t pptr;
     if (m->pos_is_block) {
@@ -238,7 +249,12 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     if (c->have_view && m->view_var && m->it && c->bt) {
         { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
         { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
-        { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cl,c->cr}; sb_push_n(out,w,6); }
+        STEREO_LOG(
+            "emit_body: projection=%d have_view=%d view_var=%u",
+            c->projection_mode,
+            c->have_view,
+            m->view_var);
+        { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cr,c->cl}; sb_push_n(out,w,6); }
     } else { sel=c->cl; }
     { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u};    sb_push_n(out,w,5); }
     if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
@@ -292,9 +308,9 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             sb_push_n(out,w,5);
         }
 
-        /* nx = tmp + signed convergence */
+        /* nx = tmp - signed convergence */
         {
-            uint32_t w[]={op_(SpvOpFAdd,5),
+            uint32_t w[]={op_(131,5),   /* OpFSub */
                           m->ft,nx,tmp,convsel};
             sb_push_n(out,w,5);
         }
@@ -380,6 +396,12 @@ bool spirv_patch_stereo_vertex(
         sb_push_n(&te,w,4); m.ptr_in_int=id_ptr_int; uint_=id_ptr_int; }
     if (id_new_bt) { uint32_t w[]={op_(SpvOpTypeBool,2),id_new_bt}; sb_push_n(&te,w,2); }
     if (m.it) { uint32_t w[]={op_(SpvOpConstant,4),m.it,id_cz,0}; sb_push_n(&te,w,4); }
+    STEREO_LOG(
+        "[SPIRV] lo=%f ro=%f conv=%f projection=%d",
+        lo,
+        ro,
+        conv,
+        projection_mode);
     {
         uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cf0,0};
         float z=0.0f;
@@ -400,14 +422,18 @@ bool spirv_patch_stereo_vertex(
     }
 
     BodyCtx bc={&m, have_view, uv4, uint_, bt,
-            id_cz, id_cf0,
-            id_cl, id_cr, id_cc,
-            projection_mode};
+             id_cz, id_cf0,
+             id_cl, id_cr, id_cc,
+             projection_mode,
+             lo,
+             ro,
+             0};
     STEREO_LOG(
-        "Projection constants: L=%f R=%f Conv=%f",
+        "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
         ro,
-        conv);
+        conv,
+        projection_mode);
 
     size_t ins_t=0, ins_b=0;
     for (size_t i=5;i<in_c;) {
@@ -959,6 +985,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     float lo=sd->stereo.left_eye_offset, ro=sd->stereo.right_eye_offset,
           conv=sd->stereo.convergence;
 
+    STEREO_LOG(
+        "[PATCH] lo=%f ro=%f flip=%d",
+        lo,
+        ro,
+        sd->stereo.flip_eyes);
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
 
@@ -1068,6 +1099,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             StereoShaderCache *e=cache_find(sd, ci->pStages[tes_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
+            STEREO_LOG(
+                "[CALL A] lo=%f ro=%f conv=%f flip=%d",
+                lo,
+                ro,
+                conv,
+                sd->stereo.flip_eyes);
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
                     lo,ro,conv,true))
             {
@@ -1125,6 +1162,16 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
+            STEREO_LOG(
+                "[CALL B] lo=%f ro=%f conv=%f flip=%d",
+                lo,
+                ro,
+                conv,
+                sd->stereo.flip_eyes);
+            STEREO_LOG(
+                "[CALL B] multiview=%d pass_exists=%d",
+                sd->stereo.multiview,
+                sd->multiview_pass_exists);
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
                     lo,ro,conv,/*inj_vi=*/true)) {
                 STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
