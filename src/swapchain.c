@@ -191,8 +191,25 @@ stereo_CreateSwapchainKHR(VkDevice device,
         "[CREATE SC] swapchain_count=%u old_app_swapchain=%p",
         sd->swapchain_count,
         pCreateInfo->oldSwapchain);
-    StereoSwapchain *sc = &sd->swapchains[sd->swapchain_count];
-    memset(sc, 0, sizeof(*sc));
+    StereoSwapchain *old_sc = NULL;
+
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE) {
+        for (uint32_t i = 0; i < sd->swapchain_count; i++) {
+            if (sd->swapchains[i].app_swapchain ==
+                pCreateInfo->oldSwapchain)
+            {
+                old_sc = &sd->swapchains[i];
+                break;
+            }
+        }
+    }
+    if (old_sc) {
+        sc = old_sc;
+    }
+    else {
+        sc = &sd->swapchains[sd->swapchain_count++];
+        memset(sc, 0, sizeof(*sc));
+    }
     STEREO_LOG(
         "[CREATE SC] new sc=%p real_swapchain=%p",
         sc,
@@ -266,15 +283,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
         }
         sc->present_mode  = STEREO_PRESENT_NV3DLIB;
         sc->stereo_active = true;
-
         sc->real_swapchain = VK_NULL_HANDLE;
-
         sc->app_handle =
             (VkSwapchainKHR)(uintptr_t)sc;
-
         *pSwapchain =
             sc->app_handle;
-
         sd->swapchain_count++;
 
         STEREO_LOG(
