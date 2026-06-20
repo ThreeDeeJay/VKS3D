@@ -238,7 +238,12 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     if (c->have_view && m->view_var && m->it && c->bt) {
         { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
         { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
-        { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cl,c->cr}; sb_push_n(out,w,6); }
+        STEREO_LOG(
+            "emit_body: projection=%d have_view=%d view_var=%u",
+            c->projection_mode,
+            c->have_view,
+            m->view_var);
+        { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cr,c->cl}; sb_push_n(out,w,6); }
     } else { sel=c->cl; }
     { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u};    sb_push_n(out,w,5); }
     if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
@@ -275,13 +280,13 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             sb_push_n(out,w,5);
         }
 
-        /* TEST: swap convergence sign */
+        /* left eye = +convmag, right eye = -convmag */
         {
             uint32_t w[]={op_(SpvOpSelect,6),
                           m->ft,convsel,
                           isl,
-                          negconv,
-                          convmag};
+                          convmag,
+                          negconv};
             sb_push_n(out,w,6);
         }
 
@@ -399,6 +404,13 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view;
     }
 
+    STEREO_LOG(
+        "BodyCtx: left=%f right=%f conv=%f projection=%d flip=%d",
+        cfg->left_eye_offset,
+        cfg->right_eye_offset,
+        cfg->convergence,
+        cfg->projection,
+        cfg->flip_eyes);
     BodyCtx bc={&m, have_view, uv4, uint_, bt,
             id_cz, id_cf0,
             id_cl, id_cr, id_cc,
