@@ -262,12 +262,21 @@ void stereo_config_compute_offsets(StereoConfig *cfg)
         cfg->right_eye_offset =  half_sep;
     }
 
+    STEREO_LOG(
+        "flip_eyes=%d left=%f right=%f",
+        cfg->flip_eyes,
+        cfg->left_eye_offset,
+        cfg->right_eye_offset);
     if (cfg->flip_eyes)
     {
         float t = cfg->left_eye_offset;
         cfg->left_eye_offset  = cfg->right_eye_offset;
         cfg->right_eye_offset = t;
     }
+    STEREO_LOG(
+        "after swap left=%f right=%f",
+        cfg->left_eye_offset,
+        cfg->right_eye_offset);
 }
 
 /* ── Real ICD loading ────────────────────────────────────────────────────── */
