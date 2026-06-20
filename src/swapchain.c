@@ -205,8 +205,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
     }
     if (old_sc) {
         sc = old_sc;
-    }
-    else {
+    } else {
         sc = &sd->swapchains[sd->swapchain_count++];
         memset(sc, 0, sizeof(*sc));
     }
