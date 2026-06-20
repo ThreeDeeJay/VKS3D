@@ -403,7 +403,13 @@ try_dx9:
             /* GPU compose init failed — fall to passthrough */
             gpu_compose_sc_destroy(sd, sc);
             if (sc->real_swapchain) {
+                STEREO_LOG(
+                    "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+                    sc->real_swapchain);
                 sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
+                STEREO_LOG(
+                    "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
+                    sc->real_swapchain);
                 sc->real_swapchain = VK_NULL_HANDLE;
             }
         }
@@ -460,7 +466,14 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         /* real_swapchain: GPU compose output SC or passthrough SC */
         if (sc->real_swapchain)
+            STEREO_LOG(
+                "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+                sc->real_swapchain);
             sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, pAllocator);
+            STEREO_LOG(
+                "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
+                sc->real_swafpchain);
+            sc->real_swapchain = VK_NULL_HANDLE;
 
         uint32_t idx = (uint32_t)(sc - sd->swapchains);
         if (idx + 1 < sd->swapchain_count)
@@ -468,7 +481,14 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                     (sd->swapchain_count - idx - 1) * sizeof(StereoSwapchain));
         sd->swapchain_count--;
     } else {
+        STEREO_LOG(
+            "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+            sc->real_swapchain);
         sd->real.DestroySwapchainKHR(sd->real_device, swapchain, pAllocator);
+        STEREO_LOG(
+            "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
+            sc->real_swapchain);
+        sc->real_swapchain = VK_NULL_HANDLE;
     }
 }
 

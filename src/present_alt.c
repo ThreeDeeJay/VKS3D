@@ -836,27 +836,43 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         .clipped          = VK_TRUE,
     };
     STEREO_LOG(
-        "[COMPOSE] oldSwapchain=%p real_swapchain=%p",
-        sci.oldSwapchain,
-        sc->real_swapchain);
+        "[COMPOSE] requested extent=%ux%u",
+        sc->app_width,
+        sc->app_height);
     STEREO_LOG(
-        "[COMPOSE] create swapchain old=%p extent=%ux%u",
+        "[COMPOSE CREATE] oldSwapchain=%p current=%p extent=%ux%u",
         sci.oldSwapchain,
+        sc->real_swapchain,
         sci.imageExtent.width,
         sci.imageExtent.height);
     STEREO_LOG(
-        "[COMPOSE] existing real_swapchain=%p",
+        "[COMPOSE CREATE] handle before create=%p",
         sc->real_swapchain);
-    VkResult res = sd->real.CreateSwapchainKHR(sd->real_device, &sci, NULL, &sc->real_swapchain);
+    VkResult res = sd->real.CreateSwapchainKHR(
+        sd->real_device,
+        &sci,
+        NULL,
+        &sc->real_swapchain);
+
     if (res != VK_SUCCESS) {
         STEREO_ERR("[GPU Compose] CreateSwapchainKHR failed: %d", res);
         return false;
     }
 
+    STEREO_LOG(
+        "[COMPOSE CREATE] created=%p",
+        sc->real_swapchain);
+
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain, &sc->comp_sc_count, NULL);
     sc->comp_sc_images = calloc(sc->comp_sc_count, sizeof(VkImage));
     if (!sc->comp_sc_images) {
+        STEREO_LOG(
+            "[COMPOSE DESTROY] destroying=%p",
+            sc->real_swapchain);
         sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
+        STEREO_LOG(
+            "[COMPOSE DESTROY] destroyed=%p",
+            sc->real_swapchain);
         sc->real_swapchain = VK_NULL_HANDLE; return false;
     }
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain,
