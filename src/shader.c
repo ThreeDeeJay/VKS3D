@@ -972,6 +972,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     float lo=sd->stereo.left_eye_offset, ro=sd->stereo.right_eye_offset,
           conv=sd->stereo.convergence;
 
+    STEREO_LOG(
+        "[PATCH] lo=%f ro=%f flip=%d",
+        lo,
+        ro,
+        sd->stereo.flip_eyes);
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
 
@@ -1081,6 +1086,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             StereoShaderCache *e=cache_find(sd, ci->pStages[tes_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
+            STEREO_LOG(
+                "[CALL A] lo=%f ro=%f conv=%f flip=%d",
+                lo,
+                ro,
+                conv,
+                sd->stereo.flip_eyes);
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
                     lo,ro,conv,true))
             {
@@ -1138,6 +1149,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
+            STEREO_LOG(
+                "[CALL B] lo=%f ro=%f conv=%f flip=%d",
+                lo,
+                ro,
+                conv,
+                sd->stereo.flip_eyes);
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
                     lo,ro,conv,/*inj_vi=*/true)) {
                 STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
