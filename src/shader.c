@@ -210,11 +210,21 @@ typedef struct {
     uint32_t cc;
 
     uint32_t projection_mode;
+    /* diagnostics only */
+    float lo_dbg;
+    float ro_dbg;
+    int   flip_dbg;
 } BodyCtx;
 
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m=c->m;
+    STEREO_LOG(
+        "[EMIT] flip=%d lo=%f ro=%f proj=%d",
+        c->flip_dbg,
+        c->lo_dbg,
+        c->ro_dbg,
+        c->projection_mode);
     uint32_t ch=(*nid)++, lp=(*nid)++;
     uint32_t pptr;
     if (m->pos_is_block) {
@@ -411,10 +421,13 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view;
     }
 
-    BodyCtx bc={&m, have_view, uv4, uint_, bt,
-            id_cz, id_cf0,
-            id_cl, id_cr, id_cc,
-            projection_mode};
+     BodyCtx bc={&m, have_view, uv4, uint_, bt,
+             id_cz, id_cf0,
+             id_cl, id_cr, id_cc,
+             projection_mode,
+             lo,
+             ro,
+             sd->stereo.flip_eyes ? 1 : 0};
     STEREO_LOG(
         "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
