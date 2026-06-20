@@ -1,6 +1,5 @@
 #Based on template from: https://github.com/ThreeDeeJay/GitHub-Actions-build-templates/blob/main/Windows-CMake.yml
 name: Build
-run-name: '[${{ github.ref_name }}] ${{ github.event.head_commit.message }} r${{env.CommitCount}}'
 
 env:
   GH_TOKEN: ${{github.token}}
