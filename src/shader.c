@@ -248,7 +248,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
              px=(*nid)++, nx=(*nid)++, np=(*nid)++;
     if (c->have_view && m->view_var && m->it && c->bt) {
         { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
-        { uint32_t w[]={op_(SpvOpINotEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
         STEREO_LOG(
             "emit_body: projection=%d have_view=%d view_var=%u",
             c->projection_mode,
