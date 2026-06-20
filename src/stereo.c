@@ -262,7 +262,7 @@ void stereo_config_compute_offsets(StereoConfig *cfg)
         cfg->right_eye_offset =  half_sep;
     }
 
-    if (0 && cfg->flip_eyes)
+    if (cfg->flip_eyes)
     {
         float t = cfg->left_eye_offset;
         cfg->left_eye_offset  = cfg->right_eye_offset;
