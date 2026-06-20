@@ -421,13 +421,13 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view;
     }
 
-     BodyCtx bc={&m, have_view, uv4, uint_, bt,
+    BodyCtx bc={&m, have_view, uv4, uint_, bt,
              id_cz, id_cf0,
              id_cl, id_cr, id_cc,
              projection_mode,
              lo,
              ro,
-             sd->stereo.flip_eyes ? 1 : 0};
+             0};
     STEREO_LOG(
         "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
