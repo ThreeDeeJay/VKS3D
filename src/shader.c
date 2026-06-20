@@ -281,11 +281,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             sb_push_n(out,w,5);
         }
 
-        STEREO_LOG(
-            "[OFFAXIS] sel(L,R)=(%f,%f)",
-            lo,
-            ro);
-
         /* left eye = +convmag, right eye = -convmag */
         {
             uint32_t w[]={op_(SpvOpSelect,6),
