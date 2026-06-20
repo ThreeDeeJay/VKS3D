@@ -187,8 +187,16 @@ stereo_CreateSwapchainKHR(VkDevice device,
     uint32_t app_w = pCreateInfo->imageExtent.width;
     uint32_t app_h = pCreateInfo->imageExtent.height;
 
+    STEREO_LOG(
+        "[CREATE SC] swapchain_count=%u old_app_swapchain=%p",
+        sd->swapchain_count,
+        pCreateInfo->oldSwapchain);
     StereoSwapchain *sc = &sd->swapchains[sd->swapchain_count];
     memset(sc, 0, sizeof(*sc));
+    STEREO_LOG(
+        "[CREATE SC] new sc=%p real_swapchain=%p",
+        sc,
+        sc->real_swapchain);
 
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
