@@ -38,15 +38,7 @@ jobs:
     steps:
 
     - name: Clone repo and submodules
-      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules
-
-    - name: Get current date, commit hash and count
-      run: |
-        echo "FirstCommitHash=$(git rev-list --max-parents=0 HEAD --first-parent)" >> $env:GITHUB_ENV
-        echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
-        echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
-        echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
-        echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
+      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules --depth 1
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
