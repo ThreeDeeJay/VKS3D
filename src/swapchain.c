@@ -199,9 +199,10 @@ stereo_CreateSwapchainKHR(VkDevice device,
         sc = (StereoSwapchain *)(uintptr_t)pCreateInfo->oldSwapchain;
 
         STEREO_LOG(
-            "[CREATE SC] reusing sc=%p real_swapchain=%p",
+            "[CREATE SC] reusing sc=%p real_swapchain=%p app_handle=%p",
             sc,
-            sc->real_swapchain);
+            sc->real_swapchain,
+            sc->app_handle);
     }
     else
     {
