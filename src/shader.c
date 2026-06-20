@@ -237,7 +237,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
              px=(*nid)++, nx=(*nid)++, np=(*nid)++;
     if (c->have_view && m->view_var && m->it && c->bt) {
         { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
-        { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
+        { uint32_t w[]={op_(SpvOpINotEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
         STEREO_LOG(
             "emit_body: projection=%d have_view=%d view_var=%u",
             c->projection_mode,
@@ -415,10 +415,11 @@ bool spirv_patch_stereo_vertex(
             id_cl, id_cr, id_cc,
             projection_mode};
     STEREO_LOG(
-        "Projection constants: L=%f R=%f Conv=%f",
+        "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
         ro,
-        conv);
+        conv,
+        projection_mode);
 
     size_t ins_t=0, ins_b=0;
     for (size_t i=5;i<in_c;) {
