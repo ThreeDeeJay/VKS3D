@@ -174,6 +174,10 @@ stereo_CreateSwapchainKHR(VkDevice device,
                           const VkAllocationCallbacks    *pAllocator,
                           VkSwapchainKHR                 *pSwapchain)
 {
+    STEREO_LOG(
+        "[CREATE SC] surface=%p old=%p",
+        pCreateInfo->surface,
+        pCreateInfo->oldSwapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 

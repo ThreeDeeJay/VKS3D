@@ -311,7 +311,7 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
             .bufferImageHeight = sc->app_height,
             .imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
             .imageOffset       = {0, 0, 0},
-            .imageExtent       = { sc->app_width, sc->app_height, 1 },
+            .imageExtent       = caps.currentExtent,
         },
         {
             .bufferOffset      = sc->cpu_eye_bytes,
@@ -319,7 +319,7 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
             .bufferImageHeight = sc->app_height,
             .imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 1 },
             .imageOffset       = {0, 0, 0},
-            .imageExtent       = { sc->app_width, sc->app_height, 1 },
+            .imageExtent       = caps.currentExtent,
         },
     };
     sd->real.CmdCopyImageToBuffer(sc->cpu_cmd, sc->stereo_images[0],
@@ -826,7 +826,7 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         .minImageCount    = min_img,
         .imageFormat      = sc->format,
         .imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-        .imageExtent      = { sc->app_width, sc->app_height },
+        .imageExtent      = caps.currentExtent,
         .imageArrayLayers = 1,
         .imageUsage       = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -835,6 +835,12 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         .presentMode      = pmode,
         .clipped          = VK_TRUE,
     };
+    STEREO_LOG(
+        "[COMPOSE] caps extent=%ux%u app extent=%ux%u",
+        caps.currentExtent.width,
+        caps.currentExtent.height,
+        sc->app_width,
+        sc->app_height);
     STEREO_LOG(
         "[COMPOSE] requested extent=%ux%u",
         sc->app_width,
@@ -847,6 +853,10 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         sci.imageExtent.height);
     STEREO_LOG(
         "[COMPOSE CREATE] handle before create=%p",
+        sc->real_swapchain);
+    STEREO_LOG(
+        "[COMPOSE] surface=%p real_swapchain=%p",
+        surface,
         sc->real_swapchain);
     VkResult res = sd->real.CreateSwapchainKHR(
         sd->real_device,
@@ -866,14 +876,15 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain, &sc->comp_sc_count, NULL);
     sc->comp_sc_images = calloc(sc->comp_sc_count, sizeof(VkImage));
     if (!sc->comp_sc_images) {
-        STEREO_LOG(
-            "[COMPOSE DESTROY] destroying=%p",
-            sc->real_swapchain);
-        sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
-        STEREO_LOG(
-            "[COMPOSE DESTROY] destroyed=%p",
-            sc->real_swapchain);
-        sc->real_swapchain = VK_NULL_HANDLE; return false;
+        VkSwapchainKHR dead = sc->real_swapchain;
+
+        sd->real.DestroySwapchainKHR(
+            sd->real_device,
+            dead,
+            NULL);
+
+        sc->real_swapchain = VK_NULL_HANDLE;
+        return false;
     }
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain,
                                     &sc->comp_sc_count, sc->comp_sc_images);
