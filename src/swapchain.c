@@ -191,12 +191,27 @@ stereo_CreateSwapchainKHR(VkDevice device,
         "[CREATE SC] swapchain_count=%u old_app_swapchain=%p",
         sd->swapchain_count,
         pCreateInfo->oldSwapchain);
-    StereoSwapchain *sc = &sd->swapchains[sd->swapchain_count];
-    memset(sc, 0, sizeof(*sc));
-    STEREO_LOG(
-        "[CREATE SC] new sc=%p real_swapchain=%p",
-        sc,
-        sc->real_swapchain);
+
+    StereoSwapchain *sc;
+
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
+    {
+        sc = (StereoSwapchain *)(uintptr_t)pCreateInfo->oldSwapchain;
+
+        STEREO_LOG(
+            "[CREATE SC] reusing sc=%p real_swapchain=%p",
+            sc,
+            sc->real_swapchain);
+    }
+    else
+    {
+        sc = &sd->swapchains[sd->swapchain_count];
+        memset(sc, 0, sizeof(*sc));
+
+        STEREO_LOG(
+            "[CREATE SC] fresh sc=%p",
+            sc);
+    }
 
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
@@ -266,16 +281,13 @@ stereo_CreateSwapchainKHR(VkDevice device,
         }
         sc->present_mode  = STEREO_PRESENT_NV3DLIB;
         sc->stereo_active = true;
-
         sc->real_swapchain = VK_NULL_HANDLE;
-
         sc->app_handle =
             (VkSwapchainKHR)(uintptr_t)sc;
-
         *pSwapchain =
             sc->app_handle;
-
-        sd->swapchain_count++;
+        if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
+            sd->swapchain_count++;
 
         STEREO_LOG(
             "[NV3D] RETURNING NV3D SWAPCHAIN handle=%p",
@@ -360,7 +372,8 @@ stereo_CreateSwapchainKHR(VkDevice device,
             sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
             *pSwapchain       = sc->app_handle;
             sd->stereo_w = app_w; sd->stereo_h = app_h;
-            sd->swapchain_count++;
+            if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
+                sd->swapchain_count++;
             STEREO_LOG("DXGI stereo swapchain (external mem): %ux%u  handle=%p",
                        app_w, app_h, (void*)*pSwapchain);
             return VK_SUCCESS;
