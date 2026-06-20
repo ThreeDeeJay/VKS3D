@@ -275,13 +275,15 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             sb_push_n(out,w,5);
         }
 
-        /* TEST: swap convergence sign */
+        /* left eye = +convmag, right eye = -convmag */
         {
             uint32_t w[]={op_(SpvOpSelect,6),
                           m->ft,convsel,
                           isl,
-                          negconv,
-                          convmag};
+                          convmag,
+                          negconv};
+            sb_push_n(out,w,6);
+        }
 
         /* tmp = px + eyeOffset */
         {
