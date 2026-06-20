@@ -291,13 +291,13 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             sb_push_n(out,w,5);
         }
 
-        /* left eye = +convmag, right eye = -convmag */
+        /* left eye = -convmag, right eye = +convmag */
         {
             uint32_t w[]={op_(SpvOpSelect,6),
                           m->ft,convsel,
                           isl,
-                          convmag,
-                          negconv};
+                          negconv,
+                          convmag};
             sb_push_n(out,w,6);
         }
 
