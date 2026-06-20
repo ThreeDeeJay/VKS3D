@@ -44,6 +44,7 @@
 #define SpvOpMatrixTimesVector 145
 #define SpvOpMatrixTimesMatrix 146
 #define SpvOpIEqual           170
+#define SpvOpINotEqual        171
 #define SpvOpSelect           169
 
 #define SpvDecorationBuiltIn   11
