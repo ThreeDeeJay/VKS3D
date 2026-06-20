@@ -73,9 +73,6 @@ jobs:
         -DVKS3D_BUILD_DEMO=ON
         -DSTEREO_BUILD_DEMO=ON
 
-    - name: List files
-      run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
-
     - name: Build
       run: cmake --build "${{github.workspace}}/build" --config "${{matrix.Configuration}}"
 
