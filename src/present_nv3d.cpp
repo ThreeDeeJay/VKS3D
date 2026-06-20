@@ -485,6 +485,7 @@ extern "C" VkResult nv3d_present(
     uint32_t wait_sem_count,
     const VkSemaphore *wait_sems)
 {
+STEREO_LOG("[PRESENT] using NV3D path");
 STEREO_LOG(
     "[NV3D] present iface=%p image=%p timeline=%p value=%llu",
     sd->nv3d_iface,
