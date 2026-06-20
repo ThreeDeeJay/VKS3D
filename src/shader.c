@@ -385,6 +385,12 @@ bool spirv_patch_stereo_vertex(
         sb_push_n(&te,w,4); m.ptr_in_int=id_ptr_int; uint_=id_ptr_int; }
     if (id_new_bt) { uint32_t w[]={op_(SpvOpTypeBool,2),id_new_bt}; sb_push_n(&te,w,2); }
     if (m.it) { uint32_t w[]={op_(SpvOpConstant,4),m.it,id_cz,0}; sb_push_n(&te,w,4); }
+    STEREO_LOG(
+        "[SPIRV] lo=%f ro=%f conv=%f projection=%d",
+        lo,
+        ro,
+        conv,
+        projection_mode);
     {
         uint32_t w[4]={op_(SpvOpConstant,4),m.ft,id_cf0,0};
         float z=0.0f;
@@ -404,13 +410,6 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view;
     }
 
-    STEREO_LOG(
-        "BodyCtx: left=%f right=%f conv=%f projection=%d flip=%d",
-        cfg->left_eye_offset,
-        cfg->right_eye_offset,
-        cfg->convergence,
-        cfg->projection,
-        cfg->flip_eyes);
     BodyCtx bc={&m, have_view, uv4, uint_, bt,
             id_cz, id_cf0,
             id_cl, id_cr, id_cc,
