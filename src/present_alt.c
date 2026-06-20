@@ -694,8 +694,8 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
      * Fall back to image-space shift of layer 0 when only one layer is valid
      * (e.g. multiview disabled, or driver did not populate gl_ViewIndex).   */
     bool two_layers = sd->stereo.multiview && sd->multiview_pass_exists;
-    const uint8_t *left_eye  = (const uint8_t *)sc->cpu_map;
-    const uint8_t *right_eye = two_layers ? left_eye + sc->cpu_eye_bytes : left_eye;
+    const uint8_t *right_eye = (const uint8_t *)sc->cpu_map;
+    const uint8_t *left_eye  = right_eye + sc->cpu_eye_bytes;
     uint8_t *out = (uint8_t *)sd->comp_composed;
 
     switch (mode) {
