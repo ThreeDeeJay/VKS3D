@@ -395,7 +395,8 @@ try_dx9:
                 sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
                 *pSwapchain       = sc->app_handle;
                 sd->stereo_w = app_w; sd->stereo_h = app_h;
-                sd->swapchain_count++;
+                if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
+                    sd->swapchain_count++;
                 STEREO_LOG("DX9 stereo swapchain: %ux%u  handle=%p", app_w, app_h, (void*)*pSwapchain);
                 return VK_SUCCESS;
             }
@@ -418,7 +419,8 @@ try_dx9:
                 sc->stereo_active = true;
                 /* sc->real_swapchain already set by gpu_compose_sc_init */
                 sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
-                *pSwapchain       = sc->app_handle;
+                if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
+                    sd->swapchain_count++;
                 sd->stereo_w = app_w; sd->stereo_h = app_h;
                 sd->swapchain_count++;
                 STEREO_LOG("GPU-blit stereo swapchain (mode=%d): %ux%u  handle=%p",
@@ -447,7 +449,8 @@ passthrough:
     if (res == VK_SUCCESS) {
         sc->real_swapchain = *pSwapchain;
         sc->app_handle     = *pSwapchain;
-        sd->swapchain_count++;
+        if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
+            sd->swapchain_count++;
     }
     return res;
 }
