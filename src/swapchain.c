@@ -445,6 +445,13 @@ try_dx9:
                 sc->stereo_active = true;
                 *pSwapchain       = (VkSwapchainKHR)(uintptr_t)sc;
                 sc->app_handle    = *pSwapchain;
+                STEREO_LOG(
+                    "[CREATE SC GPU FINAL] sc=%p app=%p real=%p active=%d count=%u",
+                    sc,
+                    sc->app_handle,
+                    sc->real_swapchain,
+                    (int)sc->stereo_active,
+                    sd->swapchain_count);
                 if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
                     sd->swapchain_count++;
                 sd->stereo_w = app_w;
@@ -509,6 +516,12 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
     if (!sd) return;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
+    STEREO_LOG(
+        "[DESTROY SC] present_mode=%d active=%d app=%p real=%p",
+        sc ? (int)sc->present_mode : -1,
+        sc ? (int)sc->stereo_active : -1,
+        sc ? sc->app_handle : VK_NULL_HANDLE,
+        sc ? sc->real_swapchain : VK_NULL_HANDLE);
     STEREO_LOG(
         "[DESTROY SC LOOKUP] app=%p sc=%p",
         swapchain,
@@ -613,6 +626,13 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         STEREO_LOG(
             "[DESTROY SC] keeping slot alive sc=%p",
             sc);
+
+        STEREO_LOG(
+            "[DESTROY SC FINAL] sc=%p app=%p real=%p active=%d",
+            sc,
+            sc->app_handle,
+            sc->real_swapchain,
+            (int)sc->stereo_active);
 
         /* leave the structure intact */
         sc->stereo_active = false;
