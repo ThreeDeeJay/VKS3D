@@ -60,7 +60,15 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.0.2
 
-    - name: Build NV3DLib
+    - name: Cache NV3D-Lib
+      id: cache-nv3dlib
+      uses: actions/cache@v5
+      with:
+        path: "third_party\\NV3D-Lib"
+        key: NV3DLib
+    - name: Build NV3D-Lib
+      if: steps.cache-nv3dlib.outputs.cache-hit != 'true'
+      shell: cmd
       run: >
         msbuild
         /m "third_party\NV3D-Lib\NV3DLib.sln"
