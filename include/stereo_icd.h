@@ -438,6 +438,7 @@ typedef struct StereoSwapchain {
     uint32_t          app_width, app_height;
     VkFormat          format;
     bool              stereo_active, dxgi_mode;
+    bool              resize_reused;
     uint32_t          image_count;
     VkImage          *stereo_images;
     VkDeviceMemory   *stereo_memory;

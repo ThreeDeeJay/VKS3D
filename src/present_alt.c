@@ -822,10 +822,11 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
     VkSwapchainCreateInfoKHR sci = {
         .sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface          = surface,
+        .oldSwapchain     = (sc->real_swapchain != VK_NULL_HANDLE) ? sc->real_swapchain : VK_NULL_HANDLE,
         .minImageCount    = min_img,
         .imageFormat      = sc->format,
         .imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-        .imageExtent      = { sc->app_width, sc->app_height },
+        .imageExtent      = caps.currentExtent,
         .imageArrayLayers = 1,
         .imageUsage       = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -834,17 +835,104 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         .presentMode      = pmode,
         .clipped          = VK_TRUE,
     };
-    VkResult res = sd->real.CreateSwapchainKHR(sd->real_device, &sci, NULL, &sc->real_swapchain);
-    if (res != VK_SUCCESS) {
-        STEREO_ERR("[GPU Compose] CreateSwapchainKHR failed: %d", res);
+    STEREO_LOG(
+        "[COMPOSE EXTENT] current=%ux%u min=%ux%u max=%ux%u",
+        caps.currentExtent.width,
+        caps.currentExtent.height,
+        caps.minImageExtent.width,
+        caps.minImageExtent.height,
+        caps.maxImageExtent.width,
+        caps.maxImageExtent.height);
+    STEREO_LOG(
+        "[COMPOSE] caps extent=%ux%u app extent=%ux%u",
+        caps.currentExtent.width,
+        caps.currentExtent.height,
+        sc->app_width,
+        sc->app_height);
+    STEREO_LOG(
+        "[COMPOSE] requested extent=%ux%u",
+        sc->app_width,
+        sc->app_height);
+    STEREO_LOG(
+        "[COMPOSE CREATE] oldSwapchain=%p current=%p extent=%ux%u",
+        sci.oldSwapchain,
+        sc->real_swapchain,
+        sci.imageExtent.width,
+        sci.imageExtent.height);
+    STEREO_LOG(
+        "[COMPOSE CREATE] handle before create=%p",
+        sc->real_swapchain);
+    STEREO_LOG(
+        "[COMPOSE] surface=%p real_swapchain=%p",
+        surface,
+        sc->real_swapchain);
+    STEREO_LOG(
+        "[COMPOSE CAPS] usage=0x%08X supported=0x%08X",
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        caps.supportedUsageFlags);
+    STEREO_LOG(
+        "[COMPOSE CAPS] minImages=%u maxImages=%u transform=0x%X",
+        caps.minImageCount,
+        caps.maxImageCount,
+        (unsigned)caps.currentTransform);
+    VkResult res = sd->real.CreateSwapchainKHR(
+        sd->real_device,
+        &sci,
+        NULL,
+        &sc->real_swapchain);
+    STEREO_LOG(
+        "[COMPOSE CREATE RESULT] res=%d new_real=%p old=%p",
+        (int)res,
+        sc->real_swapchain,
+        sci.oldSwapchain);
+    
+    if (res == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        STEREO_LOG(
+            "[GPU Compose] init failed currentExtent=%ux%u",
+            caps.currentExtent.width,
+            caps.currentExtent.height);
+
+        STEREO_LOG(
+            "[GPU Compose] CreateSwapchainKHR OUT_OF_DATE");
+
         return false;
     }
+
+    if (res != VK_SUCCESS)
+    {
+        STEREO_LOG(
+            "[GPU Compose] init failed currentExtent=%ux%u",
+            caps.currentExtent.width,
+            caps.currentExtent.height);
+
+        STEREO_ERR(
+            "[GPU Compose] CreateSwapchainKHR failed: %d",
+            res);
+
+        return false;
+    }
+
+    STEREO_LOG(
+        "[COMPOSE CREATE] created=%p",
+        sc->real_swapchain);
 
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain, &sc->comp_sc_count, NULL);
     sc->comp_sc_images = calloc(sc->comp_sc_count, sizeof(VkImage));
     if (!sc->comp_sc_images) {
-        sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
-        sc->real_swapchain = VK_NULL_HANDLE; return false;
+        VkSwapchainKHR dead = sc->real_swapchain;
+
+        STEREO_LOG(
+            "[COMPOSE DESTROY] sc=%p real=%p",
+            sc,
+            sc->real_swapchain);
+        sd->real.DestroySwapchainKHR(
+            sd->real_device,
+            dead,
+            NULL);
+
+        sc->real_swapchain = VK_NULL_HANDLE;
+        return false;
     }
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain,
                                     &sc->comp_sc_count, sc->comp_sc_images);

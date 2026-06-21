@@ -38,15 +38,7 @@ jobs:
     steps:
 
     - name: Clone repo and submodules
-      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules
-
-    - name: Get current date, commit hash and count
-      run: |
-        echo "FirstCommitHash=$(git rev-list --max-parents=0 HEAD --first-parent)" >> $env:GITHUB_ENV
-        echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
-        echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
-        echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
-        echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
+      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --depth 1
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
@@ -68,15 +60,31 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.0.2
 
-    - name: Build NV3DLib
+    - name: List files
+      run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
+
+    - name: Cache NV3D-Lib
+      id: cache-nv3dlib
+      uses: actions/cache@v5
+      with:
+        path: "third_party\\NV3D-Lib"
+        key: NV3DLib-${{matrix.Settings.Architecture}}
+    - name: Clone NV3D-Lib
+      if: steps.cache-nv3dlib.outputs.cache-hit != 'true'
+      shell: cmd
+      run: |
+        git submodule update --init --recursive
+    - name: Build NV3D-Lib
+      if: steps.cache-nv3dlib.outputs.cache-hit != 'true'
+      shell: cmd
       run: >
         msbuild
         /m "third_party\NV3D-Lib\NV3DLib.sln"
         /p:Configuration="${{matrix.Configuration}}-MD"
         /p:Platform="${{matrix.Settings.Architecture}}"
         /p:PlatformToolset=v143
-
     - name: Collect dependencies
+      if: steps.cache-nv3dlib.outputs.cache-hit != 'true'
       run: |
         move "third_party\NV3D-Lib\NV3DLib\lib\x${{matrix.Settings.Bits}}\Release-MD\NV3DLib-md.lib" "third_party\NV3D-Lib\NV3DLib\lib\NV3DLib.lib"
 
@@ -117,7 +125,7 @@ jobs:
     steps:
 
       - name: Clone repo and submodules
-        run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules
+        run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}}
 
       - name: Get current date, commit hash and count
         run: |
