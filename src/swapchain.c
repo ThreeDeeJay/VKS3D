@@ -179,8 +179,17 @@ stereo_CreateSwapchainKHR(VkDevice device,
         pCreateInfo->surface,
         pCreateInfo->oldSwapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
+    STEREO_LOG(
+        "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
+        *pSwapchain,
+        sc,
+        sc->real_swapchain);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-
+    STEREO_LOG(
+        "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
+        *pSwapchain,
+        sc,
+        sc->real_swapchain);
     if (!sd->stereo.enabled || sd->swapchain_count >= MAX_SWAPCHAINS)
         return sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
 
@@ -251,6 +260,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
         if (!nv3d_init(sd, app_w, app_h))
         {
             STEREO_ERR("[NV3D] init failed");
+            STEREO_LOG(
+                "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
+                *pSwapchain,
+                sc,
+                sc->real_swapchain);
             return VK_ERROR_INITIALIZATION_FAILED;
         }
         if (sc->stereo_images)
@@ -327,6 +341,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 "[NV3D] fence0=%p",
                 sc->barrier_fences[0]);
         }
+        STEREO_LOG(
+            "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
+            *pSwapchain,
+            sc,
+            sc->real_swapchain);
         return VK_SUCCESS;
     }
 
@@ -463,7 +482,9 @@ try_dx9:
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
+            STEREEO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
             gpu_compose_sc_destroy(sd, sc);
+            STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
             if (sc->real_swapchain) {
                 STEREO_LOG(
                     "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
@@ -511,14 +532,56 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         "[DESTROY SC LOOKUP] app=%p sc=%p",
         swapchain,
         sc);
+    STEREO_LOG(
+        "[GET IMAGES] sc=%p",
+        sc);
+
+    STEREO_LOG(
+        "[GET IMAGES] stereo_active addr=%p",
+        &sc->stereo_active);
+
+    STEREO_LOG(
+        "[GET IMAGES] stereo_active value=%d",
+        (int)sc->stereo_active);
     if (sc) {
-        for (uint32_t i = 0; i < sc->image_count; i++) {
+
+        STEREO_LOG(
+            "[DESTROY SC] image_count=%u stereo_images=%p stereo_views=%p",
+            sc->image_count,
+            sc->stereo_images,
+            sc->stereo_views_arr);
+
+        for (uint32_t i = 0; i < sc->image_count; i++)
+        {
+            STEREO_LOG("[DESTROY SC] image %u", i);
+
             if (sc->stereo_views_arr && sc->stereo_views_arr[i])
-                sd->real.DestroyImageView(sd->real_device, sc->stereo_views_arr[i], NULL);
+            {
+                STEREO_LOG("[DESTROY SC] destroy imageview %u", i);
+                sd->real.DestroyImageView(
+                    sd->real_device,
+                    sc->stereo_views_arr[i],
+                    NULL);
+            }
+
             if (sc->stereo_images && sc->stereo_images[i])
-                sd->real.DestroyImage(sd->real_device, sc->stereo_images[i], NULL);
+            {
+                STEREO_LOG("[DESTROY SC] destroy image %u", i);
+                sd->real.DestroyImage(
+                    sd->real_device,
+                    sc->stereo_images[i],
+                    NULL);
+            }
+
             if (sc->stereo_memory && sc->stereo_memory[i])
-                sd->real.FreeMemory(sd->real_device, sc->stereo_memory[i], NULL);
+            {
+                STEREO_LOG("[DESTROY SC] free memory %u", i);
+                sd->real.FreeMemory(
+                    sd->real_device,
+                    sc->stereo_memory[i],
+                    NULL);
+            }
+        }
             if (sc->barrier_fences && sc->barrier_fences[i])
                 sd->real.DestroyFence(sd->real_device, sc->barrier_fences[i], NULL);
         }
@@ -535,9 +598,15 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
             nv3d_destroy(sd);
 
+        STEREEO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
         gpu_compose_sc_destroy(sd, sc);     /* semaphores + comp_sc_images array */
+        STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
+        STEREO_LOG("[DESTROY SC] before alt_cpu_staging_destroy");
         alt_cpu_staging_destroy(sd, sc);    /* DX9 CPU staging (no-op if unused) */
+        STEREO_LOG("[DESTROY SC] after alt_cpu_staging_destroy");
+        STEREO_LOG("[DESTROY SC] before dxgi_sc_destroy");
         dxgi_sc_destroy(sc);
+        STEREO_LOG("[DESTROY SC] after dxgi_sc_destroy");
 
         /* real_swapchain: GPU compose output SC or passthrough SC */
         if (sc->real_swapchain)
@@ -594,9 +663,11 @@ stereo_GetSwapchainImagesKHR(
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
     STEREO_LOG(
-        "[DESTROY SC LOOKUP] app=%p sc=%p",
+        "[GET IMAGES LOOKUP] app=%p sc=%p real=%p active=%d",
         swapchain,
-        sc);
+        sc,
+        sc ? sc->real_swapchain : VK_NULL_HANDLE,
+        sc ? sc->stereo_active : -1);
     if (!sc || !sc->stereo_active) {
         VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.GetSwapchainImagesKHR(sd->real_device, real, pCount, pImages);
@@ -650,9 +721,11 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
 
     STEREO_LOG(
-        "[DESTROY SC LOOKUP] app=%p sc=%p",
+        "[ACQUIRE LOOKUP] app=%p sc=%p real=%p active=%d",
         swapchain,
-        sc);
+        sc,
+        sc ? sc->real_swapchain : VK_NULL_HANDLE,
+        sc ? sc->stereo_active : -1);
     STEREO_LOG(
         "stereo_AcquireNextImageKHR: sc=%p mode=%d real_sc=%p",
         sc,
