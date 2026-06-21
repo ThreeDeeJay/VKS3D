@@ -188,16 +188,27 @@ stereo_CreateSwapchainKHR(VkDevice device,
     uint32_t app_h = pCreateInfo->imageExtent.height;
 
     STEREO_LOG(
-        "[CREATE SC] swapchain_count=%u old_app_swapchain=%p",
+        "[CREATE SC] swapchain_count=%u old=%p",
         sd->swapchain_count,
         pCreateInfo->oldSwapchain);
 
+    STEREO_LOG(
+        "[CREATE SC] lookup candidate sc=%p real=%p app=%p",
+        sc,
+        sc ? sc->real_swapchain : 0,
+        sc ? sc->app_handle : 0);
     StereoSwapchain *sc;
 
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
     {
         sc = (StereoSwapchain *)(uintptr_t)pCreateInfo->oldSwapchain;
 
+        STEREO_LOG(
+            "[CREATE SC] reuse old=%p sc=%p stereo_active=%d real=%p",
+            pCreateInfo->oldSwapchain,
+            sc,
+            (int)sc->stereo_active,
+            sc->real_swapchain);
         STEREO_LOG(
             "[CREATE SC] reusing sc=%p real_swapchain=%p app_handle=%p",
             sc,
@@ -457,9 +468,9 @@ try_dx9:
                     "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
                     sc->real_swapchain);
                 STEREO_LOG(
-                    "[DESTROY SC] app=%p sc=%p real=%p",
-                    swapchain,
+                    "[COMPOSE DESTROY] sc=%p app=%p real=%p",
                     sc,
+                    sc->app_handle,
                     sc->real_swapchain);
                 sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
                 STEREO_LOG(
@@ -495,6 +506,10 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
     if (!sd) return;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
+    STEREO_LOG(
+        "[DESTROY SC LOOKUP] app=%p sc=%p",
+        swapchain,
+        sc);
     if (sc) {
         for (uint32_t i = 0; i < sc->image_count; i++) {
             if (sc->stereo_views_arr && sc->stereo_views_arr[i])
@@ -525,19 +540,24 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         /* real_swapchain: GPU compose output SC or passthrough SC */
         if (sc->real_swapchain)
-            STEREO_LOG(
-                "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
-                sc->real_swapchain);
+        {
             STEREO_LOG(
                 "[DESTROY SC] app=%p sc=%p real=%p",
                 swapchain,
                 sc,
                 sc->real_swapchain);
-            sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, pAllocator);
+            STEREO_LOG(
+                "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+                sc->real_swapchain);
+            sd->real.DestroySwapchainKHR(
+                sd->real_device,
+                sc->real_swapchain,
+                pAllocator);
             STEREO_LOG(
                 "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
                 sc->real_swapchain);
             sc->real_swapchain = VK_NULL_HANDLE;
+        }
 
         uint32_t idx = (uint32_t)(sc - sd->swapchains);
         if (idx + 1 < sd->swapchain_count)
@@ -546,18 +566,12 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         sd->swapchain_count--;
     } else {
         STEREO_LOG(
-            "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
-            sc->real_swapchain);
-        STEREO_LOG(
-            "[DESTROY SC] app=%p sc=%p real=%p",
+            "[DESTROY SC PASSTHROUGH] swapchain=%p",
+            swapchain);
+        sd->real.DestroySwapchainKHR(
+            sd->real_device,
             swapchain,
-            sc,
-            sc->real_swapchain);
-        sd->real.DestroySwapchainKHR(sd->real_device, swapchain, pAllocator);
-        STEREO_LOG(
-            "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
-            sc->real_swapchain);
-        sc->real_swapchain = VK_NULL_HANDLE;
+            pAllocator);
     }
 }
 
@@ -578,6 +592,10 @@ stereo_GetSwapchainImagesKHR(
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
+    STEREO_LOG(
+        "[DESTROY SC LOOKUP] app=%p sc=%p",
+        swapchain,
+        sc);
     if (!sc || !sc->stereo_active) {
         VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
         return sd->real.GetSwapchainImagesKHR(sd->real_device, real, pCount, pImages);
@@ -630,6 +648,10 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
 
+    STEREO_LOG(
+        "[DESTROY SC LOOKUP] app=%p sc=%p",
+        swapchain,
+        sc);
     STEREO_LOG(
         "stereo_AcquireNextImageKHR: sc=%p mode=%d real_sc=%p",
         sc,
