@@ -667,13 +667,22 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         sd->swapchain_count--;
 
     } else {
-        STEREO_LOG(
-            "[DESTROY SC PASSTHROUGH] swapchain=%p",
-            swapchain);
-        sd->real.DestroySwapchainKHR(
-            sd->real_device,
-            swapchain,
-            pAllocator);
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] BEFORE destroy swapchain=%p",
+        swapchain);
+
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] device=%p",
+        sd->real_device);
+
+    sd->real.DestroySwapchainKHR(
+        sd->real_device,
+        swapchain,
+        pAllocator);
+
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] AFTER destroy swapchain=%p",
+        swapchain);
     }
     STEREO_LOG(
         "[DESTROY SC END] count=%u",
