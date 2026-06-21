@@ -482,7 +482,7 @@ try_dx9:
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
-            STEREEO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
+            STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
             gpu_compose_sc_destroy(sd, sc);
             STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
             if (sc->real_swapchain) {
@@ -598,7 +598,7 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
             nv3d_destroy(sd);
 
-        STEREEO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
+        STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
         gpu_compose_sc_destroy(sd, sc);     /* semaphores + comp_sc_images array */
         STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
         STEREO_LOG("[DESTROY SC] before alt_cpu_staging_destroy");
