@@ -822,7 +822,7 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
     VkSwapchainCreateInfoKHR sci = {
         .sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface          = surface,
-        .oldSwapchain     = sc->real_swapchain,
+        .oldSwapchain     = (sc->real_swapchain != VK_NULL_HANDLE) ? sc->real_swapchain : VK_NULL_HANDLE,
         .minImageCount    = min_img,
         .imageFormat      = sc->format,
         .imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -835,6 +835,14 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         .presentMode      = pmode,
         .clipped          = VK_TRUE,
     };
+    STEREO_LOG(
+        "[COMPOSE EXTENT] current=%ux%u min=%ux%u max=%ux%u",
+        caps.currentExtent.width,
+        caps.currentExtent.height,
+        caps.minImageExtent.width,
+        caps.minImageExtent.height,
+        caps.maxImageExtent.width,
+        caps.maxImageExtent.height);
     STEREO_LOG(
         "[COMPOSE] caps extent=%ux%u app extent=%ux%u",
         caps.currentExtent.width,
@@ -863,7 +871,11 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         &sci,
         NULL,
         &sc->real_swapchain);
-
+    STEREO_LOG(
+        "[COMPOSE CREATE RESULT] res=%d new_real=%p old=%p",
+        (int)res,
+        sc->real_swapchain,
+        sci.oldSwapchain);
     if (res != VK_SUCCESS) {
         STEREO_ERR("[GPU Compose] CreateSwapchainKHR failed: %d", res);
         return false;
