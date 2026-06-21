@@ -657,9 +657,29 @@ stereo_GetSwapchainImagesKHR(
         sc,
         sc ? sc->real_swapchain : VK_NULL_HANDLE,
         sc ? sc->stereo_active : -1);
-    if (!sc || !sc->stereo_active) {
-        VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
-        return sd->real.GetSwapchainImagesKHR(sd->real_device, real, pCount, pImages);
+    if (!sc || !sc->stereo_active)
+    {
+        STEREO_LOG(
+            "[GET IMAGES PASSTHROUGH] sc=%p active=%d real=%p",
+            sc,
+            sc ? (int)sc->stereo_active : -1,
+            sc ? sc->real_swapchain : VK_NULL_HANDLE);
+
+        if (sc && sc->real_swapchain == VK_NULL_HANDLE)
+        {
+            STEREO_ERR(
+                "[GET IMAGES] called on destroyed stereo swapchain");
+            return VK_ERROR_OUT_OF_DATE_KHR;
+        }
+
+        VkSwapchainKHR real =
+            sc ? sc->real_swapchain : swapchain;
+
+        return sd->real.GetSwapchainImagesKHR(
+            sd->real_device,
+            real,
+            pCount,
+            pImages);
     }
     STEREO_LOG(
         "GetSwapchainImagesKHR stereo=%d image_count=%u",
@@ -772,10 +792,31 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
     return VK_SUCCESS;
     }
 
-    if (!sc || !sc->stereo_active) {
-        VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
-        return sd->real.AcquireNextImageKHR(sd->real_device, real,
-                                             timeout, semaphore, fence, pImageIndex);
+    if (!sc || !sc->stereo_active)
+    {
+        STEREO_LOG(
+            "[ACQUIRE PASSTHROUGH] sc=%p active=%d real=%p",
+            sc,
+            sc ? (int)sc->stereo_active : -1,
+            sc ? sc->real_swapchain : VK_NULL_HANDLE);
+
+        if (sc && sc->real_swapchain == VK_NULL_HANDLE)
+        {
+            STEREO_ERR(
+                "[ACQUIRE] called on destroyed stereo swapchain");
+            return VK_ERROR_OUT_OF_DATE_KHR;
+        }
+
+        VkSwapchainKHR real =
+            sc ? sc->real_swapchain : swapchain;
+
+        return sd->real.AcquireNextImageKHR(
+            sd->real_device,
+            real,
+            timeout,
+            semaphore,
+            fence,
+            pImageIndex);
     }
 
     /* Wait for the previous frame's GPU work (DXGI barrier or GPU blit) to
