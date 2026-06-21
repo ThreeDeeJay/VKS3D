@@ -468,8 +468,48 @@ try_dx9:
 
 passthrough:
     STEREO_ERR("All stereo modes failed — passthrough");
+    STEREO_LOG(
+        "[PASSTHROUGH] entering real CreateSwapchainKHR old=%p",
+        pCreateInfo->oldSwapchain);
     sc->stereo_active = false;
-    VkResult res = sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
+    STEREO_LOG(
+        "[PASSTHROUGH] calling real CreateSwapchainKHR");
+
+    VkSwapchainCreateInfoKHR ci = *pCreateInfo;
+
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
+    {
+        StereoSwapchain *old_sc =
+            stereo_swapchain_lookup(sd, pCreateInfo->oldSwapchain);
+
+        if (old_sc && old_sc->real_swapchain)
+        {
+            ci.oldSwapchain = old_sc->real_swapchain;
+
+            STEREO_LOG(
+                "[PASSTHROUGH] translated old swapchain %p -> %p",
+                pCreateInfo->oldSwapchain,
+                ci.oldSwapchain);
+        }
+        else
+        {
+            STEREO_LOG(
+                "[PASSTHROUGH] dropping old swapchain %p",
+                pCreateInfo->oldSwapchain);
+
+            ci.oldSwapchain = VK_NULL_HANDLE;
+        }
+    } 
+    VkResult res =
+        sd->real.CreateSwapchainKHR(
+            sd->real_device,
+            &ci,
+            pAllocator,
+            pSwapchain);
+    STEREO_LOG(
+        "[PASSTHROUGH] returned %d swapchain=%p",
+        (int)res,
+        res == VK_SUCCESS ? *pSwapchain : VK_NULL_HANDLE);
     if (res == VK_SUCCESS) {
         sc->real_swapchain = *pSwapchain;
         sc->app_handle     = *pSwapchain;
