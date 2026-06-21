@@ -560,9 +560,11 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             sc->real_swapchain = VK_NULL_HANDLE;
         }
         STEREO_LOG(
-            "[DESTROY SC] clearing slot sc=%p",
+            "[DESTROY SC] keeping slot alive sc=%p",
             sc);
-        memset(sc, 0, sizeof(*sc));
+
+        /* leave the structure intact */
+        sc->stereo_active = false;
     } else {
         STEREO_LOG(
             "[DESTROY SC PASSTHROUGH] swapchain=%p",
