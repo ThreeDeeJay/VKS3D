@@ -492,7 +492,7 @@ passthrough:
         StereoSwapchain *old_sc =
             stereo_swapchain_lookup(sd, pCreateInfo->oldSwapchain);
 
-        if (old_sc && old_sc->real_swapchain)
+        if (old_sc)
         {
             ci.oldSwapchain = old_sc->real_swapchain;
 
@@ -503,12 +503,13 @@ passthrough:
         }
         else
         {
-            STEREO_LOG(
-                "[PASSTHROUGH] dropping old swapchain %p",
-                pCreateInfo->oldSwapchain);
+            ci.oldSwapchain = pCreateInfo->oldSwapchain;
 
-            ci.oldSwapchain = VK_NULL_HANDLE;
+            STEREO_LOG(
+                "[PASSTHROUGH] forwarding unknown old swapchain %p",
+                ci.oldSwapchain);
         }
+
     } 
     VkResult res =
         sd->real.CreateSwapchainKHR(
