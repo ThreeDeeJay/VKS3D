@@ -193,11 +193,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
 
     StereoSwapchain *sc;
     STEREO_LOG(
-        "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
-        *pSwapchain,
-        sc,
-        sc->real_swapchain);
-    STEREO_LOG(
         "[CREATE SC] old swapchain=%p",
         pCreateInfo->oldSwapchain);
 
@@ -210,10 +205,10 @@ stereo_CreateSwapchainKHR(VkDevice device,
             sc);
         STEREO_LOG(
             "[CREATE SC] reuse real=%p",
-            sc->real_swapchain);
+            sc ? sc->real_swapchain : VK_NULL_HANDLE);
         STEREO_LOG(
             "[CREATE SC] reuse app=%p",
-            sc->app_handle);
+            sc ? sc->app_handle : VK_NULL_HANDLE);
     }
     else
     {
