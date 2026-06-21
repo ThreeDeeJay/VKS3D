@@ -539,10 +539,10 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         "[DESTROY SC ENTRY] swapchain=%p",
         swapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd) return;
     STEREO_LOG(
         "[DESTROY SC START] count=%u",
         sd->swapchain_count);
-    if (!sd) return;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
     STEREO_LOG(
@@ -558,8 +558,8 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
     if (sc) {
         STEREO_LOG(
-            "[GET IMAGES] stereo_active value=%d",
-            (int)sc->stereo_active);
+            "[DESTROY SC] stereo_active=%d",
+            sc ? (int)sc->stereo_active : -1);
 
         STEREO_LOG(
             "[DESTROY SC] image_count=%u stereo_images=%p stereo_views=%p",
@@ -615,6 +615,7 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         if (sc->barrier_pool)
             sd->real.DestroyCommandPool(sd->real_device, sc->barrier_pool, NULL);
+        sc->barrier_pool = VK_NULL_HANDLE;
         STEREO_LOG(
             "[NV3D] QueuePresent mode=%d sc=%p",
             (int)sc->present_mode,
@@ -653,18 +654,12 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             sc->real_swapchain = VK_NULL_HANDLE;
         }
 
-        uint32_t idx = (uint32_t)(sc - sd->swapchains);
+        STEREO_LOG(
+            "[DESTROY SC] keeping slot alive sc=%p",
+            sc);
 
-        if (idx + 1 < sd->swapchain_count)
-        {
-            memmove(
-                &sd->swapchains[idx],
-                &sd->swapchains[idx + 1],
-                (sd->swapchain_count - idx - 1) *
-                    sizeof(StereoSwapchain));
-        }
-
-        sd->swapchain_count--;
+        /* leave structure in table */
+        sc->stereo_active = false;
 
     } else {
     STEREO_LOG(
