@@ -427,8 +427,14 @@ try_dx9:
                     sc->real_swapchain,
                     (int)sc->stereo_active,
                     sd->swapchain_count);
-                if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
-                    sd->swapchain_count++;
+                sd->swapchain_count++;
+                STEREO_LOG(
+                    "[CREATE SC GPU FINAL] sc=%p app=%p real=%p active=%d count=%u",
+                    sc,
+                    sc->app_handle,
+                    sc->real_swapchain,
+                    (int)sc->stereo_active,
+                    sd->swapchain_count);
                 sd->stereo_w = app_w;
                 sd->stereo_h = app_h;
                 STEREO_LOG(
