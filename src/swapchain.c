@@ -559,12 +559,10 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                 sc->real_swapchain);
             sc->real_swapchain = VK_NULL_HANDLE;
         }
-
-        uint32_t idx = (uint32_t)(sc - sd->swapchains);
-        if (idx + 1 < sd->swapchain_count)
-            memmove(&sd->swapchains[idx], &sd->swapchains[idx + 1],
-                    (sd->swapchain_count - idx - 1) * sizeof(StereoSwapchain));
-        sd->swapchain_count--;
+        STEREO_LOG(
+            "[DESTROY SC] clearing slot sc=%p",
+            sc);
+        memset(sc, 0, sizeof(*sc));
     } else {
         STEREO_LOG(
             "[DESTROY SC PASSTHROUGH] swapchain=%p",
