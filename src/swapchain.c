@@ -229,6 +229,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
     if (old_sc)
     {
         sc = old_sc;
+        sc->resize_reused = true;
     
         STEREO_LOG(
             "[CREATE SC REUSE] sc=%p",
@@ -236,14 +237,15 @@ stereo_CreateSwapchainKHR(VkDevice device,
     }
     else
     {
-        sc = &sd->swapchains[sd->swapchain_count];
-    
-        memset(sc, 0, sizeof(*sc));
-    
-        STEREO_LOG(
-            "[CREATE SC NEW] sc=%p count=%u",
-            sc,
-            sd->swapchain_count);
+    sc = &sd->swapchains[sd->swapchain_count];
+
+    memset(sc, 0, sizeof(*sc));
+    sc->resize_reused = false;
+    STEREO_LOG(
+        "[CREATE SC NEW] sc=%p count=%u reused=%d",
+        sc,
+        sd->swapchain_count,
+        (int)sc->resize_reused);
     }
 
     sc->device     = sd->real_device;
@@ -597,6 +599,18 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         sd->swapchain_count);
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
+
+    if (sc && sc->resize_reused)
+    {
+        STEREO_LOG(
+            "[DESTROY SC] ignoring recycled resize swapchain app=%p sc=%p",
+            swapchain,
+            sc);
+    
+        sc->resize_reused = false;
+        return;
+    }
+
     STEREO_LOG(
         "[DESTROY SC] present_mode=%d active=%d app=%p real=%p",
         sc ? (int)sc->present_mode : -1,
