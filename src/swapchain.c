@@ -179,17 +179,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
         pCreateInfo->surface,
         pCreateInfo->oldSwapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
-    STEREO_LOG(
-        "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
-        *pSwapchain,
-        sc,
-        sc->real_swapchain);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG(
-        "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
-        *pSwapchain,
-        sc,
-        sc->real_swapchain);
     if (!sd->stereo.enabled || sd->swapchain_count >= MAX_SWAPCHAINS)
         return sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
 
@@ -202,7 +192,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
         pCreateInfo->oldSwapchain);
 
     StereoSwapchain *sc;
-
+    STEREO_LOG(
+        "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
+        *pSwapchain,
+        sc,
+        sc->real_swapchain);
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
     {
         sc = (StereoSwapchain *)(uintptr_t)pCreateInfo->oldSwapchain;
@@ -260,11 +254,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
         if (!nv3d_init(sd, app_w, app_h))
         {
             STEREO_ERR("[NV3D] init failed");
-            STEREO_LOG(
-                "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
-                *pSwapchain,
-                sc,
-                sc->real_swapchain);
             return VK_ERROR_INITIALIZATION_FAILED;
         }
         if (sc->stereo_images)
@@ -341,11 +330,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 "[NV3D] fence0=%p",
                 sc->barrier_fences[0]);
         }
-        STEREO_LOG(
-            "[CREATE SC RETURN] app_handle=%p sc=%p real=%p",
-            *pSwapchain,
-            sc,
-            sc->real_swapchain);
         return VK_SUCCESS;
     }
 
@@ -532,18 +516,11 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         "[DESTROY SC LOOKUP] app=%p sc=%p",
         swapchain,
         sc);
-    STEREO_LOG(
-        "[GET IMAGES] sc=%p",
-        sc);
 
-    STEREO_LOG(
-        "[GET IMAGES] stereo_active addr=%p",
-        &sc->stereo_active);
-
-    STEREO_LOG(
-        "[GET IMAGES] stereo_active value=%d",
-        (int)sc->stereo_active);
     if (sc) {
+        STEREO_LOG(
+            "[GET IMAGES] stereo_active value=%d",
+            (int)sc->stereo_active);
 
         STEREO_LOG(
             "[DESTROY SC] image_count=%u stereo_images=%p stereo_views=%p",
@@ -581,7 +558,6 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                     sc->stereo_memory[i],
                     NULL);
             }
-        }
             if (sc->barrier_fences && sc->barrier_fences[i])
                 sd->real.DestroyFence(sd->real_device, sc->barrier_fences[i], NULL);
         }
@@ -662,6 +638,13 @@ stereo_GetSwapchainImagesKHR(
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
+    STEREO_LOG(
+        "[GET IMAGES] sc=%p",
+        sc);
+
+    STEREO_LOG(
+        "[GET IMAGES] stereo_active addr=%p",
+        &sc->stereo_active);
     STEREO_LOG(
         "[GET IMAGES LOOKUP] app=%p sc=%p real=%p active=%d",
         swapchain,
