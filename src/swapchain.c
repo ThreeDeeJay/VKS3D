@@ -536,12 +536,12 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                             const VkAllocationCallbacks *pAllocator)
 {
     STEREO_LOG(
-        "[DESTROY SC START] count=%u",
-        sd->swapchain_count);
-    STEREO_LOG(
         "[DESTROY SC ENTRY] swapchain=%p",
         swapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
+    STEREO_LOG(
+        "[DESTROY SC START] count=%u",
+        sd->swapchain_count);
     if (!sd) return;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
