@@ -38,7 +38,7 @@ jobs:
     steps:
 
     - name: Clone repo and submodules
-      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --recurse-submodules --depth 1
+      run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}} --depth 1
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
@@ -66,6 +66,11 @@ jobs:
       with:
         path: "third_party\\NV3D-Lib"
         key: NV3DLib
+    - name: Clone NV3D-Lib
+      if: steps.cache-nv3dlib.outputs.cache-hit != 'true'
+      shell: cmd
+      run: |
+        git submodule update --init --recursive
     - name: Build NV3D-Lib
       if: steps.cache-nv3dlib.outputs.cache-hit != 'true'
       shell: cmd
