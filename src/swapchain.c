@@ -196,8 +196,29 @@ stereo_CreateSwapchainKHR(VkDevice device,
         "[CREATE SC] old swapchain=%p",
         pCreateInfo->oldSwapchain);
 
-    sc = &sd->swapchains[sd->swapchain_count];
-    memset(sc, 0, sizeof(*sc));
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
+    {
+        sc = (StereoSwapchain *)(uintptr_t)pCreateInfo->oldSwapchain;
+
+        STEREO_LOG(
+            "[CREATE SC] reuse ptr=%p",
+            sc);
+        STEREO_LOG(
+            "[CREATE SC] reuse real=%p",
+            sc ? sc->real_swapchain : VK_NULL_HANDLE);
+        STEREO_LOG(
+            "[CREATE SC] reuse app=%p",
+            sc ? sc->app_handle : VK_NULL_HANDLE);
+    }
+    else
+    {
+        sc = &sd->swapchains[sd->swapchain_count];
+        memset(sc, 0, sizeof(*sc));
+
+        STEREO_LOG(
+            "[CREATE SC] fresh sc=%p",
+            sc);
+    }
 
     STEREO_LOG(
         "[CREATE SC] lookup candidate sc=%p real=%p app=%p",
@@ -472,18 +493,7 @@ try_dx9:
 
 passthrough:
     STEREO_ERR("All stereo modes failed — passthrough");
-    uint32_t idx = (uint32_t)(sc - sd->swapchains);
-
-    if (idx + 1 < sd->swapchain_count)
-    {
-        memmove(
-            &sd->swapchains[idx],
-            &sd->swapchains[idx + 1],
-            (sd->swapchain_count - idx - 1) *
-                sizeof(StereoSwapchain));
-    }
-
-    sd->swapchain_count--;
+    sc->stereo_active = false;
     VkResult res = sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
     if (res == VK_SUCCESS) {
         sc->real_swapchain = *pSwapchain;
@@ -624,18 +634,8 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             sc->real_swapchain,
             (int)sc->stereo_active);
 
-        uint32_t idx = (uint32_t)(sc - sd->swapchains);
-
-        if (idx + 1 < sd->swapchain_count)
-        {
-            memmove(
-                &sd->swapchains[idx],
-                &sd->swapchains[idx + 1],
-                (sd->swapchain_count - idx - 1) *
-                    sizeof(StereoSwapchain));
-        }
-
-        sd->swapchain_count--;
+        /* leave the structure intact */
+        sc->stereo_active = false;
     } else {
         STEREO_LOG(
             "[DESTROY SC PASSTHROUGH] swapchain=%p",
