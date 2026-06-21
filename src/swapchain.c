@@ -283,10 +283,13 @@ stereo_CreateSwapchainKHR(VkDevice device,
         sc->present_mode  = STEREO_PRESENT_NV3DLIB;
         sc->stereo_active = true;
         sc->real_swapchain = VK_NULL_HANDLE;
-        sc->app_handle =
-            (VkSwapchainKHR)(uintptr_t)sc;
-        *pSwapchain =
-            sc->app_handle;
+        *pSwapchain = (VkSwapchainKHR)(uintptr_t)sc;
+        sc->app_handle = *pSwapchain;
+        STEREO_LOG(
+            "[CREATE SC] sc=%p app_handle=%p returned=%p",
+            sc,
+            sc->app_handle,
+            *pSwapchain);
         if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
             sd->swapchain_count++;
 
@@ -370,8 +373,13 @@ stereo_CreateSwapchainKHR(VkDevice device,
             sc->dxgi_mode     = true;
             sc->stereo_active = true;
             sc->real_swapchain = VK_NULL_HANDLE;
-            sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
-            *pSwapchain       = sc->app_handle;
+            *pSwapchain       = (VkSwapchainKHR)(uintptr_t)sc;
+            sc->app_handle    = *pSwapchain;
+            STEREO_LOG(
+                "[CREATE SC] sc=%p app_handle=%p returned=%p",
+                sc,
+                sc->app_handle,
+                *pSwapchain);
             sd->stereo_w = app_w; sd->stereo_h = app_h;
             if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
                 sd->swapchain_count++;
@@ -393,8 +401,13 @@ try_dx9:
                 sc->dxgi_mode     = false;
                 sc->stereo_active = true;
                 sc->real_swapchain = VK_NULL_HANDLE;
-                sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
-                *pSwapchain       = sc->app_handle;
+                *pSwapchain       = (VkSwapchainKHR)(uintptr_t)sc;
+                sc->app_handle    = *pSwapchain;
+                STEREO_LOG(
+                    "[CREATE SC] sc=%p app_handle=%p returned=%p",
+                    sc,
+                    sc->app_handle,
+                    *pSwapchain);
                 sd->stereo_w = app_w; sd->stereo_h = app_h;
                 if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
                     sd->swapchain_count++;
@@ -418,14 +431,23 @@ try_dx9:
                 sc->present_mode  = req;
                 sc->dxgi_mode     = false;
                 sc->stereo_active = true;
-                /* sc->real_swapchain already set by gpu_compose_sc_init */
-                sc->app_handle    = (VkSwapchainKHR)(uintptr_t)sc;
+                *pSwapchain       = (VkSwapchainKHR)(uintptr_t)sc;
+                sc->app_handle    = *pSwapchain;
                 if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
                     sd->swapchain_count++;
-                sd->stereo_w = app_w; sd->stereo_h = app_h;
-                sd->swapchain_count++;
-                STEREO_LOG("GPU-blit stereo swapchain (mode=%d): %ux%u  handle=%p",
-                           (int)req, app_w, app_h, (void*)*pSwapchain);
+                sd->stereo_w = app_w;
+                sd->stereo_h = app_h;
+                STEREO_LOG(
+                    "[CREATE SC GPU] sc=%p app_handle=%p returned=%p",
+                    sc,
+                    sc->app_handle,
+                    *pSwapchain);
+                STEREO_LOG(
+                    "GPU-blit stereo swapchain (mode=%d): %ux%u  handle=%p",
+                    (int)req,
+                    app_w,
+                    app_h,
+                    (void*)*pSwapchain);
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
