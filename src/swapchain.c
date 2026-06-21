@@ -472,24 +472,25 @@ try_dx9:
 
 passthrough:
     STEREO_ERR("All stereo modes failed — passthrough");
+    uint32_t idx = (uint32_t)(sc - sd->swapchains);
 
-    VkResult res =
-        sd->real.CreateSwapchainKHR(
-            sd->real_device,
-            pCreateInfo,
-            pAllocator,
-            pSwapchain);
-
-    if (res == VK_SUCCESS)
+    if (idx + 1 < sd->swapchain_count)
     {
+        memmove(
+            &sd->swapchains[idx],
+            &sd->swapchains[idx + 1],
+            (sd->swapchain_count - idx - 1) *
+                sizeof(StereoSwapchain));
+    }
+
+    sd->swapchain_count--;
+    VkResult res = sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
+    if (res == VK_SUCCESS) {
         sc->real_swapchain = *pSwapchain;
         sc->app_handle     = *pSwapchain;
-        sc->stereo_active  = false;
-
         if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
             sd->swapchain_count++;
     }
-
     return res;
 }
 
@@ -623,18 +624,18 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             sc->real_swapchain,
             (int)sc->stereo_active);
 
-        sc->stereo_active = false;
+        uint32_t idx = (uint32_t)(sc - sd->swapchains);
 
-        STEREO_LOG(
-            "[DESTROY SC FINAL] sc=%p app=%p real=%p active=%d",
-            sc,
-            sc->app_handle,
-            sc->real_swapchain,
-            (int)sc->stereo_active);
+        if (idx + 1 < sd->swapchain_count)
+        {
+            memmove(
+                &sd->swapchains[idx],
+                &sd->swapchains[idx + 1],
+                (sd->swapchain_count - idx - 1) *
+                    sizeof(StereoSwapchain));
+        }
 
-        /* DO NOT remove the slot */
-        return;
-
+        sd->swapchain_count--;
     } else {
         STEREO_LOG(
             "[DESTROY SC PASSTHROUGH] swapchain=%p",
