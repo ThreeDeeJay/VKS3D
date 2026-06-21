@@ -197,20 +197,22 @@ stereo_CreateSwapchainKHR(VkDevice device,
         *pSwapchain,
         sc,
         sc->real_swapchain);
+    STEREO_LOG(
+        "[CREATE SC] old swapchain=%p",
+        pCreateInfo->oldSwapchain);
+
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
     {
         sc = (StereoSwapchain *)(uintptr_t)pCreateInfo->oldSwapchain;
 
         STEREO_LOG(
-            "[CREATE SC] reuse old=%p sc=%p stereo_active=%d real=%p",
-            pCreateInfo->oldSwapchain,
-            sc,
-            (int)sc->stereo_active,
+            "[CREATE SC] reuse ptr=%p",
+            sc);
+        STEREO_LOG(
+            "[CREATE SC] reuse real=%p",
             sc->real_swapchain);
         STEREO_LOG(
-            "[CREATE SC] reusing sc=%p real_swapchain=%p app_handle=%p",
-            sc,
-            sc->real_swapchain,
+            "[CREATE SC] reuse app=%p",
             sc->app_handle);
     }
     else
@@ -561,9 +563,18 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             if (sc->barrier_fences && sc->barrier_fences[i])
                 sd->real.DestroyFence(sd->real_device, sc->barrier_fences[i], NULL);
         }
-        free(sc->stereo_views_arr); free(sc->stereo_images);
-        free(sc->stereo_memory);    free(sc->barrier_cmds);
+        free(sc->stereo_views_arr);
+        free(sc->stereo_images);
+        free(sc->stereo_memory);
+        free(sc->barrier_cmds);
         free(sc->barrier_fences);
+
+        sc->stereo_views_arr = NULL;
+        sc->stereo_images    = NULL;
+        sc->stereo_memory    = NULL;
+        sc->barrier_cmds     = NULL;
+        sc->barrier_fences   = NULL;
+        sc->image_count      = 0;
 
         if (sc->barrier_pool)
             sd->real.DestroyCommandPool(sd->real_device, sc->barrier_pool, NULL);
