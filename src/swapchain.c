@@ -198,6 +198,12 @@ stereo_CreateSwapchainKHR(VkDevice device,
     StereoSwapchain *sc =
         &sd->swapchains[sd->swapchain_count];
 
+    STEREO_LOG(
+        "[CREATE SC SLOT] count=%u sc=%p old=%p",
+        sd->swapchain_count,
+        sc,
+        pCreateInfo->oldSwapchain);
+
     memset(sc, 0, sizeof(*sc));
 
     STEREO_LOG(
@@ -495,6 +501,11 @@ passthrough:
     {
         StereoSwapchain *old_sc =
             stereo_swapchain_lookup(sd, pCreateInfo->oldSwapchain);
+        STEREO_LOG(
+            "[PASSTHROUGH LOOKUP] old=%p old_sc=%p real=%p",
+            pCreateInfo->oldSwapchain,
+            old_sc,
+            old_sc ? old_sc->real_swapchain : VK_NULL_HANDLE);
 
         if (old_sc)
         {
