@@ -878,6 +878,11 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
     if (!sc->comp_sc_images) {
         VkSwapchainKHR dead = sc->real_swapchain;
 
+        STEREO_LOG(
+            "[DESTROY SC] app=%p sc=%p real=%p",
+            swapchain,
+            sc,
+            sc->real_swapchain);
         sd->real.DestroySwapchainKHR(
             sd->real_device,
             dead,

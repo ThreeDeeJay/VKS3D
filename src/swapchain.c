@@ -456,6 +456,11 @@ try_dx9:
                 STEREO_LOG(
                     "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
                     sc->real_swapchain);
+                STEREO_LOG(
+                    "[DESTROY SC] app=%p sc=%p real=%p",
+                    swapchain,
+                    sc,
+                    sc->real_swapchain);
                 sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
                 STEREO_LOG(
                     "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
@@ -483,6 +488,9 @@ VKAPI_ATTR void VKAPI_CALL
 stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                             const VkAllocationCallbacks *pAllocator)
 {
+    STEREO_LOG(
+        "[DESTROY SC ENTRY] swapchain=%p",
+        swapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return;
 
@@ -520,6 +528,11 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             STEREO_LOG(
                 "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
                 sc->real_swapchain);
+            STEREO_LOG(
+                "[DESTROY SC] app=%p sc=%p real=%p",
+                swapchain,
+                sc,
+                sc->real_swapchain);
             sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, pAllocator);
             STEREO_LOG(
                 "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
@@ -534,6 +547,11 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
     } else {
         STEREO_LOG(
             "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+            sc->real_swapchain);
+        STEREO_LOG(
+            "[DESTROY SC] app=%p sc=%p real=%p",
+            swapchain,
+            sc,
             sc->real_swapchain);
         sd->real.DestroySwapchainKHR(sd->real_device, swapchain, pAllocator);
         STEREO_LOG(
