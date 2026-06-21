@@ -174,6 +174,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
                           const VkAllocationCallbacks    *pAllocator,
                           VkSwapchainKHR                 *pSwapchain)
 {
+
     STEREO_LOG(
         "[CREATE SC] surface=%p old=%p",
         pCreateInfo->surface,
@@ -195,21 +196,55 @@ stereo_CreateSwapchainKHR(VkDevice device,
         sd->swapchain_count,
         pCreateInfo->oldSwapchain);
 
-    StereoSwapchain *sc =
-        &sd->swapchains[sd->swapchain_count];
+    StereoSwapchain *old_sc = NULL;
 
-    STEREO_LOG(
-        "[CREATE SC SLOT] count=%u sc=%p old=%p",
-        sd->swapchain_count,
-        sc,
-        pCreateInfo->oldSwapchain);
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
+    {
+        old_sc =
+            stereo_swapchain_lookup(
+                sd,
+                pCreateInfo->oldSwapchain);
 
-    memset(sc, 0, sizeof(*sc));
-
-    STEREO_LOG(
-        "[CREATE SC] fresh sc=%p old=%p",
-        sc,
-        pCreateInfo->oldSwapchain);
+        STEREO_LOG(
+            "[CREATE SC OLD LOOKUP] old=%p old_sc=%p",
+            pCreateInfo->oldSwapchain,
+            old_sc);
+    }
+    
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
+    {
+        old_sc =
+            stereo_swapchain_lookup(
+                sd,
+                pCreateInfo->oldSwapchain);
+    
+        STEREO_LOG(
+            "[CREATE SC OLD LOOKUP] old=%p old_sc=%p",
+            pCreateInfo->oldSwapchain,
+            old_sc);
+    }
+    
+    StereoSwapchain *sc;
+    
+    if (old_sc)
+    {
+        sc = old_sc;
+    
+        STEREO_LOG(
+            "[CREATE SC REUSE] sc=%p",
+            sc);
+    }
+    else
+    {
+        sc = &sd->swapchains[sd->swapchain_count];
+    
+        memset(sc, 0, sizeof(*sc));
+    
+        STEREO_LOG(
+            "[CREATE SC NEW] sc=%p count=%u",
+            sc,
+            sd->swapchain_count);
+    }
 
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
@@ -441,7 +476,8 @@ try_dx9:
                     sc->real_swapchain,
                     (int)sc->stereo_active,
                     sd->swapchain_count);
-                sd->swapchain_count++;
+                if (!old_sc)
+                    sd->swapchain_count++;
                 STEREO_LOG(
                     "[CREATE SC GPU FINAL] sc=%p app=%p real=%p active=%d count=%u",
                     sc,
