@@ -192,11 +192,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
         sd->swapchain_count,
         pCreateInfo->oldSwapchain);
 
-    STEREO_LOG(
-        "[CREATE SC] lookup candidate sc=%p real=%p app=%p",
-        sc,
-        sc ? sc->real_swapchain : 0,
-        sc ? sc->app_handle : 0);
     StereoSwapchain *sc;
 
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
@@ -224,6 +219,12 @@ stereo_CreateSwapchainKHR(VkDevice device,
             "[CREATE SC] fresh sc=%p",
             sc);
     }
+
+    STEREO_LOG(
+        "[CREATE SC] lookup candidate sc=%p real=%p app=%p",
+        sc,
+        sc ? sc->real_swapchain : 0,
+        sc ? sc->app_handle : 0);
 
     sc->device     = sd->real_device;
     sc->app_width  = app_w;
