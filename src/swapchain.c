@@ -670,10 +670,18 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         "[DESTROY SC PASSTHROUGH] device=%p",
         sd->real_device);
 
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] calling real destroy device=%p swapchain=%p",
+        sd->real_device,
+        swapchain);
+
     sd->real.DestroySwapchainKHR(
         sd->real_device,
         swapchain,
         pAllocator);
+
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] real destroy returned");
 
     STEREO_LOG(
         "[DESTROY SC PASSTHROUGH] AFTER destroy swapchain=%p",
