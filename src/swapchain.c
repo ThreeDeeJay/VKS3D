@@ -507,7 +507,6 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
     if (!sd) return;
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
-    sc->destroyed = true;
     STEREO_LOG(
         "[DESTROY SC LOOKUP] app=%p sc=%p",
         swapchain,
@@ -585,16 +584,6 @@ stereo_GetSwapchainImagesKHR(
     uint32_t *pCount,
     VkImage *pImages)
 {
-    STEREO_LOG(
-        "[GET IMAGES] sc=%p destroyed=%d stereo_images=%p image_count=%u",
-        sc,
-        sc ? sc->destroyed : -1,
-        sc ? sc->stereo_images : NULL,
-        sc ? sc->image_count : 0);
-    if (sc && sc->destroyed)
-    {
-        STEREO_LOG("[GET IMAGES] called on destroyed swapchain");
-    }
     STEREO_LOG(
         "GetSwapchainImagesKHR swapchain=%p count_ptr=%p images_ptr=%p",
         swapchain,
