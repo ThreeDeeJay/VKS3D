@@ -179,6 +179,10 @@ stereo_CreateSwapchainKHR(VkDevice device,
         pCreateInfo->surface,
         pCreateInfo->oldSwapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
+    STEREO_LOG(
+        "[CREATE SC START] count=%u old=%p",
+        sd->swapchain_count,
+        pCreateInfo->oldSwapchain);
     if (!sd) return VK_ERROR_DEVICE_LOST;
     if (!sd->stereo.enabled || sd->swapchain_count >= MAX_SWAPCHAINS)
         return sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
@@ -532,6 +536,9 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                             const VkAllocationCallbacks *pAllocator)
 {
     STEREO_LOG(
+        "[DESTROY SC START] count=%u",
+        sd->swapchain_count);
+    STEREO_LOG(
         "[DESTROY SC ENTRY] swapchain=%p",
         swapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
@@ -668,6 +675,9 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             swapchain,
             pAllocator);
     }
+    STEREO_LOG(
+        "[DESTROY SC END] count=%u",
+        sd->swapchain_count);
 }
 
 /* ── vkGetSwapchainImagesKHR ────────────────────────────────────────────── */
