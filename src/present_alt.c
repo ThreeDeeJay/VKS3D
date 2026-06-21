@@ -866,6 +866,15 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         "[COMPOSE] surface=%p real_swapchain=%p",
         surface,
         sc->real_swapchain);
+    STEREO_LOG(
+        "[COMPOSE CAPS] usage=0x%08X supported=0x%08X",
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        caps.supportedUsageFlags);
+    STEREO_LOG(
+        "[COMPOSE CAPS] minImages=%u maxImages=%u transform=0x%X",
+        caps.minImageCount,
+        caps.maxImageCount,
+        (unsigned)caps.currentTransform);
     VkResult res = sd->real.CreateSwapchainKHR(
         sd->real_device,
         &sci,
@@ -876,8 +885,31 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         (int)res,
         sc->real_swapchain,
         sci.oldSwapchain);
-    if (res != VK_SUCCESS) {
-        STEREO_ERR("[GPU Compose] CreateSwapchainKHR failed: %d", res);
+    
+    if (res == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        STEREO_LOG(
+            "[GPU Compose] init failed currentExtent=%ux%u",
+            caps.currentExtent.width,
+            caps.currentExtent.height);
+
+        STEREO_LOG(
+            "[GPU Compose] CreateSwapchainKHR OUT_OF_DATE");
+
+        return false;
+    }
+
+    if (res != VK_SUCCESS)
+    {
+        STEREO_LOG(
+            "[GPU Compose] init failed currentExtent=%ux%u",
+            caps.currentExtent.width,
+            caps.currentExtent.height);
+
+        STEREO_ERR(
+            "[GPU Compose] CreateSwapchainKHR failed: %d",
+            res);
+
         return false;
     }
 

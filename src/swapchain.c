@@ -415,6 +415,10 @@ try_dx9:
         req == STEREO_PRESENT_TAB  ||
         req == STEREO_PRESENT_INTERLACED) {
         STEREO_LOG("[SBS] gpu_compose_sc_init surface=%p", (void*)(uintptr_t)pCreateInfo->surface);
+        STEREO_LOG(
+            "[CREATE SC GPU] hwnd=%p surface=%p",
+            sc->hwnd,
+            pCreateInfo->surface);
         if (sc->hwnd && gpu_compose_sc_init(sd, sc, pCreateInfo->surface)) {
             VkResult res = alloc_alt_stereo_swapchain(sd, sc);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
