@@ -485,10 +485,12 @@ passthrough:
         sc->real_swapchain = *pSwapchain;
         sc->app_handle     = *pSwapchain;
         sc->stereo_active  = false;
-
-        if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
-            sd->swapchain_count++;
     }
+
+    STEREO_LOG(
+        "[PASSTHROUGH CREATE] app=%p real=%p",
+        sc->app_handle,
+        sc->real_swapchain);
 
     return res;
 }
@@ -694,6 +696,13 @@ stereo_GetSwapchainImagesKHR(
         VkSwapchainKHR real =
             sc ? sc->real_swapchain : swapchain;
 
+        STEREO_LOG(
+            "[GET IMAGES PASSTHROUGH] sc=%p active=%d real=%p app=%p",
+            sc,
+            sc ? sc->stereo_active : -1,
+            real,
+            swapchain);
+
         return sd->real.GetSwapchainImagesKHR(
             sd->real_device,
             real,
@@ -828,6 +837,13 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         VkSwapchainKHR real =
             sc ? sc->real_swapchain : swapchain;
+
+        STEREO_LOG(
+            "[GET IMAGES PASSTHROUGH] sc=%p active=%d real=%p app=%p",
+            sc,
+            sc ? sc->stereo_active : -1,
+            real,
+            swapchain);
 
         return sd->real.AcquireNextImageKHR(
             sd->real_device,
