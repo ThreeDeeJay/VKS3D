@@ -649,6 +649,14 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             if (sc->stereo_images && sc->stereo_images[i])
             {
                 STEREO_LOG("[DESTROY SC] destroy image %u", i);
+                remove_tracked_image(
+                    sd->intercepted_depth,
+                    &sd->intercepted_depth_count,
+                    sc->stereo_images[i]);
+                remove_tracked_image(
+                    sd->intercepted_color,
+                    &sd->intercepted_color_count,
+                    sc->stereo_images[i]);
                 sd->real.DestroyImage(
                     sd->real_device,
                     sc->stereo_images[i],
@@ -668,6 +676,10 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         }
         free(sc->stereo_views_arr);
         free(sc->stereo_images);
+        STEREO_LOG(
+            "[IMAGE TRACK COUNTS] depth=%u color=%u",
+            sd->intercepted_depth_count,
+            sd->intercepted_color_count);
         free(sc->stereo_memory);
         free(sc->barrier_cmds);
         free(sc->barrier_fences);
@@ -1294,4 +1306,28 @@ stereo_DestroyImageView(
         sd->real_device,
         imageView,
         pAllocator);
+}
+
+
+static void remove_tracked_image(
+    VkImage *arr,
+    uint32_t *count,
+    VkImage image)
+{
+    for (uint32_t i = 0; i < *count; i++)
+    {
+        if (arr[i] == image)
+        {
+            uint32_t last = --(*count);
+            arr[i] = arr[last];
+
+            STEREO_LOG(
+                "[IMAGE TRACK REMOVE] image=%p slot=%u count=%u",
+                image,
+                i,
+                *count);
+
+            return;
+        }
+    }
 }
