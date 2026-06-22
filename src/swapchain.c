@@ -1174,13 +1174,14 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 sd->intercepted_depth_count++] = *pImage;
 
             STEREO_LOG(
-                "[DEPTH TRACK ADD] image=%p count=%u usage=0x%08X extent=%ux%u layers=%u",
+                "[DEPTH TRACK FULL] image=%p count=%u max=%u usage=0x%08X extent=%ux%u layers=%u swapchains=%u",
                 *pImage,
                 sd->intercepted_depth_count,
                 pCreateInfo->usage,
                 pCreateInfo->extent.width,
                 pCreateInfo->extent.height,
-                pCreateInfo->arrayLayers);
+                pCreateInfo->arrayLayers,
+                sd->swapchain_count);
         }
         else if (intercept_depth)
         {
@@ -1269,17 +1270,26 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         (int)needs_upgrade,
         depth_matches,
         color_matches);
-     if (!needs_upgrade)
-        {
-            STEREO_LOG(
-                "[VIEW PASSTHROUGH] image=%p",
-                pCreateInfo->image);
-         return sd->real.CreateImageView(
-             sd->real_device,
-             pCreateInfo,
-             pAllocator,
-             pView);
-        }
+    if (!needs_upgrade &&
+        (pCreateInfo->subresourceRange.aspectMask &
+         VK_IMAGE_ASPECT_DEPTH_BIT))
+    {
+        STEREO_LOG(
+            "[DEPTH VIEW NOT UPGRADED] image=%p depth_count=%u",
+            pCreateInfo->image,
+            sd->intercepted_depth_count);
+    }
+    if (!needs_upgrade)
+       {
+           STEREO_LOG(
+               "[VIEW PASSTHROUGH] image=%p",
+               pCreateInfo->image);
+        return sd->real.CreateImageView(
+            sd->real_device,
+            pCreateInfo,
+            pAllocator,
+            pView);
+       }
 
     STEREO_LOG(
         "[VIEW CREATE] image=%p layers=%u viewType=%u",
