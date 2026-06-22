@@ -1167,7 +1167,14 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
                (void*)(uintptr_t)pCreateInfo->image);
     VkResult _r = sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
     /* Track upgraded views for framebuffer multiview detection */
-    if (_r == VK_SUCCESS && sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
+    if (_r == VK_SUCCESS &&
+        sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
+    {
         sd->upgraded_views[sd->upgraded_view_count++] = *pView;
+    }
+    STEREO_LOG(
+        "[VIEW TRACKED] view=%p count=%u",
+        *pView,
+        sd->upgraded_view_count);
     return _r;
 }

@@ -64,6 +64,23 @@ stereo_CreateFramebuffer(
         
                 if (!found) {
                     STEREO_LOG(
+                        "[FB CHECK] att=%u view=%p tracked_count=%u",
+                        i,
+                        pCreateInfo->pAttachments[i],
+                        sd->upgraded_view_count);
+                for (uint32_t k = 0; k < sd->upgraded_view_count; k++)
+                {
+                    if (sd->upgraded_views[k] ==
+                        pCreateInfo->pAttachments[i])
+                    {
+                        STEREO_LOG(
+                            "[FB FOUND] att=%u view=%p slot=%u",
+                            i,
+                            pCreateInfo->pAttachments[i],
+                            k);
+                    }
+                }
+                    STEREO_LOG(
                         "[FB NON-UPGRADED] att=%u view=%p",
                         i,
                         pCreateInfo->pAttachments[i]);
