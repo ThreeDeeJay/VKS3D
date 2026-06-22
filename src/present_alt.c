@@ -167,10 +167,10 @@ VkResult alt_alloc_stereo_image(StereoDevice *sd, StereoSwapchain *sc,
     sd->real.GetImageMemoryRequirements(sd->real_device, *out_image, &mr);
     uint32_t mt = find_mem_type(sd, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (mt == UINT32_MAX) {
-        tracked_destroy_image(
-            sd,
+        sd->real.DestroyImage(
+            sd->real_device,
             *out_image,
-            "alt staging failure");
+            NULL);
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
     VkMemoryAllocateInfo mai = {
@@ -180,19 +180,19 @@ VkResult alt_alloc_stereo_image(StereoDevice *sd, StereoSwapchain *sc,
     };
     res = sd->real.AllocateMemory(sd->real_device, &mai, NULL, out_mem);
     if (res != VK_SUCCESS) {
-        tracked_destroy_image(
-            sd,
+        sd->real.DestroyImage(
+            sd->real_device,
             *out_image,
-            "alt staging failure");
+            NULL);
         return res;
     }
     res = sd->real.BindImageMemory(sd->real_device, *out_image, *out_mem, 0);
     if (res != VK_SUCCESS) {
         sd->real.FreeMemory(sd->real_device, *out_mem, NULL);
-        tracked_destroy_image(
-            sd,
+        sd->real.DestroyImage(
+            sd->real_device,
             *out_image,
-            "alt staging failure");
+            NULL);
     }
     return res;
 }
