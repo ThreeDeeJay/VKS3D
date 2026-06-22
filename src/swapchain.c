@@ -33,34 +33,6 @@ static uint32_t find_memory_type(StereoDevice *sd, uint32_t type_bits,
     return UINT32_MAX;
 }
 
-static void tracked_destroy_image(
-    StereoDevice *sd,
-    VkImage image,
-    const char *site)
-{
-    STEREO_LOG(
-        "[DESTROY IMAGE] site=%s image=%p depth_count=%u color_count=%u",
-        site,
-        image,
-        sd->intercepted_depth_count,
-        sd->intercepted_color_count);
-
-    remove_tracked_image(
-        sd->intercepted_depth,
-        &sd->intercepted_depth_count,
-        image);
-
-    remove_tracked_image(
-        sd->intercepted_color,
-        &sd->intercepted_color_count,
-        image);
-
-    sd->real.DestroyImage(
-        sd->real_device,
-        image,
-        NULL);
-}
-
 /* ── Allocate VkImage backed by imported D3D11 NT-handle memory ─────────── */
 static VkResult alloc_external_stereo_image(StereoDevice *sd, StereoSwapchain *sc,
                                              VkImage *out_image, VkDeviceMemory *out_mem)
@@ -269,7 +241,33 @@ static void remove_tracked_image(
         *count);
 }
 
+static void tracked_destroy_image(
+    StereoDevice *sd,
+    VkImage image,
+    const char *site)
+{
+    STEREO_LOG(
+        "[DESTROY IMAGE] site=%s image=%p depth_count=%u color_count=%u",
+        site,
+        image,
+        sd->intercepted_depth_count,
+        sd->intercepted_color_count);
 
+    remove_tracked_image(
+        sd->intercepted_depth,
+        &sd->intercepted_depth_count,
+        image);
+
+    remove_tracked_image(
+        sd->intercepted_color,
+        &sd->intercepted_color_count,
+        image);
+
+    sd->real.DestroyImage(
+        sd->real_device,
+        image,
+        NULL);
+}
 
 /* ── vkCreateSwapchainKHR ──────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
