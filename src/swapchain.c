@@ -173,6 +173,10 @@ static void remove_tracked_image(
     uint32_t *count,
     VkImage image)
 {
+    STEREO_LOG(
+        "[IMAGE TRACK SEARCH] image=%p count=%u",
+        image,
+        *count);
     for (uint32_t i = 0; i < *count; i++)
     {
         if (arr[i] == image)
@@ -189,6 +193,10 @@ static void remove_tracked_image(
             return;
         }
     }
+    STEREO_LOG(
+        "[IMAGE TRACK MISS] image=%p count=%u",
+        image,
+        *count);
 }
 
 
@@ -674,6 +682,9 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             if (sc->stereo_images && sc->stereo_images[i])
             {
                 STEREO_LOG("[DESTROY SC] destroy image %u", i);
+                STEREO_LOG(
+                    "[DESTROY IMAGE TRACKED?] image=%p",
+                    sc->stereo_images[i]);
                 remove_tracked_image(
                     sd->intercepted_depth,
                     &sd->intercepted_depth_count,
@@ -1145,6 +1156,11 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
     modified.arrayLayers = 2;
     VkResult res = sd->real.CreateImage(sd->real_device, &modified, pAllocator, pImage);
     if (res == VK_SUCCESS) {
+        STEREO_LOG(
+            "[CREATE IMAGE RESULT] image=%p usage=0x%08X layers=%u",
+            *pImage,
+            pCreateInfo->usage,
+            pCreateInfo->arrayLayers);
         if (intercept_depth &&
             sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
         {
