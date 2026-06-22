@@ -47,14 +47,28 @@ stereo_CreateFramebuffer(
                            pCreateInfo->attachmentCount, (void*)use_mv);
             }
         } else {
-            STEREO_LOG(
-                "[FB NON-UPGRADED] att=%u view=%p",
-                i,
-                attachments[i]);
-            STEREO_LOG(
-                "[FB NON-UPGRADED] view=%p upgraded=%d",
-                attachments[i],
-                is_upgraded_view(attachments[i]));
+            for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+                bool found = false;
+        
+                for (uint32_t k = 0;
+                     k < sd->upgraded_view_count;
+                     k++)
+                {
+                    if (sd->upgraded_views[k] ==
+                        pCreateInfo->pAttachments[i])
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+        
+                if (!found) {
+                    STEREO_LOG(
+                        "[FB NON-UPGRADED] att=%u view=%p",
+                        i,
+                        pCreateInfo->pAttachments[i]);
+                }
+            }
         }
     }
 
