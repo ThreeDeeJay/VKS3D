@@ -707,6 +707,7 @@ VKAPI_ATTR void     VKAPI_CALL stereo_DestroySwapchainKHR(VkDevice, VkSwapchainK
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(VkDevice, VkSwapchainKHR, uint32_t*, VkImage*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
 
 bool spirv_patch_stereo_vertex(
     const uint32_t *in, size_t in_c,

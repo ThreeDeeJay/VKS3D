@@ -640,8 +640,8 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             if (sc->stereo_views_arr && sc->stereo_views_arr[i])
             {
                 STEREO_LOG("[DESTROY SC] destroy imageview %u", i);
-                sd->real.DestroyImageView(
-                    sd->real_device,
+                stereo_DestroyImageView(
+                    device,
                     sc->stereo_views_arr[i],
                     NULL);
             }
@@ -1208,10 +1208,59 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
     {
         sd->upgraded_views[sd->upgraded_view_count++] = *pView;
+
+        STEREO_LOG(
+            "[VIEW TRACK ADD] view=%p count=%u",
+            *pView,
+            sd->upgraded_view_count);
     }
     STEREO_LOG(
         "[VIEW TRACKED] view=%p count=%u",
         *pView,
         sd->upgraded_view_count);
     return _r;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyImageView(
+    VkDevice device,
+    VkImageView imageView,
+    const VkAllocationCallbacks *pAllocator)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+
+    if (!sd)
+        return;
+
+    for (uint32_t i = 0;
+         i < sd->upgraded_view_count;
+         i++)
+    {
+        if (sd->upgraded_views[i] == imageView)
+        {
+            STEREO_LOG(
+                "[VIEW TRACK REMOVE] view=%p slot=%u",
+                imageView,
+                i);
+
+            memmove(
+                &sd->upgraded_views[i],
+                &sd->upgraded_views[i + 1],
+                (sd->upgraded_view_count - i - 1) *
+                    sizeof(VkImageView));
+
+            sd->upgraded_view_count--;
+
+            STEREO_LOG(
+                "[VIEW TRACK COUNT] count=%u",
+                sd->upgraded_view_count);
+
+            break;
+        }
+    }
+
+    sd->real.DestroyImageView(
+        sd->real_device,
+        imageView,
+        pAllocator);
 }
