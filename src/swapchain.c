@@ -1333,7 +1333,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 pCreateInfo->extent.height,
                 pCreateInfo->arrayLayers);
             STEREO_LOG(
-                "[DEPTH TRACK ADD] image=%p slot=%u usage=0x%08X extent=%ux%u layers=%u",
+                "[DEPTH TRACK STORE] image=%p slot=%u usage=0x%08X extent=%ux%u layers=%u",
                 *pImage,
                 sd->intercepted_depth_count - 1,
                 pCreateInfo->usage,
