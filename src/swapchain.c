@@ -33,6 +33,11 @@ static uint32_t find_memory_type(StereoDevice *sd, uint32_t type_bits,
     return UINT32_MAX;
 }
 
+static void tracked_destroy_image(
+    StereoDevice *sd,
+    VkImage image,
+    const char *site);
+
 /* ── Allocate VkImage backed by imported D3D11 NT-handle memory ─────────── */
 static VkResult alloc_external_stereo_image(StereoDevice *sd, StereoSwapchain *sc,
                                              VkImage *out_image, VkDeviceMemory *out_mem)
