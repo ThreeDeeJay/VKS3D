@@ -1110,8 +1110,16 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
     if (res == VK_SUCCESS) {
         if (intercept_depth && sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
             sd->intercepted_depth[sd->intercepted_depth_count++] = *pImage;
+            STEREO_LOG(
+                "[DEPTH TRACK ADD] image=%p count=%u",
+                image,
+                sd->intercepted_depth_count);
         if (intercept_color && sd->intercepted_color_count < MAX_COLOR_IMAGES)
             sd->intercepted_color[sd->intercepted_color_count++] = *pImage;
+            STEREO_LOG(
+                "[COLOR TRACK ADD] image=%p count=%u",
+                image,
+                sd->intercepted_color_count);
         STEREO_LOG("stereo_CreateImage: upgraded %p → arrayLayers=2 (%s) [%ux%u mip=%u]",
                    (void*)*pImage,
                    intercept_depth ? "depth" : "color",
@@ -1144,10 +1152,23 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         for (uint32_t ii = 0; ii < scc->image_count && !needs_upgrade; ii++)
             if (scc->stereo_images[ii] == pCreateInfo->image) needs_upgrade = true;
     }
+    STEREO_LOG(
+        "[VIEW LOOKUP] image=%p depth_count=%u color_count=%u",
+        pCreateInfo->image,
+        sd->intercepted_depth_count,
+        sd->intercepted_color_count);
     for (uint32_t i = 0; i < sd->intercepted_depth_count && !needs_upgrade; i++)
         if (sd->intercepted_depth[i] == pCreateInfo->image) needs_upgrade = true;
+        STEREO_LOG(
+            "[DEPTH TRACK ADD] image=%p count=%u",
+            image,
+            sd->intercepted_depth_count);
     for (uint32_t i = 0; i < sd->intercepted_color_count && !needs_upgrade; i++)
         if (sd->intercepted_color[i] == pCreateInfo->image) needs_upgrade = true;
+        STEREO_LOG(
+            "[COLOR TRACK ADD] image=%p count=%u",
+            image,
+            sd->intercepted_color_count);
     STEREO_LOG(
         "[VIEW DECISION] image=%p needs_upgrade=%d",
         pCreateInfo->image,
