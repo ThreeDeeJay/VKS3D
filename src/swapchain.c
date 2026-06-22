@@ -1108,23 +1108,29 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
     modified.arrayLayers = 2;
     VkResult res = sd->real.CreateImage(sd->real_device, &modified, pAllocator, pImage);
     if (res == VK_SUCCESS) {
-        if (intercept_depth && sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
-            sd->intercepted_depth[sd->intercepted_depth_count++] = *pImage;
+        if (intercept_depth &&
+            sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
+        {
+            sd->intercepted_depth[
+                sd->intercepted_depth_count++] = *pImage;
+
             STEREO_LOG(
                 "[DEPTH TRACK ADD] image=%p count=%u",
-                image,
+                *pImage,
                 sd->intercepted_depth_count);
-        if (intercept_color && sd->intercepted_color_count < MAX_COLOR_IMAGES)
-            sd->intercepted_color[sd->intercepted_color_count++] = *pImage;
+        }
+
+        if (intercept_color &&
+            sd->intercepted_color_count < MAX_COLOR_IMAGES)
+        {
+            sd->intercepted_color[
+                sd->intercepted_color_count++] = *pImage;
+
             STEREO_LOG(
                 "[COLOR TRACK ADD] image=%p count=%u",
-                image,
+                *pImage,
                 sd->intercepted_color_count);
-        STEREO_LOG("stereo_CreateImage: upgraded %p → arrayLayers=2 (%s) [%ux%u mip=%u]",
-                   (void*)*pImage,
-                   intercept_depth ? "depth" : "color",
-                   pCreateInfo->extent.width, pCreateInfo->extent.height,
-                   pCreateInfo->mipLevels);
+        }
     }
     return res;
 }
@@ -1159,16 +1165,8 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         sd->intercepted_color_count);
     for (uint32_t i = 0; i < sd->intercepted_depth_count && !needs_upgrade; i++)
         if (sd->intercepted_depth[i] == pCreateInfo->image) needs_upgrade = true;
-        STEREO_LOG(
-            "[DEPTH TRACK ADD] image=%p count=%u",
-            image,
-            sd->intercepted_depth_count);
     for (uint32_t i = 0; i < sd->intercepted_color_count && !needs_upgrade; i++)
         if (sd->intercepted_color[i] == pCreateInfo->image) needs_upgrade = true;
-        STEREO_LOG(
-            "[COLOR TRACK ADD] image=%p count=%u",
-            image,
-            sd->intercepted_color_count);
     STEREO_LOG(
         "[VIEW DECISION] image=%p needs_upgrade=%d",
         pCreateInfo->image,
