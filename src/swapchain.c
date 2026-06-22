@@ -224,6 +224,11 @@ static void remove_tracked_image(
                 "[IMAGE REMOVE FOUND] image=%p slot=%u",
                 image,
                 i);
+            STEREO_LOG(
+                "[IMAGE REMOVE VALUE] image=%p last=%p count=%u",
+                image,
+                arr[*count - 1],
+                *count);
             uint32_t last = --(*count);
             arr[i] = arr[last];
 
@@ -1324,14 +1329,11 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 pCreateInfo->extent.width,
                 pCreateInfo->extent.height);
             STEREO_LOG(
-                "[DEPTH TRACK ADD] seq=%llu image=%p count=%u usage=0x%08X extent=%ux%u layers=%u",
-                (unsigned long long)seq,
-                *pImage,
-                sd->intercepted_depth_count,
-                pCreateInfo->usage,
-                pCreateInfo->extent.width,
-                pCreateInfo->extent.height,
-                pCreateInfo->arrayLayers);
+                    "[DEPTH TRACK ADD] seq=%llu image=%p slot=%u count=%u",
+                    (unsigned long long)seq,
+                    *pImage,
+                    sd->intercepted_depth_count - 1,
+                    sd->intercepted_depth_count);
             STEREO_LOG(
                 "[DEPTH TRACK STORE] image=%p slot=%u usage=0x%08X extent=%ux%u layers=%u",
                 *pImage,
@@ -1349,7 +1351,8 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         else if (intercept_depth)
         {
             STEREO_LOG(
-                "[DEPTH TRACK OVERFLOW] image=%p count=%u",
+                "[DEPTH TRACK OVERFLOW] seq=%llu image=%p count=%u",
+                (unsigned long long)seq,
                 *pImage,
                 sd->intercepted_depth_count);
             STEREO_LOG(
