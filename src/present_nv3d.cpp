@@ -443,10 +443,10 @@ if (sd->nv3d_timeline)
 
 if (sd->nv3d_image)
 {
-    tracked_destroy_image(
-        sd,
+    sd->real.DestroyImage(
+        sd->real_device,
         sd->nv3d_image,
-        "nv3d image");
+        NULL);
 
     sd->nv3d_image = VK_NULL_HANDLE;
 }
