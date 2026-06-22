@@ -1129,7 +1129,13 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     if (!sd->stereo.multiview)
-        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
+        return sd->real.CreateImageView(...);
+
+    STEREO_LOG(
+        "[VIEW CREATE RAW] image=%p viewType=%u layers=%u",
+        pCreateInfo->image,
+        pCreateInfo->viewType,
+        pCreateInfo->subresourceRange.layerCount);
 
     bool needs_upgrade = false;
     for (uint32_t si = 0; si < sd->swapchain_count && !needs_upgrade; si++) {
@@ -1142,9 +1148,21 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         if (sd->intercepted_depth[i] == pCreateInfo->image) needs_upgrade = true;
     for (uint32_t i = 0; i < sd->intercepted_color_count && !needs_upgrade; i++)
         if (sd->intercepted_color[i] == pCreateInfo->image) needs_upgrade = true;
-
-    if (!needs_upgrade)
-        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
+    STEREO_LOG(
+        "[VIEW DECISION] image=%p needs_upgrade=%d",
+        pCreateInfo->image,
+        (int)needs_upgrade);
+     if (!needs_upgrade)
+        {
+            STEREO_LOG(
+                "[VIEW PASSTHROUGH] image=%p",
+                pCreateInfo->image);
+         return sd->real.CreateImageView(
+             sd->real_device,
+             pCreateInfo,
+             pAllocator,
+             pView);
+        }
 
     STEREO_LOG(
         "[VIEW CREATE] image=%p layers=%u viewType=%u",
