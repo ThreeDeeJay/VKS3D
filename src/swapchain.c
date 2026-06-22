@@ -167,6 +167,31 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
     return VK_SUCCESS;
 }
 
+/* ── image untracking helper ─ */
+static void remove_tracked_image(
+    VkImage *arr,
+    uint32_t *count,
+    VkImage image)
+{
+    for (uint32_t i = 0; i < *count; i++)
+    {
+        if (arr[i] == image)
+        {
+            uint32_t last = --(*count);
+            arr[i] = arr[last];
+
+            STEREO_LOG(
+                "[IMAGE TRACK REMOVE] image=%p slot=%u count=%u",
+                image,
+                i,
+                *count);
+
+            return;
+        }
+    }
+}
+
+
 /* ── vkCreateSwapchainKHR ──────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateSwapchainKHR(VkDevice device,
@@ -1306,28 +1331,4 @@ stereo_DestroyImageView(
         sd->real_device,
         imageView,
         pAllocator);
-}
-
-
-static void remove_tracked_image(
-    VkImage *arr,
-    uint32_t *count,
-    VkImage image)
-{
-    for (uint32_t i = 0; i < *count; i++)
-    {
-        if (arr[i] == image)
-        {
-            uint32_t last = --(*count);
-            arr[i] = arr[last];
-
-            STEREO_LOG(
-                "[IMAGE TRACK REMOVE] image=%p slot=%u count=%u",
-                image,
-                i,
-                *count);
-
-            return;
-        }
-    }
 }
