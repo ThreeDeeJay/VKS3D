@@ -1185,7 +1185,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         else if (intercept_depth)
         {
             STEREO_LOG(
-                "[DEPTH TRACK FULL] seq=%llu image=%p count=%u max=%u usage=0x%08X extent=%ux%u layers=%u",
+                "[DEPTH TRACK FULL] image=%p count=%u max=%u usage=0x%08X extent=%ux%u layers=%u",
                 *pImage,
                 sd->intercepted_depth_count,
                 MAX_DEPTH_IMAGES,
