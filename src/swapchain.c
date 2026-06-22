@@ -62,7 +62,10 @@ static VkResult alloc_external_stereo_image(StereoDevice *sd, StereoSwapchain *s
     sd->real.GetImageMemoryRequirements(sd->real_device, *out_image, &mr);
     if (!sd->real.GetMemoryWin32HandlePropertiesKHR) {
         STEREO_ERR("GetMemoryWin32HandlePropertiesKHR not loaded");
-        sd->real.DestroyImage(sd->real_device, *out_image, NULL);
+        tracked_destroy_image(
+            sd,
+            *out_image,
+            "external image failure");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
     VkMemoryWin32HandlePropertiesKHR hp = {
@@ -71,13 +74,19 @@ static VkResult alloc_external_stereo_image(StereoDevice *sd, StereoSwapchain *s
         VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT, sc->shared_nt_handle, &hp);
     if (res != VK_SUCCESS) {
         STEREO_ERR("GetMemoryWin32HandlePropertiesKHR failed: %d", res);
-        sd->real.DestroyImage(sd->real_device, *out_image, NULL); return res;
+        tracked_destroy_image(
+            sd,
+            *out_image,
+            "external image failure"); return res;
     }
     uint32_t mt = find_memory_type(sd, mr.memoryTypeBits & hp.memoryTypeBits,
                                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (mt == UINT32_MAX) {
         STEREO_ERR("No compatible memory for external image");
-        sd->real.DestroyImage(sd->real_device, *out_image, NULL);
+        tracked_destroy_image(
+            sd,
+            *out_image,
+            "external image failure");
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
     VkImportMemoryWin32HandleInfoKHR import_info = {
@@ -92,14 +101,20 @@ static VkResult alloc_external_stereo_image(StereoDevice *sd, StereoSwapchain *s
     res = sd->real.AllocateMemory(sd->real_device, &mai, NULL, out_mem);
     if (res != VK_SUCCESS) {
         STEREO_ERR("AllocateMemory(import) failed: %d", res);
-        sd->real.DestroyImage(sd->real_device, *out_image, NULL); return res;
+        tracked_destroy_image(
+            sd,
+            *out_image,
+            "external image failure"); return res;
     }
     sc->shared_nt_handle = NULL;
     res = sd->real.BindImageMemory(sd->real_device, *out_image, *out_mem, 0);
     if (res != VK_SUCCESS) {
         STEREO_ERR("BindImageMemory(external) failed: %d", res);
         sd->real.FreeMemory(sd->real_device, *out_mem, NULL);
-        sd->real.DestroyImage(sd->real_device, *out_image, NULL);
+        tracked_destroy_image(
+            sd,
+            *out_image,
+            "external image failure");
     }
     return res;
 }
@@ -226,6 +241,33 @@ static void remove_tracked_image(
         *count);
 }
 
+static void tracked_destroy_image(
+    StereoDevice *sd,
+    VkImage image,
+    const char *site)
+{
+    STEREO_LOG(
+        "[DESTROY IMAGE] site=%s image=%p depth_count=%u color_count=%u",
+        site,
+        image,
+        sd->intercepted_depth_count,
+        sd->intercepted_color_count);
+
+    remove_tracked_image(
+        sd->intercepted_depth,
+        &sd->intercepted_depth_count,
+        image);
+
+    remove_tracked_image(
+        sd->intercepted_color,
+        &sd->intercepted_color_count,
+        image);
+
+    sd->real.DestroyImage(
+        sd->real_device,
+        image,
+        NULL);
+}
 
 /* ── vkCreateSwapchainKHR ──────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -758,10 +800,10 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                     sd->intercepted_color,
                     &sd->intercepted_color_count,
                     sc->stereo_images[i]);
-                sd->real.DestroyImage(
-                    sd->real_device,
+                tracked_destroy_image(
+                    sd,
                     sc->stereo_images[i],
-                    NULL);
+                    "swapchain stereo image");
             }
 
             if (sc->stereo_memory && sc->stereo_memory[i])
