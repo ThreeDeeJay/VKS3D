@@ -184,6 +184,10 @@ static void remove_tracked_image(
     VkImage image)
 {
     STEREO_LOG(
+        "[IMAGE REMOVE SEARCH] image=%p count=%u",
+        image,
+        *count);
+    STEREO_LOG(
         "[IMAGE TRACK SEARCH] image=%p count=%u",
         image,
         *count);
@@ -205,6 +209,10 @@ static void remove_tracked_image(
     }
     STEREO_LOG(
         "[IMAGE TRACK MISS] image=%p count=%u",
+        image,
+        *count);
+    STEREO_LOG(
+        "[IMAGE REMOVE MISS] image=%p count=%u",
         image,
         *count);
 }
@@ -726,6 +734,10 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                     sc->stereo_images[i],
                     depth_match,
                     color_match);
+                STEREO_LOG(
+                    "[IMAGE REMOVE TRY] image=%p",
+                    sc->stereo_images[i]);
+
                 STEREO_LOG(
                     "[IMAGE REMOVE TRY] image=%p",
                     sc->stereo_images[i]);
