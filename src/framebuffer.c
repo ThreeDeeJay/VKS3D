@@ -47,8 +47,14 @@ stereo_CreateFramebuffer(
                            pCreateInfo->attachmentCount, (void*)use_mv);
             }
         } else {
-            STEREO_LOG("CreateFramebuffer: non-upgraded att present → original rp (att=%u)",
-                       pCreateInfo->attachmentCount);
+            STEREO_LOG(
+                "[FB NON-UPGRADED] att=%u view=%p",
+                i,
+                attachments[i]);
+            STEREO_LOG(
+                "[FB NON-UPGRADED] view=%p upgraded=%d",
+                attachments[i],
+                is_upgraded_view(attachments[i]));
         }
     }
 

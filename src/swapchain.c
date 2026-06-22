@@ -1146,11 +1146,23 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     if (!needs_upgrade)
         return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
 
+    STEREO_LOG(
+        "[VIEW CREATE] image=%p layers=%u viewType=%u",
+        (void*)(uintptr_t)pCreateInfo->image,
+        pCreateInfo->subresourceRange.layerCount,
+        pCreateInfo->viewType);
     VkImageViewCreateInfo upgraded = *pCreateInfo;
     if (upgraded.viewType == VK_IMAGE_VIEW_TYPE_2D)
         upgraded.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
     if (upgraded.subresourceRange.layerCount < 2)
         upgraded.subresourceRange.layerCount = 2;
+    STEREO_LOG(
+        "[VIEW UPGRADED] image=%p oldType=%u newType=%u oldLayers=%u newLayers=%u",
+        (void*)(uintptr_t)pCreateInfo->image,
+        pCreateInfo->viewType,
+        upgraded.viewType,
+        pCreateInfo->subresourceRange.layerCount,
+        upgraded.subresourceRange.layerCount);
     STEREO_LOG("stereo_CreateImageView: upgraded %p → 2D_ARRAY/layerCount=2 [multiview=1]",
                (void*)(uintptr_t)pCreateInfo->image);
     VkResult _r = sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
