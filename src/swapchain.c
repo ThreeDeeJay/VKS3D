@@ -710,9 +710,15 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                     sc->stereo_images[i],
                     depth_match,
                     color_match);
+                STEREO_LOG(
+                    "[IMAGE REMOVE TRY] image=%p",
+                    sc->stereo_images[i]);
                 remove_tracked_image(
                     sd->intercepted_depth,
                     &sd->intercepted_depth_count,
+                    sc->stereo_images[i]);
+                STEREO_LOG(
+                    "[IMAGE REMOVE TRY] image=%p",
                     sc->stereo_images[i]);
                 remove_tracked_image(
                     sd->intercepted_color,
