@@ -184,6 +184,11 @@ static void remove_tracked_image(
     VkImage image)
 {
     STEREO_LOG(
+        "[IMAGE REMOVE SEARCH] image=%p count=%u first=%p",
+        image,
+        *count,
+        *count ? arr[0] : VK_NULL_HANDLE);
+    STEREO_LOG(
         "[IMAGE REMOVE SEARCH] image=%p count=%u",
         image,
         *count);
@@ -195,6 +200,10 @@ static void remove_tracked_image(
     {
         if (arr[i] == image)
         {
+            STEREO_LOG(
+                "[IMAGE REMOVE FOUND] image=%p slot=%u",
+                image,
+                i);
             uint32_t last = --(*count);
             arr[i] = arr[last];
 
@@ -1223,6 +1232,30 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         if (intercept_depth &&
             sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
         {
+            bool duplicate = false;
+            uint32_t duplicate_slot = 0;
+            
+            for (uint32_t j = 0;
+                 j < sd->intercepted_depth_count;
+                 j++)
+            {
+                if (sd->intercepted_depth[j] == *pImage)
+                {
+                    duplicate = true;
+                    duplicate_slot = j;
+                    break;
+                }
+            }
+            
+            if (duplicate)
+            {
+                STEREO_LOG(
+                    "[DEPTH DUPLICATE] seq=%llu image=%p slot=%u count=%u",
+                    (unsigned long long)seq,
+                    *pImage,
+                    duplicate_slot,
+                    sd->intercepted_depth_count);
+            }
             STEREO_LOG(
                 "[DEPTH TRACK SOURCE] seq=%llu image=%p usage=0x%08X extent=%ux%u",
                 (unsigned long long)seq,
@@ -1230,6 +1263,11 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 pCreateInfo->usage,
                 pCreateInfo->extent.width,
                 pCreateInfo->extent.height);
+            STEREO_LOG(
+                "[DEPTH TRACK BEFORE ADD] seq=%llu image=%p count=%u",
+                (unsigned long long)seq,
+                *pImage,
+                sd->intercepted_depth_count);
             sd->intercepted_depth[
                 sd->intercepted_depth_count++] = *pImage;
             STEREO_LOG(
@@ -1255,6 +1293,11 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 pCreateInfo->extent.width,
                 pCreateInfo->extent.height,
                 pCreateInfo->arrayLayers);
+            STEREO_LOG(
+                "[DEPTH TRACK AFTER ADD] seq=%llu image=%p count=%u",
+                (unsigned long long)seq,
+                *pImage,
+                sd->intercepted_depth_count);
         }
         else if (intercept_depth)
         {
