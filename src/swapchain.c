@@ -1385,6 +1385,9 @@ stereo_DestroyImageView(
     const VkAllocationCallbacks *pAllocator)
 {
     STEREO_LOG(
+        "[DESTROY IMAGEVIEW ENTRY] view=%p",
+        imageView);
+    STEREO_LOG(
         "[VIEW DESTROY ENTRY] view=%p",
         imageView);
 
