@@ -1111,6 +1111,9 @@ VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                    const VkAllocationCallbacks *pAllocator, VkImage *pImage)
 {
+    static uint64_t image_create_seq = 0;
+    uint64_t seq = ++image_create_seq;
+
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
@@ -1168,17 +1171,25 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 sd->intercepted_depth_count++] = *pImage;
 
             STEREO_LOG(
-                "[DEPTH TRACK ADD] image=%p count=%u",
+                "[DEPTH TRACK ADD] image=%p count=%u usage=0x%08X extent=%ux%u layers=%u",
                 *pImage,
-                sd->intercepted_depth_count);
+                sd->intercepted_depth_count,
+                pCreateInfo->usage,
+                pCreateInfo->extent.width,
+                pCreateInfo->extent.height,
+                pCreateInfo->arrayLayers);
         }
         else if (intercept_depth)
         {
             STEREO_LOG(
-                "[DEPTH TRACK FULL] image=%p count=%u max=%u",
+                "[DEPTH TRACK FULL] seq=%llu image=%p count=%u max=%u usage=0x%08X extent=%ux%u layers=%u",
                 *pImage,
                 sd->intercepted_depth_count,
-                MAX_DEPTH_IMAGES);
+                MAX_DEPTH_IMAGES,
+                pCreateInfo->usage,
+                pCreateInfo->extent.width,
+                pCreateInfo->extent.height,
+                pCreateInfo->arrayLayers);
         }
         if (intercept_color &&
             sd->intercepted_color_count < MAX_COLOR_IMAGES)
