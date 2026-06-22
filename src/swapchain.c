@@ -684,10 +684,32 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
             if (sc->stereo_images && sc->stereo_images[i])
             {
-                STEREO_LOG("[DESTROY SC] destroy image %u", i);
+                bool depth_match = false;
+                bool color_match = false;
+                
+                for (uint32_t d = 0; d < sd->intercepted_depth_count; d++)
+                {
+                    if (sd->intercepted_depth[d] == sc->stereo_images[i])
+                    {
+                        depth_match = true;
+                        break;
+                    }
+                }
+                
+                for (uint32_t c = 0; c < sd->intercepted_color_count; c++)
+                {
+                    if (sd->intercepted_color[c] == sc->stereo_images[i])
+                    {
+                        color_match = true;
+                        break;
+                    }
+                }
+                
                 STEREO_LOG(
-                    "[DESTROY IMAGE TRACKED?] image=%p",
-                    sc->stereo_images[i]);
+                    "[TRACK REMOVE ATTEMPT] image=%p depth_match=%d color_match=%d",
+                    sc->stereo_images[i],
+                    depth_match,
+                    color_match);
                 remove_tracked_image(
                     sd->intercepted_depth,
                     &sd->intercepted_depth_count,
@@ -1170,13 +1192,26 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         if (intercept_depth &&
             sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
         {
+            STEREO_LOG(
+                "[DEPTH TRACK SOURCE] seq=%llu image=%p usage=0x%08X extent=%ux%u",
+                (unsigned long long)seq,
+                *pImage,
+                pCreateInfo->usage,
+                pCreateInfo->extent.width,
+                pCreateInfo->extent.height);
             sd->intercepted_depth[
                 sd->intercepted_depth_count++] = *pImage;
-
+            STEREO_LOG(
+                "[DEPTH TRACK INSERT] image=%p usage=0x%08X extent=%ux%u",
+                *pImage,
+                pCreateInfo->usage,
+                pCreateInfo->extent.width,
+                pCreateInfo->extent.height);
             STEREO_LOG(
                 "[DEPTH TRACK FULL] image=%p count=%u max=%u usage=0x%08X extent=%ux%u layers=%u swapchains=%u",
                 *pImage,
                 sd->intercepted_depth_count,
+                MAX_DEPTH_IMAGES,
                 pCreateInfo->usage,
                 pCreateInfo->extent.width,
                 pCreateInfo->extent.height,
@@ -1185,6 +1220,10 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         }
         else if (intercept_depth)
         {
+            STEREO_LOG(
+                "[DEPTH TRACK OVERFLOW] image=%p count=%u",
+                *pImage,
+                sd->intercepted_depth_count);
             STEREO_LOG(
                 "[DEPTH TRACK FULL] image=%p count=%u max=%u usage=0x%08X extent=%ux%u layers=%u",
                 *pImage,
