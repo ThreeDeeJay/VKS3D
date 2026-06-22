@@ -1129,7 +1129,7 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     if (!sd->stereo.multiview)
-        return sd->real.CreateImageView(...);
+        return sd->real.CreateImageView(sd->real_device, pCreateInfo, pAllocator, pView);
 
     STEREO_LOG(
         "[VIEW CREATE RAW] image=%p viewType=%u layers=%u",
