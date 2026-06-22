@@ -68,16 +68,20 @@ stereo_CreateFramebuffer(
                         i,
                         pCreateInfo->pAttachments[i],
                         sd->upgraded_view_count);
+                    STEREO_LOG(
+                        "[FB SEARCH START] target=%p count=%u",
+                        pCreateInfo->pAttachments[i],
+                        sd->upgraded_view_count);
                 for (uint32_t k = 0; k < sd->upgraded_view_count; k++)
                 {
-                    if (sd->upgraded_views[k] ==
-                        pCreateInfo->pAttachments[i])
+                    if (k < 5 ||
+                        k >= sd->upgraded_view_count - 5)
                     {
                         STEREO_LOG(
-                            "[FB FOUND] att=%u view=%p slot=%u",
-                            i,
+                            "[FB SEARCH] target=%p slot[%u]=%p",
                             pCreateInfo->pAttachments[i],
-                            k);
+                            k,
+                            sd->upgraded_views[k]);
                     }
                 }
                     STEREO_LOG(
