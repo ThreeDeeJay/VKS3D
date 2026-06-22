@@ -157,6 +157,16 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
     res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
     if (res != VK_SUCCESS) return res;
 
+    if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
+    {
+        sd->upgraded_views[sd->upgraded_view_count++] =
+            sc->stereo_views_arr[0];
+    
+        STEREO_LOG(
+            "[VIEW TRACK ADD NV3D] view=%p count=%u",
+            sc->stereo_views_arr[0],
+            sd->upgraded_view_count);
+    }
     STEREO_LOG(
         "[NV3D TEST] alloc_alt_stereo_swapchain image=%p view=%p count=%u",
         sc->stereo_images[0],
@@ -633,6 +643,12 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
 
+    STEREO_LOG(
+        "[DESTROY SC LOOKUP RESULT] app=%p sc=%p active=%d images=%u",
+        swapchain,
+        sc,
+        sc ? (int)sc->stereo_active : -1,
+        sc ? sc->image_count : 0);
     if (sc && sc->resize_reused)
     {
         STEREO_LOG(
@@ -1356,10 +1372,18 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     STEREO_LOG("stereo_CreateImageView: upgraded %p → 2D_ARRAY/layerCount=2 [multiview=1]",
                (void*)(uintptr_t)pCreateInfo->image);
     VkResult _r = sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
+    STEREO_LOG(
+        "[VIEW TRACK CANDIDATE] view=%p image=%p",
+        _r == VK_SUCCESS ? *pView : VK_NULL_HANDLE,
+        pCreateInfo->image);
     /* Track upgraded views for framebuffer multiview detection */
     if (_r == VK_SUCCESS &&
         sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
     {
+        STEREO_LOG(
+            "[VIEW TRACK ADD] view=%p slot=%u",
+            *pView,
+            sd->upgraded_view_count);
         sd->upgraded_views[sd->upgraded_view_count++] = *pView;
         STEREO_LOG(
             "[VIEW TRACK ADD] view=%p count=%u",
