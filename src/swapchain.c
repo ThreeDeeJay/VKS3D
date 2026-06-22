@@ -1119,7 +1119,14 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 *pImage,
                 sd->intercepted_depth_count);
         }
-
+        else if (intercept_depth)
+        {
+            STEREO_LOG(
+                "[DEPTH TRACK FULL] image=%p count=%u max=%u",
+                *pImage,
+                sd->intercepted_depth_count,
+                MAX_DEPTH_IMAGES);
+        }
         if (intercept_color &&
             sd->intercepted_color_count < MAX_COLOR_IMAGES)
         {
@@ -1130,6 +1137,14 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 "[COLOR TRACK ADD] image=%p count=%u",
                 *pImage,
                 sd->intercepted_color_count);
+        }
+        else if (intercept_color)
+        {
+            STEREO_LOG(
+                "[COLOR TRACK FULL] image=%p count=%u max=%u",
+                *pImage,
+                sd->intercepted_color_count,
+                MAX_COLOR_IMAGES);
         }
     }
     return res;
@@ -1163,14 +1178,30 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         pCreateInfo->image,
         sd->intercepted_depth_count,
         sd->intercepted_color_count);
+    uint32_t depth_matches = 0;
+    uint32_t color_matches = 0;
     for (uint32_t i = 0; i < sd->intercepted_depth_count && !needs_upgrade; i++)
-        if (sd->intercepted_depth[i] == pCreateInfo->image) needs_upgrade = true;
+    {
+        if (sd->intercepted_depth[i] == pCreateInfo->image)
+        {
+            depth_matches++;
+            needs_upgrade = true;
+        }
+    }
     for (uint32_t i = 0; i < sd->intercepted_color_count && !needs_upgrade; i++)
-        if (sd->intercepted_color[i] == pCreateInfo->image) needs_upgrade = true;
+    {
+        if (sd->intercepted_color[i] == pCreateInfo->image)
+        {
+            color_matches++;
+            needs_upgrade = true;
+        }
+    }
     STEREO_LOG(
-        "[VIEW DECISION] image=%p needs_upgrade=%d",
+        "[VIEW DECISION] image=%p needs_upgrade=%d depth_matches=%u color_matches=%u",
         pCreateInfo->image,
-        (int)needs_upgrade);
+        (int)needs_upgrade,
+        depth_matches,
+        color_matches);
      if (!needs_upgrade)
         {
             STEREO_LOG(
