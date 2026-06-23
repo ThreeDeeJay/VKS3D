@@ -167,6 +167,17 @@ STEREO_LOG(
     "[NV3D] VKS3D vulkan-1.dll=%p",
     vulkan);
 
+VkPhysicalDeviceIDProperties id{};
+id.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+
+VkPhysicalDeviceProperties2 props2{};
+props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+props2.pNext = &id;
+
+sd->si->real.GetPhysicalDeviceProperties2(
+    sd->real_physdev,
+    &props2);
+
 if (id.deviceLUIDValid)
 {
     const uint8_t* l = id.deviceLUID;
@@ -175,25 +186,10 @@ if (id.deviceLUIDValid)
         "[NV3D TEST] Vulkan LUID=%02X%02X%02X%02X-%02X%02X%02X%02X",
         l[0], l[1], l[2], l[3],
         l[4], l[5], l[6], l[7]);
-}
 
-VkPhysicalDeviceIDProperties id2{};
-id2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
-
-VkPhysicalDeviceProperties2 props2b{};
-props2b.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-props2b.pNext = &id2;
-
-sd->si->real.GetPhysicalDeviceProperties2(
-    sd->real_physdev,
-    &props2b);
-
-if (id2.deviceLUIDValid)
-{
     params.has_external_luid = true;
-
     static_assert(sizeof(LUID) == VK_LUID_SIZE, "LUID mismatch");
-    std::memcpy(&params.external_luid, id2.deviceLUID, VK_LUID_SIZE);
+    std::memcpy(&params.external_luid, id.deviceLUID, VK_LUID_SIZE);
 
     STEREO_LOG("[NV3D] passing external LUID to NV3D-Lib");
 }
