@@ -167,32 +167,35 @@ STEREO_LOG(
     "[NV3D] VKS3D vulkan-1.dll=%p",
     vulkan);
 
-VkPhysicalDeviceProperties2 props2{};
-props2.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+if (id.deviceLUIDValid)
+{
+    const uint8_t* l = id.deviceLUID;
 
-VkPhysicalDeviceIDProperties id{};
-id.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+    STEREO_LOG(
+        "[NV3D TEST] Vulkan LUID=%02X%02X%02X%02X-%02X%02X%02X%02X",
+        l[0], l[1], l[2], l[3],
+        l[4], l[5], l[6], l[7]);
+}
 
-props2.pNext = &id;
+VkPhysicalDeviceIDProperties id2{};
+id2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+
+VkPhysicalDeviceProperties2 props2b{};
+props2b.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+props2b.pNext = &id2;
 
 sd->si->real.GetPhysicalDeviceProperties2(
     sd->real_physdev,
-    &props2);
+    &props2b);
 
-
-if (id.deviceLUIDValid)
+if (id2.deviceLUIDValid)
 {
-    const uint8_t* l =
-        (const uint8_t*)id.deviceLUID;
+    params.has_external_luid = true;
 
-    STEREO_LOG(
-        "[NV3D TEST] LUID=%02X%02X%02X%02X-%02X%02X%02X%02X-%02X%02X%02X%02X-%02X%02X%02X%02X",
-        l[0],l[1],l[2],l[3],
-        l[4],l[5],l[6],l[7],
-        l[8],l[9],l[10],l[11],
-        l[12],l[13],l[14],l[15]);
+    static_assert(sizeof(LUID) == VK_LUID_SIZE, "LUID mismatch");
+    std::memcpy(&params.external_luid, id2.deviceLUID, VK_LUID_SIZE);
+
+    STEREO_LOG("[NV3D] passing external LUID to NV3D-Lib");
 }
 
 HRESULT hr =
