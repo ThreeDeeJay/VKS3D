@@ -1320,8 +1320,37 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 (unsigned long long)seq,
                 *pImage,
                 sd->intercepted_depth_count);
-            sd->intercepted_depth[
-                sd->intercepted_depth_count++] = *pImage;
+            bool already_tracked = false;
+            
+            for (uint32_t i = 0;
+                 i < sd->intercepted_depth_count;
+                 i++)
+            {
+                if (sd->intercepted_depth[i] == *pImage)
+                {
+                    already_tracked = true;
+            
+                    STEREO_LOG(
+                        "[DEPTH TRACK DUP] image=%p slot=%u",
+                        *pImage,
+                        i);
+            
+                    break;
+                }
+            }
+            
+            if (!already_tracked)
+            {
+                sd->intercepted_depth[
+                    sd->intercepted_depth_count++] = *pImage;
+            
+                STEREO_LOG(
+                    "[DEPTH TRACK ADD] seq=%llu image=%p slot=%u count=%u",
+                    (unsigned long long)seq,
+                    *pImage,
+                    sd->intercepted_depth_count - 1,
+                    sd->intercepted_depth_count);
+            }
             STEREO_LOG(
                 "[DEPTH TRACK INSERT] image=%p usage=0x%08X extent=%ux%u",
                 *pImage,
@@ -1369,8 +1398,37 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         if (intercept_color &&
             sd->intercepted_color_count < MAX_COLOR_IMAGES)
         {
+        bool already_tracked = false;
+
+        for (uint32_t i = 0;
+             i < sd->intercepted_color_count;
+             i++)
+        {
+            if (sd->intercepted_color[i] == *pImage)
+            {
+                already_tracked = true;
+
+                STEREO_LOG(
+                    "[DEPTH TRACK DUP] image=%p slot=%u",
+                    *pImage,
+                    i);
+
+                break;
+            }
+        }
+
+        if (!already_tracked)
+        {
             sd->intercepted_color[
                 sd->intercepted_color_count++] = *pImage;
+
+            STEREO_LOG(
+                "[DEPTH TRACK ADD] seq=%llu image=%p slot=%u count=%u",
+                (unsigned long long)seq,
+                *pImage,
+                sd->intercepted_color_count - 1,
+                sd->intercepted_color_count);
+        }
 
             STEREO_LOG(
                 "[COLOR TRACK ADD] image=%p count=%u",
