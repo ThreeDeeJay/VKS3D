@@ -1172,7 +1172,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     _snprintf(
                         dp,
                         sizeof(dp)-1,
-                        "%s\\pipe%04d_a_tes_failed.spv",
+                        "%s\\pipe%04d_ts_failed.spv",
                         dump,
                         dump_n++);
 
