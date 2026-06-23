@@ -1356,6 +1356,10 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 *pImage,
                 sd->intercepted_depth_count);
             STEREO_LOG(
+                "[DEPTH TRACK OVERFLOW FIRST] slot0=%p slot255=%p",
+                sd->intercepted_depth[0],
+                sd->intercepted_depth[255]);
+            STEREO_LOG(
                 "[DEPTH TRACK FULL] seq=%llu image=%p count=%u max=%u usage=0x%08X extent=%ux%u layers=%u",
                 (unsigned long long)seq,
                 *pImage,

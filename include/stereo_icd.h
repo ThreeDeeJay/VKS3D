@@ -148,7 +148,7 @@ typedef VkResult (VKAPI_PTR *PFN_vkImportSemaphoreWin32HandleKHR)(
 #define MAX_DEVICES             32
 #define MAX_RENDER_PASSES       4096
 #define MAX_SWAPCHAINS          64
-#define MAX_DEPTH_IMAGES        256
+#define MAX_DEPTH_IMAGES        2048
 
 /* -- Shader module cache ---------------------------------------------------- *
  * Stores original (unpatched) SPIR-V for vertex/geometry/tesseval shaders.   *
