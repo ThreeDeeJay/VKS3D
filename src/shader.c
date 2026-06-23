@@ -1193,6 +1193,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         lo, ro, conv,
                         true,
                         &dbgA))
+                {
                 STEREO_LOG("TES patch failed");
 
                 if (dump) {
