@@ -445,11 +445,6 @@ bool spirv_patch_stereo_vertex(
     if (!m.view_var && !inj_vi) {
         have_view = false;
     }
-    
-    if (!have_view) {
-        c.have_view = false;
-    }
-
 
     uint32_t nid=m.bound;
     uint32_t id_ptr_v4=nid++, id_ptr_int=nid++;
@@ -959,17 +954,9 @@ bool spirv_patch_stereo_fs(
             uint32_t id_y  = samp_nid++;
             uint32_t id_c3 = samp_nid++;
 
-            if (has_vi_runtime)
-            {
-                uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, new_vi_id};
-                sb_push_n(&ob,w,4);
-            }
-            else
-            {
-                uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, 0};
-                sb_push_n(&ob,w,4);
-            }
-              sb_push_n(&ob,w,4); }
+            { uint32_t vi_src = has_vi_runtime ? new_vi_id : 0;
+              uint32_t w[] = {(4u<<16)|61, new_int_id, id_lv, vi_src};
+              sb_push_n(&ob, w, 4); }
 
             { uint32_t w[]={(5u<<16)|81, new_int_id, id_x, coord_id, 0};
               sb_push_n(&ob,w,5); }
@@ -1093,6 +1080,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
         bool has_vs=false, has_tcs=false, has_tes=false;
         uint32_t vs_stage=~0u, tes_stage=~0u;
+        bool allow_viewindex =
+            sd->stereo.multiview && in_mv_rp;
+
         for (uint32_t s=0;s<ci->stageCount;s++) {
             VkShaderStageFlagBits st=ci->pStages[s].stage;
             if (st==VK_SHADER_STAGE_VERTEX_BIT)
