@@ -357,7 +357,7 @@ bool spirv_patch_stereo_vertex(
     float lo, float ro,
     float conv,
     bool inj_vi,
-    const StereoDebugCtx *dbg);
+    const StereoDebugCtx *dbg)
 {
     const int projection_mode = STEREO_PROJECTION_OFF_AXIS;
 
@@ -1082,13 +1082,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     StereoRenderPassInfo *rpi = NULL;
     bool in_mv_rp = false;
     
-    if (ci->renderPass != VK_NULL_HANDLE) {
-        rpi = stereo_rp_lookup(sd, ci->renderPass);
-        in_mv_rp = (rpi != NULL && rpi->has_multiview);
-        }
 
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
+
+        if (ci->renderPass != VK_NULL_HANDLE) {
+            rpi = stereo_rp_lookup(sd, ci->renderPass);
+            in_mv_rp = (rpi != NULL && rpi->has_multiview);
+            }
 
         bool allow_viewindex =
             sd->stereo.multiview && in_mv_rp;
