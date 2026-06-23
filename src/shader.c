@@ -411,16 +411,17 @@ bool spirv_patch_stereo_vertex(
      *
      * Leave these monoscopic at screen depth.
      */
-    if (m.exec_model == SpvExecVertex &&
-        !m.has_matrix_ops)
+    /* FIX: prevent shadow / depth-only passes from being stereoized */
+    bool is_depth_like =
+        (!m.has_emit_vertex &&
+         m.exec_model == SpvExecVertex &&
+         !m.has_viewindex_builtin);
+    
+    if (is_depth_like)
     {
-        STEREO_LOG(
-            "Skipping stereo patch: likely screen-space shader");
+        STEREO_LOG("Skipping stereo patch: depth-only vertex shader");
         return false;
     }
-
-    if (!m.is_patchable || !m.pos_var)
-        return false;
 
     if (!m.is_patchable || !m.pos_var)
         return false;
@@ -435,6 +436,20 @@ bool spirv_patch_stereo_vertex(
 /*     }*/
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
+
+    /* HARD GUARD:
+     * Do not inject view-dependent logic unless shader actually has ViewIndex
+     * OR injection was explicitly requested AND renderpass is multiview.
+     * Prevents stereo leakage into shadow / G-buffer passes.
+     */
+    if (!m.view_var && !inj_vi) {
+        have_view = false;
+    }
+    
+    if (!have_view) {
+        c.have_view = false;
+    }
+
 
     uint32_t nid=m.bound;
     uint32_t id_ptr_v4=nid++, id_ptr_int=nid++;
@@ -453,7 +468,9 @@ bool spirv_patch_stereo_vertex(
          id_cr=nid++,
          id_cc=nid++;
     uint32_t uv4  = m.ptr_out_v4 ? m.ptr_out_v4 : id_ptr_v4;
-    uint32_t uint_= m.ptr_in_int  ? m.ptr_in_int  : id_ptr_int;
+    uint32_t uint_ = (m.ptr_in_int ? m.ptr_in_int : id_ptr_int);
+    /* FIX: ensure consistent type use after injection */
+    m.ptr_in_int = uint_;
     uint32_t bt   = m.bt          ? m.bt          : id_new_bt;
 
     SpvBuf te; if (!sb_init(&te,96)) return false;
@@ -793,6 +810,8 @@ bool spirv_patch_stereo_fs(
     uint32_t new_pin_id    = s.ptr_int_in_id ? s.ptr_int_in_id : nid++;
     uint32_t new_vi_id     = s.vi_var_id     ? s.vi_var_id     : nid++;
     bool     is_new_vi     = (s.vi_var_id == 0);
+    /* FIX: do not assume VI exists in non-multiview pipelines */
+    bool     has_vi_runtime = (s.vi_var_id != 0);
     uint32_t samp_nid      = nid;
     uint32_t new_bound     = samp_nid + n_patches * 5 + 8;
 
@@ -905,7 +924,7 @@ bool spirv_patch_stereo_fs(
             uint32_t id_c3  = samp_nid++;
 
             /* OpLoad %int %vi → id_lv */
-            { uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, new_vi_id};
+            { uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, has_vi_runtime ? new_vi_id : 0};
               sb_push_n(&ob,w,4); }
             /* OpConvertSToF %float id_lv → id_cvt */
             { uint32_t w[]={(4u<<16)|111, s.float_id, id_cvt, id_lv};
@@ -940,7 +959,16 @@ bool spirv_patch_stereo_fs(
             uint32_t id_y  = samp_nid++;
             uint32_t id_c3 = samp_nid++;
 
-            { uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, new_vi_id};
+            if (has_vi_runtime)
+            {
+                uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, new_vi_id};
+                sb_push_n(&ob,w,4);
+            }
+            else
+            {
+                uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, 0};
+                sb_push_n(&ob,w,4);
+            }
               sb_push_n(&ob,w,4); }
 
             { uint32_t w[]={(5u<<16)|81, new_int_id, id_x, coord_id, 0};
@@ -1256,7 +1284,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * Works on all modern drivers. No topology change, no extra stages.
          * Replaces the TCS+TES injection approach which crashed on newer
          * drivers due to strict PerVertex block interface validation.       */
-        if (has_vs && !has_tcs && vs_stage!=~0u) {
+        /* FIX: only inject ViewIndex when multiview pipeline context exists */
+        bool allow_viewindex =
+            sd->stereo.multiview &&
+            in_mv_rp;
+        if (has_vs && !has_tcs && vs_stage!=~0u && allow_viewindex) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
@@ -1267,7 +1299,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 conv,
                 sd->stereo.flip_eyes);
             STEREO_LOG(
-                "[CALL B] multiview=%d pass_exists=%d",
+                "[CALL B] multiview=%d mv_pass=%d",
                 sd->stereo.multiview,
                 sd->multiview_pass_exists);
             STEREO_LOG(
