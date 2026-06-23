@@ -83,6 +83,7 @@ typedef struct {
 
     /* Geometry classification */
     bool has_matrix_ops;
+    bool has_direct_position_write;
 
     int  exec_model;
     uint32_t pos_var, pos_member_idx, pos_ptr_type;
@@ -156,6 +157,18 @@ static void do_scan(SpvMod *m, bool p2)
             m->emit_count++;
             m->has_emit_vertex = true;
             break;
+        case SpvOpStore:
+        {
+            if (wc >= 3 &&
+                w[i+1] == m->pos_var)
+            {
+                uint32_t source = w[i+2];
+
+                if (!m->has_matrix_ops)
+                    m->has_direct_position_write = true;
+            }
+        }
+        break;
         } else {
             if(op==SpvOpTypePointer && wc>=4 &&
                w[i+2]==SpvStorageOutput)
@@ -351,6 +364,34 @@ bool spirv_patch_stereo_vertex(
         (unsigned)m.emit_count,
         m.has_mv_cap,
         m.has_matrix_ops);
+
+    if (m.exec_model == SpvExecVertex)
+    {
+        STEREO_LOG(
+            "SPIRV classify: vertex shader matrix_ops=%d",
+            m.has_matrix_ops);
+    }
+
+    /* HUD/text/fullscreen shaders often write clip-space coordinates
+     * directly and contain no matrix math. Stereoizing them pushes
+     * them in front of the screen and causes excessive negative
+     * parallax.
+     *
+     * Examples:
+     *   gl_Position = vec4(pos.xy, 0.0, 1.0);
+     *
+     * Leave these monoscopic at screen depth.
+     */
+    if (m.exec_model == SpvExecVertex &&
+        !m.has_matrix_ops)
+    {
+        STEREO_LOG(
+            "Skipping stereo patch: likely screen-space shader");
+        return false;
+    }
+
+    if (!m.is_patchable || !m.pos_var)
+        return false;
 
     if (!m.is_patchable || !m.pos_var)
         return false;
