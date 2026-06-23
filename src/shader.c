@@ -365,10 +365,13 @@ bool spirv_patch_stereo_vertex(
         m.has_mv_cap,
         m.has_matrix_ops);
     STEREO_LOG(
-        "PATCHABLE shader: matrix=%d geom=%d emits=%u",
+        "PATCHABLE shader: words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+        m.count,
         m.has_matrix_ops,
         m.exec_model,
-        m.emit_count);
+        m.emit_count,
+        m.pos_var,
+        m.view_var);
 
     if (m.exec_model == SpvExecVertex)
     {
