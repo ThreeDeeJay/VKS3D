@@ -1123,7 +1123,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
             if (dump) {
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_fs.spv",dump,dump_n++);
+                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_words%zu_fs.spv",dump,dump_n++,e->words);
                 FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1159,23 +1159,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             {
                 STEREO_LOG("TES patch failed");
 
-                if (dump)
-                {
+                if (dump) {
                     char dp[512];
-
-                    _snprintf(
-                        dp,
-                        sizeof(dp)-1,
-                        "%s\\pipe%04d_a_tes_failed.spv",
-                        dump,
-                        dump_n++);
-
-                    FILE *f = fopen(dp, "wb");
-                    if (f)
-                    {
-                        fwrite(e->spv, 4, e->words, f);
-                        fclose(f);
-                    }
+                    _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_words%zu_fs_failed.spv",dump,dump_n++,e->words);
+                    FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
                 }
 
                 STEREO_LOG("Pipe %u PathA: patch failed",p);
@@ -1183,7 +1170,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
             if (dump) {
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_a_tes.spv",dump,dump_n++);
+                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_words%zu_ts.spv",dump,dump_n++,e->words);
                 FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1230,7 +1217,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
             if (dump) {
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_b_vs.spv",dump,dump_n++);
+                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_words%zu_vs.spv",dump,dump_n++,e->words);
                 FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
