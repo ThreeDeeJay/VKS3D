@@ -385,16 +385,12 @@ bool spirv_patch_stereo_vertex(
         m.has_matrix_ops);
     uint64_t spv_hash = hash_spv(m.words, m.count);
     STEREO_LOG(
-        "PATCHABLE shader: pipe=%u stage=%d rp=%p mv=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
-        dbg ? dbg->pipeline_index : 0,
-        m.exec_model,
-        dbg ? (void*)dbg->render_pass : NULL,
-        dbg ? dbg->is_multiview : 0,
+        "PATCHABLE shader: hash=%016llx-vs.spv words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
         (unsigned long long)spv_hash,
         m.count,
         m.has_matrix_ops,
         m.exec_model,
-        (unsigned)m.emit_count,
+        m.emit_count,
         m.pos_var,
         m.view_var);
 
@@ -1149,8 +1145,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\spv_hash%016llx_words%zu_stage%d_fs.spv",dump,(unsigned long long)spv_hash,e->words,ci->pStages[vs_stage].stage);
-                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
+                _snprintf(
+                    dp,
+                    sizeof(dp)-1,
+                    "%s\\%016llx-fs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f=fopen(dp,"wb");
+                if (f) {
+                    fwrite(patched,4,pc2,f);
+                    fclose(f);
+                }
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
@@ -1196,11 +1201,20 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 {
                 STEREO_LOG("TES patch failed");
 
-                if (dump) {
+                if (dump && patched && pc2) {
                     uint64_t spv_hash = hash_spv(e->spv, e->words);
                     char dp[512];
-                    _snprintf(dp,sizeof(dp)-1,"%s\\spv_hash%016llx_words%zu_stage%d_ts_failed.spv",dump,(unsigned long long)spv_hash,e->words,ci->pStages[vs_stage].stage);
-                    FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
+                    _snprintf(
+                        dp,
+                        sizeof(dp)-1,
+                        "%s\\%016llx-ts_failed.spv",
+                        dump,
+                        (unsigned long long)spv_hash);
+                    FILE *f=fopen(dp,"wb");
+                    if (f) {
+                        fwrite(patched,4,pc2,f);
+                        fclose(f);
+                    }
                 }
 
                 STEREO_LOG("Pipe %u PathA: patch failed",p);
@@ -1209,8 +1223,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\spv_hash%016llx_words%zu_stage%d_ts.spv",dump,(unsigned long long)spv_hash,e->words,ci->pStages[vs_stage].stage);
-                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
+                _snprintf(
+                    dp,
+                    sizeof(dp)-1,
+                    "%s\\%016llx-ts.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f=fopen(dp,"wb");
+                if (f) {
+                    fwrite(patched,4,pc2,f);
+                    fclose(f);
+                }
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
@@ -1268,8 +1291,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\spv_hash%016llx_words%zu_stage%d_vs.spv",dump,(unsigned long long)spv_hash,e->words,ci->pStages[vs_stage].stage);
-                FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
+                _snprintf(
+                    dp,
+                    sizeof(dp)-1,
+                    "%s\\%016llx-vs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f=fopen(dp,"wb");
+                if (f) {
+                    fwrite(patched,4,pc2,f);
+                    fclose(f);
+                }
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
