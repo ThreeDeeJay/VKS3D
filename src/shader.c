@@ -443,7 +443,7 @@ bool spirv_patch_stereo_vertex(
      * Prevents stereo leakage into shadow / G-buffer passes.
      */
     if (!m.view_var && !inj_vi) {
-        have_view = false;
+        inj_vi = false;
     }
 
     uint32_t nid=m.bound;
@@ -1075,11 +1075,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         lo,
         ro,
         sd->stereo.flip_eyes);
+
+    bool has_vs=false, has_tcs=false, has_tes=false;
+    uint32_t vs_stage=~0u, tes_stage=~0u;
+
+    StereoRenderPassInfo *rpi = NULL;
+    bool in_mv_rp = false;
+    
+    if (ci->renderPass != VK_NULL_HANDLE) {
+        rpi = stereo_rp_lookup(sd, ci->renderPass);
+        in_mv_rp = (rpi != NULL && rpi->has_multiview);
+        }
+
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
 
-        bool has_vs=false, has_tcs=false, has_tes=false;
-        uint32_t vs_stage=~0u, tes_stage=~0u;
         bool allow_viewindex =
             sd->stereo.multiview && in_mv_rp;
 
@@ -1275,9 +1285,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * Replaces the TCS+TES injection approach which crashed on newer
          * drivers due to strict PerVertex block interface validation.       */
         /* FIX: only inject ViewIndex when multiview pipeline context exists */
-        bool allow_viewindex =
-            sd->stereo.multiview &&
-            in_mv_rp;
         if (has_vs && !has_tcs && vs_stage!=~0u && allow_viewindex) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
