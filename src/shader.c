@@ -1131,6 +1131,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     dump_n++,
                     e->words);
                 FILE *f=fopen(dp,"wb");
+            }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
             VkShaderModule tmp=VK_NULL_HANDLE;
@@ -1196,6 +1197,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     dump_n++,
                     e->words);
                 FILE *f=fopen(dp,"wb");
+            }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
             VkShaderModule tmp=VK_NULL_HANDLE;
@@ -1248,6 +1250,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     dump_n++,
                     e->words);
                 FILE *f=fopen(dp,"wb");
+            }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 NULL,0,pc2*4,patched};
             VkShaderModule tmp=VK_NULL_HANDLE;
