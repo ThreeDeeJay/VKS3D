@@ -83,6 +83,7 @@ jobs:
         /p:Configuration="${{matrix.Configuration}}-MD"
         /p:Platform="${{matrix.Settings.Architecture}}"
         /p:PlatformToolset=v143
+        /t:NV3DLib
     - name: Collect dependencies
       if: steps.cache-nv3dlib.outputs.cache-hit != 'true'
       run: |
