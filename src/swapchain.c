@@ -1329,7 +1329,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                     sd->intercepted_depth_count);
             }
             STEREO_LOG(
-                    "[DEPTH TRACK VERIFIED] seq=%llu image=%p slot=%u count=%u",
+                    "[DEPTH TRACK STATE] seq=%llu image=%p slot=%u count=%u",
                     (unsigned long long)seq,
                     *pImage,
                     sd->intercepted_depth_count - 1,
