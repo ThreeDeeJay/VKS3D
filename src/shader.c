@@ -364,6 +364,11 @@ bool spirv_patch_stereo_vertex(
         (unsigned)m.emit_count,
         m.has_mv_cap,
         m.has_matrix_ops);
+    STEREO_LOG(
+        "PATCHABLE shader: matrix=%d geom=%d emits=%u",
+        m.has_matrix_ops,
+        m.exec_model,
+        m.emit_count);
 
     if (m.exec_model == SpvExecVertex)
     {
@@ -1213,6 +1218,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 "[CALL B] multiview=%d pass_exists=%d",
                 sd->stereo.multiview,
                 sd->multiview_pass_exists);
+            STEREO_LOG(
+                "PathB candidate module=%p words=%zu",
+                (void*)ci->pStages[vs_stage].module,
+                e->words);
             if (!spirv_patch_stereo_vertex(e->spv,e->words,&patched,&pc2,
                     lo,ro,conv,/*inj_vi=*/true)) {
                 STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
