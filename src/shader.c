@@ -210,6 +210,17 @@ static void spv_scan(SpvMod *m)
         do_scan(m,true);
 }
 
+uint64_t hash_spv(const uint32_t *data, size_t words)
+{
+    uint64_t h = 1469598103934665603ULL; // FNV offset basis
+    for (size_t i = 0; i < words; i++) {
+        uint64_t v = data[i];
+        h ^= v;
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
 /* ── Stereo offset injection body ────────────────────────────────────────── */
 typedef struct {
     SpvMod  *m;
@@ -364,8 +375,14 @@ bool spirv_patch_stereo_vertex(
         (unsigned)m.emit_count,
         m.has_mv_cap,
         m.has_matrix_ops);
+    uint64_t spv_hash = hash_spv(m.words, m.count);
     STEREO_LOG(
-        "PATCHABLE shader: words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+        "PATCHABLE shader: pipe=%u stage=%d rp=%p mv=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+        p,
+        m.exec_model,
+        (void*)ci->renderPass,
+        in_mv_rp,
+        (unsigned long long)spv_hash,
         m.count,
         m.has_matrix_ops,
         m.exec_model,
@@ -1122,8 +1139,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 continue;
             }
             if (dump) {
+                uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_words%zu_fs.spv",dump,dump_n++,e->words);
+                _snprintf(dp,sizeof(dp)-1,"%s\\spv_hash%016llx_words%zu_stage%d_fs.spv",dump,(unsigned long long)spv_hash,m.count,m.exec_model);
                 FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1160,8 +1178,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 STEREO_LOG("TES patch failed");
 
                 if (dump) {
+                    uint64_t spv_hash = hash_spv(e->spv, e->words);
                     char dp[512];
-                    _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_words%zu_fs_failed.spv",dump,dump_n++,e->words);
+                    _snprintf(dp,sizeof(dp)-1,"%s\\spv_hash%016llx_words%zu_stage%d_ts_failed.spv",dump,(unsigned long long)spv_hash,m.count,m.exec_model);
                     FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
                 }
 
@@ -1169,8 +1188,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 continue;
             }
             if (dump) {
+                uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_words%zu_ts.spv",dump,dump_n++,e->words);
+                _snprintf(dp,sizeof(dp)-1,"%s\\spv_hash%016llx_words%zu_stage%d_ts.spv",dump,(unsigned long long)spv_hash,m.count,m.exec_model);
                 FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1216,8 +1236,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo,ro,conv,/*inj_vi=*/true)) {
                 STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
             if (dump) {
+                uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
-                _snprintf(dp,sizeof(dp)-1,"%s\\pipe%04d_words%zu_vs.spv",dump,dump_n++,e->words);
+                _snprintf(dp,sizeof(dp)-1,"%s\\spv_hash%016llx_words%zu_stage%d_vs.spv",dump,(unsigned long long)spv_hash,m.count,m.exec_model);
                 FILE *f=fopen(dp,"wb"); if(f){fwrite(patched,4,pc2,f);fclose(f);}
             }
             VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
