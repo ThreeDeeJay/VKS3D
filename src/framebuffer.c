@@ -47,8 +47,49 @@ stereo_CreateFramebuffer(
                            pCreateInfo->attachmentCount, (void*)use_mv);
             }
         } else {
-            STEREO_LOG("CreateFramebuffer: non-upgraded att present → original rp (att=%u)",
-                       pCreateInfo->attachmentCount);
+            for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+                bool found = false;
+        
+                for (uint32_t k = 0;
+                     k < sd->upgraded_view_count;
+                     k++)
+                {
+                    if (sd->upgraded_views[k] ==
+                        pCreateInfo->pAttachments[i])
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+        
+                if (!found) {
+                    STEREO_LOG(
+                        "[FB CHECK] att=%u view=%p tracked_count=%u",
+                        i,
+                        pCreateInfo->pAttachments[i],
+                        sd->upgraded_view_count);
+                    STEREO_LOG(
+                        "[FB SEARCH START] target=%p count=%u",
+                        pCreateInfo->pAttachments[i],
+                        sd->upgraded_view_count);
+                for (uint32_t k = 0; k < sd->upgraded_view_count; k++)
+                {
+                    if (k < 5 ||
+                        k >= sd->upgraded_view_count - 5)
+                    {
+                        STEREO_LOG(
+                            "[FB SEARCH] target=%p slot[%u]=%p",
+                            pCreateInfo->pAttachments[i],
+                            k,
+                            sd->upgraded_views[k]);
+                    }
+                }
+                    STEREO_LOG(
+                        "[FB NON-UPGRADED] att=%u view=%p",
+                        i,
+                        pCreateInfo->pAttachments[i]);
+                }
+            }
         }
     }
 
