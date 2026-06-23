@@ -1284,30 +1284,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         if (intercept_depth &&
             sd->intercepted_depth_count < MAX_DEPTH_IMAGES)
         {
-            bool duplicate = false;
-            uint32_t duplicate_slot = 0;
             
-            for (uint32_t j = 0;
-                 j < sd->intercepted_depth_count;
-                 j++)
-            {
-                if (sd->intercepted_depth[j] == *pImage)
-                {
-                    duplicate = true;
-                    duplicate_slot = j;
-                    break;
-                }
-            }
-            
-            if (duplicate)
-            {
-                STEREO_LOG(
-                    "[DEPTH DUPLICATE] seq=%llu image=%p slot=%u count=%u",
-                    (unsigned long long)seq,
-                    *pImage,
-                    duplicate_slot,
-                    sd->intercepted_depth_count);
-            }
             STEREO_LOG(
                 "[DEPTH TRACK SOURCE] seq=%llu image=%p usage=0x%08X extent=%ux%u",
                 (unsigned long long)seq,
@@ -1345,20 +1322,14 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                     sd->intercepted_depth_count++] = *pImage;
             
                 STEREO_LOG(
-                    "[DEPTH TRACK ADD] seq=%llu image=%p slot=%u count=%u",
+                    "[DEPTH TRACK INSERT] seq=%llu image=%p slot=%u count=%u",
                     (unsigned long long)seq,
                     *pImage,
                     sd->intercepted_depth_count - 1,
                     sd->intercepted_depth_count);
             }
             STEREO_LOG(
-                "[DEPTH TRACK INSERT] image=%p usage=0x%08X extent=%ux%u",
-                *pImage,
-                pCreateInfo->usage,
-                pCreateInfo->extent.width,
-                pCreateInfo->extent.height);
-            STEREO_LOG(
-                    "[DEPTH TRACK ADD] seq=%llu image=%p slot=%u count=%u",
+                    "[DEPTH TRACK VERIFIED] seq=%llu image=%p slot=%u count=%u",
                     (unsigned long long)seq,
                     *pImage,
                     sd->intercepted_depth_count - 1,
@@ -1409,7 +1380,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 already_tracked = true;
 
                 STEREO_LOG(
-                    "[DEPTH TRACK DUP] image=%p slot=%u",
+                    "[COLOR TRACK DUP] image=%p slot=%u",
                     *pImage,
                     i);
 
@@ -1423,17 +1394,12 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                 sd->intercepted_color_count++] = *pImage;
 
             STEREO_LOG(
-                "[DEPTH TRACK ADD] seq=%llu image=%p slot=%u count=%u",
+                "[COLOR TRACK ADD] seq=%llu image=%p slot=%u count=%u",
                 (unsigned long long)seq,
                 *pImage,
                 sd->intercepted_color_count - 1,
                 sd->intercepted_color_count);
         }
-
-            STEREO_LOG(
-                "[COLOR TRACK ADD] image=%p count=%u",
-                *pImage,
-                sd->intercepted_color_count);
         }
         else if (intercept_color)
         {
