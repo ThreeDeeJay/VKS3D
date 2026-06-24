@@ -1163,10 +1163,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     goto fs_skip;
                 }
 
-                 /* --- SPIR-V safety validation + max-id tracking --- */
-
-                uint32_t fs_max_id = 0;
-
                 /* walk instruction-by-instruction (NOT word-by-word) */
                 for (size_t i = 0; i < pc2; ) {
 
