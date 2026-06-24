@@ -1073,8 +1073,50 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * and post-fx all render from the CENTER perspective; the multiview
          * final (swapchain) pass applies per-eye shift → image-space stereo
          * for deferred content with shadows/lights/bloom properly aligned.   */
-        if (ci->renderPass != VK_NULL_HANDLE) {
-            rpi = stereo_rp_lookup(sd, ci->renderPass);
+        if (canonical_rp != VK_NULL_HANDLE) {
+            STEREO_LOG(
+                "[RP DEBUG] pipeline_rp=%p mv_enabled=%d",
+                (void*)canonical_rp,
+                sd->stereo.multiview);
+
+            StereoRenderPassInfo *dbg_rpi =
+                stereo_rp_lookup(sd, canonical_rp);
+
+            if (dbg_rpi) {
+                STEREO_LOG(
+                    "[RP DEBUG] lookup ok rp=%p has_mv=%d",
+                    (void*)canonical_rp,
+                    dbg_rpi->has_multiview);
+            } else {
+                STEREO_LOG(
+                    "[RP DEBUG] lookup MISS rp=%p",
+                    (void*)canonical_rp);
+            }
+
+            /* Canonical renderpass fix:
+             * ensure all pipeline RP pointers map to MV RP when available
+             */
+
+            VkRenderPass canonical_rp = canonical_rp;
+
+            StereoRenderPassInfo *rpi =
+                stereo_rp_lookup(sd, canonical_rp);
+
+            /* If not multiview but MV exists globally, remap */
+            if ((!rpi || !rpi->has_multiview) &&
+                sd->stereo.multiview &&
+                sd->mv_renderpass != VK_NULL_HANDLE)
+            {
+                canonical_rp = sd->mv_renderpass;
+
+                rpi = stereo_rp_lookup(sd, canonical_rp);
+
+                STEREO_LOG(
+                    "[RP FIX] remapped %p -> %p (mv=%d)",
+                    (void*)canonical_rp,
+                    (void*)canonical_rp,
+                    rpi ? rpi->has_multiview : 0);
+            }
             in_mv_rp = (rpi && rpi->has_multiview);
         }
         allow_viewindex = (sd->stereo.multiview && in_mv_rp);
@@ -1082,7 +1124,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             STEREO_LOG(
                 "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
                 p,
-                (void*)(uintptr_t)ci->renderPass,
+                (void*)(uintptr_t)canonical_rp,
                 has_vs,
                 has_tes,
                 ci->stageCount);
@@ -1208,12 +1250,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     i += wc;
                 }
 
-                /* FINALIZE MAX ID (if you need bound tracking) */
+                uint32_t fs_max_id = 0;
+                
+                /* FINALIZE SPIR-V IDS (debug only) */
                 uint32_t final_max = fs_max_id + 16;
-
-                /* NOTE:
-                 * Do NOT touch ob.w[3] here unless you fully own SPIR-V module header.
-                 * PipelineLayout / module bounds must be patched in SPIR-V header, not here.
+                
+                /*
+                 * IMPORTANT:
+                 * Do NOT modify SPIR-V module header or bound here.
+                 * We only track for diagnostics.
                  */
                 (void)final_max;
 
@@ -1295,7 +1340,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 sd->stereo.flip_eyes);
                 StereoDebugCtx dbgA = {
                     p,
-                    ci->renderPass,
+                    canonical_rp,
                     in_mv_rp,
                     (uint32_t)VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT
                 };
@@ -1385,7 +1430,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 e->words);
             StereoDebugCtx dbgB = {
                 p,
-                ci->renderPass,
+                canonical_rp,
                 in_mv_rp,
                 (uint32_t)VK_SHADER_STAGE_VERTEX_BIT
             };
