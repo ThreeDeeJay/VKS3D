@@ -357,7 +357,7 @@ bool spirv_patch_stereo_vertex(
     float lo, float ro,
     float conv,
     bool inj_vi,
-    const StereoDebugCtx *dbg);
+    const StereoDebugCtx *dbg)
 {
     const int projection_mode = STEREO_PROJECTION_OFF_AXIS;
 
@@ -411,17 +411,6 @@ bool spirv_patch_stereo_vertex(
      *
      * Leave these monoscopic at screen depth.
      */
-    /* FIX: prevent shadow / depth-only passes from being stereoized */
-    bool is_depth_like =
-        (!m.has_emit_vertex &&
-         m.exec_model == SpvExecVertex &&
-         !m.has_viewindex_builtin);
-    
-    if (is_depth_like)
-    {
-        STEREO_LOG("Skipping stereo patch: depth-only vertex shader");
-        return false;
-    }
 
     if (!m.is_patchable || !m.pos_var)
         return false;
@@ -436,15 +425,6 @@ bool spirv_patch_stereo_vertex(
 /*     }*/
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
-
-    /* HARD GUARD:
-     * Do not inject view-dependent logic unless shader actually has ViewIndex
-     * OR injection was explicitly requested AND renderpass is multiview.
-     * Prevents stereo leakage into shadow / G-buffer passes.
-     */
-    if (!m.view_var && !inj_vi) {
-        inj_vi = false;
-    }
 
     uint32_t nid=m.bound;
     uint32_t id_ptr_v4=nid++, id_ptr_int=nid++;
@@ -464,8 +444,6 @@ bool spirv_patch_stereo_vertex(
          id_cc=nid++;
     uint32_t uv4  = m.ptr_out_v4 ? m.ptr_out_v4 : id_ptr_v4;
     uint32_t uint_ = (m.ptr_in_int ? m.ptr_in_int : id_ptr_int);
-    /* FIX: ensure consistent type use after injection */
-    m.ptr_in_int = uint_;
     uint32_t bt   = m.bt          ? m.bt          : id_new_bt;
 
     SpvBuf te; if (!sb_init(&te,96)) return false;
@@ -580,6 +558,7 @@ bool spirv_patch_stereo_vertex(
                m.exec_model, in_c, ob.n, nid, (int)(id_inj_view!=0));
     return true;
 }
+
 void spirv_patched_free(uint32_t *w) { free(w); }
 
 /* ══════════════════════════════════════════════════════════════════════════
