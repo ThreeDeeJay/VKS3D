@@ -468,27 +468,47 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 
 static uint32_t safe_id_base(SpvMod *m)
 {
-    uint32_t max_id = m->bound;
+    uint32_t max_id = 0;
 
-    for (size_t i = 5; i < m->count; i++) {
-        uint32_t op = m->words[i] & 0xffff;
-        uint32_t wc  = m->words[i] >> 16;
-        if (!wc) break;
+    /* ── Scan entire module for ID usage ───────────────────── */
+    for (size_t i = 5; i < m->count;) {
 
-        for (uint32_t k = 1; k < wc; k++) {
+        if (i + 1 >= m->count)
+            break;
+
+        uint32_t word = m->words[i];
+        uint32_t op   = word & 0xffff;
+        uint32_t wc   = word >> 16;
+
+        if (wc == 0)
+            break;
+
+        /* IDs are operands 1..wc-1 in most instructions */
+        for (uint32_t k = 1; k < wc && (i + k) < m->count; k++) {
             uint32_t id = m->words[i + k];
-            if (id > max_id) max_id = id;
+
+            /* Only consider plausible SPIR-V IDs */
+            if (id > max_id && id < 0x7fffffff)
+                max_id = id;
         }
 
-        i += wc - 1;
+        i += wc;
     }
 
-    uint32_t base = max_id + 1;
-    
-    /* SPIR-V safety: avoid reuse of low reserved ID ranges */
+    /* ── Safety margin (critical for injected SSA) ─────────── */
+    uint32_t base = max_id + 4096;
+
+    /* ── Prevent low-ID collisions with driver-generated IDs ─ */
     if (base < 1000)
         base = 1000;
-    
+
+    /* ── Optional hard safety clamp (prevents wrap bugs) ───── */
+    if (base < max_id)
+        base = max_id + 1;
+
+    STEREO_LOG("[IDBASE] max_id=%u base=%u bound_hint=%u",
+               max_id, base, m->bound);
+
     return base;
 }
 
@@ -606,6 +626,7 @@ bool spirv_patch_stereo_vertex(
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
     uint32_t nid = safe_id_base(&m);
+    STEREO_LOG("[IDBASE] starting nid=%u bound=%u", nid, m.bound);
     uint32_t id_ptr_v4=nid++, id_ptr_int=nid++;
     uint32_t id_new_it=0;
     if (!m.it && inj_vi && !m.view_var) { id_new_it=nid++; m.it=id_new_it; }
