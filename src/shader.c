@@ -240,13 +240,6 @@ typedef struct {
     int   flip_dbg;
 } BodyCtx;
 
-typedef struct {
-    uint32_t pipeline_index;
-    VkRenderPass render_pass;
-    int is_multiview;
-    uint32_t stage;
-} StereoDebugCtx;
-
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m=c->m;
