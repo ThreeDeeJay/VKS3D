@@ -19,45 +19,44 @@
 #include "tes_inject.h"
 
 /* ── SPIR-V opcodes / constants ──────────────────────────────────────────── */
-#define SpvOpCapability                     17
-#define SpvOpEntryPoint                     15
-#define SpvOpTypeBool                       20
-#define SpvOpTypeInt                        21
-#define SpvOpTypeFloat                      22
-#define SpvOpTypeVector                     23
-#define SpvOpTypeMatrix                     24
-#define SpvOpTypePointer                    32
-#define SpvOpTypeArray                      28
-#define SpvOpConstant                       43
-#define SpvOpVariable                       59
-#define SpvOpLoad                           61
-#define SpvOpStore                          62
-#define SpvOpAccessChain                    65
-#define SpvOpDecorate                       71
-#define SpvOpMemberDecorate                 72
-#define SpvOpImageSampleImplicitLod         87
-#define SpvOpFunction                       54
-#define SpvOpEmitVertex                     218
-#define SpvOpCompositeExtract               81
-#define SpvOpCompositeInsert                82
-#define SpvOpFAdd                           129
-#define SpvOpFMul                           133
-#define SpvOpMatrixTimesVector              145
-#define SpvOpMatrixTimesMatrix              146
-#define SpvOpIEqual                         170
-#define SpvOpINotEqual                      171
-#define SpvOpSelect                         169
+#define SpvOpCapability       17
+#define SpvOpEntryPoint       15
+#define SpvOpTypeBool         20
+#define SpvOpTypeInt          21
+#define SpvOpTypeFloat        22
+#define SpvOpTypeVector       23
+#define SpvOpTypeMatrix       24
+#define SpvOpTypePointer      32
+#define SpvOpTypeArray        28
+#define SpvOpConstant         43
+#define SpvOpVariable         59
+#define SpvOpLoad             61
+#define SpvOpStore            62
+#define SpvOpAccessChain      65
+#define SpvOpDecorate         71
+#define SpvOpMemberDecorate   72
+#define SpvOpFunction         54
+#define SpvOpEmitVertex       218
+#define SpvOpCompositeExtract 81
+#define SpvOpCompositeInsert  82
+#define SpvOpFAdd             129
+#define SpvOpFMul             133
+#define SpvOpMatrixTimesVector 145
+#define SpvOpMatrixTimesMatrix 146
+#define SpvOpIEqual           170
+#define SpvOpINotEqual        171
+#define SpvOpSelect           169
 
-#define SpvDecorationBuiltIn                11
-#define SpvBuiltInPosition                  0
-#define SpvBuiltInViewIndex                 4440
-#define SpvStorageInput                     1
-#define SpvStorageOutput                    3
-#define SpvExecVertex                       0
-#define SpvExecTessEval                     2
-#define SpvExecGeometry                     3
-#define SpvCapabilityMultiView              4439
-#define SPIRV_MAGIC                         0x07230203u
+#define SpvDecorationBuiltIn   11
+#define SpvBuiltInPosition      0
+#define SpvBuiltInViewIndex  4440
+#define SpvStorageInput         1
+#define SpvStorageOutput        3
+#define SpvExecVertex           0
+#define SpvExecTessEval         2
+#define SpvExecGeometry         3
+#define SpvCapabilityMultiView  4439
+#define SPIRV_MAGIC  0x07230203u
 
 /* ── Dynamic word buffer ─────────────────────────────────────────────────── */
 typedef struct { uint32_t *w; size_t n, cap; } SpvBuf;
@@ -241,6 +240,13 @@ typedef struct {
     int   flip_dbg;
 } BodyCtx;
 
+typedef struct {
+    uint32_t pipeline_index;
+    VkRenderPass render_pass;
+    int is_multiview;
+    uint32_t stage;
+} StereoDebugCtx;
+
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m=c->m;
@@ -405,6 +411,16 @@ bool spirv_patch_stereo_vertex(
      *
      * Leave these monoscopic at screen depth.
      */
+    if (m.exec_model == SpvExecVertex &&
+        !m.has_matrix_ops)
+    {
+        STEREO_LOG(
+            "Skipping stereo patch: likely screen-space shader");
+        return false;
+    }
+
+    if (!m.is_patchable || !m.pos_var)
+        return false;
 
     if (!m.is_patchable || !m.pos_var)
         return false;
@@ -437,7 +453,7 @@ bool spirv_patch_stereo_vertex(
          id_cr=nid++,
          id_cc=nid++;
     uint32_t uv4  = m.ptr_out_v4 ? m.ptr_out_v4 : id_ptr_v4;
-    uint32_t uint_ = (m.ptr_in_int ? m.ptr_in_int : id_ptr_int);
+    uint32_t uint_= m.ptr_in_int  ? m.ptr_in_int  : id_ptr_int;
     uint32_t bt   = m.bt          ? m.bt          : id_new_bt;
 
     SpvBuf te; if (!sb_init(&te,96)) return false;
@@ -552,7 +568,6 @@ bool spirv_patch_stereo_vertex(
                m.exec_model, in_c, ob.n, nid, (int)(id_inj_view!=0));
     return true;
 }
-
 void spirv_patched_free(uint32_t *w) { free(w); }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -590,7 +605,6 @@ typedef struct {
     uint32_t v3float_id;
     uint32_t ptr_int_in_id;
     uint32_t vi_var_id;
-    uint32_t max_id;                    /* Tracks highest SSA ID seen in module */
     bool     has_mv_cap;
     size_t   ep_word;
     size_t   fn_word;
@@ -606,7 +620,6 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
 {
     memset(s, 0, sizeof(*s));
     bool in_func = false;
-    s->max_id = 0;
     for (size_t i = 5; i < c; ) {
         uint32_t op = w[i] & 0xffff, wc = w[i] >> 16;
         if (!wc || i + wc > c) break;
@@ -773,15 +786,13 @@ bool spirv_patch_stereo_fs(
     uint32_t n_patches = fs_count_patches(&s, in, in_c);
 
     /* Allocate new IDs above current bound */
-    uint32_t nid           = s.max_id + 1;
+    uint32_t nid           = in[3];
     uint32_t new_int_id    = s.int_id        ? s.int_id        : nid++;
     uint32_t new_v3f_id    = s.v3float_id    ? s.v3float_id    : nid++;
     uint32_t new_v3i_id    = nid++;
     uint32_t new_pin_id    = s.ptr_int_in_id ? s.ptr_int_in_id : nid++;
     uint32_t new_vi_id     = s.vi_var_id     ? s.vi_var_id     : nid++;
     bool     is_new_vi     = (s.vi_var_id == 0);
-    /* FIX: do not assume VI exists in non-multiview pipelines */
-    bool     has_vi_runtime = (s.vi_var_id != 0 && is_new_vi == false);
     uint32_t samp_nid      = nid;
     uint32_t new_bound     = samp_nid + n_patches * 5 + 8;
 
@@ -894,7 +905,7 @@ bool spirv_patch_stereo_fs(
             uint32_t id_c3  = samp_nid++;
 
             /* OpLoad %int %vi → id_lv */
-            { uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, has_vi_runtime ? new_vi_id : 0};
+            { uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, new_vi_id};
               sb_push_n(&ob,w,4); }
             /* OpConvertSToF %float id_lv → id_cvt */
             { uint32_t w[]={(4u<<16)|111, s.float_id, id_cvt, id_lv};
@@ -929,9 +940,8 @@ bool spirv_patch_stereo_fs(
             uint32_t id_y  = samp_nid++;
             uint32_t id_c3 = samp_nid++;
 
-            { uint32_t vi_src = has_vi_runtime ? new_vi_id : 0;
-              uint32_t w[] = {(4u<<16)|61, new_int_id, id_lv, vi_src};
-              sb_push_n(&ob, w, 4); }
+            { uint32_t w[]={(4u<<16)|61, new_int_id, id_lv, new_vi_id};
+              sb_push_n(&ob,w,4); }
 
             { uint32_t w[]={(5u<<16)|81, new_int_id, id_x, coord_id, 0};
               sb_push_n(&ob,w,5); }
@@ -960,7 +970,7 @@ bool spirv_patch_stereo_fs(
         i += wc;
     }
 
-    ob.w[3] = nid;
+    ob.w[3] = samp_nid + 1;
     *out   = ob.w;
     *out_c = ob.n;
     STEREO_LOG("FS patched: %u 2D img types→arr, %u samples extended, bound %u→%u",
@@ -1050,93 +1060,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         lo,
         ro,
         sd->stereo.flip_eyes);
-
     for (uint32_t p=0; p<N; p++) {
-
-
-        bool has_vs  = false;
-        bool has_tcs = false;
-        bool has_tes = false;
-
-        uint32_t vs_stage  = ~0u;
-        uint32_t tes_stage = ~0u;
-
-        StereoRenderPassInfo *rpi = NULL;
-        bool in_mv_rp = false;
-        bool allow_viewindex = false;
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
-        VkRenderPass canonical_rp = ci->renderPass;
 
-        /* ── Determine if this pipeline's render pass has multiview ──────
-         * gl_ViewIndex is 0 in non-multiview passes.  Patching VS/TES there
-         * bakes in left_eye_offset for ALL draws → deferred G-buffer / shadow
-         * passes render from left-eye-only perspective → monoscopic output.
-         * Leave non-multiview pass shaders unpatched so G-buffer, shadow maps,
-         * and post-fx all render from the CENTER perspective; the multiview
-         * final (swapchain) pass applies per-eye shift → image-space stereo
-         * for deferred content with shadows/lights/bloom properly aligned.   */
-        if (canonical_rp != VK_NULL_HANDLE) {
-            STEREO_LOG(
-                "[RP DEBUG] pipeline_rp=%p mv_enabled=%d",
-                (void*)canonical_rp,
-                sd->stereo.multiview);
-
-            StereoRenderPassInfo *dbg_rpi =
-                stereo_rp_lookup(sd, canonical_rp);
-
-            if (dbg_rpi) {
-                STEREO_LOG(
-                    "[RP DEBUG] lookup ok rp=%p has_mv=%d",
-                    (void*)canonical_rp,
-                    dbg_rpi->has_multiview);
-            } else {
-                STEREO_LOG(
-                    "[RP DEBUG] lookup MISS rp=%p",
-                    (void*)canonical_rp);
-            }
-
-            /* Canonical renderpass fix:
-             * ensure all pipeline RP pointers map to MV RP when available
-             */
-
-
-            StereoRenderPassInfo *rpi =
-                stereo_rp_lookup(sd, canonical_rp);
-
-            /* If not multiview but MV exists globally, remap */
-            if ((!rpi || !rpi->has_multiview) &&
-                sd->stereo.multiview &&
-                sd->mv_renderpass)
-            {
-                canonical_rp = sd->mv_renderpass;
-
-                rpi = stereo_rp_lookup(sd, canonical_rp);
-
-                STEREO_LOG(
-                    "[RP FIX] remapped %p -> %p (mv=%d)",
-                    (void*)canonical_rp,
-                    (void*)canonical_rp,
-                    rpi ? rpi->has_multiview : 0);
-            }
-            /* CRITICAL: apply to pipeline create info */
-            infos[p].renderPass = canonical_rp;
-            in_mv_rp = (rpi && rpi->has_multiview);
-        }
-        allow_viewindex = (sd->stereo.multiview && in_mv_rp);
-        if (!in_mv_rp) {
-            STEREO_LOG(
-                "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
-                p,
-                (void*)(uintptr_t)canonical_rp,
-                has_vs,
-                has_tes,
-                ci->stageCount);
-            in_mv_rp = false;
-        }
-
-        if (rpi && rpi->has_multiview && sd->stereo.multiview)
-            allow_viewindex = true;
-
+        bool has_vs=false, has_tcs=false, has_tes=false;
+        uint32_t vs_stage=~0u, tes_stage=~0u;
         for (uint32_t s=0;s<ci->stageCount;s++) {
             VkShaderStageFlagBits st=ci->pStages[s].stage;
             if (st==VK_SHADER_STAGE_VERTEX_BIT)
@@ -1147,220 +1075,107 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 { has_tes=true; tes_stage=s; }
         }
 
+        /* ── Determine if this pipeline's render pass has multiview ──────
+         * gl_ViewIndex is 0 in non-multiview passes.  Patching VS/TES there
+         * bakes in left_eye_offset for ALL draws → deferred G-buffer / shadow
+         * passes render from left-eye-only perspective → monoscopic output.
+         * Leave non-multiview pass shaders unpatched so G-buffer, shadow maps,
+         * and post-fx all render from the CENTER perspective; the multiview
+         * final (swapchain) pass applies per-eye shift → image-space stereo
+         * for deferred content with shadows/lights/bloom properly aligned.   */
+        StereoRenderPassInfo *rpi = NULL;
+        bool in_mv_rp = false;
+        if (ci->renderPass != VK_NULL_HANDLE) {
+            rpi = stereo_rp_lookup(sd, ci->renderPass);
+            in_mv_rp = (rpi != NULL && rpi->has_multiview);
+        }
+        if (!in_mv_rp) {
+            STEREO_LOG(
+                "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
+                p,
+                (void*)(uintptr_t)ci->renderPass,
+                has_vs,
+                has_tes,
+                ci->stageCount);
+
+            /* TEMP: continue removed for diagnostics */
+        }
+
+        /* Substitute multiview render pass for pipeline compilation.
+         * Pipelines must be compiled against the MV render pass so the driver
+         * enables multiview optimisation and gl_ViewIndex receives the real
+         * per-view index (0 or 1).  Render-pass compatibility rules allow these
+         * pipelines to be used with both MV and non-MV framebuffers since
+         * viewMask is not part of the compatibility criteria. */
+        if (rpi && rpi->mv_handle)
+            infos[p].renderPass = rpi->mv_handle;
+
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
-         * by deferred lighting, SSAO, bloom, TAA, etc. Their FS samples from
-         * G-buffer / render-target textures (all upgraded to 2D_ARRAY).
-         *
-         * We patch FS to sampler2DArray + gl_ViewIndex so each eye reads its
-         * correct layer.
-         */
+         * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from
+         * G-buffer / render-target textures (all upgraded to 2D_ARRAY by
+         * stereo_CreateImage).  We patch the FS to use sampler2DArray +
+         * gl_ViewIndex so each eye reads its own G-buffer layer.
+         * The VS of a quad must NOT be patched — shifting the quad position
+         * would prevent it covering the full screen for one eye.
+         * Geometry pipelines (has vertex input) use Path A/B VS patching. */
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
 
-        /* Only attempt FS stereo patch if this is a quad pipeline */
         if (is_quad) {
-
-            /* FIX:
-             * FS patching must NOT depend strictly on multiview renderpass.
-             *
-             * Reason:
-             * - FS sampler conversion (2D → 2D_ARRAY) is required even in
-             *   non-multiview passes when stereo is active.
-             *
-             * - ViewIndex injection is handled inside SPIR-V patcher.
-             *
-             * - renderpass multiview only affects whether gl_ViewIndex is meaningful,
-             *   not whether texture layer conversion is required.
-             */
-            bool allow_fs_patch =
-                sd->stereo.enabled &&
-                sd->stereo.multiview &&
-                in_mv_rp;
-
-            if (allow_fs_patch) {
-
-                /* Find FS stage */
-                uint32_t fs_s = ~0u;
-                for (uint32_t s2 = 0; s2 < ci->stageCount; s2++) {
-                    if (ci->pStages[s2].stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
-                        fs_s = s2;
-                        break;
-                    }
-                }
-
-                if (fs_s == ~0u) {
-                    STEREO_LOG("Pipe %u: quad but no FS stage", p);
-                    /* do NOT continue pipeline compilation */
-                    goto fs_skip;
-                }
-
-                StereoShaderCache *e = cache_find(sd, ci->pStages[fs_s].module);
-                if (!e) {
-                    STEREO_LOG("Pipe %u: quad FS not cached (stageCount=%u)", p, ci->stageCount);
-                    goto fs_skip;
-                }
-
-                uint32_t *patched = NULL;
-                size_t pc2 = 0;
-
-                /* SPIR-V ID tracking across scan */
-                uint32_t fs_max_id = 0;
-
-                if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
-                    STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
-                    goto fs_skip;
-                }
-                
-                /* ───────────────────────────────────────────────────────────────
-                 * GLOBAL SPIR-V SANITY GUARD (CRITICAL)
-                 * Must run BEFORE any instruction scan or patch usage
-                 * ─────────────────────────────────────────────────────────────── */
-                
-                if (!patched || pc2 < 16 || pc2 > (1024 * 1024)) {
-                    STEREO_ERR("FS SPIR-V invalid module size pc2=%zu", pc2);
-                    goto fs_skip;
-                }
-                
-                /* SPIR-V header magic */
-                if (patched[0] != 0x07230203) {
-                    STEREO_ERR("FS SPIR-V bad magic: %08x", patched[0]);
-                    goto fs_skip;
-                }
-                
-                /* IMPORTANT: enforce instruction safety before scan loop */
-                #define SPV_WC(w)   ((w) >> 16)
-                #define SPV_OP(w)   ((w) & 0xFFFF)
-
-                /* ── GLOBAL SPIR-V SANITY GUARD ───────────────────────────── */
-                if (!patched || pc2 < 10 || pc2 > (1024 * 1024)) {
-                    STEREO_ERR("FS SPIR-V invalid module size pc2=%zu", pc2);
-                    goto fs_skip;
-                }
-                
-                /* SPIR-V header check */
-                if (patched[0] != 0x07230203) {
-                    STEREO_ERR("FS SPIR-V invalid magic %08x", patched[0]);
-                    goto fs_skip;
-                }
-
-                size_t i = 0;
-                while (i < pc2) {
-                    
-                    if (i >= pc2) break;
-                    
-                    uint32_t word = patched[i];
-                    uint32_t wc32 = SPV_WC(word);
-                    uint32_t op   = SPV_OP(word);
-                    
-                    /* HARD GUARD: invalid instruction header */
-                    if (wc32 == 0 || wc32 > 128 || i + wc32 > pc2) {
-                        STEREO_ERR("FS SPIR-V malformed at %zu (wc=%u op=%u)", i, wc32, op);
-                        goto fs_fail;
-                    }
-
-                    /* Only treat real instructions */
-                    if (op == SpvOpLoad && wc >= 3) {
-                        uint32_t result_id = patched[i + 2];
-                        if (result_id == 0) goto fs_fail;
-                        if (result_id > fs_max_id) fs_max_id = result_id;
-                    }
-
-                    if (op == SpvOpImageSampleImplicitLod && wc >= 5) {
-                        uint32_t result_id = patched[i + 2];
-                        if (result_id == 0) goto fs_fail;
-                        if (result_id > fs_max_id) fs_max_id = result_id;
-                    }
-
-                    i += wc;
-                }
-
-                goto fs_done;
-
-                fs_fail:
-                STEREO_ERR("INVALID SPV result_id=0");
-                spirv_patched_free(patched);
-                goto fs_skip;
-
-                fs_done:
-
-                /* FINALIZE SPIR-V IDS */
-                uint32_t final_max = fs_max_id + 16;
-                
-                /*
-                 * IMPORTANT:
-                 * Do NOT modify SPIR-V module header or bound here.
-                 * We only track for diagnostics.
-                 */
-                (void)final_max;
-
-                /* Optional dump */
-                if (dump) {
-                    uint64_t spv_hash = hash_spv(e->spv, e->words);
-                    char dp[512];
-                    _snprintf(
-                        dp,
-                        sizeof(dp) - 1,
-                        "%s\\%016llx-fs.spv",
-                        dump,
-                        (unsigned long long)spv_hash);
-
-                    FILE *f = fopen(dp, "wb");
-                    if (f) {
-                        fwrite(patched, 4, pc2, f);
-                        fclose(f);
-                    }
-                }
-
-                VkShaderModuleCreateInfo smci = {
-                    VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                    NULL,
-                    0,
-                    pc2 * 4,
-                    patched
-                };
-
-                VkShaderModule tmp = VK_NULL_HANDLE;
-                VkResult mr = sd->real.CreateShaderModule(
-                    sd->real_device,
-                    &smci,
-                    NULL,
-                    &tmp);
-
-                spirv_patched_free(patched);
-
-                if (mr != VK_SUCCESS) {
-                    STEREO_ERR("Pipe %u: quad FS module err %d", p, mr);
-                    goto fs_skip;
-                }
-
-                uint32_t sc2 = ci->stageCount;
-                VkPipelineShaderStageCreateInfo *st = malloc(sc2 * sizeof(*st));
-                if (!st) {
-                    sd->real.DestroyShaderModule(sd->real_device, tmp, NULL);
-                    goto fs_skip;
-                }
-
-                memcpy(st, ci->pStages, sc2 * sizeof(*st));
-                st[fs_s].module = tmp;
-
-                infos[p].pStages = st;
-                tmp_mod[p] = tmp;
-                tst[p] = st;
-
-                STEREO_LOG(
-                    "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
-                    p,
-                    sc2);
-
+            /* Find FS stage */
+            uint32_t fs_s = ~0u;
+            for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
+                if (ci->pStages[s2].stage == VK_SHADER_STAGE_FRAGMENT_BIT)
+                    { fs_s = s2; break; }
+            if (fs_s == ~0u) {
+                STEREO_LOG("Pipe %u: quad but no FS stage", p);
                 continue;
             }
+            StereoShaderCache *e = cache_find(sd, ci->pStages[fs_s].module);
+            if (!e) {
+                STEREO_LOG("Pipe %u: quad FS not cached (stageCount=%u)", p, ci->stageCount);
+                continue;
+            }
+            uint32_t *patched = NULL; size_t pc2 = 0;
+            if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
+                STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
+                continue;
+            }
+            if (dump) {
+                uint64_t spv_hash = hash_spv(e->spv, e->words);
+                char dp[512];
+                _snprintf(
+                    dp,
+                    sizeof(dp)-1,
+                    "%s\\%016llx-fs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f=fopen(dp,"wb");
+                if (f) {
+                    fwrite(patched,4,pc2,f);
+                    fclose(f);
+                }
+            }
+            VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                NULL,0,pc2*4,patched};
+            VkShaderModule tmp=VK_NULL_HANDLE;
+            VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
+            spirv_patched_free(patched);
+            if (mr!=VK_SUCCESS) {
+                STEREO_ERR("Pipe %u: quad FS module err %d",p,mr); continue; }
+            uint32_t sc2=ci->stageCount;
+            VkPipelineShaderStageCreateInfo *st=malloc(sc2*sizeof(*st));
+            if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
+            memcpy(st,ci->pStages,sc2*sizeof(*st));
+            st[fs_s].module=tmp;
+            infos[p].pStages=st; tmp_mod[p]=tmp; tst[p]=st;
+            STEREO_LOG("Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",p,sc2);
+            continue;
         }
 
-        fs_skip:
-
         /* ── Path A: patch existing TES ──────────────────────────────── */
-        if (has_tes && tes_stage!=~0u && allow_viewindex) {
+        if (has_tes && tes_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[tes_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
@@ -1372,7 +1187,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 sd->stereo.flip_eyes);
                 StereoDebugCtx dbgA = {
                     p,
-                    canonical_rp,
+                    ci->renderPass,
                     in_mv_rp,
                     (uint32_t)VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT
                 };
@@ -1441,8 +1256,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * Works on all modern drivers. No topology change, no extra stages.
          * Replaces the TCS+TES injection approach which crashed on newer
          * drivers due to strict PerVertex block interface validation.       */
-        /* FIX: only inject ViewIndex when multiview pipeline context exists */
-        if (has_vs && !has_tcs && vs_stage!=~0u && (sd->stereo.multiview)) {
+        if (has_vs && !has_tcs && vs_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
@@ -1453,7 +1267,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 conv,
                 sd->stereo.flip_eyes);
             STEREO_LOG(
-                "[CALL B] multiview=%d mv_pass=%d",
+                "[CALL B] multiview=%d pass_exists=%d",
                 sd->stereo.multiview,
                 sd->multiview_pass_exists);
             STEREO_LOG(
@@ -1462,7 +1276,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 e->words);
             StereoDebugCtx dbgB = {
                 p,
-                canonical_rp,
+                ci->renderPass,
                 in_mv_rp,
                 (uint32_t)VK_SHADER_STAGE_VERTEX_BIT
             };
@@ -1510,9 +1324,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                    p, ci->stageCount, has_vs, has_tes, has_tcs);
     }
 
-    if (sd->stereo.multiview && !allow_viewindex) {
-        STEREO_ERR("PIPELINE NOT IN MULTIVIEW MODE: %p", canonical_rp);
-    }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG("CreateGraphicsPipelines result=%d",res);
 
