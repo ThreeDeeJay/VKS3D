@@ -576,11 +576,23 @@ bool spirv_patch_stereo_vertex(
      *   - position writes
      *   - no matrix ops (procedural skybox / cubemap)
      * ───────────────────────────────────────────── */
+    bool is_fullscreen_like =
+        (!m.has_matrix_ops) &&
+        (m.pos_var != 0) &&
+        (m.exec_model == SpvExecVertex);
+
+    /* detect clip-space quads (UI / HUD / postprocess) */
+    bool is_clip_quad =
+        (m.has_direct_position_write) &&
+        (!m.has_matrix_ops);
+
+    /* SKY = NOT fullscreen quad */
     bool sky_candidate =
         (m.exec_model == SpvExecVertex) &&
         (m.pos_var != 0) &&
-        (!m.has_emit_vertex) &&
-        (m.emit_count == 0);
+        (!is_clip_quad) &&
+        (!m.has_direct_position_write);
+
     /* HUD/text/fullscreen shaders often write clip-space coordinates
      * directly and contain no matrix math. Stereoizing them pushes
      * them in front of the screen and causes excessive negative
