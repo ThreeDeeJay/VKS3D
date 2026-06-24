@@ -1118,6 +1118,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     (void*)canonical_rp,
                     rpi ? rpi->has_multiview : 0);
             }
+            /* CRITICAL: apply to pipeline create info */
+            infos[p].renderPass = canonical_rp;
             in_mv_rp = (rpi && rpi->has_multiview);
         }
         allow_viewindex = (sd->stereo.multiview && in_mv_rp);
@@ -1208,56 +1210,44 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     goto fs_skip;
                 }
 
-                /* walk instruction-by-instruction (NOT word-by-word) */
-                for (size_t i = 0; i < pc2; ) {
+                size_t i = 0;
+                while (i < pc2) {
 
                     uint32_t word = patched[i];
-                    uint16_t op = (uint16_t)(word & 0xFFFF);
-                    uint16_t wc = (uint16_t)(word >> 16);
+                    uint16_t op   = word & 0xFFFF;
+                    uint16_t wc   = word >> 16;
 
-                    if (wc == 0 || i + (size_t)wc > pc2) {
-                        STEREO_ERR("FS SPIR-V malformed at %zu (wc=%u op=%u)", i, wc, op);
-                        spirv_patched_free(patched);
-                        goto fs_skip;
-                    }
-                    /* SPIR-V sanity: first word must always be valid OpCode */
-                    if (i == 0 && op == 0) {
-                        STEREO_ERR("FS SPIR-V invalid header");
+                    /* HARD SAFETY: reject nonsense opcodes */
+                    if (op == 0 || op > 0xFFFF) {
+                        STEREO_ERR("FS invalid opcode at %zu: %u", i, op);
                         spirv_patched_free(patched);
                         goto fs_skip;
                     }
 
-                    /* OpLoad */
+                    /* Only treat real instructions */
                     if (op == SpvOpLoad && wc >= 3) {
-                        uint32_t result_id = patched[i + 1]; /* SPIR-V correct result id position */
-
-                        if (result_id == 0) {
-                            STEREO_ERR("INVALID SPV: OpLoad result_id=0 at word %zu", i);
-                            spirv_patched_free(patched);
-                            goto fs_skip;
-                        }
-
-                        if (result_id > fs_max_id)
-                            fs_max_id = result_id;
+                        uint32_t result_id = patched[i + 2];
+                        if (result_id == 0) goto fs_fail;
+                        if (result_id > fs_max_id) fs_max_id = result_id;
                     }
 
-                    /* OpImageSampleImplicitLod */
                     if (op == SpvOpImageSampleImplicitLod && wc >= 5) {
-                        uint32_t result_id = patched[i + 1]; /* SPIR-V correct result id position */
-
-                        if (result_id == 0) {
-                            STEREO_ERR("INVALID SPV: Sample result_id=0 at word %zu", i);
-                            spirv_patched_free(patched);
-                            goto fs_skip;
-                        }
-
-                        if (result_id > fs_max_id)
-                            fs_max_id = result_id;
+                        uint32_t result_id = patched[i + 2];
+                        if (result_id == 0) goto fs_fail;
+                        if (result_id > fs_max_id) fs_max_id = result_id;
                     }
 
-                    /* advance by instruction length */
                     i += wc;
                 }
+
+                goto fs_done;
+
+                fs_fail:
+                STEREO_ERR("INVALID SPV result_id=0");
+                spirv_patched_free(patched);
+                goto fs_skip;
+
+                fs_done:
 
                 /* FINALIZE SPIR-V IDS */
                 uint32_t final_max = fs_max_id + 16;
