@@ -568,6 +568,19 @@ bool spirv_patch_stereo_vertex(
             m.has_matrix_ops);
     }
 
+    /* ─────────────────────────────────────────────
+     * SKY / WORLD BACKGROUND OVERRIDE
+     * These are NOT HUD or screenspace quads.
+     * They often have:
+     *   - no emit vertex
+     *   - position writes
+     *   - no matrix ops (procedural skybox / cubemap)
+     * ───────────────────────────────────────────── */
+    bool sky_candidate =
+        (m.exec_model == SpvExecVertex) &&
+        (m.pos_var != 0) &&
+        (!m.has_emit_vertex) &&
+        (m.emit_count == 0);
     /* HUD/text/fullscreen shaders often write clip-space coordinates
      * directly and contain no matrix math. Stereoizing them pushes
      * them in front of the screen and causes excessive negative
@@ -579,7 +592,8 @@ bool spirv_patch_stereo_vertex(
      * Leave these monoscopic at screen depth.
      */
     if (m.exec_model == SpvExecVertex &&
-        !m.has_matrix_ops)
+        !m.has_matrix_ops &&
+        !sky_candidate)
     {
         STEREO_LOG(
             "[SCREENSPACE_SKIP] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u",
@@ -591,9 +605,6 @@ bool spirv_patch_stereo_vertex(
             m.view_var);
         return false;
     }
-
-    if (!m.is_patchable || !m.pos_var)
-        return false;
 
     if (!m.is_patchable || !m.pos_var)
         return false;
