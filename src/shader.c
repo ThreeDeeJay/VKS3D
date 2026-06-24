@@ -349,7 +349,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
     { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
     STEREO_LOG(
-        "STEREO_INJECTED pos_var=%u block=%d matrix=%d emit=%d",
+        "STEREO_INJECTED hash=%016llx pos_var=%u block=%d matrix=%d emit=%d",
+        (unsigned long long)hash_spv(m->words, m->count),
         m->pos_var,
         m->pos_is_block ? 1 : 0,
         m->has_matrix_ops ? 1 : 0,
