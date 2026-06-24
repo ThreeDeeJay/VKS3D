@@ -1053,7 +1053,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
     for (uint32_t p=0; p<N; p++) {
 
-        VkRenderPass canonical_rp = ci->renderPass;
 
         bool has_vs  = false;
         bool has_tcs = false;
@@ -1066,6 +1065,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool in_mv_rp = false;
         bool allow_viewindex = false;
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
+        VkRenderPass canonical_rp = ci->renderPass;
 
         /* ── Determine if this pipeline's render pass has multiview ──────
          * gl_ViewIndex is 0 in non-multiview passes.  Patching VS/TES there
