@@ -586,35 +586,33 @@ bool spirv_patch_stereo_vertex(
         (m.has_direct_position_write) &&
         (!m.has_matrix_ops);
 
-    /* SKY = NOT fullscreen quad */
-    bool sky_candidate =
+    /* SKY heuristic (IMPORTANT: allow no-matrix shaders) */
+    bool is_sky_like =
         (m.exec_model == SpvExecVertex) &&
         (m.pos_var != 0) &&
-        (!is_clip_quad) &&
-        (!m.has_direct_position_write);
+        (!m.has_direct_position_write) &&
+        (!is_clip_quad);
 
-    /* HUD/text/fullscreen shaders often write clip-space coordinates
-     * directly and contain no matrix math. Stereoizing them pushes
-     * them in front of the screen and causes excessive negative
-     * parallax.
-     *
-     * Examples:
-     *   gl_Position = vec4(pos.xy, 0.0, 1.0);
-     *
-     * Leave these monoscopic at screen depth.
-     */
-    if (m.exec_model == SpvExecVertex &&
-        !m.has_matrix_ops &&
-        !sky_candidate)
+    /* HUD/text/fullscreen shaders */
+    bool is_screenspace_ui =
+        (m.exec_model == SpvExecVertex) &&
+        (!m.has_matrix_ops) &&
+        (m.has_direct_position_write);
+
+    /* ─────────────────────────────────────────────
+     * SCREENSPACE SKIP (STRICTLY UI ONLY)
+     * ───────────────────────────────────────────── */
+    if (is_screenspace_ui && !is_sky_like)
     {
         STEREO_LOG(
-            "[SCREENSPACE_SKIP] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u",
+            "[SCREENSPACE_SKIP] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u sky=%d",
             (unsigned long long)hash_spv(m.words, m.count),
             m.count,
             m.pos_var,
             m.pos_is_block ? 1 : 0,
             m.has_emit_vertex ? 1 : 0,
-            m.view_var);
+            m.view_var,
+            is_sky_like ? 1 : 0);
         return false;
     }
 
