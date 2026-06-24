@@ -217,15 +217,20 @@ static void spv_scan(SpvMod *m)
     if (m->pos_is_block)
         do_scan(m,true);
 
-    /* ── SKY CLASSIFICATION (FINAL PASS ONLY) ───────────────── */
+    /* SKY CUBE / SKYBOX DETECTION:
+       Sky shaders often have:
+       - no emit vertex
+       - position output
+       - very few/no matrix ops
+       - no view-dependent logic
+    */
     if (m->exec_model == SpvExecVertex &&
-        m->has_matrix_ops &&
         m->pos_var &&
         !m->has_emit_vertex &&
         m->emit_count == 0)
     {
-        /* extra safety: exclude “geometry-like world shaders” */
-        if (m->view_var == 0 && m->has_mv_cap)
+        /* sky tends to be "simple transform or none" */
+        if (!m->has_direct_position_write || !m->has_matrix_ops)
         {
             m->looks_like_sky = true;
         }
@@ -237,7 +242,15 @@ static void spv_scan(SpvMod *m)
     else
     {
         m->looks_like_sky = false;
-    } 
+    }
+    /* ── SKY DIAGNOSTIC OUTPUT ───────────────────────────── */
+    STEREO_LOG("[SKYTEST] hash=%016llx sky=%d matrix=%d direct_write=%d pos_var=%u emit=%d",
+        (unsigned long long)hash_spv(m->words, m->count),
+        m->looks_like_sky,
+        m->has_matrix_ops,
+        m->has_direct_position_write,
+        m->pos_var,
+        m->emit_count);
 }
 
 uint64_t hash_spv(const uint32_t *data, size_t words)
@@ -281,6 +294,15 @@ typedef struct {
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m=c->m;
+    STEREO_LOG(
+        "[EMIT_ENTER] sky=%d pos=%u block=%d emit=%d matrix=%d view=%u force_far=%d",
+        m->looks_like_sky,
+        m->pos_var,
+        m->pos_is_block,
+        m->has_emit_vertex,
+        m->has_matrix_ops,
+        m->view_var,
+        c->force_far_depth);
     STEREO_LOG(
         "[EMIT] flip=%d lo=%f ro=%f proj=%d",
         c->flip_dbg,
@@ -430,6 +452,12 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 
 
     STEREO_LOG(
+        "[EMIT_EXIT] sky=%d wrote_pos=%u pptr=%u force_far=%d",
+        m->looks_like_sky,
+        m->pos_var,
+        pptr,
+        c->force_far_depth);
+    STEREO_LOG(
         "STEREO_INJECTED hash=%016llx pos_var=%u block=%d matrix=%d emit=%d",
         (unsigned long long)hash_spv(m->words, m->count),
         m->pos_var,
@@ -491,6 +519,15 @@ bool spirv_patch_stereo_vertex(
     m.next_id = m.bound;
     spv_scan(&m);
 
+    STEREO_LOG(
+        "[PATCH_DECISION] patchable=%d pos=%u sky=%d matrix=%d emits=%u view=%u mv=%d",
+        m.is_patchable,
+        m.pos_var,
+        m.looks_like_sky,
+        m.has_matrix_ops,
+        m.emit_count,
+        m.view_var,
+        m.has_mv_cap);
     STEREO_LOG(
         "SHADER_ANALYSIS exec=%d pos=%u view=%u block=%d emits=%u emitv=%d mvcap=%d matrix=%d patchable=%d",
         m.exec_model,
