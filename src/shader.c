@@ -102,17 +102,6 @@ typedef struct {
     uint32_t next_id;
 } SpvMod;
 
-uint64_t hash_spv(const uint32_t *data, size_t words)
-{
-    uint64_t h = 1469598103934665603ULL; // FNV offset basis
-    for (size_t i = 0; i < words; i++) {
-        uint64_t v = data[i];
-        h ^= v;
-        h *= 1099511628211ULL;
-    }
-    return h;
-}
-
 static void do_scan(SpvMod *m, bool p2)
 {
     const uint32_t *w=m->words;
@@ -228,20 +217,15 @@ static void spv_scan(SpvMod *m)
     if (m->pos_is_block)
         do_scan(m,true);
 
-    /* SKY CUBE / SKYBOX DETECTION:
-       Sky shaders often have:
-       - no emit vertex
-       - position output
-       - very few/no matrix ops
-       - no view-dependent logic
-    */
+    /* ── SKY CLASSIFICATION (FINAL PASS ONLY) ───────────────── */
     if (m->exec_model == SpvExecVertex &&
+        m->has_matrix_ops &&
         m->pos_var &&
         !m->has_emit_vertex &&
         m->emit_count == 0)
     {
-        /* sky tends to be "simple transform or none" */
-        if (!m->has_direct_position_write || !m->has_matrix_ops)
+        /* extra safety: exclude “geometry-like world shaders” */
+        if (m->view_var == 0 && m->has_mv_cap)
         {
             m->looks_like_sky = true;
         }
@@ -253,15 +237,18 @@ static void spv_scan(SpvMod *m)
     else
     {
         m->looks_like_sky = false;
+    } 
+}
+
+uint64_t hash_spv(const uint32_t *data, size_t words)
+{
+    uint64_t h = 1469598103934665603ULL; // FNV offset basis
+    for (size_t i = 0; i < words; i++) {
+        uint64_t v = data[i];
+        h ^= v;
+        h *= 1099511628211ULL;
     }
-    /* ── SKY DIAGNOSTIC OUTPUT ───────────────────────────── */
-    STEREO_LOG("[SKYTEST] hash=%016llx sky=%d matrix=%d direct_write=%d pos_var=%u emit=%d",
-        (unsigned long long)hash_spv(m->words, m->count),
-        m->looks_like_sky,
-        m->has_matrix_ops,
-        m->has_direct_position_write,
-        m->pos_var,
-        m->emit_count);
+    return h;
 }
 
 /* ── Stereo offset injection body ────────────────────────────────────────── */
@@ -294,15 +281,6 @@ typedef struct {
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m=c->m;
-    STEREO_LOG(
-        "[EMIT_ENTER] sky=%d pos=%u block=%d emit=%d matrix=%d view=%u force_far=%d",
-        m->looks_like_sky,
-        m->pos_var,
-        m->pos_is_block,
-        m->has_emit_vertex,
-        m->has_matrix_ops,
-        m->view_var,
-        c->force_far_depth);
     STEREO_LOG(
         "[EMIT] flip=%d lo=%f ro=%f proj=%d",
         c->flip_dbg,
@@ -416,9 +394,9 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
 
     /* ── SKY / FAR DEPTH OVERRIDE ─────────────────────────────── */
-    if ((c->force_far_depth || m->looks_like_sky) &&
-        m->exec_model == SpvExecVertex &&
-        m->pos_var)
+    if (c->force_far_depth && m->exec_model == SpvExecVertex &&
+        m->pos_var && !m->has_emit_vertex &&
+        m->emit_count == 0)
     {
         /* FARDEPTH SAFE MODE:
            Do NOT rebuild SSA chains (causes ID corruption).
@@ -452,12 +430,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 
 
     STEREO_LOG(
-        "[EMIT_EXIT] sky=%d wrote_pos=%u pptr=%u force_far=%d",
-        m->looks_like_sky,
-        m->pos_var,
-        pptr,
-        c->force_far_depth);
-    STEREO_LOG(
         "STEREO_INJECTED hash=%016llx pos_var=%u block=%d matrix=%d emit=%d",
         (unsigned long long)hash_spv(m->words, m->count),
         m->pos_var,
@@ -468,47 +440,27 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 
 static uint32_t safe_id_base(SpvMod *m)
 {
-    uint32_t max_id = 0;
+    uint32_t max_id = m->bound;
 
-    /* ── Scan entire module for ID usage ───────────────────── */
-    for (size_t i = 5; i < m->count;) {
+    for (size_t i = 5; i < m->count; i++) {
+        uint32_t op = m->words[i] & 0xffff;
+        uint32_t wc  = m->words[i] >> 16;
+        if (!wc) break;
 
-        if (i + 1 >= m->count)
-            break;
-
-        uint32_t word = m->words[i];
-        uint32_t op   = word & 0xffff;
-        uint32_t wc   = word >> 16;
-
-        if (wc == 0)
-            break;
-
-        /* IDs are operands 1..wc-1 in most instructions */
-        for (uint32_t k = 1; k < wc && (i + k) < m->count; k++) {
+        for (uint32_t k = 1; k < wc; k++) {
             uint32_t id = m->words[i + k];
-
-            /* Only consider plausible SPIR-V IDs */
-            if (id > max_id && id < 0x7fffffff)
-                max_id = id;
+            if (id > max_id) max_id = id;
         }
 
-        i += wc;
+        i += wc - 1;
     }
 
-    /* ── Safety margin (critical for injected SSA) ─────────── */
-    uint32_t base = max_id + 4096;
-
-    /* ── Prevent low-ID collisions with driver-generated IDs ─ */
+    uint32_t base = max_id + 1;
+    
+    /* SPIR-V safety: avoid reuse of low reserved ID ranges */
     if (base < 1000)
         base = 1000;
-
-    /* ── Optional hard safety clamp (prevents wrap bugs) ───── */
-    if (base < max_id)
-        base = max_id + 1;
-
-    STEREO_LOG("[IDBASE] max_id=%u base=%u bound_hint=%u",
-               max_id, base, m->bound);
-
+    
     return base;
 }
 
@@ -539,15 +491,6 @@ bool spirv_patch_stereo_vertex(
     m.next_id = m.bound;
     spv_scan(&m);
 
-    STEREO_LOG(
-        "[PATCH_DECISION] patchable=%d pos=%u sky=%d matrix=%d emits=%u view=%u mv=%d",
-        m.is_patchable,
-        m.pos_var,
-        m.looks_like_sky,
-        m.has_matrix_ops,
-        m.emit_count,
-        m.view_var,
-        m.has_mv_cap);
     STEREO_LOG(
         "SHADER_ANALYSIS exec=%d pos=%u view=%u block=%d emits=%u emitv=%d mvcap=%d matrix=%d patchable=%d",
         m.exec_model,
@@ -596,9 +539,7 @@ bool spirv_patch_stereo_vertex(
      * Leave these monoscopic at screen depth.
      */
     if (m.exec_model == SpvExecVertex &&
-        !m.has_matrix_ops &&
-        !m.pos_is_block &&
-        !m.has_viewindex_builtin)
+        !m.has_matrix_ops)
     {
         STEREO_LOG(
             "SCREENSPACE_SKIP pos_var=%u block=%d emit=%d",
@@ -626,7 +567,6 @@ bool spirv_patch_stereo_vertex(
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
     uint32_t nid = safe_id_base(&m);
-    STEREO_LOG("[IDBASE] starting nid=%u bound=%u", nid, m.bound);
     uint32_t id_ptr_v4=nid++, id_ptr_int=nid++;
     uint32_t id_new_it=0;
     if (!m.it && inj_vi && !m.view_var) { id_new_it=nid++; m.it=id_new_it; }
