@@ -208,20 +208,6 @@ static void spv_scan(SpvMod *m)
     /* First pass: discover decorations/types. */
     do_scan(m,false);
 
-    /* ── SKY HEURISTIC CLASSIFICATION ─────────────────────────── */
-    if (m->exec_model == SpvExecVertex &&
-        m->has_matrix_ops &&
-        m->pos_var &&
-        !m->has_emit_vertex &&
-        m->emit_count == 0)
-    {
-        /* Sky / atmosphere / dome shaders:
-           - transform but no animation emission
-           - no geometry expansion
-           - typically camera-relative */
-        m->looks_like_sky = true;
-    }
-
     /* Run again now that block Position info is known.
        Some TES shaders declare OpTypePointer before
        the OpMemberDecorate(BuiltIn Position). */
@@ -229,6 +215,16 @@ static void spv_scan(SpvMod *m)
 
     if (m->pos_is_block)
         do_scan(m,true);
+
+    /* ── SKY CLASSIFICATION (FINAL PASS ONLY) ───────────────── */
+    if (m->exec_model == SpvExecVertex &&
+        m->has_matrix_ops &&
+        m->pos_var &&
+        !m->has_emit_vertex &&
+        m->emit_count == 0)
+    {
+        m->looks_like_sky = true;
+    }
 }
 
 uint64_t hash_spv(const uint32_t *data, size_t words)
