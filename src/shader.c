@@ -1048,20 +1048,43 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         ro,
         sd->stereo.flip_eyes);
 
-    bool has_vs=false, has_tcs=false, has_tes=false;
-    uint32_t vs_stage=~0u, tes_stage=~0u;
-
-    StereoRenderPassInfo *rpi = NULL;
-    bool in_mv_rp = false;
-    
-
     for (uint32_t p=0; p<N; p++) {
+
+        bool has_vs  = false;
+        bool has_tcs = false;
+        bool has_tes = false;
+
+        uint32_t vs_stage  = ~0u;
+        uint32_t tes_stage = ~0u;
+
+        StereoRenderPassInfo *rpi = NULL;
+        bool in_mv_rp = false;
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
 
+        /* ── Determine if this pipeline's render pass has multiview ──────
+         * gl_ViewIndex is 0 in non-multiview passes.  Patching VS/TES there
+         * bakes in left_eye_offset for ALL draws → deferred G-buffer / shadow
+         * passes render from left-eye-only perspective → monoscopic output.
+         * Leave non-multiview pass shaders unpatched so G-buffer, shadow maps,
+         * and post-fx all render from the CENTER perspective; the multiview
+         * final (swapchain) pass applies per-eye shift → image-space stereo
+         * for deferred content with shadows/lights/bloom properly aligned.   */
         if (ci->renderPass != VK_NULL_HANDLE) {
             rpi = stereo_rp_lookup(sd, ci->renderPass);
             in_mv_rp = (rpi != NULL && rpi->has_multiview);
             }
+        if (!in_mv_rp) {
+            STEREO_LOG(
+                "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
+                p,
+                (void*)(uintptr_t)ci->renderPass,
+                has_vs,
+                has_tes,
+                ci->stageCount);
+
+            continue;
+        }
+
 
         bool allow_viewindex =
             sd->stereo.multiview && in_mv_rp;
@@ -1076,41 +1099,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 { has_tes=true; tes_stage=s; }
         }
 
-        /* ── Determine if this pipeline's render pass has multiview ──────
-         * gl_ViewIndex is 0 in non-multiview passes.  Patching VS/TES there
-         * bakes in left_eye_offset for ALL draws → deferred G-buffer / shadow
-         * passes render from left-eye-only perspective → monoscopic output.
-         * Leave non-multiview pass shaders unpatched so G-buffer, shadow maps,
-         * and post-fx all render from the CENTER perspective; the multiview
-         * final (swapchain) pass applies per-eye shift → image-space stereo
-         * for deferred content with shadows/lights/bloom properly aligned.   */
-        StereoRenderPassInfo *rpi = NULL;
-        bool in_mv_rp = false;
-        if (ci->renderPass != VK_NULL_HANDLE) {
-            rpi = stereo_rp_lookup(sd, ci->renderPass);
-            in_mv_rp = (rpi != NULL && rpi->has_multiview);
-        }
-        if (!in_mv_rp) {
-            STEREO_LOG(
-                "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
-                p,
-                (void*)(uintptr_t)ci->renderPass,
-                has_vs,
-                has_tes,
-                ci->stageCount);
-
-            /* TEMP: continue removed for diagnostics */
-        }
-
-        /* Substitute multiview render pass for pipeline compilation.
-         * Pipelines must be compiled against the MV render pass so the driver
-         * enables multiview optimisation and gl_ViewIndex receives the real
-         * per-view index (0 or 1).  Render-pass compatibility rules allow these
-         * pipelines to be used with both MV and non-MV framebuffers since
-         * viewMask is not part of the compatibility criteria. */
-        if (rpi && rpi->mv_handle)
-            infos[p].renderPass = rpi->mv_handle;
-
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
          * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from
@@ -1123,7 +1111,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
 
-        if (is_quad) {
+        if (is_quad && in_mv_rp) {
             /* Find FS stage */
             uint32_t fs_s = ~0u;
             for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
@@ -1176,7 +1164,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
 
         /* ── Path A: patch existing TES ──────────────────────────────── */
-        if (has_tes && tes_stage!=~0u) {
+        if (has_tes && tes_stage!=~0u && allow_viewindex) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[tes_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
