@@ -511,6 +511,15 @@ bool spirv_patch_stereo_vertex(
         m.has_mv_cap,
         m.has_matrix_ops);
     uint64_t spv_hash = hash_spv(m.words, m.count);
+    if (spv_hash == 0x4316779e1c0bcc4dULL)
+    {
+        STEREO_LOG(
+            "[SKYHASH] pipeline_stage=%d words=%zu pos=%u block=%d",
+            m.exec_model,
+            m.count,
+            m.pos_var,
+            m.pos_is_block ? 1 : 0);
+    }
     STEREO_LOG(
         "PATCHABLE shader: hash=%016llx-vs.spv words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
         (unsigned long long)spv_hash,
@@ -520,7 +529,15 @@ bool spirv_patch_stereo_vertex(
         m.emit_count,
         m.pos_var,
         m.view_var);
-
+    if (spv_hash == 0x4316779e1c0bcc4dULL && dbg)
+    {
+        STEREO_LOG(
+            "[SKYHASH_PASS] rp=%p mv=%d pipe=%u stage=%u",
+            (void*)dbg->render_pass,
+            dbg->is_multiview,
+            dbg->pipeline_index,
+            dbg->stage);
+    }
     if (m.exec_model == SpvExecVertex)
     {
         STEREO_LOG(
