@@ -1053,6 +1053,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
     for (uint32_t p=0; p<N; p++) {
 
+        VkRenderPass canonical_rp = ci->renderPass;
+
         bool has_vs  = false;
         bool has_tcs = false;
         bool has_tes = false;
@@ -1198,6 +1200,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 uint32_t *patched = NULL;
                 size_t pc2 = 0;
 
+                /* SPIR-V ID tracking across scan */
+                uint32_t fs_max_id = 0;
+
                 if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
                     STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
                     goto fs_skip;
@@ -1210,7 +1215,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     uint16_t op = (uint16_t)(word & 0xFFFF);
                     uint16_t wc = (uint16_t)(word >> 16);
 
-                    if (wc == 0 || i + wc > pc2) {
+                    if (wc == 0 || i + (size_t)wc > pc2) {
                         STEREO_ERR("FS SPIR-V malformed at %zu (wc=%u op=%u)", i, wc, op);
                         spirv_patched_free(patched);
                         goto fs_skip;
@@ -1254,8 +1259,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     i += wc;
                 }
 
-                /* SPIR-V ID tracking across scan */
-                uint32_t fs_max_id = 0;
                 /* FINALIZE SPIR-V IDS */
                 uint32_t final_max = fs_max_id + 16;
                 

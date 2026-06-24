@@ -580,6 +580,8 @@ typedef struct StereoDevice {
     HWND                   comp_hwnd;
     void                  *comp_composed;
     uint32_t               comp_w, comp_h;
+
+    VkRenderPass           mv_renderpass;
 } StereoDevice;
 
 /* -- Stereo UBO layout ----------------------------------------------------- */
