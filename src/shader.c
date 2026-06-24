@@ -394,9 +394,9 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
 
     /* ── SKY / FAR DEPTH OVERRIDE ─────────────────────────────── */
-    if (c->force_far_depth && m->exec_model == SpvExecVertex &&
-        m->pos_var && !m->has_emit_vertex &&
-        m->emit_count == 0)
+    if ((c->force_far_depth || m->looks_like_sky) &&
+        m->exec_model == SpvExecVertex &&
+        m->pos_var)
     {
         /* FARDEPTH SAFE MODE:
            Do NOT rebuild SSA chains (causes ID corruption).
@@ -539,7 +539,9 @@ bool spirv_patch_stereo_vertex(
      * Leave these monoscopic at screen depth.
      */
     if (m.exec_model == SpvExecVertex &&
-        !m.has_matrix_ops)
+        !m.has_matrix_ops &&
+        !m.pos_is_block &&
+        !m.has_viewindex_builtin)
     {
         STEREO_LOG(
             "SCREENSPACE_SKIP pos_var=%u block=%d emit=%d",
