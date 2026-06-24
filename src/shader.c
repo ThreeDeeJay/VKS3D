@@ -218,14 +218,26 @@ static void spv_scan(SpvMod *m)
         do_scan(m,true);
 
     /* ── SKY CLASSIFICATION (FINAL PASS ONLY) ───────────────── */
-    if (m->exec_model == SpvExecVertex &&
-        m->has_matrix_ops &&
-        m->pos_var &&
-        !m->has_emit_vertex &&
-        m->emit_count == 0)
+    if (m.exec_model == SpvExecVertex &&
+        m.has_matrix_ops &&
+        m.pos_var &&
+        !m.has_emit_vertex &&
+        m.emit_count == 0)
     {
-        m->looks_like_sky = true;
+        /* extra safety: exclude “geometry-like world shaders” */
+        if (m.view_var == 0 && m.has_mv_cap)
+        {
+            m.looks_like_sky = true;
+        }
+        else
+        {
+            m.looks_like_sky = false;
+        }
     }
+    else
+    {
+        m.looks_like_sky = false;
+    } 
 }
 
 uint64_t hash_spv(const uint32_t *data, size_t words)
@@ -382,7 +394,9 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
 
     /* ── SKY / FAR DEPTH OVERRIDE ─────────────────────────────── */
-    if (c->force_far_depth)
+    if (c->force_far_depth && m->exec_model == SpvExecVertex &&
+        m->pos_var && !m->has_emit_vertex &&
+        m->emit_count == 0)
     {
         /* FARDEPTH SAFE MODE:
            Do NOT rebuild SSA chains (causes ID corruption).
@@ -390,7 +404,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         
         uint32_t tmp = (*nid)++;
         /* tmp = load(position) */
-        uint32_t a1[] = {op_(SpvOpLoad,4), m->v4t, tmp, pptr};
+        uint32_t a1[] = {op_(SpvOpLoad,4), m->v4t, tmp, np};
         sb_push_n(out, a1, 4);
     
         /* tmp.z = 0.9999 (force far plane) */
@@ -441,7 +455,13 @@ static uint32_t safe_id_base(SpvMod *m)
         i += wc - 1;
     }
 
-    return max_id + 1;
+    uint32_t base = max_id + 1;
+    
+    /* SPIR-V safety: avoid reuse of low reserved ID ranges */
+    if (base < 1000)
+        base = 1000;
+    
+    return base;
 }
 
 /* ── Public patcher ──────────────────────────────────────────────────────── */
