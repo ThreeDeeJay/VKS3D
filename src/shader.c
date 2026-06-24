@@ -420,6 +420,26 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         m->has_emit_vertex ? 1 : 0);
 }
 
+static uint32_t safe_id_base(SpvMod *m)
+{
+    uint32_t max_id = m->bound;
+
+    for (size_t i = 5; i < m->count; i++) {
+        uint32_t op = m->words[i] & 0xffff;
+        uint32_t wc  = m->words[i] >> 16;
+        if (!wc) break;
+
+        for (uint32_t k = 1; k < wc; k++) {
+            uint32_t id = m->words[i + k];
+            if (id > max_id) max_id = id;
+        }
+
+        i += wc - 1;
+    }
+
+    return max_id + 1;
+}
+
 /* ── Public patcher ──────────────────────────────────────────────────────── */
 bool spirv_patch_stereo_vertex(
     const uint32_t *in, size_t in_c,
@@ -521,7 +541,7 @@ bool spirv_patch_stereo_vertex(
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
-    uint32_t nid=m.bound;
+    uint32_t nid = safe_id_base(&m);
     uint32_t id_ptr_v4=nid++, id_ptr_int=nid++;
     uint32_t id_new_it=0;
     if (!m.it && inj_vi && !m.view_var) { id_new_it=nid++; m.it=id_new_it; }
