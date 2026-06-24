@@ -348,6 +348,12 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
     { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
     { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
+    STEREO_LOG(
+        "STEREO_INJECTED pos_var=%u block=%d matrix=%d emit=%d",
+        m->pos_var,
+        m->pos_is_block ? 1 : 0,
+        m->has_matrix_ops ? 1 : 0,
+        m->has_emit_vertex ? 1 : 0);
 }
 
 /* ── Public patcher ──────────────────────────────────────────────────────── */
@@ -375,6 +381,17 @@ bool spirv_patch_stereo_vertex(
     m.count=in_c;
     spv_scan(&m);
 
+    STEREO_LOG(
+        "SHADER_ANALYSIS exec=%d pos=%u view=%u block=%d emits=%u emitv=%d mvcap=%d matrix=%d patchable=%d",
+        m.exec_model,
+        m.pos_var,
+        m.view_var,
+        m.pos_is_block ? 1 : 0,
+        (unsigned)m.emit_count,
+        m.has_emit_vertex ? 1 : 0,
+        m.has_mv_cap,
+        m.has_matrix_ops,
+        m.is_patchable ? 1 : 0);
     STEREO_LOG(
         "SPIRV scan: exec=%d pos=%u view=%u emits=%u mvcap=%d matrix=%d",
         m.exec_model,
@@ -415,7 +432,10 @@ bool spirv_patch_stereo_vertex(
         !m.has_matrix_ops)
     {
         STEREO_LOG(
-            "Skipping stereo patch: likely screen-space shader");
+            "SCREENSPACE_SKIP pos_var=%u block=%d emit=%d",
+            m.pos_var,
+            m.pos_is_block ? 1 : 0,
+            m.has_emit_vertex ? 1 : 0);
         return false;
     }
 
