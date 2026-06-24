@@ -528,6 +528,16 @@ bool spirv_patch_stereo_vertex(
         (m.emit_count == 0) &&
         (!m.has_direct_position_write);
     
+    /* ─────────────────────────────────────────────
+     * SKY FIX: ensure stereo separation even when
+     * shader does NOT provide ViewIndex or matrix ops
+     * ───────────────────────────────────────────── */
+    if (sky_candidate)
+    {
+        /* Force view usage so sel != 0 path is active */
+        m.view_var = m.view_var ? m.view_var : 1;
+    }
+
     STEREO_LOG(
         "[SKYCAND] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u direct=%d matrix=%d sky=%d",
         hash_spv(m.words, m.count),
