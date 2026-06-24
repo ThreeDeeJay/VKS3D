@@ -617,7 +617,6 @@ bool spirv_patch_stereo_vertex(
     bool is_sky_like =
         (m.exec_model == SpvExecVertex) &&
         (m.pos_var != 0) &&
-        (!m.has_direct_position_write) &&
         (!is_clip_quad);
 
     /* HUD/text/fullscreen shaders */
