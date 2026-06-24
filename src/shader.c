@@ -218,25 +218,25 @@ static void spv_scan(SpvMod *m)
         do_scan(m,true);
 
     /* ── SKY CLASSIFICATION (FINAL PASS ONLY) ───────────────── */
-    if (m.exec_model == SpvExecVertex &&
-        m.has_matrix_ops &&
-        m.pos_var &&
-        !m.has_emit_vertex &&
-        m.emit_count == 0)
+    if (m->exec_model == SpvExecVertex &&
+        m->has_matrix_ops &&
+        m->pos_var &&
+        !m->has_emit_vertex &&
+        m->emit_count == 0)
     {
         /* extra safety: exclude “geometry-like world shaders” */
-        if (m.view_var == 0 && m.has_mv_cap)
+        if (m->view_var == 0 && m->has_mv_cap)
         {
-            m.looks_like_sky = true;
+            m->looks_like_sky = true;
         }
         else
         {
-            m.looks_like_sky = false;
+            m->looks_like_sky = false;
         }
     }
     else
     {
-        m.looks_like_sky = false;
+        m->looks_like_sky = false;
     } 
 }
 
