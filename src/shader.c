@@ -771,7 +771,7 @@ bool spirv_patch_stereo_fs(
     uint32_t n_patches = fs_count_patches(&s, in, in_c);
 
     /* Allocate new IDs above current bound */
-    uint32_t nid           = in[3];
+    uint32_t nid           = s.max_id + 1;
     uint32_t new_int_id    = s.int_id        ? s.int_id        : nid++;
     uint32_t new_v3f_id    = s.v3float_id    ? s.v3float_id    : nid++;
     uint32_t new_v3i_id    = nid++;
@@ -958,7 +958,7 @@ bool spirv_patch_stereo_fs(
         i += wc;
     }
 
-    ob.w[3] = samp_nid + 1;
+    ob.w[3] = nid;
     *out   = ob.w;
     *out_c = ob.n;
     STEREO_LOG("FS patched: %u 2D img types→arr, %u samples extended, bound %u→%u",
@@ -1154,6 +1154,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
                 uint32_t *patched = NULL;
                 size_t pc2 = 0;
+                uint32_t fs_max_id = 0;
 
                 if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
                     STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
@@ -1172,7 +1173,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
                     /* OpLoad / Sample instructions must be validated via result ID field */
                     if (op == SpvOpLoad) {
-                        uint32_t result_id = patched[i + 2]; /* result id is always operand 2 */
+                        uint32_t result_id = patched[i + 2];
+
+                        if (result_id > fs_max_id)
+                            fs_max_id = result_id;
+
                         if (result_id == 0) {
                             STEREO_ERR("INVALID SPV: OpLoad result_id=0 at word %zu", i);
                             spirv_patched_free(patched);
@@ -1182,6 +1187,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
                     if (op == SpvOpImageSampleImplicitLod) {
                         uint32_t result_id = patched[i + 2];
+
+                        if (result_id > fs_max_id)
+                            fs_max_id = result_id;
+
                         if (result_id == 0) {
                             STEREO_ERR("INVALID SPV: Sample result_id=0 at word %zu", i);
                             spirv_patched_free(patched);
@@ -1189,6 +1198,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         }
                     }
                 }
+
+                /* FINALIZE SPIR-V BOUND USING ACTUAL MAX ID FOUND */
+                uint32_t final_max = fs_max_id;
+                
+                /* safety margin for injected temporaries */
+                final_max += 16;
+                
+                ob.w[3] = final_max;
 
                 /* Optional dump */
                 if (dump) {
