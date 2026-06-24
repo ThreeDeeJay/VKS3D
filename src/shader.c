@@ -1097,7 +1097,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              * ensure all pipeline RP pointers map to MV RP when available
              */
 
-            VkRenderPass canonical_rp = canonical_rp;
 
             StereoRenderPassInfo *rpi =
                 stereo_rp_lookup(sd, canonical_rp);
@@ -1105,7 +1104,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             /* If not multiview but MV exists globally, remap */
             if ((!rpi || !rpi->has_multiview) &&
                 sd->stereo.multiview &&
-                sd->mv_renderpass != VK_NULL_HANDLE)
+                sd->mv_renderpass)
             {
                 canonical_rp = sd->mv_renderpass;
 
@@ -1198,7 +1197,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
                 uint32_t *patched = NULL;
                 size_t pc2 = 0;
-                uint32_t fs_max_id = 0;
 
                 if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
                     STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
@@ -1209,18 +1207,24 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 for (size_t i = 0; i < pc2; ) {
 
                     uint32_t word = patched[i];
-                    uint16_t wc   = (uint16_t)(word >> 16);
-                    uint16_t op   = (uint16_t)(word & 0xFFFF);
+                    uint16_t op = (uint16_t)(word & 0xFFFF);
+                    uint16_t wc = (uint16_t)(word >> 16);
 
                     if (wc == 0 || i + wc > pc2) {
-                        STEREO_ERR("FS SPIR-V malformed at %zu (wc=%u)", i, wc);
+                        STEREO_ERR("FS SPIR-V malformed at %zu (wc=%u op=%u)", i, wc, op);
+                        spirv_patched_free(patched);
+                        goto fs_skip;
+                    }
+                    /* SPIR-V sanity: first word must always be valid OpCode */
+                    if (i == 0 && op == 0) {
+                        STEREO_ERR("FS SPIR-V invalid header");
                         spirv_patched_free(patched);
                         goto fs_skip;
                     }
 
                     /* OpLoad */
                     if (op == SpvOpLoad && wc >= 3) {
-                        uint32_t result_id = patched[i + 2];
+                        uint32_t result_id = patched[i + 1]; /* SPIR-V correct result id position */
 
                         if (result_id == 0) {
                             STEREO_ERR("INVALID SPV: OpLoad result_id=0 at word %zu", i);
@@ -1234,7 +1238,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
                     /* OpImageSampleImplicitLod */
                     if (op == SpvOpImageSampleImplicitLod && wc >= 5) {
-                        uint32_t result_id = patched[i + 2];
+                        uint32_t result_id = patched[i + 1]; /* SPIR-V correct result id position */
 
                         if (result_id == 0) {
                             STEREO_ERR("INVALID SPV: Sample result_id=0 at word %zu", i);
@@ -1250,9 +1254,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     i += wc;
                 }
 
+                /* SPIR-V ID tracking across scan */
                 uint32_t fs_max_id = 0;
-                
-                /* FINALIZE SPIR-V IDS (debug only) */
+                /* FINALIZE SPIR-V IDS */
                 uint32_t final_max = fs_max_id + 16;
                 
                 /*
@@ -1410,7 +1414,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * Replaces the TCS+TES injection approach which crashed on newer
          * drivers due to strict PerVertex block interface validation.       */
         /* FIX: only inject ViewIndex when multiview pipeline context exists */
-        if (has_vs && !has_tcs && vs_stage!=~0u && allow_viewindex) {
+        if (has_vs && !has_tcs && vs_stage!=~0u && (sd->stereo.multiview)) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
