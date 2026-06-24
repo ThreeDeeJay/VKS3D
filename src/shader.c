@@ -96,6 +96,7 @@ typedef struct {
     uint32_t view_var, ft, v4t, it, bt, ptr_out_v4, ptr_in_int;
     size_t   fn_word;
     uint32_t emit_count;
+    bool     force_far_depth;
 } SpvMod;
 
 static void do_scan(SpvMod *m, bool p2)
@@ -238,6 +239,7 @@ typedef struct {
     float lo_dbg;
     float ro_dbg;
     int   flip_dbg;
+    bool  force_far_depth;
 } BodyCtx;
 
 typedef struct {
@@ -347,7 +349,52 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         }
     }
     { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
-    { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
+
+    STEREO_LOG(
+        "[FARDEPTH] hash=%016llx force=%d pos_var=%u block=%d emit=%d",
+        (unsigned long long)hash_spv(m->words, m->count),
+        c->force_far_depth,
+        m->pos_var,
+        m->pos_is_block ? 1 : 0,
+        m->has_emit_vertex ? 1 : 0);
+
+    if (c->force_far_depth)
+    {
+        STEREO_LOG("[FARDEPTH] APPLYING override to shader hash=%016llx",
+                   (unsigned long long)hash_spv(m->words, m->count));
+    }
+
+    /* ── SKY / FAR DEPTH OVERRIDE ─────────────────────────────── */
+    if (c->force_far_depth)
+    {
+        uint32_t z = (*nid)++;
+        uint32_t w = (*nid)++;
+        uint32_t tmp = (*nid)++;
+    
+        /* tmp = np */
+        uint32_t a1[] = {op_(SpvOpCopyObject,4), m->v4t, tmp, np};
+        sb_push_n(out, a1, 4);
+    
+        /* z = w */
+        uint32_t a2[] = {op_(SpvOpCompositeExtract,5), m->ft, z, tmp, 3u};
+        sb_push_n(out, a2, 5);
+    
+        uint32_t a3[] = {op_(SpvOpCompositeExtract,5), m->ft, w, tmp, 3u};
+        sb_push_n(out, a3, 5);
+    
+        uint32_t a4[] = {op_(SpvOpCompositeInsert,6), m->v4t, np, w, tmp, 2u};
+        sb_push_n(out, a4, 6);
+    
+        uint32_t a5[] = {op_(SpvOpStore,3), pptr, np};
+        sb_push_n(out, a5, 3);
+    }
+    else
+    {
+        uint32_t w[]={op_(SpvOpStore,3),pptr,np};
+        sb_push_n(out,w,3);
+    }
+
+
     STEREO_LOG(
         "STEREO_INJECTED hash=%016llx pos_var=%u block=%d matrix=%d emit=%d",
         (unsigned long long)hash_spv(m->words, m->count),
@@ -518,13 +565,17 @@ bool spirv_patch_stereo_vertex(
              projection_mode,
              lo,
              ro,
-             0};
+             0,
+             false};
     STEREO_LOG(
         "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
         ro,
         conv,
         projection_mode);
+    STEREO_LOG("[BC] shader=%016llx force_far_depth=%d",
+               (unsigned long long)hash_spv(m.words, m.count),
+               bc.force_far_depth);
 
     size_t ins_t=0, ins_b=0;
     for (size_t i=5;i<in_c;) {
