@@ -1174,7 +1174,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              *   not whether texture layer conversion is required.
              */
             bool allow_fs_patch =
-                sd->stereo.enabled && sd->stereo.multiview;
+                sd->stereo.enabled &&
+                sd->stereo.multiview &&
+                in_mv_rp;
 
             if (allow_fs_patch) {
 
@@ -1209,19 +1211,52 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
                     goto fs_skip;
                 }
+                
+                /* ───────────────────────────────────────────────────────────────
+                 * GLOBAL SPIR-V SANITY GUARD (CRITICAL)
+                 * Must run BEFORE any instruction scan or patch usage
+                 * ─────────────────────────────────────────────────────────────── */
+                
+                if (!patched || pc2 < 16 || pc2 > (1024 * 1024)) {
+                    STEREO_ERR("FS SPIR-V invalid module size pc2=%zu", pc2);
+                    goto fs_skip;
+                }
+                
+                /* SPIR-V header magic */
+                if (patched[0] != 0x07230203) {
+                    STEREO_ERR("FS SPIR-V bad magic: %08x", patched[0]);
+                    goto fs_skip;
+                }
+                
+                /* IMPORTANT: enforce instruction safety before scan loop */
+                #define SPV_WC(w)   ((w) >> 16)
+                #define SPV_OP(w)   ((w) & 0xFFFF)
+
+                /* ── GLOBAL SPIR-V SANITY GUARD ───────────────────────────── */
+                if (!patched || pc2 < 10 || pc2 > (1024 * 1024)) {
+                    STEREO_ERR("FS SPIR-V invalid module size pc2=%zu", pc2);
+                    goto fs_skip;
+                }
+                
+                /* SPIR-V header check */
+                if (patched[0] != 0x07230203) {
+                    STEREO_ERR("FS SPIR-V invalid magic %08x", patched[0]);
+                    goto fs_skip;
+                }
 
                 size_t i = 0;
                 while (i < pc2) {
-
+                    
+                    if (i >= pc2) break;
+                    
                     uint32_t word = patched[i];
-                    uint16_t op   = word & 0xFFFF;
-                    uint16_t wc   = word >> 16;
-
-                    /* HARD SAFETY: reject nonsense opcodes */
-                    if (op == 0 || op > 0xFFFF) {
-                        STEREO_ERR("FS invalid opcode at %zu: %u", i, op);
-                        spirv_patched_free(patched);
-                        goto fs_skip;
+                    uint32_t wc32 = SPV_WC(word);
+                    uint32_t op   = SPV_OP(word);
+                    
+                    /* HARD GUARD: invalid instruction header */
+                    if (wc32 == 0 || wc32 > 128 || i + wc32 > pc2) {
+                        STEREO_ERR("FS SPIR-V malformed at %zu (wc=%u op=%u)", i, wc32, op);
+                        goto fs_fail;
                     }
 
                     /* Only treat real instructions */
@@ -1475,6 +1510,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                    p, ci->stageCount, has_vs, has_tes, has_tcs);
     }
 
+    if (sd->stereo.multiview && !allow_viewindex) {
+        STEREO_ERR("PIPELINE NOT IN MULTIVIEW MODE: %p", canonical_rp);
+    }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG("CreateGraphicsPipelines result=%d",res);
 
