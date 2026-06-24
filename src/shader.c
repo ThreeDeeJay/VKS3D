@@ -1060,6 +1060,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
         StereoRenderPassInfo *rpi = NULL;
         bool in_mv_rp = false;
+        bool allow_viewindex = false;
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
 
         /* ── Determine if this pipeline's render pass has multiview ──────
@@ -1072,8 +1073,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * for deferred content with shadows/lights/bloom properly aligned.   */
         if (ci->renderPass != VK_NULL_HANDLE) {
             rpi = stereo_rp_lookup(sd, ci->renderPass);
-            in_mv_rp = (rpi != NULL && rpi->has_multiview);
-            }
+            in_mv_rp = (rpi && rpi->has_multiview);
+        }
+        allow_viewindex = (sd->stereo.multiview && in_mv_rp);
         if (!in_mv_rp) {
             STEREO_LOG(
                 "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
@@ -1082,13 +1084,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 has_vs,
                 has_tes,
                 ci->stageCount);
-
-            allow_viewindex = false;
             in_mv_rp = false;
         }
 
-
-        bool allow_viewindex = false;
         if (rpi && rpi->has_multiview && sd->stereo.multiview)
             allow_viewindex = true;
 
