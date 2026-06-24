@@ -1111,13 +1111,23 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
 
-        /* Only attempt FS stereo patch if we are in a valid multiview renderpass context */
+        /* Only attempt FS stereo patch if this is a quad pipeline */
         if (is_quad) {
 
-            /* We still allow FS patching for non-multiview passes if stereo is enabled,
-             * because FS conversion (2D -> 2D_ARRAY) is still required for correctness. */
+            /* FIX:
+             * FS patching must NOT depend strictly on multiview renderpass.
+             *
+             * Reason:
+             * - FS sampler conversion (2D → 2D_ARRAY) is required even in
+             *   non-multiview passes when stereo is active.
+             *
+             * - ViewIndex injection is handled inside SPIR-V patcher.
+             *
+             * - renderpass multiview only affects whether gl_ViewIndex is meaningful,
+             *   not whether texture layer conversion is required.
+             */
             bool allow_fs_patch =
-                sd->stereo.multiview && (in_mv_rp || sd->multiview_pass_exists);
+                sd->stereo.enabled && sd->stereo.multiview;
 
             if (allow_fs_patch) {
 
@@ -1152,13 +1162,31 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
                 /* --- SPIR-V safety validation (must never allow ID=0 writes) --- */
                 for (size_t i = 0; i < pc2; i++) {
-                    uint32_t op = patched[i] & 0xFFFF;
-                    uint32_t id = patched[i] >> 16;
+                    uint32_t word = patched[i];
+                    uint32_t op   = word & 0xFFFF;
+                    uint32_t wc   = word >> 16;
 
-                    if ((op == SpvOpLoad || op == SpvOpImageSampleImplicitLod) && id == 0) {
-                        STEREO_ERR("INVALID SPV DETECTED AT WORD %zu (op=%u)", i, op);
-                        spirv_patched_free(patched);
-                        goto fs_skip;
+                    /* Only validate instruction headers */
+                    if (wc == 0 || i + wc > pc2)
+                        continue;
+
+                    /* OpLoad / Sample instructions must be validated via result ID field */
+                    if (op == SpvOpLoad) {
+                        uint32_t result_id = patched[i + 2]; /* result id is always operand 2 */
+                        if (result_id == 0) {
+                            STEREO_ERR("INVALID SPV: OpLoad result_id=0 at word %zu", i);
+                            spirv_patched_free(patched);
+                            goto fs_skip;
+                        }
+                    }
+
+                    if (op == SpvOpImageSampleImplicitLod) {
+                        uint32_t result_id = patched[i + 2];
+                        if (result_id == 0) {
+                            STEREO_ERR("INVALID SPV: Sample result_id=0 at word %zu", i);
+                            spirv_patched_free(patched);
+                            goto fs_skip;
+                        }
                     }
                 }
 
