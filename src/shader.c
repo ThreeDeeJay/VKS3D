@@ -102,6 +102,17 @@ typedef struct {
     uint32_t next_id;
 } SpvMod;
 
+uint64_t hash_spv(const uint32_t *data, size_t words)
+{
+    uint64_t h = 1469598103934665603ULL; // FNV offset basis
+    for (size_t i = 0; i < words; i++) {
+        uint64_t v = data[i];
+        h ^= v;
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
 static void do_scan(SpvMod *m, bool p2)
 {
     const uint32_t *w=m->words;
@@ -251,17 +262,6 @@ static void spv_scan(SpvMod *m)
         m->has_direct_position_write,
         m->pos_var,
         m->emit_count);
-}
-
-uint64_t hash_spv(const uint32_t *data, size_t words)
-{
-    uint64_t h = 1469598103934665603ULL; // FNV offset basis
-    for (size_t i = 0; i < words; i++) {
-        uint64_t v = data[i];
-        h ^= v;
-        h *= 1099511628211ULL;
-    }
-    return h;
 }
 
 /* ── Stereo offset injection body ────────────────────────────────────────── */
