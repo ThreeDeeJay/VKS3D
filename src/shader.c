@@ -491,6 +491,29 @@ bool spirv_patch_stereo_vertex(
     m.next_id = m.bound;
     spv_scan(&m);
 
+    /* ───────────────────────────────────────────────
+     * SKY CANDIDATE CLASSIFICATION (DEBUG ONLY)
+     * ─────────────────────────────────────────────── */
+    uint32_t sky_direct =
+        (m.exec_model == SpvExecVertex) &&
+        (m.pos_var != 0) &&
+        (!m.has_emit_vertex) &&
+        (m.emit_count == 0) &&
+        (!m.has_direct_position_write);
+    
+    STEREO_LOG(
+        "[SKYCAND] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u direct=%d matrix=%d sky=%d",
+        hash_spv(m.words, m.count),
+        m.count,
+        m.pos_var,
+        m.pos_is_block ? 1 : 0,
+        m.emit_count,
+        m.view_var,
+        m.has_direct_position_write,
+        m.has_matrix_ops,
+        sky_direct
+    );
+
     STEREO_LOG(
         "SHADER_ANALYSIS exec=%d pos=%u view=%u block=%d emits=%u emitv=%d mvcap=%d matrix=%d patchable=%d",
         m.exec_model,
@@ -558,15 +581,6 @@ bool spirv_patch_stereo_vertex(
     if (m.exec_model == SpvExecVertex &&
         !m.has_matrix_ops)
     {
-        STEREO_LOG(
-            "[SKYCAND] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u direct=%d",
-            (unsigned long long)spv_hash,
-            m.count,
-            m.pos_var,
-            m.pos_is_block ? 1 : 0,
-            m.has_emit_vertex ? 1 : 0,
-            m.view_var,
-            m.has_direct_position_write ? 1 : 0);
         STEREO_LOG(
             "[SCREENSPACE_SKIP] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u",
             (unsigned long long)hash_spv(m.words, m.count),
