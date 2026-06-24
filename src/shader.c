@@ -778,7 +778,7 @@ bool spirv_patch_stereo_fs(
     uint32_t new_vi_id     = s.vi_var_id     ? s.vi_var_id     : nid++;
     bool     is_new_vi     = (s.vi_var_id == 0);
     /* FIX: do not assume VI exists in non-multiview pipelines */
-    bool     has_vi_runtime = (s.vi_var_id != 0);
+    bool     has_vi_runtime = (s.vi_var_id != 0 && is_new_vi == false);
     uint32_t samp_nid      = nid;
     uint32_t new_bound     = samp_nid + n_patches * 5 + 8;
 
@@ -1082,12 +1082,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 has_tes,
                 ci->stageCount);
 
-            continue;
+            allow_viewindex = false;
+            in_mv_rp = false;
         }
 
 
-        bool allow_viewindex =
-            sd->stereo.multiview && in_mv_rp;
+        bool allow_viewindex = false;
+        if (rpi && rpi->has_multiview && sd->stereo.multiview)
+            allow_viewindex = true;
 
         for (uint32_t s=0;s<ci->stageCount;s++) {
             VkShaderStageFlagBits st=ci->pStages[s].stage;
@@ -1101,67 +1103,130 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
-         * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from
-         * G-buffer / render-target textures (all upgraded to 2D_ARRAY by
-         * stereo_CreateImage).  We patch the FS to use sampler2DArray +
-         * gl_ViewIndex so each eye reads its own G-buffer layer.
-         * The VS of a quad must NOT be patched — shifting the quad position
-         * would prevent it covering the full screen for one eye.
-         * Geometry pipelines (has vertex input) use Path A/B VS patching. */
+         * by deferred lighting, SSAO, bloom, TAA, etc. Their FS samples from
+         * G-buffer / render-target textures (all upgraded to 2D_ARRAY).
+         *
+         * We patch FS to sampler2DArray + gl_ViewIndex so each eye reads its
+         * correct layer.
+         */
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
 
-        if (is_quad && in_mv_rp) {
-            /* Find FS stage */
-            uint32_t fs_s = ~0u;
-            for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
-                if (ci->pStages[s2].stage == VK_SHADER_STAGE_FRAGMENT_BIT)
-                    { fs_s = s2; break; }
-            if (fs_s == ~0u) {
-                STEREO_LOG("Pipe %u: quad but no FS stage", p);
-                continue;
-            }
-            StereoShaderCache *e = cache_find(sd, ci->pStages[fs_s].module);
-            if (!e) {
-                STEREO_LOG("Pipe %u: quad FS not cached (stageCount=%u)", p, ci->stageCount);
-                continue;
-            }
-            uint32_t *patched = NULL; size_t pc2 = 0;
-            if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
-                STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
-                continue;
-            }
-            if (dump) {
-                uint64_t spv_hash = hash_spv(e->spv, e->words);
-                char dp[512];
-                _snprintf(
-                    dp,
-                    sizeof(dp)-1,
-                    "%s\\%016llx-fs.spv",
-                    dump,
-                    (unsigned long long)spv_hash);
-                FILE *f=fopen(dp,"wb");
-                if (f) {
-                    fwrite(patched,4,pc2,f);
-                    fclose(f);
+        /* Only attempt FS stereo patch if we are in a valid multiview renderpass context */
+        if (is_quad) {
+
+            /* We still allow FS patching for non-multiview passes if stereo is enabled,
+             * because FS conversion (2D -> 2D_ARRAY) is still required for correctness. */
+            bool allow_fs_patch =
+                sd->stereo.multiview && (in_mv_rp || sd->multiview_pass_exists);
+
+            if (allow_fs_patch) {
+
+                /* Find FS stage */
+                uint32_t fs_s = ~0u;
+                for (uint32_t s2 = 0; s2 < ci->stageCount; s2++) {
+                    if (ci->pStages[s2].stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+                        fs_s = s2;
+                        break;
+                    }
                 }
+
+                if (fs_s == ~0u) {
+                    STEREO_LOG("Pipe %u: quad but no FS stage", p);
+                    /* do NOT continue pipeline compilation */
+                    goto fs_skip;
+                }
+
+                StereoShaderCache *e = cache_find(sd, ci->pStages[fs_s].module);
+                if (!e) {
+                    STEREO_LOG("Pipe %u: quad FS not cached (stageCount=%u)", p, ci->stageCount);
+                    goto fs_skip;
+                }
+
+                uint32_t *patched = NULL;
+                size_t pc2 = 0;
+
+                if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
+                    STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
+                    goto fs_skip;
+                }
+
+                /* --- SPIR-V safety validation (must never allow ID=0 writes) --- */
+                for (size_t i = 0; i < pc2; i++) {
+                    uint32_t op = patched[i] & 0xFFFF;
+                    uint32_t id = patched[i] >> 16;
+
+                    if ((op == SpvOpLoad || op == SpvOpImageSampleImplicitLod) && id == 0) {
+                        STEREO_ERR("INVALID SPV DETECTED AT WORD %zu (op=%u)", i, op);
+                        spirv_patched_free(patched);
+                        goto fs_skip;
+                    }
+                }
+
+                /* Optional dump */
+                if (dump) {
+                    uint64_t spv_hash = hash_spv(e->spv, e->words);
+                    char dp[512];
+                    _snprintf(
+                        dp,
+                        sizeof(dp) - 1,
+                        "%s\\%016llx-fs.spv",
+                        dump,
+                        (unsigned long long)spv_hash);
+
+                    FILE *f = fopen(dp, "wb");
+                    if (f) {
+                        fwrite(patched, 4, pc2, f);
+                        fclose(f);
+                    }
+                }
+
+                VkShaderModuleCreateInfo smci = {
+                    VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                    NULL,
+                    0,
+                    pc2 * 4,
+                    patched
+                };
+
+                VkShaderModule tmp = VK_NULL_HANDLE;
+                VkResult mr = sd->real.CreateShaderModule(
+                    sd->real_device,
+                    &smci,
+                    NULL,
+                    &tmp);
+
+                spirv_patched_free(patched);
+
+                if (mr != VK_SUCCESS) {
+                    STEREO_ERR("Pipe %u: quad FS module err %d", p, mr);
+                    goto fs_skip;
+                }
+
+                uint32_t sc2 = ci->stageCount;
+                VkPipelineShaderStageCreateInfo *st = malloc(sc2 * sizeof(*st));
+                if (!st) {
+                    sd->real.DestroyShaderModule(sd->real_device, tmp, NULL);
+                    goto fs_skip;
+                }
+
+                memcpy(st, ci->pStages, sc2 * sizeof(*st));
+                st[fs_s].module = tmp;
+
+                infos[p].pStages = st;
+                tmp_mod[p] = tmp;
+                tst[p] = st;
+
+                STEREO_LOG(
+                    "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
+                    p,
+                    sc2);
+
+                continue;
             }
-            VkShaderModuleCreateInfo smci={VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                NULL,0,pc2*4,patched};
-            VkShaderModule tmp=VK_NULL_HANDLE;
-            VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
-            spirv_patched_free(patched);
-            if (mr!=VK_SUCCESS) {
-                STEREO_ERR("Pipe %u: quad FS module err %d",p,mr); continue; }
-            uint32_t sc2=ci->stageCount;
-            VkPipelineShaderStageCreateInfo *st=malloc(sc2*sizeof(*st));
-            if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
-            memcpy(st,ci->pStages,sc2*sizeof(*st));
-            st[fs_s].module=tmp;
-            infos[p].pStages=st; tmp_mod[p]=tmp; tst[p]=st;
-            STEREO_LOG("Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",p,sc2);
-            continue;
         }
+
+        fs_skip:
 
         /* ── Path A: patch existing TES ──────────────────────────────── */
         if (has_tes && tes_stage!=~0u && allow_viewindex) {
