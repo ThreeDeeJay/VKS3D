@@ -147,8 +147,16 @@ static void test_magic_preserved(void)
 
     uint32_t *out = NULL;
     size_t    out_c = 0;
-    bool ok = spirv_patch_stereo_vertex(minimal, sizeof(minimal)/4,
-                                         &out, &out_c, -0.032f, 0.032f, 0.015f, false);
+    bool ok = spirv_patch_stereo_vertex(
+        minimal,
+        sizeof(minimal)/4,
+        &out,
+        &out_c,
+        -0.032f,
+        0.032f,
+        0.015f,
+        false,
+        NULL);
 
     if (!ok || !out) {
         /* Patcher might decline to patch if no Position found — that's OK */
