@@ -98,6 +98,7 @@ typedef struct {
     size_t   fn_word;
     uint32_t emit_count;
     bool     force_far_depth;
+    bool     looks_like_sky;
 } SpvMod;
 
 static void do_scan(SpvMod *m, bool p2)
@@ -192,6 +193,10 @@ static void do_scan(SpvMod *m, bool p2)
                     m->pos_var=w[i+2];
                 }
             }
+            if(op==SpvOpMatrixTimesVector || op==SpvOpLoad)
+            {
+                /* potential sky signal accumulation */
+            }
         }
         i+=wc;
     }
@@ -202,6 +207,20 @@ static void spv_scan(SpvMod *m)
 
     /* First pass: discover decorations/types. */
     do_scan(m,false);
+
+    /* ── SKY HEURISTIC CLASSIFICATION ─────────────────────────── */
+    if (m->exec_model == SpvExecVertex &&
+        m->has_matrix_ops &&
+        m->pos_var &&
+        !m->has_emit_vertex &&
+        m->emit_count == 0)
+    {
+        /* Sky / atmosphere / dome shaders:
+           - transform but no animation emission
+           - no geometry expansion
+           - typically camera-relative */
+        m->looks_like_sky = true;
+    }
 
     /* Run again now that block Position info is known.
        Some TES shaders declare OpTypePointer before
@@ -428,6 +447,7 @@ bool spirv_patch_stereo_vertex(
     SpvMod m={0};
     m.words=in;
     m.count=in_c;
+    m.looks_like_sky = false;
     spv_scan(&m);
 
     STEREO_LOG(
@@ -567,7 +587,7 @@ bool spirv_patch_stereo_vertex(
              lo,
              ro,
              0,
-             false};
+             m.looks_like_sky};
     STEREO_LOG(
         "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
