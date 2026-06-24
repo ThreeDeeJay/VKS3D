@@ -163,13 +163,40 @@ static void do_scan(SpvMod *m, bool p2)
             break;
         case SpvOpStore:
         {
-            if (wc >= 3 &&
-                w[i+1] == m->pos_var)
+            /* ── SKY/UI CLASSIFICATION DEBUG ───────────────────────── */
+            if (wc >= 3)
             {
-                uint32_t source = w[i+2];
-
-                if (!m->has_matrix_ops)
+                uint32_t dst = w[i+1];
+                uint32_t src = w[i+2];
+            
+                STEREO_LOG(
+                    "[STORE] dst=%u pos_var=%u block=%d src=%u",
+                    dst,
+                    m->pos_var,
+                    m->pos_is_block ? 1 : 0,
+                    src);
+            }
+            
+            /* ── detect ANY position write, not just exact match ───── */
+            if (wc >= 3)
+            {
+                uint32_t dst = w[i+1];
+            
+                /* direct write to Position variable */
+                if (dst == m->pos_var)
+                {
                     m->has_direct_position_write = true;
+                }
+            
+                /* block-based position writes (CRITICAL for sky shaders) */
+                for (uint32_t k = 0; k < m->pos_block_count; k++)
+                {
+                    if (dst == m->pos_block_type[k])
+                    {
+                        m->has_direct_position_write = true;
+                        break;
+                    }
+                }
             }
         }
         break;
