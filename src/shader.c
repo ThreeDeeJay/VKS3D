@@ -393,6 +393,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         uint32_t a1[] = {op_(SpvOpLoad,4), m->v4t, tmp, pptr};
         sb_push_n(out, a1, 4);
     
+        /* tmp.z = 0.9999 (force far plane) */
         uint32_t zc = (*nid)++;
         uint32_t wv = (*nid)++;
         uint32_t a2[] = {op_(SpvOpCompositeExtract,5), m->ft, zc, tmp, 2u};
