@@ -233,6 +233,16 @@ static void spv_scan(SpvMod *m)
         {
             m->looks_like_sky = false;
         }
+
+        /* DEBUG OVERRIDE: treat sky candidates as normal geometry */
+        if (m->exec_model == SpvExecVertex &&
+            m->pos_var &&
+            m->pos_var == 13 /* or log-based match */)
+        {
+            STEREO_LOG("[DEBUG] forcing sky candidate into stereo path pos=%u", m->pos_var);
+            m->looks_like_sky = false;
+        }
+
     }
     else
     {
