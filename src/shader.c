@@ -35,6 +35,7 @@
 #define SpvOpAccessChain      65
 #define SpvOpDecorate         71
 #define SpvOpMemberDecorate   72
+#define SpvOpCopyObject       83
 #define SpvOpFunction         54
 #define SpvOpEmitVertex       218
 #define SpvOpCompositeExtract 81
