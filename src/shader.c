@@ -520,6 +520,15 @@ bool spirv_patch_stereo_vertex(
         m.emit_count,
         m.pos_var,
         m.view_var);
+    STEREO_LOG(
+        "[SKYCAND] hash=%016llx words=%zu matrix=%d pos=%u block=%d emit=%d view=%u",
+        (unsigned long long)spv_hash,
+        m.count,
+        m.has_matrix_ops,
+        m.pos_var,
+        m.pos_is_block ? 1 : 0,
+        m.has_emit_vertex ? 1 : 0,
+        m.view_var);
 
     if (m.exec_model == SpvExecVertex)
     {
