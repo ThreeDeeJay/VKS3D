@@ -714,8 +714,7 @@ bool spirv_patch_stereo_vertex(
     uint32_t **out, size_t *out_c,
     float lo, float ro,
     float conv,
-    bool inj_vi,
-    const StereoDebugCtx *dbg);
+    bool inj_vi);
 void spirv_patched_free(uint32_t *w);
 
 VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*,
