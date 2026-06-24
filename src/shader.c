@@ -99,6 +99,7 @@ typedef struct {
     uint32_t emit_count;
     bool     force_far_depth;
     bool     looks_like_sky;
+    uint32_t next_id;
 } SpvMod;
 
 static void do_scan(SpvMod *m, bool p2)
@@ -383,25 +384,27 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     /* ── SKY / FAR DEPTH OVERRIDE ─────────────────────────────── */
     if (c->force_far_depth)
     {
-        uint32_t z = (*nid)++;
-        uint32_t w = (*nid)++;
+        /* FARDEPTH SAFE MODE:
+           Do NOT rebuild SSA chains (causes ID corruption).
+           Just push position to far clip plane by biasing z. */
+        
         uint32_t tmp = (*nid)++;
-    
-        /* tmp = np */
-        uint32_t a1[] = {op_(SpvOpCopyObject,4), m->v4t, tmp, np};
+        /* tmp = load(position) */
+        uint32_t a1[] = {op_(SpvOpLoad,4), m->v4t, tmp, pptr};
         sb_push_n(out, a1, 4);
     
-        /* z = w */
-        uint32_t a2[] = {op_(SpvOpCompositeExtract,5), m->ft, z, tmp, 3u};
+        uint32_t zc = (*nid)++;
+        uint32_t wv = (*nid)++;
+        uint32_t a2[] = {op_(SpvOpCompositeExtract,5), m->ft, zc, tmp, 2u};
         sb_push_n(out, a2, 5);
     
-        uint32_t a3[] = {op_(SpvOpCompositeExtract,5), m->ft, w, tmp, 3u};
+        uint32_t a3[] = {op_(SpvOpFAdd,5), m->ft, wv, zc, c->cc};
         sb_push_n(out, a3, 5);
     
-        uint32_t a4[] = {op_(SpvOpCompositeInsert,6), m->v4t, np, w, tmp, 2u};
+        uint32_t a4[] = {op_(SpvOpCompositeInsert,6), m->v4t, tmp, wv, tmp, 2u};
         sb_push_n(out, a4, 6);
     
-        uint32_t a5[] = {op_(SpvOpStore,3), pptr, np};
+        uint32_t a5[] = {op_(SpvOpStore,3), pptr, tmp};
         sb_push_n(out, a5, 3);
     }
     else
@@ -464,6 +467,7 @@ bool spirv_patch_stereo_vertex(
     m.words=in;
     m.count=in_c;
     m.looks_like_sky = false;
+    m.next_id = m.bound;
     spv_scan(&m);
 
     STEREO_LOG(
