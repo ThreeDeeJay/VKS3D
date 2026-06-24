@@ -180,7 +180,7 @@ static void test_frag_not_patched(void)
     size_t    out_c = 0;
     bool ok = spirv_patch_stereo_vertex(
         MINIMAL_FRAG_SPV, sizeof(MINIMAL_FRAG_SPV)/4,
-        &out, &out_c, -0.032f, 0.032f, 0.015f, false);
+        &out, &out_c, -0.032f, 0.032f, 0.015f, false, NULL);
 
     if (ok) {
         FAIL("should not patch fragment shader");
@@ -266,7 +266,7 @@ static void test_output_larger_than_input(void)
     size_t    out_c = 0;
 
     bool ok = spirv_patch_stereo_vertex(
-        dummy_vert, in_c, &out, &out_c, -0.032f, 0.032f, 0.015f, false);
+        dummy_vert, in_c, &out, &out_c, -0.032f, 0.032f, 0.015f, false, NULL);
 
     if (!ok) {
         FAIL("spirv_patch_stereo_vertex returned false on valid vertex shader");
@@ -301,7 +301,7 @@ static void test_id_bound_updated(void)
     uint32_t *out = NULL;
     size_t    out_c = 0;
     bool ok = spirv_patch_stereo_vertex(
-        simple, sizeof(simple)/4, &out, &out_c, -0.032f, 0.032f, 0.015f, false);
+        simple, sizeof(simple)/4, &out, &out_c, -0.032f, 0.032f, 0.015f, false, NULL);
 
     if (!ok) {
         printf("SKIP (no Position found)\n");
@@ -324,7 +324,7 @@ static void test_null_input_rejected(void)
 
     uint32_t *out = NULL;
     size_t    out_c = 0;
-    bool ok = spirv_patch_stereo_vertex(NULL, 0, &out, &out_c, 0.f, 0.f, 0.f, false);
+    bool ok = spirv_patch_stereo_vertex(NULL, 0, &out, &out_c, 0.f, 0.f, 0.f, false, NULL);
 
     if (ok) {
         FAIL("should reject NULL input");
@@ -340,7 +340,7 @@ static void test_wrong_magic_rejected(void)
     const uint32_t bad[] = { 0xDEADBEEF, 0x00010300, 0x00000000, 0x00000005, 0x00000000 };
     uint32_t *out = NULL;
     size_t    out_c = 0;
-    bool ok = spirv_patch_stereo_vertex(bad, 5, &out, &out_c, -0.032f, 0.032f, 0.015f, false);
+    bool ok = spirv_patch_stereo_vertex(bad, 5, &out, &out_c, -0.032f, 0.032f, 0.015f, false, NULL);
 
     if (ok) {
         FAIL("should reject wrong magic");
