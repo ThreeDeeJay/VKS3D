@@ -590,6 +590,7 @@ typedef struct {
     uint32_t v3float_id;
     uint32_t ptr_int_in_id;
     uint32_t vi_var_id;
+    uint32_t max_id;                    /* Tracks highest SSA ID seen in module */
     bool     has_mv_cap;
     size_t   ep_word;
     size_t   fn_word;
@@ -605,6 +606,7 @@ static void fs_prescan(FsScan *s, const uint32_t *w, size_t c)
 {
     memset(s, 0, sizeof(*s));
     bool in_func = false;
+    s->max_id = 0;
     for (size_t i = 5; i < c; ) {
         uint32_t op = w[i] & 0xffff, wc = w[i] >> 16;
         if (!wc || i + wc > c) break;
@@ -1161,51 +1163,63 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     goto fs_skip;
                 }
 
-                /* --- SPIR-V safety validation (must never allow ID=0 writes) --- */
-                for (size_t i = 0; i < pc2; i++) {
+                 /* --- SPIR-V safety validation + max-id tracking --- */
+
+                uint32_t fs_max_id = 0;
+
+                /* walk instruction-by-instruction (NOT word-by-word) */
+                for (size_t i = 0; i < pc2; ) {
+
                     uint32_t word = patched[i];
-                    uint32_t op   = word & 0xFFFF;
-                    uint32_t wc   = word >> 16;
+                    uint16_t wc   = (uint16_t)(word >> 16);
+                    uint16_t op   = (uint16_t)(word & 0xFFFF);
 
-                    /* Only validate instruction headers */
-                    if (wc == 0 || i + wc > pc2)
-                        continue;
+                    if (wc == 0 || i + wc > pc2) {
+                        STEREO_ERR("FS SPIR-V malformed at %zu (wc=%u)", i, wc);
+                        spirv_patched_free(patched);
+                        goto fs_skip;
+                    }
 
-                    /* OpLoad / Sample instructions must be validated via result ID field */
-                    if (op == SpvOpLoad) {
+                    /* OpLoad */
+                    if (op == SpvOpLoad && wc >= 3) {
                         uint32_t result_id = patched[i + 2];
-
-                        if (result_id > fs_max_id)
-                            fs_max_id = result_id;
 
                         if (result_id == 0) {
                             STEREO_ERR("INVALID SPV: OpLoad result_id=0 at word %zu", i);
                             spirv_patched_free(patched);
                             goto fs_skip;
                         }
-                    }
-
-                    if (op == SpvOpImageSampleImplicitLod) {
-                        uint32_t result_id = patched[i + 2];
 
                         if (result_id > fs_max_id)
                             fs_max_id = result_id;
+                    }
+
+                    /* OpImageSampleImplicitLod */
+                    if (op == SpvOpImageSampleImplicitLod && wc >= 5) {
+                        uint32_t result_id = patched[i + 2];
 
                         if (result_id == 0) {
                             STEREO_ERR("INVALID SPV: Sample result_id=0 at word %zu", i);
                             spirv_patched_free(patched);
                             goto fs_skip;
                         }
+
+                        if (result_id > fs_max_id)
+                            fs_max_id = result_id;
                     }
+
+                    /* advance by instruction length */
+                    i += wc;
                 }
 
-                /* FINALIZE SPIR-V BOUND USING ACTUAL MAX ID FOUND */
-                uint32_t final_max = fs_max_id;
-                
-                /* safety margin for injected temporaries */
-                final_max += 16;
-                
-                ob.w[3] = final_max;
+                /* FINALIZE MAX ID (if you need bound tracking) */
+                uint32_t final_max = fs_max_id + 16;
+
+                /* NOTE:
+                 * Do NOT touch ob.w[3] here unless you fully own SPIR-V module header.
+                 * PipelineLayout / module bounds must be patched in SPIR-V header, not here.
+                 */
+                (void)final_max;
 
                 /* Optional dump */
                 if (dump) {
