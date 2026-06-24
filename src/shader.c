@@ -72,6 +72,8 @@ static bool sb_push_n(SpvBuf *b, const uint32_t *v, size_t c)
     { for(size_t i=0;i<c;i++) if(!sb_push(b,v[i])) return false; return true; }
 static inline uint32_t op_(uint32_t op, uint32_t wc) { return (wc<<16)|op; }
 
+static bool g_force_stereo_all = false; // DEBUG ONLY
+
 /* ── Module scanner ──────────────────────────────────────────────────────── */
 typedef struct {
     const uint32_t *words; size_t count;
@@ -538,7 +540,9 @@ bool spirv_patch_stereo_vertex(
      *
      * Leave these monoscopic at screen depth.
      */
+    g_force_stereo_all = true;
     if (m.exec_model == SpvExecVertex &&
+        !g_force_stereo_all &&
         !m.has_matrix_ops &&
         !m.pos_is_block &&
         !m.has_viewindex_builtin)
