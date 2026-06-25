@@ -1127,8 +1127,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         /* Multiview is render-pass driven ONLY.
          * Pipeline pNext must NOT contain VkPipelineMultiviewCreateInfo (invalid Vulkan API). */
         if (in_mv_rp) {
-            STEREO_LOG("Pipe %u: MV RP detected (subpassCount=%u) - no pipeline pNext needed",
-                       p, ci->subpassCount);
+            STEREO_LOG("Pipe %u: MV RP detected (stageCount=%u) - no pipeline pNext needed",
+                       p, ci->stageCount);
             /* optional: mark via internal flag if needed later */
             infos[p].renderPass = rpi->mv_handle;
         }
@@ -1398,14 +1398,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
         }
         free(tst[p]);
-        /* cleanup PIPE multiview pNext */
-        if (infos[p].pNext) {
-            VkPipelineMultiviewCreateInfo *mv =
-                (VkPipelineMultiviewCreateInfo*)infos[p].pNext;
-        
-            if (mv && mv->sType == VK_STRUCTURE_TYPE_PIPELINE_MULTIVIEW_CREATE_INFO)
-                free(mv);
-        }
     }
     free(tmp_mod); free(tst); free(infos);
     return res;
