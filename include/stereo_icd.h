@@ -479,6 +479,13 @@ typedef struct StereoRenderPassInfo {
     VkRenderPass  mv_handle;     /* multiview version — VK_NULL_HANDLE until framebuffer confirms */
 } StereoRenderPassInfo;
 
+typedef struct StereoFramebufferTrack {
+    VkFramebuffer fb;
+    VkRenderPass  rp;      /* original RP */
+    VkRenderPass  mv_rp;   /* multiview RP */
+    bool          has_mv;
+} StereoFramebufferTrack;
+
 typedef struct StereoDevice {
     /* MUST be first: loader reads *(void**)device for dispatch table. */
     VK_LOADER_DATA         loader_data;
@@ -508,8 +515,7 @@ typedef struct StereoDevice {
     uint32_t               upgraded_view_count;
     /* Per-framebuffer: which render pass (multiview version) was used */
 #define MAX_FB_TRACK           512
-    VkFramebuffer          fb_track_handles[MAX_FB_TRACK];
-    VkRenderPass           fb_track_mv_rps [MAX_FB_TRACK];
+    StereoFramebufferTrack fb_tracks[MAX_FB_TRACK];
     uint32_t               fb_track_count;
     stereo_mutex_t         lock;
 
