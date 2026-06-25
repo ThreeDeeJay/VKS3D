@@ -43,6 +43,12 @@ jobs:
     - name: Get current date, commit hash and count
       run: |
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+        echo 1 GITHUB_RUN_ATTEMPT
+        echo 2 {GITHUB_RUN_ATTEMPT}
+        echo 3 $GITHUB_RUN_ATTEMPT
+        echo 4 ${GITHUB_RUN_ATTEMPT}
+        echo 5 ${env.GITHUB_RUN_ATTEMPT}
+        echo 6 ${env:GITHUB_RUN_ATTEMPT}
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
