@@ -82,10 +82,10 @@ extern "C" bool nv3d_init(
     uint32_t width,
     uint32_t height)
 {
-STEREO_LOG(
-    "[NV3D] nv3d_init(%u x %u)",
-    width,
-    height);
+//STEREO_LOG(
+//    "[NV3D] nv3d_init(%u x %u)",
+//    width,
+//    height);
 
 if (sd->nv3d_ok &&
     sd->nv3d_width  == width * 2 &&
@@ -100,12 +100,12 @@ NV3D::InterfaceVulkan *iface = nullptr;
 
 NV3D::InitParams params = {};
 
-STEREO_LOG(
-    "[NV3D] instance=%p physdev=%p device=%p gfx_qf=%u",
-    sd->si->real_instance,
-    sd->real_physdev,
-    sd->real_device,
-    sd->gfx_qf);
+//STEREO_LOG(
+//    "[NV3D] instance=%p physdev=%p device=%p gfx_qf=%u",
+//    sd->si->real_instance,
+//    sd->real_physdev,
+//    sd->real_device,
+//    sd->gfx_qf);
 
 VkPhysicalDeviceProperties props = {};
 
@@ -113,27 +113,27 @@ sd->si->real.GetPhysicalDeviceProperties(
     sd->real_physdev,
     &props);
 
-STEREO_LOG(
-    "[NV3D] GPU=%s vendor=%04X device=%04X",
-    props.deviceName,
-    props.vendorID,
-    props.deviceID);
+//STEREO_LOG(
+//    "[NV3D] GPU=%s vendor=%04X device=%04X",
+//    props.deviceName,
+//    props.vendorID,
+//    props.deviceID);
 
-STEREO_LOG(
-    "[NV3D] si=%p",
-    sd->si);
+//STEREO_LOG(
+//    "[NV3D] si=%p",
+//    sd->si);
 
-STEREO_LOG(
-    "[NV3D] real_instance=%p",
-    sd->si->real_instance);
+//STEREO_LOG(
+//    "[NV3D] real_instance=%p",
+//    sd->si->real_instance);
 
-STEREO_LOG(
-    "[NV3D] real_physdev=%p",
-    sd->real_physdev);
+//STEREO_LOG(
+//    "[NV3D] real_physdev=%p",
+//    sd->real_physdev);
 
-STEREO_LOG(
-    "[NV3D] real_device=%p",
-    sd->real_device);
+//STEREO_LOG(
+//    "[NV3D] real_device=%p",
+//    sd->real_device);
 
 NV3D::SetLogSink(
     [](NV3D::LogLevel lvl, const wchar_t* msg, void*)
@@ -150,22 +150,22 @@ NV3D::SetLogSink(
             nullptr,
             nullptr);
 
-        STEREO_LOG("[NV3D] %s", utf8);
+        //STEREO_LOG("[NV3D] %s", utf8);
     },
     nullptr);
 
 
-STEREO_LOG(
-    "[NV3D] real_instance=%p wrapper=%p",
-    sd->si->real_instance,
-    sd->si);
+//STEREO_LOG(
+//    "[NV3D] real_instance=%p wrapper=%p",
+//    sd->si->real_instance,
+//    sd->si);
 
 HMODULE vulkan =
     GetModuleHandleW(L"vulkan-1.dll");
 
-STEREO_LOG(
-    "[NV3D] VKS3D vulkan-1.dll=%p",
-    vulkan);
+//STEREO_LOG(
+//    "[NV3D] VKS3D vulkan-1.dll=%p",
+//    vulkan);
 
 VkPhysicalDeviceIDProperties id{};
 id.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
@@ -182,16 +182,16 @@ if (id.deviceLUIDValid)
 {
     const uint8_t* l = id.deviceLUID;
 
-    STEREO_LOG(
-        "[NV3D TEST] Vulkan LUID=%02X%02X%02X%02X-%02X%02X%02X%02X",
-        l[0], l[1], l[2], l[3],
-        l[4], l[5], l[6], l[7]);
+    //STEREO_LOG(
+    //    "[NV3D TEST] Vulkan LUID=%02X%02X%02X%02X-%02X%02X%02X%02X",
+    //    l[0], l[1], l[2], l[3],
+    //    l[4], l[5], l[6], l[7]);
 
     params.has_external_luid = true;
     static_assert(sizeof(LUID) == VK_LUID_SIZE, "LUID mismatch");
     std::memcpy(&params.external_luid, id.deviceLUID, VK_LUID_SIZE);
 
-    STEREO_LOG("[NV3D] passing external LUID to NV3D-Lib");
+    //STEREO_LOG("[NV3D] passing external LUID to NV3D-Lib");
 }
 
 HRESULT hr =
@@ -203,16 +203,16 @@ HRESULT hr =
         &params,
         &iface);
 
-STEREO_LOG(
-    "[NV3D] CreateInterfaceVulkan hr=0x%08X iface=%p",
-    (unsigned)hr,
-    iface);
+//STEREO_LOG(
+//    "[NV3D] CreateInterfaceVulkan hr=0x%08X iface=%p",
+//    (unsigned)hr,
+//    iface);
 
 if (FAILED(hr) || !iface)
 {
-    STEREO_ERR(
-        "[NV3D] CreateInterfaceVulkan failed: 0x%08x",
-        (unsigned)hr);
+    //STEREO_ERR(
+    //    "[NV3D] CreateInterfaceVulkan failed: 0x%08x",
+    //    (unsigned)hr);
     return false;
 }
 
@@ -226,15 +226,15 @@ hr =
         87, /* DXGI_FORMAT_B8G8R8A8_UNORM */
         &mem_handle,
         &fence_handle);
-STEREO_LOG(
-    "[NV3D] InitSharedResources hr=0x%08X",
-    (unsigned)hr);
+//STEREO_LOG(
+//    "[NV3D] InitSharedResources hr=0x%08X",
+//    (unsigned)hr);
 
 if (FAILED(hr))
 {
-    STEREO_ERR(
-        "[NV3D] InitSharedResources failed: 0x%08x",
-        (unsigned)hr);
+//    STEREO_ERR(
+//        "[NV3D] InitSharedResources failed: 0x%08x",
+//        (unsigned)hr);
 
     iface->Delete();
     return false;
@@ -249,18 +249,18 @@ sd->nv3d_value        = 0;
 
 if (FAILED(hr))
 {
-    STEREO_ERR(
-        "[NV3D] InitSharedResources failed: 0x%08x",
-        (unsigned)hr);
+//    STEREO_ERR(
+//        "[NV3D] InitSharedResources failed: 0x%08x",
+//        (unsigned)hr);
 
     iface->Delete();
     return false;
 }
 
-STEREO_LOG(
-    "[NV3D] imported image %ux%u",
-    sd->nv3d_width,
-    sd->nv3d_height);
+//STEREO_LOG(
+//    "[NV3D] imported image %ux%u",
+//    sd->nv3d_width,
+//    sd->nv3d_height);
 
 /* ------------------------------------------------------------- */
 /* Imported image                                                */
@@ -296,7 +296,7 @@ if (sd->real.CreateImage(
         NULL,
         &sd->nv3d_image) != VK_SUCCESS)
 {
-    STEREO_ERR("[NV3D] CreateImage failed");
+    //STEREO_ERR("[NV3D] CreateImage failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -314,7 +314,7 @@ uint32_t mem_type =
 
 if (mem_type == UINT32_MAX)
 {
-    STEREO_ERR("[NV3D] no compatible memory type");
+    //STEREO_ERR("[NV3D] no compatible memory type");
     nv3d_destroy(sd);
     return false;
 }
@@ -340,7 +340,7 @@ if (sd->real.AllocateMemory(
         NULL,
         &sd->nv3d_memory) != VK_SUCCESS)
 {
-    STEREO_ERR("[NV3D] AllocateMemory failed");
+    //STEREO_ERR("[NV3D] AllocateMemory failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -351,7 +351,7 @@ if (sd->real.BindImageMemory(
         sd->nv3d_memory,
         0) != VK_SUCCESS)
 {
-    STEREO_ERR("[NV3D] BindImageMemory failed");
+    //STEREO_ERR("[NV3D] BindImageMemory failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -378,7 +378,7 @@ if (sd->real.CreateSemaphore(
         NULL,
         &sd->nv3d_timeline) != VK_SUCCESS)
 {
-    STEREO_ERR("[NV3D] CreateSemaphore failed");
+    //STEREO_ERR("[NV3D] CreateSemaphore failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -396,8 +396,8 @@ VkImportSemaphoreWin32HandleInfoKHR import_sem = {
 
 if (!sd->real.ImportSemaphoreWin32HandleKHR)
 {
-    STEREO_ERR(
-        "[NV3D] ImportSemaphoreWin32HandleKHR not loaded");
+    //STEREO_ERR(
+    //    "[NV3D] ImportSemaphoreWin32HandleKHR not loaded");
     nv3d_destroy(sd);
     return false;
 }
@@ -406,17 +406,17 @@ if (sd->real.ImportSemaphoreWin32HandleKHR(
         sd->real_device,
         &import_sem) != VK_SUCCESS)
 {
-    STEREO_ERR("[NV3D] ImportSemaphoreWin32HandleKHR failed");
+    //STEREO_ERR("[NV3D] ImportSemaphoreWin32HandleKHR failed");
     nv3d_destroy(sd);
     return false;
 }
 
 sd->nv3d_ok = true;
 
-STEREO_LOG(
-    "[NV3D] initialized imported texture %ux%u",
-    width * 2,
-    height);
+//STEREO_LOG(
+//    "[NV3D] initialized imported texture %ux%u",
+//    width * 2,
+//    height);
 
 return true;
 
@@ -484,25 +484,25 @@ extern "C" VkResult nv3d_present(
     uint32_t wait_sem_count,
     const VkSemaphore *wait_sems)
 {
-STEREO_LOG("[PRESENT] using NV3D path");
-STEREO_LOG(
-    "[NV3D] present iface=%p image=%p timeline=%p value=%llu",
-    sd->nv3d_iface,
-    sd->nv3d_image,
-    sd->nv3d_timeline,
-    (unsigned long long)sd->nv3d_value);
+//STEREO_LOG("[PRESENT] using NV3D path");
+//STEREO_LOG(
+//    "[NV3D] present iface=%p image=%p timeline=%p value=%llu",
+//    sd->nv3d_iface,
+//    sd->nv3d_image,
+//    sd->nv3d_timeline,
+//    (unsigned long long)sd->nv3d_value);
 if (!sd->nv3d_iface)
 {
-    STEREO_LOG(
-        "[NV3D] present requested but nv3d_iface=NULL");
+    //STEREO_LOG(
+    //    "[NV3D] present requested but nv3d_iface=NULL");
 
     return VK_ERROR_INITIALIZATION_FAILED;
 }
 
 if (!sc->barrier_cmds)
 {
-    STEREO_ERR(
-        "[NV3D] barrier_cmds array is NULL");
+    //STEREO_ERR(
+    //    "[NV3D] barrier_cmds array is NULL");
     return VK_ERROR_INITIALIZATION_FAILED;
 }
 
@@ -510,22 +510,22 @@ VkCommandBuffer cmd = sc->barrier_cmds[0];
 
 if (!cmd)
 {
-    STEREO_ERR(
-        "[NV3D] barrier_cmds[0] is NULL");
+    //STEREO_ERR(
+    //    "[NV3D] barrier_cmds[0] is NULL");
     return VK_ERROR_INITIALIZATION_FAILED;
 }
 
-STEREO_LOG(
-    "[NV3D] cmd=%p stereoImage=%p",
-    cmd,
-    sc->stereo_images ?
-        sc->stereo_images[0] :
-        VK_NULL_HANDLE);
+//STEREO_LOG(
+//    "[NV3D] cmd=%p stereoImage=%p",
+//    cmd,
+//    sc->stereo_images ?
+//        sc->stereo_images[0] :
+//        VK_NULL_HANDLE);
 
 if (cmd == VK_NULL_HANDLE)
 {
-    STEREO_ERR(
-        "[NV3D] barrier_cmds[0] is NULL");
+    //STEREO_ERR(
+    //    "[NV3D] barrier_cmds[0] is NULL");
 
     return VK_ERROR_INITIALIZATION_FAILED;
 }
@@ -666,25 +666,25 @@ VkResult vr =
 if (vr != VK_SUCCESS)
     return vr;
 
-STEREO_LOG(
-    "[NV3D] Present begin value=%llu iface=%p",
-    (unsigned long long)sd->nv3d_value,
-    sd->nv3d_iface);
+//STEREO_LOG(
+//    "[NV3D] Present begin value=%llu iface=%p",
+//    (unsigned long long)sd->nv3d_value,
+//    sd->nv3d_iface);
 
 HRESULT hr =
     ((NV3D::InterfaceVulkan*)sd->nv3d_iface)
         ->Present(sd->nv3d_value);
 
-STEREO_LOG(
-    "[NV3D] Present end hr=0x%08X",
-    (unsigned)hr);
+//STEREO_LOG(
+//    "[NV3D] Present end hr=0x%08X",
+//    (unsigned)hr);
 
-if (FAILED(hr))
-{
-    STEREO_ERR(
-        "[NV3D] Present failed: 0x%08x",
-        (unsigned)hr);
-}
+//if (FAILED(hr))
+//{
+//    STEREO_ERR(
+//        "[NV3D] Present failed: 0x%08x",
+//        (unsigned)hr);
+//}
 
 return VK_SUCCESS;
 
