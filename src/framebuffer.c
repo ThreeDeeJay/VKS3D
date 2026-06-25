@@ -153,7 +153,7 @@ stereo_CmdBeginRenderPass(
     }
     if (!sd) return;
 
-    if (mv_rp) {
+    if (mv_rp && false) {
         VkRenderPassBeginInfo modified = *pRenderPassBegin;
         modified.renderPass = mv_rp;
         sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
