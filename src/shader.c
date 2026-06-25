@@ -1056,6 +1056,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 {
     StereoDevice *sd=stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
+    STEREO_LOG("PIPE_IN_RAW N=%u pCI=%p first=%p renderPass=%p stageCount=%u pNext=%p",
+               N,
+               (void*)pCI,
+               (N > 0 ? (void*)pCI[0].renderPass : NULL),
+               (N > 0 ? (void*)pCI[0].renderPass : NULL),
+               (N > 0 ? pCI[0].stageCount : 0),
+               (N > 0 ? pCI[0].pNext : NULL));
+
     STEREO_LOG(
         "PIPE_CREATE_BEGIN N=%u multiview=%d enabled=%d",
         N,
@@ -1096,6 +1104,30 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
 
+        if (!ci || ci->stageCount == 0 || !ci->pStages) {
+            STEREO_LOG(
+                "PIPE_EMPTY_STAGE_PIPELINE p=%u rp=%p pNext=%p stageCount=%u pStages=%p isUI=%d isComputeLike=%d",
+                p,
+                ci ? (void*)ci->renderPass : NULL,
+                ci ? (void*)ci->pNext : NULL,
+                ci ? ci->stageCount : 0,
+                ci ? (void*)ci->pStages : NULL,
+                (ci && ci->pVertexInputState == NULL),
+                (ci && ci->stageCount == 0));
+        }
+
+        if (!ci ||
+            ci->stageCount == 0 ||
+            !ci->pStages)
+        {
+            STEREO_LOG("PIPE_INVALID p=%u ci=%p stageCount=%u pStages=%p renderPass=%p",
+                       p,
+                       (void*)ci,
+                       ci ? ci->stageCount : 0,
+                       ci ? (void*)ci->pStages : NULL,
+                       ci ? (void*)ci->renderPass : NULL);
+            continue;
+        }
         bool has_vs=false, has_tcs=false, has_tes=false;
         uint32_t vs_stage=~0u, tes_stage=~0u;
         for (uint32_t s=0;s<ci->stageCount;s++) {
@@ -1166,7 +1198,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
 
-        if (is_quad) {
+        if (is_quad && ci->stageCount > 0) {
             /* Find FS stage */
             uint32_t fs_s = ~0u;
             for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
@@ -1300,7 +1332,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * Works on all modern drivers. No topology change, no extra stages.
          * Replaces the TCS+TES injection approach which crashed on newer
          * drivers due to strict PerVertex block interface validation.       */
-        if (has_vs && !has_tcs && vs_stage!=~0u) {
+        if (ci->stageCount > 0 && has_vs && !has_tcs && vs_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             uint32_t *patched=NULL; size_t pc2=0;
