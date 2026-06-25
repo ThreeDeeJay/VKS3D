@@ -1071,7 +1071,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 
     const char *dump = stereo_getenv("VKS3D_DUMP_SPIRV");
     static int  dump_n = 0;
-    float lo=0.0f, ro=0.0f,
+    float lo=sd->stereo.left_eye_offset, ro=sd->stereo.right_eye_offset,
           conv=sd->stereo.convergence;
 
     STEREO_LOG(
