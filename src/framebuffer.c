@@ -76,11 +76,24 @@ stereo_CreateFramebuffer(
     }
 
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
-    if (res == VK_SUCCESS && use_mv && sd->fb_track_count < MAX_FB_TRACK) {
-        sd->fb_tracks[sd->fb_track_count].fb     = *pFramebuffer;
-        sd->fb_tracks[sd->fb_track_count].rp     = pCreateInfo->renderPass;
-        sd->fb_tracks[sd->fb_track_count].mv_rp  = use_mv;
-        sd->fb_tracks[sd->fb_track_count].has_mv =(use_mv != VK_NULL_HANDLE);
+    if (res == VK_SUCCESS && sd->fb_track_count < MAX_FB_TRACK) {
+
+        uint32_t idx = sd->fb_track_count;
+
+        sd->fb_tracks[idx].fb     = *pFramebuffer;
+        sd->fb_tracks[idx].rp     = pCreateInfo->renderPass;
+        sd->fb_tracks[idx].mv_rp  = use_mv;
+        sd->fb_tracks[idx].has_mv = (use_mv != VK_NULL_HANDLE);
+
+        STEREO_LOG(
+            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u sizeof(track)=%u",
+            idx,
+            *pFramebuffer,
+            pCreateInfo->renderPass,
+            use_mv,
+            (unsigned)sd->fb_tracks[idx].has_mv,
+            (unsigned)sizeof(StereoFramebufferTrack));
+
         sd->fb_track_count++;
     }
     return res;
@@ -129,7 +142,8 @@ stereo_CmdBeginRenderPass(
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
             {
                 STEREO_LOG(
-                    "RP_BEGIN_CMD fb=%p rp=%p tracked_rp=%p mv_rp=%p has_mv=%d",
+                    "RP_BEGIN_CMD idx=%u fb=%p rp=%p tracked_rp=%p mv_rp=%p has_mv=%u",
+                    i,
                     pRenderPassBegin->framebuffer,
                     pRenderPassBegin->renderPass,
                     dev->fb_tracks[i].rp,

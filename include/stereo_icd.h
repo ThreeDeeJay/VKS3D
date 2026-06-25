@@ -588,13 +588,6 @@ typedef struct StereoDevice {
     uint32_t               comp_w, comp_h;
 } StereoDevice;
 
-typedef struct StereoFBTrack {
-    VkFramebuffer fb;
-    VkRenderPass  rp;     // original RP used to create FB
-    VkRenderPass  mv_rp;  // selected MV RP
-    bool          has_mv;  // TRUE if framebuffer uses multiview renderpass
-} StereoFBTrack;
-
 /* -- Stereo UBO layout ----------------------------------------------------- */
 typedef struct StereoUBO {
     float eye_offset[2];
