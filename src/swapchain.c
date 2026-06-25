@@ -1025,17 +1025,17 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
 
-    STEREO_LOG(
-        "[ACQUIRE LOOKUP] app=%p sc=%p real=%p active=%d",
-        swapchain,
-        sc,
-        sc ? sc->real_swapchain : VK_NULL_HANDLE,
-        sc ? sc->stereo_active : -1);
-    STEREO_LOG(
-        "stereo_AcquireNextImageKHR: sc=%p mode=%d real_sc=%p",
-        sc,
-        sc ? (int)sc->present_mode : -1,
-        sc ? (void*)sc->real_swapchain : 0);
+    //STEREO_LOG(
+    //    "[ACQUIRE LOOKUP] app=%p sc=%p real=%p active=%d",
+    //    swapchain,
+    //    sc,
+    //    sc ? sc->real_swapchain : VK_NULL_HANDLE,
+    //    sc ? sc->stereo_active : -1);
+    //STEREO_LOG(
+    //    "stereo_AcquireNextImageKHR: sc=%p mode=%d real_sc=%p",
+    //    sc,
+    //    sc ? (int)sc->present_mode : -1,
+    //    sc ? (void*)sc->real_swapchain : 0);
 
     if (sc &&
         sc->present_mode == STEREO_PRESENT_NV3DLIB)
