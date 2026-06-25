@@ -589,11 +589,7 @@ bool spirv_patch_stereo_vertex(
             m.pos_is_block ? 1 : 0);
     }
     STEREO_LOG(
-        "PIPE_SHADER stage=%s exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
-        (m.exec_model == SpvExecVertex) ? "VS" :
-        (m.exec_model == SpvExecFragment) ? "FS" :
-        (m.exec_model == SpvExecGeometry) ? "GS" :
-        "OTHER",
+        "PIPE_SHADER exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
         m.exec_model,
         (unsigned long long)spv_hash,
         m.count,
@@ -605,8 +601,8 @@ bool spirv_patch_stereo_vertex(
 
     if (spv_hash == 0x4316779e1c0bcc4dULL)
     {
-        STEREO_LOG("[PIPE_KILL] DISABLING SHADER %016llx", spv_hash);
-        continue; // IMPORTANT: skip pipeline creation entirely
+        STEREO_LOG("[PIPE_KILL] SKIPPING SHADER %016llx", spv_hash);
+        return false;
     }
 
     if (spv_hash == 0x4316779e1c0bcc4dULL && dbg)
