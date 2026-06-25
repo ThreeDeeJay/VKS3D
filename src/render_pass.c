@@ -146,9 +146,11 @@ stereo_CreateRenderPass(
                depth_only,
                pCreateInfo->attachmentCount);
 
-    if (!sd->stereo.enabled ||
-        !sd->stereo.multiview ||
-        depth_only)
+    bool mv_eligible =
+        sd->stereo.enabled &&
+        sd->stereo.multiview &&
+        !depth_only;
+    if (!mv_eligible)
     {
         return VK_SUCCESS;
     }
@@ -157,21 +159,24 @@ stereo_CreateRenderPass(
      * FIX 2 CORE: DEDUPE MV render passes
      * Ensure 1 base RP → 1 MV RP mapping.
      */
-    for (uint32_t i = 0; i < sd->render_pass_count - 1; i++)
+    if (sd->render_pass_count > 1)
     {
-        StereoRenderPassInfo *ex = &sd->render_passes[i];
-
-        if (ex->handle == *pRenderPass && ex->mv_handle)
+        for (uint32_t i = 0; i < sd->render_pass_count - 1; i++)
         {
-            rpi->mv_handle     = ex->mv_handle;
-            rpi->has_multiview = true;
-            rpi->view_mask     = STEREO_VIEW_MASK;
+            StereoRenderPassInfo *ex = &sd->render_passes[i];
 
-            STEREO_LOG("RenderPass %p: reused existing mv=%p",
-                       (void*)*pRenderPass,
-                       (void*)ex->mv_handle);
+            if (ex->handle == *pRenderPass && ex->mv_handle)
+            {
+                rpi->mv_handle     = ex->mv_handle;
+                rpi->has_multiview = true;
+                rpi->view_mask     = STEREO_VIEW_MASK;
 
-            return VK_SUCCESS;
+                STEREO_LOG("RenderPass %p: reused existing mv=%p",
+                           (void*)*pRenderPass,
+                           (void*)ex->mv_handle);
+
+                return VK_SUCCESS;
+            }
         }
     }
 

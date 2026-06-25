@@ -80,10 +80,12 @@ stereo_CreateFramebuffer(
 
         uint32_t idx = sd->fb_track_count;
 
+        /* CRITICAL: zero-initialize to prevent garbage bool/padding */
+        memset(&sd->fb_tracks[idx], 0, sizeof(StereoFramebufferTrack));
         sd->fb_tracks[idx].fb     = *pFramebuffer;
         sd->fb_tracks[idx].rp     = pCreateInfo->renderPass;
         sd->fb_tracks[idx].mv_rp  = use_mv;
-        sd->fb_tracks[idx].has_mv = (use_mv != VK_NULL_HANDLE);
+        sd->fb_tracks[idx].has_mv = (use_mv != VK_NULL_HANDLE && sd->stereo.multiview);
 
         STEREO_LOG(
             "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u sizeof(track)=%u",
@@ -153,11 +155,19 @@ stereo_CmdBeginRenderPass(
                      dev->fb_tracks[i].has_mv,
                      rp_match);
              }
-            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
+            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer &&
+                (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass ||
+                 dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass))
             {
                 if (dev->fb_tracks[i].has_mv)
                     mv_rp = dev->fb_tracks[i].mv_rp;
                 sd = dev;
+                STEREO_LOG(
+                    "FB_MATCH_RESOLVE fb=%p rp_begin=%p resolved_mv_rp=%p has_mv=%u",
+                    pRenderPassBegin->framebuffer,
+                    pRenderPassBegin->renderPass,
+                    mv_rp,
+                    dev->fb_tracks[i].has_mv);
                 break;
             }
         }
@@ -169,6 +179,14 @@ stereo_CmdBeginRenderPass(
         }
     }
     if (!sd) return;
+    /* CRITICAL DIAGNOSTIC: MV expected but not resolved */
+    if (mv_rp == VK_NULL_HANDLE)
+    {
+        STEREO_LOG(
+            "MV RP LOST BEFORE DRAW CALL fb=%p rp=%p (this frame will be mono/black if expected stereo)",
+            pRenderPassBegin->framebuffer,
+            pRenderPassBegin->renderPass);
+    }
 
     STEREO_LOG(
         "RP_BEGIN fb=%p mv_rp=%p active=%d",
