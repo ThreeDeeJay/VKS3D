@@ -451,13 +451,25 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     
         uint32_t a4[] = {op_(SpvOpCompositeInsert,6), m->v4t, tmp, wv, tmp, 2u};
         sb_push_n(out, a4, 6);
-    
+        STEREO_LOG(
+            "[FINAL_STORE] hash=%016llx pptr=%u tmp=%u view=%u",
+            (unsigned long long)hash_spv(m->words, m->count),
+            pptr,
+            tmp,
+            m->view_var);
+
         uint32_t a5[] = {op_(SpvOpStore,3), pptr, tmp};
         sb_push_n(out, a5, 3);
     }
     else
     {
-        uint32_t w[]={op_(SpvOpStore,3),pptr,np};
+    STEREO_LOG(
+        "[FINAL_STORE] hash=%016llx pptr=%u np=%u view=%u",
+        (unsigned long long)hash_spv(m->words, m->count),
+        pptr,
+        np,
+        m->view_var);
+    uint32_t w[]={op_(SpvOpStore,3),pptr,np};
         sb_push_n(out,w,3);
     }
 
@@ -577,7 +589,12 @@ bool spirv_patch_stereo_vertex(
             m.pos_is_block ? 1 : 0);
     }
     STEREO_LOG(
-        "PATCHABLE shader: hash=%016llx-vs.spv words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+        "PIPE_SHADER stage=%s exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+        (m.exec_model == SpvExecVertex) ? "VS" :
+        (m.exec_model == SpvExecFragment) ? "FS" :
+        (m.exec_model == SpvExecGeometry) ? "GS" :
+        "OTHER",
+        m.exec_model,
         (unsigned long long)spv_hash,
         m.count,
         m.has_matrix_ops,
@@ -585,6 +602,13 @@ bool spirv_patch_stereo_vertex(
         m.emit_count,
         m.pos_var,
         m.view_var);
+
+    if (spv_hash == 0x4316779e1c0bcc4dULL)
+    {
+        STEREO_LOG("[PIPE_KILL] DISABLING SHADER %016llx", spv_hash);
+        continue; // IMPORTANT: skip pipeline creation entirely
+    }
+
     if (spv_hash == 0x4316779e1c0bcc4dULL && dbg)
     {
         STEREO_LOG(
