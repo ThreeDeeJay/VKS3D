@@ -153,21 +153,26 @@ stereo_CmdBeginRenderPass(
     }
     if (!sd) return;
 
+    STEREO_LOG(
+        "RP_BEGIN fb=%p mv_rp=%p active=%d",
+        pRenderPassBegin->framebuffer,
+        mv_rp,
+        mv_rp != VK_NULL_HANDLE);
     if (mv_rp) {
         VkRenderPassBeginInfo modified = *pRenderPassBegin;
         modified.renderPass = mv_rp;
+        STEREO_LOG(
+            "[RP BEGIN MV] fb=%p rp=%p mv_rp=%p",
+            pRenderPassBegin->framebuffer,
+            pRenderPassBegin->renderPass,
+            mv_rp);
         sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
+        STEREO_LOG(
+            "[RP BEGIN MONO] fb=%p rp=%p",
+            pRenderPassBegin->framebuffer,
+            pRenderPassBegin->renderPass);
     } else {
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
 
-    STEREO_LOG(
-        "CMD_BEGIN_RP rp=%p mv_rp=%p fb=%p contents=%d",
-        pRenderPassBegin->renderPass,
-        mv_rp,
-        pRenderPassBegin->framebuffer,
-        contents);
-    STEREO_LOG(
-        "CMD_BEGIN_RP CLEAR_VALUES=%u",
-        pRenderPassBegin->clearValueCount);
 }

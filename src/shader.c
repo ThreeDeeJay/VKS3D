@@ -1056,7 +1056,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
 {
     StereoDevice *sd=stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("CreateGraphicsPipelines: N=%u", N);
+    STEREO_LOG(
+        "PIPE_CREATE_BEGIN N=%u multiview=%d enabled=%d",
+        N,
+        sd->stereo.multiview,
+        sd->stereo.enabled);
     if (!sd->stereo.enabled)
         return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
 
@@ -1068,7 +1072,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
-
+    for (uint32_t p = 0; p < N; p++) {
+        STEREO_LOG(
+            "PIPE_IN p=%u rp=%p stageCount=%u vs=%d tcs=%d tes=%d pNext=%p",
+            p,
+            (void*)pCI[p].renderPass,
+            pCI[p].stageCount,
+            (pCI[p].pVertexInputState != NULL),
+            0,
+            0,
+            pCI[p].pNext);
+    }
     const char *dump = stereo_getenv("VKS3D_DUMP_SPIRV");
     static int  dump_n = 0;
     float lo=sd->stereo.left_eye_offset, ro=sd->stereo.right_eye_offset,
@@ -1108,6 +1122,27 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             rpi = stereo_rp_lookup(sd, ci->renderPass);
             in_mv_rp = (rpi != NULL && rpi->has_multiview);
         }
+
+        /* ── PATCH 3: Pipeline Multiview enable (CRITICAL) ─────────────── */
+        VkPipelineMultiviewCreateInfo *mv_pipe_ci = NULL;
+        
+        if (in_mv_rp) {
+            mv_pipe_ci = malloc(sizeof(*mv_pipe_ci));
+            *mv_pipe_ci = (VkPipelineMultiviewCreateInfo){
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTIVIEW_CREATE_INFO,
+                .pNext = (void*)infos[p].pNext,
+                .subpassCount = ci->subpassCount,
+                .pViewMasks = NULL,
+                .correlationMaskCount = 0,
+                .pCorrelationMasks = NULL
+            };
+        
+            infos[p].pNext = mv_pipe_ci;
+        
+            STEREO_LOG("Pipe %u: PIPELINE multiview enabled (subpasses=%u)",
+                       p, ci->subpassCount);
+        }
+
         if (!in_mv_rp) {
             STEREO_LOG(
                 "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
@@ -1343,8 +1378,43 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                    p, ci->stageCount, has_vs, has_tes, has_tcs);
     }
 
+    /* ── Multiview pipeline enable (CRITICAL) ───────────────────────────
+     * Without this, gl_ViewIndex may always resolve to 0 even if the
+     * render pass is multiview-capable.
+     */
+    VkPipelineMultiviewCreateInfo mv_ci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTIVIEW_CREATE_INFO,
+        .pNext = NULL,
+        .subpassCount = 0,
+        .pViewMasks = NULL,
+        .dependencyCount = 0,
+        .pViewOffsets = NULL,
+        .correlationMaskCount = 0,
+        .pCorrelationMasks = NULL
+    };
+    
+    for (uint32_t p = 0; p < N; p++) {
+        StereoRenderPassInfo *rpi = NULL;
+        if (pCI[p].renderPass != VK_NULL_HANDLE)
+            rpi = stereo_rp_lookup(sd, pCI[p].renderPass);
+    
+        if (rpi && rpi->has_multiview) {
+            mv_ci.subpassCount = 1;
+    
+            /* attach via pNext chain */
+            infos[p].pNext = &mv_ci;
+        }
+    }
+    STEREO_LOG(
+        "PIPE_CREATE_CALL N=%u first_renderPass=%p first_stageCount=%u",
+        N,
+        infos[0].renderPass,
+        infos[0].stageCount);
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
-    STEREO_LOG("CreateGraphicsPipelines result=%d",res);
+    STEREO_LOG(
+        "PIPE_CREATE_END result=%d multiview_pass_exists=%d",
+        res,
+        sd->multiview_pass_exists);
 
     for (uint32_t p=0;p<N;p++) {
         if (tmp_mod[p]) {
@@ -1354,6 +1424,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
         }
         free(tst[p]);
+        /* cleanup PIPE multiview pNext */
+        if (infos[p].pNext) {
+            VkPipelineMultiviewCreateInfo *mv =
+                (VkPipelineMultiviewCreateInfo*)infos[p].pNext;
+        
+            if (mv && mv->sType == VK_STRUCTURE_TYPE_PIPELINE_MULTIVIEW_CREATE_INFO)
+                free(mv);
+        }
     }
     free(tmp_mod); free(tst); free(infos);
     return res;

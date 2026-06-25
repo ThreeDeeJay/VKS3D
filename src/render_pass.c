@@ -92,15 +92,16 @@ static VkResult create_mv_rp(StereoDevice *sd,
     if (!vm || !cm || (pCI->dependencyCount && !vo)) {
         free(pa); free(vm); free(cm); free(vo); return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
-    for (uint32_t i = 0; i < sc; i++) { vm[i] = STEREO_VIEW_MASK; cm[i] = STEREO_CORRELATION_MASK; }
+    for (uint32_t i = 0; i < sc; i++) { vm[i] = 0x00000003; cm[i] = STEREO_CORRELATION_MASK; }
     VkRenderPassMultiviewCreateInfo mv = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
-        .pNext = pCI->pNext, .subpassCount = sc, .pViewMasks = vm,
+        .pNext = NULL, .subpassCount = sc, .pViewMasks = vm,
         .dependencyCount = pCI->dependencyCount, .pViewOffsets = vo,
         .correlationMaskCount = sc, .pCorrelationMasks = cm,
     };
     VkRenderPassCreateInfo mod = *pCI;
     if (pa) mod.pAttachments = pa;
+    mv.pNext = NULL;
     mod.pNext = &mv;
     VkResult res = sd->real.CreateRenderPass(sd->real_device, &mod, pA, pRP);
     free(pa); free(vm); free(cm); free(vo);
