@@ -1017,11 +1017,11 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 {
 
     StereoDevice *sd = stereo_device_from_handle(device);
-    STEREO_LOG(
-        "[NV3D] acquire gfx_queue=%p",
-        sd ? sd->gfx_queue : NULL);
+    //STEREO_LOG(
+    //    "[NV3D] acquire gfx_queue=%p",
+    //    sd ? sd->gfx_queue : NULL);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
+    //STEREO_LOG("stereo_AcquireNextImageKHR: sc=%p", (void*)swapchain);
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
 
@@ -1141,13 +1141,13 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
-    STEREO_LOG(
-        "[NV3D] QueuePresentKHR queue=%p swapchains=%u",
-        queue,
-        pPresentInfo ?
-            pPresentInfo->swapchainCount : 0);
-    STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
-               (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
+    //STEREO_LOG(
+    //    "[NV3D] QueuePresentKHR queue=%p swapchains=%u",
+    //    queue,
+    //    pPresentInfo ?
+    //    pPresentInfo->swapchainCount : 0);
+    //STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
+    //           (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
     extern StereoDevice g_devices[];
     extern uint32_t     g_device_count;
 
