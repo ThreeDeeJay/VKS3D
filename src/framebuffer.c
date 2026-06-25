@@ -95,15 +95,21 @@ stereo_DestroyFramebuffer(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return;
+
     for (uint32_t i = 0; i < sd->fb_track_count; i++) {
-        if (sd->fb_track_handles[i] == framebuffer) {
+        if (sd->fb_tracks[i].fb == framebuffer) {
             uint32_t last = --sd->fb_track_count;
-            sd->fb_track_handles[i] = sd->fb_track_handles[last];
-            sd->fb_track_mv_rps [i] = sd->fb_track_mv_rps [last];
+
+            sd->fb_tracks[i] = sd->fb_tracks[last];
+
             break;
         }
     }
-    sd->real.DestroyFramebuffer(sd->real_device, framebuffer, pAllocator);
+
+    sd->real.DestroyFramebuffer(
+        sd->real_device,
+        framebuffer,
+        pAllocator);
 }
 
 /* ── vkCmdBeginRenderPass ───────────────────────────────────────────────── */
@@ -120,7 +126,16 @@ stereo_CmdBeginRenderPass(
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
         StereoDevice *dev = &g_devices[d];
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
-
+            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
+            {
+                STEREO_LOG(
+                    "RP_BEGIN_CMD fb=%p rp=%p tracked_rp=%p mv_rp=%p has_mv=%d",
+                    pRenderPassBegin->framebuffer,
+                    pRenderPassBegin->renderPass,
+                    dev->fb_tracks[i].rp,
+                    dev->fb_tracks[i].mv_rp,
+                    dev->fb_tracks[i].has_mv);
+            }
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer &&
                 dev->fb_tracks[i].rp == pRenderPassBegin->renderPass)
             {
