@@ -229,6 +229,21 @@ static void do_scan(SpvMod *m, bool p2)
         i+=wc;
     }
 }
+
+static const char* spv_stage_str(int exec_model)
+{
+    switch (exec_model)
+    {
+        case SpvExecVertex:   return "VS";
+        case SpvExecFragment: return "FS";
+        case SpvExecGeometry: return "GS";
+        case SpvExecTessellationControl: return "TCS";
+        case SpvExecTessellationEvaluation: return "TES";
+        case SpvExecCompute: return "CS";
+        default: return "UNKNOWN";
+    }
+}
+
 static void spv_scan(SpvMod *m)
 {
     m->bound = m->words[3];
@@ -589,7 +604,8 @@ bool spirv_patch_stereo_vertex(
             m.pos_is_block ? 1 : 0);
     }
     STEREO_LOG(
-        "PIPE_SHADER exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+        "PIPE_SHADER stage=%s exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+        spv_stage_str(m.exec_model),
         m.exec_model,
         (unsigned long long)spv_hash,
         m.count,
@@ -598,21 +614,24 @@ bool spirv_patch_stereo_vertex(
         m.emit_count,
         m.pos_var,
         m.view_var);
-
-    if (spv_hash == 0x4316779e1c0bcc4dULL)
-    {
-        STEREO_LOG("[PIPE_KILL] SKIPPING SHADER %016llx", spv_hash);
-        return false;
-    }
-
-    if (spv_hash == 0x4316779e1c0bcc4dULL && dbg)
+    if (m.exec_model == SpvExecFragment)
     {
         STEREO_LOG(
-            "[SKYHASH_PASS] rp=%p mv=%d pipe=%u stage=%u",
-            (void*)dbg->render_pass,
-            dbg->is_multiview,
-            dbg->pipeline_index,
-            dbg->stage);
+            "[FS_PIPELINE] hash=%016llx words=%zu uv=%d frag_coord=%d",
+            (unsigned long long)spv_hash,
+            m.count,
+            !!m.has_matrix_ops,
+            !!m.pos_var);
+    }
+    if (spv_hash == 0xb1b54a745edeb68aULL && m.exec_model == SpvExecFragment)
+    {
+        STEREO_LOG("[PIPE_KILL_FS_TEST] blocking fragment shader sky candidate");
+        return false;
+    }
+    if (spv_hash == 0xb1b54a745edeb68aULL)
+    {
+        STEREO_LOG("[FS_KILL_TEST] killing fragment shader sky candidate");
+        return black_output_fragment_shader();
     }
     if (m.exec_model == SpvExecVertex)
     {
