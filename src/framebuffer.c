@@ -153,8 +153,7 @@ stereo_CmdBeginRenderPass(
                      dev->fb_tracks[i].has_mv,
                      rp_match);
              }
-            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer &&
-                dev->fb_tracks[i].rp == pRenderPassBegin->renderPass)
+            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
             {
                 if (dev->fb_tracks[i].has_mv)
                     mv_rp = dev->fb_tracks[i].mv_rp;
