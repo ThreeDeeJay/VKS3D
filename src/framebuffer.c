@@ -82,8 +82,13 @@ stereo_CreateFramebuffer(
 
         /* CRITICAL: zero-initialize to prevent garbage bool/padding */
         memset(&sd->fb_tracks[idx], 0, sizeof(StereoFramebufferTrack));
+        STEREO_LOG("TRACK_SIZE_CHECK idx=%u expected=%zu actual=%zu",
+                    idx,
+                    sizeof(StereoFramebufferTrack),
+                    sizeof(sd->fb_tracks[idx]));
         sd->fb_tracks[idx].fb     = *pFramebuffer;
-        sd->fb_tracks[idx].rp     = pCreateInfo->renderPass;
+        VkRenderPass real_rp = *pRenderPass;
+        sd->fb_tracks[idx].rp = real_rp;
         sd->fb_tracks[idx].mv_rp  = use_mv;
         sd->fb_tracks[idx].has_mv = (use_mv != VK_NULL_HANDLE && sd->stereo.multiview);
 
@@ -159,7 +164,7 @@ stereo_CmdBeginRenderPass(
                 (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass ||
                  dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass))
             {
-                if (dev->fb_tracks[i].has_mv)
+                if (fb_tracks[i].mv_rp != VK_NULL_HANDLE)
                     mv_rp = dev->fb_tracks[i].mv_rp;
                 sd = dev;
                 STEREO_LOG(
