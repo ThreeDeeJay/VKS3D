@@ -40,9 +40,8 @@ stereo_CreateFramebuffer(
         }
         if (all) {
             StereoRenderPassInfo *rpi = stereo_rp_lookup(sd, pCreateInfo->renderPass);
-            if (rpi &&
-                rpi->mv_handle &&
-                rpi->handle == pCreateInfo->renderPass)
+        if (rpi &&
+            rpi->mv_handle && (rpi->handle == pCreateInfo->renderPass))
             {
                 fci.renderPass = rpi->mv_handle;
                 use_mv         = rpi->mv_handle;
@@ -74,8 +73,22 @@ stereo_CreateFramebuffer(
             }
         }
     }
+    STEREO_LOG(
+        "FB_CREATE rp_in=%p rp_used=%p mv_candidate=%p",
+        pCreateInfo->renderPass,
+        fci.renderPass,
+        use_mv);
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
-
+    if (fci.renderPass == VK_NULL_HANDLE)
+    {
+        STEREO_LOG("[FB_TRACK_FATAL] fci.renderPass == NULL after patching fb=%p use_mv=%p",
+                   *pFramebuffer,
+                   use_mv);
+    }
+    if (pCreateInfo->renderPass == VK_NULL_HANDLE)
+    {
+        STEREO_LOG("[FB_TRACK_FATAL] pCreateInfo->renderPass == NULL fb=%p", *pFramebuffer);
+    }
     if (res == VK_SUCCESS && sd->fb_track_count < MAX_FB_TRACK)
     {
         uint32_t idx = sd->fb_track_count;
@@ -87,12 +100,12 @@ stereo_CreateFramebuffer(
         memset(t, 0, sizeof(*t));
 
         t->fb     = *pFramebuffer;
-        t->rp     = real_rp;
+        t->rp     = fci.renderPass;   // IMPORTANT: actual used RP
         t->mv_rp  = use_mv;
 
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
                     sd->stereo.multiview &&
-                    sd->multiview_pass_exists;
+                    (use_mv == fci.renderPass || use_mv == pCreateInfo->renderPass);
 
         STEREO_LOG(
             "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u mv_enabled=%u",
@@ -102,7 +115,13 @@ stereo_CreateFramebuffer(
             t->mv_rp,
             t->has_mv,
             sd->stereo.multiview);
-
+        if (use_mv == VK_NULL_HANDLE)
+        {
+            STEREO_LOG(
+                "[FB_TRACK_WARN] MV NOT STORED fb=%p rp=%p reason=use_mv_null",
+                *pFramebuffer,
+                pCreateInfo->renderPass);
+        }
         sd->fb_track_count++;
     }
     return res;
@@ -152,7 +171,8 @@ stereo_CmdBeginRenderPass(
             bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
             bool rp_match =
                 (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass) ||
-                (dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass);
+                (dev->fb_tracks[i].mv_rp != VK_NULL_HANDLE &&
+                 dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass);
             if (fb_match) {
                 STEREO_LOG(
                     "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
