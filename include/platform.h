@@ -512,6 +512,7 @@ static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
 }
 
 /* STEREO_LOG / STEREO_ERR: no-ops when logging is disabled */
+#  ifndef STEREO_LOG
 #  define STEREO_LOG(fmt, ...) \
     do { if (g_vks3d_log_enabled) \
         vks3d_logf("", fmt, ##__VA_ARGS__); \
@@ -520,6 +521,7 @@ static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
     do { if (g_vks3d_log_enabled) \
         vks3d_logf("[ERROR] ", fmt, ##__VA_ARGS__); \
     } while (0)
+#  endif
 
 #else
 /* ── Linux / macOS ────────────────────────────────────────────────────────── */
