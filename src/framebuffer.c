@@ -160,4 +160,14 @@ stereo_CmdBeginRenderPass(
     } else {
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
+
+    STEREO_LOG(
+        "CMD_BEGIN_RP rp=%p mv_rp=%p fb=%p contents=%d",
+        pRenderPassBegin->renderPass,
+        mv_rp,
+        pRenderPassBegin->framebuffer,
+        contents);
+    STEREO_LOG(
+        "CMD_BEGIN_RP CLEAR_VALUES=%u",
+        pRenderPassBegin->clearValueCount);
 }
