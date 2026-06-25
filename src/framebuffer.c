@@ -23,17 +23,28 @@ stereo_CreateFramebuffer(
     const VkAllocationCallbacks    *pAllocator,
     VkFramebuffer                  *pFramebuffer)
 {
+    STEREO_LOG("[FB ENTRY RAW] pFramebuffer=%p rp=%p attachmentCount=%u",
+               pFramebuffer,
+               pCreateInfo->renderPass,
+               pCreateInfo->attachmentCount);
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     VkFramebufferCreateInfo fci = *pCreateInfo;
+    VkRenderPass debug_original = pCreateInfo->renderPass;
+    
+    if (debug_original == VK_NULL_HANDLE) {
+        STEREO_LOG("[FATAL] upstream pCreateInfo->renderPass already NULL!");
+    }
+
     /* CRITICAL: snapshot ORIGINAL RP before any modification */
     VkRenderPass original_rp = pCreateInfo->renderPass;
     VkRenderPass use_mv      = VK_NULL_HANDLE;
     
     /* HARD ASSERT: framebuffer created without renderPass */
     if (original_rp == VK_NULL_HANDLE) {
-        STEREO_LOG("[HARD ASSERT] CreateFramebuffer received NULL renderPass fb=%p", (void*)pFramebuffer);
+        STEREO_LOG("[HARD ASSERT] CreateFramebuffer received NULL renderPass fb=%p",
+                   pFramebuffer);
     }
 
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
@@ -90,7 +101,17 @@ stereo_CreateFramebuffer(
         pCreateInfo->renderPass,
         fci.renderPass,
         use_mv);
+    if (fci.renderPass == VK_NULL_HANDLE && use_mv != VK_NULL_HANDLE) {
+        STEREO_LOG("[FATAL] renderPass was LOST during patching path original=%p mv=%p",
+                   debug_original, use_mv);
+    }
+    VkRenderPass before = fci.renderPass;
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
+    
+    if (before != fci.renderPass) {
+        STEREO_LOG("[CRITICAL MUTATION] fci.renderPass changed during CreateFramebuffer: %p -> %p",
+                   before, fci.renderPass);
+    }
     if (fci.renderPass == VK_NULL_HANDLE)
     {
         STEREO_LOG("[FB_TRACK_FATAL] fci.renderPass == NULL after patching fb=%p use_mv=%p",
@@ -105,8 +126,6 @@ stereo_CreateFramebuffer(
     {
         uint32_t idx = sd->fb_track_count;
 
-        VkRenderPass real_rp = original_rp;
-
         /* IMPORTANT: snapshot BEFORE increment */
         StereoFramebufferTrack *t = &sd->fb_tracks[idx];
         memset(t, 0, sizeof(*t));
@@ -114,17 +133,21 @@ stereo_CreateFramebuffer(
         t->fb     = *pFramebuffer;
         /* ORIGINAL RP used by application */
         /* normalize: NULL renderpass breaks matching logic */
-        t->rp = (original_rp != VK_NULL_HANDLE) ? original_rp : fci.renderPass;
+        t->rp = original_rp;
         /* MV replacement RP */
         t->mv_rp  = use_mv;
 
-        /* HARD ASSERT: consistency checkpoint */
-        if ((sd->stereo.enabled && sd->stereo.multiview && use_mv == VK_NULL_HANDLE)) {
-            STEREO_LOG("[HARD ASSERT] mv expected but missing fb=%p", t->fb);
-        }
+        /* HARD ASSERT: final framebuffer consistency */
+        if (sd->stereo.enabled && sd->stereo.multiview) {
+            if (use_mv == VK_NULL_HANDLE) {
+                STEREO_LOG("[HARD ASSERT] multiview enabled but NO mv_rp resolved fb=%p rp=%p",
+                           t->fb, t->rp);
+            }
         
-        if (use_mv != VK_NULL_HANDLE && fci.renderPass == VK_NULL_HANDLE) {
-            STEREO_LOG("[HARD ASSERT] mv exists but fci lost rp fb=%p", t->fb);
+            if (use_mv != VK_NULL_HANDLE && fci.renderPass == VK_NULL_HANDLE) {
+                STEREO_LOG("[HARD ASSERT] mv_rp exists but fci.renderPass lost fb=%p",
+                           t->fb);
+            }
         }
 
         /* ================= HARD ASSERT SECTION ================= */
