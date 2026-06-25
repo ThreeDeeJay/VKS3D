@@ -508,15 +508,9 @@ typedef struct StereoDevice {
     uint32_t               upgraded_view_count;
     /* Per-framebuffer: which render pass (multiview version) was used */
 #define MAX_FB_TRACK           512
-typedef struct StereoFBTrack {
-    VkFramebuffer fb;
-    VkRenderPass  rp;     // original RP used to create FB
-    VkRenderPass  mv_rp;  // selected MV RP
-    bool          has_mv;  // TRUE if framebuffer uses multiview renderpass
-} StereoFBTrack;
-StereoFBTrack fb_tracks[MAX_FB_TRACK];
-uint32_t      fb_track_count;
-
+    VkFramebuffer          fb_track_handles[MAX_FB_TRACK];
+    VkRenderPass           fb_track_mv_rps [MAX_FB_TRACK];
+    uint32_t               fb_track_count;
     stereo_mutex_t         lock;
 
     /* -- Multiview render pass tracking ----------------------------------- *
