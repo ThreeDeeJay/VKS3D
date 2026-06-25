@@ -134,6 +134,16 @@ stereo_CreateFramebuffer(
                 pCreateInfo->renderPass);
         }
         sd->fb_track_count++;
+        StereoFramebufferTrack *verify =
+            &sd->fb_tracks[idx];
+        
+        STEREO_LOG(
+            "FB_TRACK_VERIFY idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u",
+            idx,
+            verify->fb,
+            verify->rp,
+            verify->mv_rp,
+            (unsigned)verify->has_mv);
     }
     return res;
 }
@@ -177,6 +187,10 @@ stereo_CmdBeginRenderPass(
     VkRenderPass mv_rp = VK_NULL_HANDLE;
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
         StereoDevice *dev = &g_devices[d];
+        STEREO_LOG(
+            "FB_TRACK_SCAN count=%u sizeof(track)=%u",
+            dev->fb_track_count,
+            (unsigned)sizeof(StereoFramebufferTrack));
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
 
             bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
