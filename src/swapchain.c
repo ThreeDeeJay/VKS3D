@@ -1494,9 +1494,13 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     }
     if (!needs_upgrade)
        {
-            //STEREO_LOG(
-            //    "[VIEW PASSTHROUGH] image=%p",
-            //    pCreateInfo->image);
+        STEREO_LOG(
+            "VIEW_PASSTHROUGH image=%p fmt=%u aspect=0x%X viewType=%u layers=%u",
+            (void*)(uintptr_t)pCreateInfo->image,
+            pCreateInfo->format,
+            pCreateInfo->subresourceRange.aspectMask,
+            pCreateInfo->viewType,
+            pCreateInfo->subresourceRange.layerCount);
         return sd->real.CreateImageView(
             sd->real_device,
             pCreateInfo,
@@ -1522,12 +1526,15 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     //    pCreateInfo->subresourceRange.layerCount,
     //    upgraded.subresourceRange.layerCount);
     STEREO_LOG(
-        "VIEW_UPGRADE image=%p fmt=%u usageDepth=%u usageColor=%u viewType=%u",
-        image,
+        "VIEW_UPGRADE image=%p fmt=%u depth_matches=%u color_matches=%u oldType=%u newType=%u oldLayers=%u newLayers=%u",
+        (void*)(uintptr_t)pCreateInfo->image,
         pCreateInfo->format,
-        is_depth_image,
-        is_color_image,
-        modified.viewType);
+        depth_matches,
+        color_matches,
+        pCreateInfo->viewType,
+        upgraded.viewType,
+        pCreateInfo->subresourceRange.layerCount,
+        upgraded.subresourceRange.layerCount);
     VkResult _r = sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
     //STEREO_LOG(
     //    "[VIEW TRACK CANDIDATE] view=%p image=%p",
