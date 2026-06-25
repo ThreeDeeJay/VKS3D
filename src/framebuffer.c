@@ -139,17 +139,20 @@ stereo_CmdBeginRenderPass(
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
         StereoDevice *dev = &g_devices[d];
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
-            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
-            {
-                STEREO_LOG(
-                    "RP_BEGIN_CMD idx=%u fb=%p rp=%p tracked_rp=%p mv_rp=%p has_mv=%u",
-                    i,
-                    pRenderPassBegin->framebuffer,
-                    pRenderPassBegin->renderPass,
-                    dev->fb_tracks[i].rp,
-                    dev->fb_tracks[i].mv_rp,
-                    dev->fb_tracks[i].has_mv);
-            }
+             bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
+             bool rp_match = (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass);
+             if (fb_match) {
+                 STEREO_LOG(
+                     "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
+                     d,
+                     i,
+                     pRenderPassBegin->framebuffer,
+                     pRenderPassBegin->renderPass,
+                     dev->fb_tracks[i].rp,
+                     dev->fb_tracks[i].mv_rp,
+                     dev->fb_tracks[i].has_mv,
+                     rp_match);
+             }
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer &&
                 dev->fb_tracks[i].rp == pRenderPassBegin->renderPass)
             {
