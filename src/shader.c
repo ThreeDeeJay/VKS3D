@@ -411,12 +411,22 @@ bool spirv_patch_stereo_vertex(
      *
      * Leave these monoscopic at screen depth.
      */
-    if (m.exec_model == SpvExecVertex &&
-        !m.has_matrix_ops)
+    if (m.exec_model == SpvExecVertex)
     {
-        STEREO_LOG(
-            "Skipping stereo patch: likely screen-space shader");
-        return false;
+        if (!m.pos_var)
+        {
+            STEREO_LOG("Skipping stereo patch: no gl_Position detected");
+            return false;
+        }
+    
+        /* Only reject truly screen-aligned fullscreen quads */
+        if (m.pos_is_block && !m.has_matrix_ops)
+        {
+            STEREO_LOG("Skipping stereo patch: confirmed screen-space (pos block)");
+            return false;
+        }
+    
+        /* IMPORTANT: DO NOT rely on matrix_ops for DXVK */
     }
 
     if (!m.is_patchable || !m.pos_var)
@@ -548,9 +558,18 @@ bool spirv_patch_stereo_vertex(
         if (id_inj_view && opx==SpvOpEntryPoint && wcx>=4 &&
             (in[i+1]==SpvExecVertex||in[i+1]==SpvExecGeometry||
              in[i+1]==SpvExecTessEval)) {
-            sb_push(&ob, ((wcx+1)<<16)|SpvOpEntryPoint);
-            sb_push_n(&ob, &in[i+1], wcx-1);
-            sb_push(&ob, id_inj_view);
+            bool is_vertex = (in[i+1] == SpvExecVertex);
+            
+            if (id_inj_view && is_vertex)
+            {
+                sb_push(&ob, ((wcx+1)<<16)|SpvOpEntryPoint);
+                sb_push_n(&ob, &in[i+1], wcx-1);
+                sb_push(&ob, id_inj_view);
+            }
+            else
+            {
+                sb_push_n(&ob, &in[i], wcx);
+            }
             i+=wcx; continue;
         }
 
