@@ -26,8 +26,10 @@ stereo_CreateFramebuffer(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    VkFramebufferCreateInfo fci    = *pCreateInfo;
-    VkRenderPass            use_mv = VK_NULL_HANDLE;
+    VkFramebufferCreateInfo fci = *pCreateInfo;
+    /* CRITICAL: snapshot ORIGINAL RP before any modification */
+    VkRenderPass original_rp = pCreateInfo->renderPass;
+    VkRenderPass use_mv      = VK_NULL_HANDLE;
 
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
         /* All attachments must be in sd->upgraded_views[] (2-layer 2D_ARRAY) */
@@ -93,7 +95,7 @@ stereo_CreateFramebuffer(
     {
         uint32_t idx = sd->fb_track_count;
 
-        VkRenderPass real_rp = pCreateInfo->renderPass;
+        VkRenderPass real_rp = original_rp;
 
         /* IMPORTANT: snapshot BEFORE increment */
         StereoFramebufferTrack *t = &sd->fb_tracks[idx];
@@ -102,7 +104,16 @@ stereo_CreateFramebuffer(
         t->fb     = *pFramebuffer;
         t->rp     = fci.renderPass;   // IMPORTANT: actual used RP
         t->mv_rp  = use_mv;
-
+        if (use_mv != VK_NULL_HANDLE && !sd->stereo.multiview)
+        {
+            STEREO_LOG("[HARD ASSERT] MV RP exists but multiview disabled?? fb=%p rp=%p",
+                       t->fb, t->rp);
+        }
+        
+        if (use_mv != VK_NULL_HANDLE && sd->multiview_pass_exists == false)
+        {
+            STEREO_LOG("[HARD ASSERT] MV RP created but global flag not set fb=%p", t->fb);
+        }
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
                     sd->stereo.multiview &&
                     (use_mv == fci.renderPass || use_mv == pCreateInfo->renderPass);
