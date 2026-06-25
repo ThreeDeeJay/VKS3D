@@ -150,8 +150,9 @@ stereo_CmdBeginRenderPass(
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
 
             bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
-            bool rp_match = (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass || dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass);
-
+            bool rp_match =
+                (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass) ||
+                (dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass);
             if (fb_match) {
                 STEREO_LOG(
                     "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
@@ -170,11 +171,38 @@ stereo_CmdBeginRenderPass(
 
                 VkRenderPass resolved_mv = VK_NULL_HANDLE;
 
-                if (dev->fb_tracks[i].has_mv &&
-                    (rp_match || dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass))
+                if (resolved_mv && dev->fb_tracks[i].mv_rp == VK_NULL_HANDLE)
                 {
-                    resolved_mv = dev->fb_tracks[i].mv_rp;
-                    sd = dev;
+                    dev->fb_tracks[i].mv_rp  = resolved_mv;
+                    dev->fb_tracks[i].has_mv = true;
+                
+                    STEREO_LOG(
+                        "[FB_MATCH_WRITEBACK] fb=%p rp=%p mv_rp=%p",
+                        dev->fb_tracks[i].fb,
+                        dev->fb_tracks[i].rp,
+                        resolved_mv);
+                }
+                if (dev->fb_tracks[i].has_mv)
+                {
+                    VkRenderPass candidate = dev->fb_tracks[i].mv_rp;
+                
+                    if (candidate != VK_NULL_HANDLE &&
+                        (rp_match || candidate == pRenderPassBegin->renderPass))
+                    {
+                        mv_rp = candidate;
+                        sd = dev;
+                        break;
+                    }
+                }
+                if (resolved_mv && dev->fb_tracks[i].mv_rp == VK_NULL_HANDLE)
+                {
+                    dev->fb_tracks[i].mv_rp  = resolved_mv;
+                    dev->fb_tracks[i].has_mv = true;
+
+                    STEREO_LOG(
+                        "[FB_MATCH_WRITEBACK] fb=%p mv_rp=%p",
+                        dev->fb_tracks[i].fb,
+                        resolved_mv);
                 }
 
                 STEREO_LOG(
