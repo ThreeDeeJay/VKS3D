@@ -8,10 +8,10 @@
 #include <winver.h>
 
 /* Version numbers — keep in sync with CMakeLists.txt */
-#define VKS3D_VER_MAJOR 1
-#define VKS3D_VER_MINOR 0
-#define VKS3D_VER_PATCH ${VKS3D_VER_PATCH}
-#define VKS3D_VER_BUILD ${VKS3D_VER_BUILD}
+#define VKS3D_VER_MAJOR  1
+#define VKS3D_VER_MINOR  0
+#define VKS3D_VER_PATCH  0
+#define VKS3D_VER_BUILD  0
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     VKS3D_VER_MAJOR, VKS3D_VER_MINOR, VKS3D_VER_PATCH, VKS3D_VER_BUILD
