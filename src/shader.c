@@ -335,14 +335,20 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     uint32_t lv=c->have_view?(*nid)++:0, isl=c->have_view?(*nid)++:0,
              sel=(*nid)++,
              px=(*nid)++, nx=(*nid)++, np=(*nid)++;
+    STEREO_LOG(
+        "[EMIT_VIEW] hash=%016llx have_view=%d view_var=%u",
+        (unsigned long long)hash_spv(m->words, m->count),
+        c->have_view ? 1 : 0,
+        m->view_var);
     if (c->have_view && m->view_var && m->it && c->bt) {
         { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
         { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
         STEREO_LOG(
-            "emit_body: projection=%d have_view=%d view_var=%u",
+            "[EMIT_VIEW] projection=%d have_view=%d view_var=%u bt=%u",
             c->projection_mode,
             c->have_view,
-            m->view_var);
+            m->view_var,
+            c->bt);
         { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cr,c->cl}; sb_push_n(out,w,6); }
     } else { sel=c->cl; }
     { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u};    sb_push_n(out,w,5); }
@@ -527,16 +533,6 @@ bool spirv_patch_stereo_vertex(
         (!m.has_emit_vertex) &&
         (m.emit_count == 0) &&
         (!m.has_direct_position_write);
-    
-    /* ─────────────────────────────────────────────
-     * SKY FIX: ensure stereo separation even when
-     * shader does NOT provide ViewIndex or matrix ops
-     * ───────────────────────────────────────────── */
-    if (sky_candidate)
-    {
-        /* Force view usage so sel != 0 path is active */
-        m.view_var = m.view_var ? m.view_var : 1;
-    }
 
     STEREO_LOG(
         "[SKYCAND] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u direct=%d matrix=%d sky=%d",
@@ -659,10 +655,15 @@ bool spirv_patch_stereo_vertex(
      * write clip-space positions. These are responsible for the
      * duplicated shadow/composite artifacts seen in deferredshadows.
      */
-/*     if (!m.has_matrix_ops && m.exec_model != SpvExecutionModelVertex) {*/
-/*         STEREO_LOG("Skipping stereo patch: no matrix operations detected");*/
-/*         return false;*/
-/*     }*/
+    /*
+    if (!m.has_matrix_ops &&
+        m.exec_model != SpvExecutionModelVertex)
+    {
+        STEREO_LOG(
+            "Skipping stereo patch: no matrix operations detected");
+        return false;
+    }
+    */
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
@@ -672,8 +673,24 @@ bool spirv_patch_stereo_vertex(
     if (!m.it && inj_vi && !m.view_var) { id_new_it=nid++; m.it=id_new_it; }
 
     bool     will_inj_vi = inj_vi && !m.view_var && m.it;
+    STEREO_LOG(
+        "[VIEW_INJECT] hash=%016llx inj_vi=%d view_var=%u m.it=%u will=%d",
+        (unsigned long long)hash_spv(m.words, m.count),
+        inj_vi ? 1 : 0,
+        m.view_var,
+        m.it,
+        will_inj_vi ? 1 : 0);
     uint32_t id_inj_view = will_inj_vi ? nid++ : 0;
     bool     have_view   = (m.view_var || will_inj_vi);
+
+    STEREO_LOG(
+        "[VIEWPATH] hash=%016llx view_var=%u inj_vi=%d will_inj_vi=%d have_view=%d m.it=%u",
+        (unsigned long long)hash_spv(m.words, m.count),
+        m.view_var,
+        inj_vi ? 1 : 0,
+        will_inj_vi ? 1 : 0,
+        have_view ? 1 : 0,
+        m.it);
     uint32_t id_new_bt=0;
     if (!m.bt && have_view && m.it) id_new_bt=nid++;
 
@@ -721,6 +738,11 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view;
     }
 
+    STEREO_LOG(
+        "[VIEWPATH_AFTER] hash=%016llx view_var=%u id_inj_view=%u",
+        (unsigned long long)hash_spv(m.words, m.count),
+        m.view_var,
+        id_inj_view);
     BodyCtx bc={&m, have_view, uv4, uint_, bt,
              id_cz, id_cf0,
              id_cl, id_cr, id_cc,
@@ -756,9 +778,20 @@ bool spirv_patch_stereo_vertex(
     }
     if (m.pos_is_block && !is_gs) {
         for (size_t i=5;i<in_c;) {
-            uint32_t opx=in[i]&0xffff, wcx=in[i]>>16; if (!wcx) break;
-            if (opx==253||opx==254) { ins_b=i; break; } i+=wcx;
+            uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
+            if (!wcx) break;
+
+            if (opx==253 || opx==254) {
+                ins_b=i;
+                break;
+            }
+            i+=wcx;
         }
+        STEREO_LOG(
+            "[INSERT_POINT] hash=%016llx block=%d ins_b=%zu",
+            (unsigned long long)hash_spv(m.words, m.count),
+            m.pos_is_block ? 1 : 0,
+            ins_b);
     }
     if (!is_gs && !ins_b) { sb_free(&te); return false; }
     if (!is_gs && ins_b < ins_t) { sb_free(&te); return false; }
