@@ -30,6 +30,11 @@ stereo_CreateFramebuffer(
     /* CRITICAL: snapshot ORIGINAL RP before any modification */
     VkRenderPass original_rp = pCreateInfo->renderPass;
     VkRenderPass use_mv      = VK_NULL_HANDLE;
+    
+    /* HARD ASSERT: framebuffer created without renderPass */
+    if (original_rp == VK_NULL_HANDLE) {
+        STEREO_LOG("[HARD ASSERT] CreateFramebuffer received NULL renderPass fb=%p", (void*)pFramebuffer);
+    }
 
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
         /* All attachments must be in sd->upgraded_views[] (2-layer 2D_ARRAY) */
@@ -108,9 +113,19 @@ stereo_CreateFramebuffer(
 
         t->fb     = *pFramebuffer;
         /* ORIGINAL RP used by application */
-        t->rp     = original_rp;
+        /* normalize: NULL renderpass breaks matching logic */
+        t->rp = (original_rp != VK_NULL_HANDLE) ? original_rp : fci.renderPass;
         /* MV replacement RP */
         t->mv_rp  = use_mv;
+
+        /* HARD ASSERT: consistency checkpoint */
+        if ((sd->stereo.enabled && sd->stereo.multiview && use_mv == VK_NULL_HANDLE)) {
+            STEREO_LOG("[HARD ASSERT] mv expected but missing fb=%p", t->fb);
+        }
+        
+        if (use_mv != VK_NULL_HANDLE && fci.renderPass == VK_NULL_HANDLE) {
+            STEREO_LOG("[HARD ASSERT] mv exists but fci lost rp fb=%p", t->fb);
+        }
 
         /* ================= HARD ASSERT SECTION ================= */
         if (sd->stereo.enabled && sd->stereo.multiview && use_mv == VK_NULL_HANDLE) {
@@ -234,9 +249,16 @@ stereo_CmdBeginRenderPass(
 
             bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
             bool rp_match =
-                (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass) ||
-                (dev->fb_tracks[i].mv_rp != VK_NULL_HANDLE &&
-                 dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass);
+                (
+                    dev->fb_tracks[i].rp != VK_NULL_HANDLE &&
+                    pRenderPassBegin->renderPass != VK_NULL_HANDLE &&
+                    dev->fb_tracks[i].rp == pRenderPassBegin->renderPass
+                )
+                ||
+                (
+                    dev->fb_tracks[i].mv_rp != VK_NULL_HANDLE &&
+                    dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass
+                );
             if (fb_match) {
                 STEREO_LOG(
                     "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p (unsigned)t->has_mv rp_match=%u",
@@ -277,16 +299,6 @@ stereo_CmdBeginRenderPass(
                         sd = dev;
                         break;
                     }
-                }
-                if (resolved_mv && dev->fb_tracks[i].mv_rp == VK_NULL_HANDLE)
-                {
-                    dev->fb_tracks[i].mv_rp  = resolved_mv;
-                    dev->fb_tracks[i].has_mv = true;
-
-                    STEREO_LOG(
-                        "[FB_MATCH_WRITEBACK] fb=%p mv_rp=%p",
-                        dev->fb_tracks[i].fb,
-                        resolved_mv);
                 }
 
                 STEREO_LOG(
