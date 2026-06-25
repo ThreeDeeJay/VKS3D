@@ -1531,6 +1531,7 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         //    "[VIEW TRACK ADD] view=%p count=%u",
         //    *pView,
         //    sd->upgraded_view_count);
+        sd->upgraded_views[sd->upgraded_view_count++] = *pView;
     }
     //STEREO_LOG(
     //    "[VIEW TRACKED] view=%p count=%u",
