@@ -182,10 +182,10 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
         sd->upgraded_views[sd->upgraded_view_count++] =
             sc->stereo_views_arr[0];
     
-        STEREO_LOG(
-            "[VIEW TRACK ADD NV3D] view=%p count=%u",
-            sc->stereo_views_arr[0],
-            sd->upgraded_view_count);
+        //STEREO_LOG(
+        //    "[VIEW TRACK ADD NV3D] view=%p count=%u",
+        //    sc->stereo_views_arr[0],
+        //    sd->upgraded_view_count);
     }
     STEREO_LOG(
         "[NV3D TEST] alloc_alt_stereo_swapchain image=%p view=%p count=%u",
@@ -256,12 +256,12 @@ static void tracked_destroy_image(
     VkImage image,
     const char *site)
 {
-    STEREO_LOG(
-        "[DESTROY IMAGE] site=%s image=%p depth_count=%u color_count=%u",
-        site,
-        image,
-        sd->intercepted_depth_count,
-        sd->intercepted_color_count);
+    //STEREO_LOG(
+    //    "[DESTROY IMAGE] site=%s image=%p depth_count=%u color_count=%u",
+    //    site,
+    //    image,
+    //    sd->intercepted_depth_count,
+    //    sd->intercepted_color_count);
 
     remove_tracked_image(
         sd->intercepted_depth,
@@ -615,22 +615,22 @@ try_dx9:
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
-            STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
+            //STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
             gpu_compose_sc_destroy(sd, sc);
-            STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
+            //STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
             if (sc->real_swapchain) {
-                STEREO_LOG(
-                    "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
-                    sc->real_swapchain);
-                STEREO_LOG(
-                    "[COMPOSE DESTROY] sc=%p app=%p real=%p",
-                    sc,
-                    sc->app_handle,
-                    sc->real_swapchain);
+                //STEREO_LOG(
+                //    "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+                //    sc->real_swapchain);
+                //STEREO_LOG(
+                //    "[COMPOSE DESTROY] sc=%p app=%p real=%p",
+                //    sc,
+                //    sc->app_handle,
+                //    sc->real_swapchain);
                 sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
-                STEREO_LOG(
-                    "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
-                    sc->real_swapchain);
+                //STEREO_LOG(
+                //    "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
+                //    sc->real_swapchain);
                 sc->real_swapchain = VK_NULL_HANDLE;
             }
         }
@@ -701,66 +701,66 @@ VKAPI_ATTR void VKAPI_CALL
 stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
                             const VkAllocationCallbacks *pAllocator)
 {
-    STEREO_LOG(
-        "[DESTROY SC ENTRY] swapchain=%p",
-        swapchain);
+    //STEREO_LOG(
+    //    "[DESTROY SC ENTRY] swapchain=%p",
+    //    swapchain);
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return;
-    STEREO_LOG(
-        "[DESTROY SC START] count=%u",
-        sd->swapchain_count);
+    //STEREO_LOG(
+    //    "[DESTROY SC START] count=%u",
+    //    sd->swapchain_count);
 
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
 
-    STEREO_LOG(
-        "[DESTROY SC LOOKUP RESULT] app=%p sc=%p active=%d images=%u",
-        swapchain,
-        sc,
-        sc ? (int)sc->stereo_active : -1,
-        sc ? sc->image_count : 0);
+    //STEREO_LOG(
+    //    "[DESTROY SC LOOKUP RESULT] app=%p sc=%p active=%d images=%u",
+    //    swapchain,
+    //    sc,
+    //    sc ? (int)sc->stereo_active : -1,
+    //    sc ? sc->image_count : 0);
     if (sc && sc->resize_reused)
     {
-        STEREO_LOG(
-            "[DESTROY SC] ignoring recycled resize swapchain app=%p sc=%p",
-            swapchain,
-            sc);
+        //STEREO_LOG(
+        //    "[DESTROY SC] ignoring recycled resize swapchain app=%p sc=%p",
+        //    swapchain,
+        //    sc);
     
         sc->resize_reused = false;
         return;
     }
 
-    STEREO_LOG(
-        "[DESTROY SC] present_mode=%d active=%d app=%p real=%p",
-        sc ? (int)sc->present_mode : -1,
-        sc ? (int)sc->stereo_active : -1,
-        sc ? sc->app_handle : VK_NULL_HANDLE,
-        sc ? sc->real_swapchain : VK_NULL_HANDLE);
-    STEREO_LOG(
-        "[DESTROY SC LOOKUP] app=%p sc=%p",
-        swapchain,
-        sc);
+    //STEREO_LOG(
+    //    "[DESTROY SC] present_mode=%d active=%d app=%p real=%p",
+    //    sc ? (int)sc->present_mode : -1,
+    //    sc ? (int)sc->stereo_active : -1,
+    //    sc ? sc->app_handle : VK_NULL_HANDLE,
+    //    sc ? sc->real_swapchain : VK_NULL_HANDLE);
+    //STEREO_LOG(
+    //    "[DESTROY SC LOOKUP] app=%p sc=%p",
+    //    swapchain,
+    //    sc);
 
     if (sc) {
-        STEREO_LOG(
-            "[DESTROY SC] stereo_active=%d",
-            sc ? (int)sc->stereo_active : -1);
+        //STEREO_LOG(
+        //    "[DESTROY SC] stereo_active=%d",
+        //    sc ? (int)sc->stereo_active : -1);
 
-        STEREO_LOG(
-            "[DESTROY SC] image_count=%u stereo_images=%p stereo_views=%p",
-            sc->image_count,
-            sc->stereo_images,
-            sc->stereo_views_arr);
+        //STEREO_LOG(
+        //    "[DESTROY SC] image_count=%u stereo_images=%p stereo_views=%p",
+        //    sc->image_count,
+        //    sc->stereo_images,
+        //    sc->stereo_views_arr);
 
         for (uint32_t i = 0; i < sc->image_count; i++)
         {
-            STEREO_LOG("[DESTROY SC] image %u", i);
+            //STEREO_LOG("[DESTROY SC] image %u", i);
 
             if (sc->stereo_views_arr && sc->stereo_views_arr[i])
             {
-                STEREO_LOG(
-                    "[DESTROY SC] destroy imageview %u view=%p",
-                    i,
-                    sc->stereo_views_arr[i]);
+                //STEREO_LOG(
+                //    "[DESTROY SC] destroy imageview %u view=%p",
+                //    i,
+                //    sc->stereo_views_arr[i]);
                 stereo_DestroyImageView(
                     device,
                     sc->stereo_views_arr[i],
@@ -818,7 +818,7 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
             if (sc->stereo_memory && sc->stereo_memory[i])
             {
-                STEREO_LOG("[DESTROY SC] free memory %u", i);
+                //STEREO_LOG("[DESTROY SC] free memory %u", i);
                 sd->real.FreeMemory(
                     sd->real_device,
                     sc->stereo_memory[i],
@@ -854,73 +854,73 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
             nv3d_destroy(sd);
 
-        STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
+        //STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
         gpu_compose_sc_destroy(sd, sc);     /* semaphores + comp_sc_images array */
-        STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
-        STEREO_LOG("[DESTROY SC] before alt_cpu_staging_destroy");
+        //STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
+        //STEREO_LOG("[DESTROY SC] before alt_cpu_staging_destroy");
         alt_cpu_staging_destroy(sd, sc);    /* DX9 CPU staging (no-op if unused) */
-        STEREO_LOG("[DESTROY SC] after alt_cpu_staging_destroy");
-        STEREO_LOG("[DESTROY SC] before dxgi_sc_destroy");
+        //STEREO_LOG("[DESTROY SC] after alt_cpu_staging_destroy");
+        //STEREO_LOG("[DESTROY SC] before dxgi_sc_destroy");
         dxgi_sc_destroy(sc);
-        STEREO_LOG("[DESTROY SC] after dxgi_sc_destroy");
+        //STEREO_LOG("[DESTROY SC] after dxgi_sc_destroy");
 
         /* real_swapchain: GPU compose output SC or passthrough SC */
         if (sc->real_swapchain)
         {
-            STEREO_LOG(
-                "[DESTROY SC] app=%p sc=%p real=%p",
-                swapchain,
-                sc,
-                sc->real_swapchain);
-            STEREO_LOG(
-                "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
-                sc->real_swapchain);
+            //STEREO_LOG(
+            //    "[DESTROY SC] app=%p sc=%p real=%p",
+            //    swapchain,
+            //    sc,
+            //    sc->real_swapchain);
+            //STEREO_LOG(
+            //    "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+            //    sc->real_swapchain);
             sd->real.DestroySwapchainKHR(
                 sd->real_device,
                 sc->real_swapchain,
                 pAllocator);
-            STEREO_LOG(
-                "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
-                sc->real_swapchain);
+            //STEREO_LOG(
+            //    "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
+            //    sc->real_swapchain);
             sc->real_swapchain = VK_NULL_HANDLE;
         }
 
-        STEREO_LOG(
-            "[DESTROY SC] keeping slot alive sc=%p",
-            sc);
+        //STEREO_LOG(
+        //    "[DESTROY SC] keeping slot alive sc=%p",
+        //    sc);
 
         /* leave structure in table */
         sc->stereo_active = false;
 
     } else {
-    STEREO_LOG(
-        "[DESTROY SC PASSTHROUGH] BEFORE destroy swapchain=%p",
-        swapchain);
+    //STEREO_LOG(
+    //    "[DESTROY SC PASSTHROUGH] BEFORE destroy swapchain=%p",
+    //    swapchain);
 
-    STEREO_LOG(
-        "[DESTROY SC PASSTHROUGH] device=%p",
-        sd->real_device);
+    //STEREO_LOG(
+    //    "[DESTROY SC PASSTHROUGH] device=%p",
+    //    sd->real_device);
 
-    STEREO_LOG(
-        "[DESTROY SC PASSTHROUGH] calling real destroy device=%p swapchain=%p",
-        sd->real_device,
-        swapchain);
+    //STEREO_LOG(
+    //    "[DESTROY SC PASSTHROUGH] calling real destroy device=%p swapchain=%p",
+    //    sd->real_device,
+    //    swapchain);
 
     sd->real.DestroySwapchainKHR(
         sd->real_device,
         swapchain,
         pAllocator);
 
-    STEREO_LOG(
-        "[DESTROY SC PASSTHROUGH] real destroy returned");
+    //STEREO_LOG(
+    //    "[DESTROY SC PASSTHROUGH] real destroy returned");
 
-    STEREO_LOG(
-        "[DESTROY SC PASSTHROUGH] AFTER destroy swapchain=%p",
-        swapchain);
+    //STEREO_LOG(
+    //    "[DESTROY SC PASSTHROUGH] AFTER destroy swapchain=%p",
+    //    swapchain);
     }
-    STEREO_LOG(
-        "[DESTROY SC END] count=%u",
-        sd->swapchain_count);
+    //STEREO_LOG(
+    //    "[DESTROY SC END] count=%u",
+    //    sd->swapchain_count);
 }
 
 /* ── vkGetSwapchainImagesKHR ────────────────────────────────────────────── */
@@ -1510,33 +1510,32 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     STEREO_LOG("stereo_CreateImageView: upgraded %p → 2D_ARRAY/layerCount=2 [multiview=1]",
                (void*)(uintptr_t)pCreateInfo->image);
     VkResult _r = sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
-    STEREO_LOG(
-        "[VIEW TRACK CANDIDATE] view=%p image=%p",
-        _r == VK_SUCCESS ? *pView : VK_NULL_HANDLE,
-        pCreateInfo->image);
+    //STEREO_LOG(
+    //    "[VIEW TRACK CANDIDATE] view=%p image=%p",
+    //    _r == VK_SUCCESS ? *pView : VK_NULL_HANDLE,
+    //    pCreateInfo->image);
     /* Track upgraded views for framebuffer multiview detection */
     if (_r == VK_SUCCESS &&
         sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
     {
-        STEREO_LOG(
-            "[VIEW TRACK ADD] view=%p slot=%u",
-            *pView,
-            sd->upgraded_view_count);
-        sd->upgraded_views[sd->upgraded_view_count++] = *pView;
-        STEREO_LOG(
-            "[VIEW TRACK ADD] view=%p count=%u",
-            *pView,
-            sd->upgraded_view_count);
-
-        STEREO_LOG(
-            "[VIEW TRACK ADD] view=%p count=%u",
-            *pView,
-            sd->upgraded_view_count);
+        //STEREO_LOG(
+        //    "[VIEW TRACK ADD] view=%p slot=%u",
+        //    *pView,
+        //    sd->upgraded_view_count);
+        //sd->upgraded_views[sd->upgraded_view_count++] = *pView;
+        //STEREO_LOG(
+        //    "[VIEW TRACK ADD] view=%p count=%u",
+        //    *pView,
+        //    sd->upgraded_view_count);
+        //STEREO_LOG(
+        //    "[VIEW TRACK ADD] view=%p count=%u",
+        //    *pView,
+        //    sd->upgraded_view_count);
     }
-    STEREO_LOG(
-        "[VIEW TRACKED] view=%p count=%u",
-        *pView,
-        sd->upgraded_view_count);
+    //STEREO_LOG(
+    //    "[VIEW TRACKED] view=%p count=%u",
+    //    *pView,
+    //    sd->upgraded_view_count);
     return _r;
 }
 
@@ -1546,21 +1545,21 @@ stereo_DestroyImageView(
     VkImageView imageView,
     const VkAllocationCallbacks *pAllocator)
 {
-    STEREO_LOG(
-        "[DESTROY IMAGEVIEW ENTRY] view=%p",
-        imageView);
-    STEREO_LOG(
-        "[VIEW DESTROY ENTRY] view=%p",
-        imageView);
+    //STEREO_LOG(
+    //    "[DESTROY IMAGEVIEW ENTRY] view=%p",
+    //    imageView);
+    //STEREO_LOG(
+    //    "[VIEW DESTROY ENTRY] view=%p",
+    //    imageView);
 
     StereoDevice *sd = stereo_device_from_handle(device);
 
     if (!sd)
         return;
 
-    STEREO_LOG(
-        "[VIEW DESTROY LOOKUP] count=%u",
-        sd->upgraded_view_count);
+    //STEREO_LOG(
+    //    "[VIEW DESTROY LOOKUP] count=%u",
+    //    sd->upgraded_view_count);
 
     for (uint32_t i = 0;
          i < sd->upgraded_view_count;
@@ -1568,10 +1567,10 @@ stereo_DestroyImageView(
     {
         if (sd->upgraded_views[i] == imageView)
         {
-            STEREO_LOG(
-                "[VIEW TRACK REMOVE] view=%p slot=%u",
-                imageView,
-                i);
+            //STEREO_LOG(
+            //    "[VIEW TRACK REMOVE] view=%p slot=%u",
+            //    imageView,
+            //    i);
 
             memmove(
                 &sd->upgraded_views[i],
@@ -1582,9 +1581,9 @@ stereo_DestroyImageView(
             sd->upgraded_view_count--;
             sd->upgraded_views[sd->upgraded_view_count] = VK_NULL_HANDLE;
 
-            STEREO_LOG(
-                "[VIEW TRACK COUNT] count=%u",
-                sd->upgraded_view_count);
+            //STEREO_LOG(
+            //    "[VIEW TRACK COUNT] count=%u",
+            //    sd->upgraded_view_count);
 
             break;
         }
