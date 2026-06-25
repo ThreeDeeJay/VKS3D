@@ -35,7 +35,6 @@
 #define SpvOpAccessChain      65
 #define SpvOpDecorate         71
 #define SpvOpMemberDecorate   72
-#define SpvOpCopyObject       83
 #define SpvOpFunction         54
 #define SpvOpEmitVertex       218
 #define SpvOpCompositeExtract 81
@@ -97,9 +96,6 @@ typedef struct {
     uint32_t view_var, ft, v4t, it, bt, ptr_out_v4, ptr_in_int;
     size_t   fn_word;
     uint32_t emit_count;
-    bool     force_far_depth;
-    bool     looks_like_sky;
-    uint32_t next_id;
 } SpvMod;
 
 static void do_scan(SpvMod *m, bool p2)
@@ -163,40 +159,13 @@ static void do_scan(SpvMod *m, bool p2)
             break;
         case SpvOpStore:
         {
-            /* ── SKY/UI CLASSIFICATION DEBUG ───────────────────────── */
-            if (wc >= 3)
+            if (wc >= 3 &&
+                w[i+1] == m->pos_var)
             {
-                uint32_t dst = w[i+1];
-                uint32_t src = w[i+2];
-            
-                STEREO_LOG(
-                    "[STORE] dst=%u pos_var=%u block=%d src=%u",
-                    dst,
-                    m->pos_var,
-                    m->pos_is_block ? 1 : 0,
-                    src);
-            }
-            
-            /* ── detect ANY position write, not just exact match ───── */
-            if (wc >= 3)
-            {
-                uint32_t dst = w[i+1];
-            
-                /* direct write to Position variable */
-                if (dst == m->pos_var)
-                {
+                uint32_t source = w[i+2];
+
+                if (!m->has_matrix_ops)
                     m->has_direct_position_write = true;
-                }
-            
-                /* block-based position writes (CRITICAL for sky shaders) */
-                for (uint32_t k = 0; k < m->pos_block_count; k++)
-                {
-                    if (dst == m->pos_block_type[k])
-                    {
-                        m->has_direct_position_write = true;
-                        break;
-                    }
-                }
             }
         }
         break;
@@ -221,29 +190,10 @@ static void do_scan(SpvMod *m, bool p2)
                     m->pos_var=w[i+2];
                 }
             }
-            if(op==SpvOpMatrixTimesVector || op==SpvOpLoad)
-            {
-                /* potential sky signal accumulation */
-            }
         }
         i+=wc;
     }
 }
-
-static const char* spv_stage_str(int exec_model)
-{
-    switch (exec_model)
-    {
-        case SpvExecutionModelVertex:   return "VS";
-        case SpvExecutionModelFragment: return "FS";
-        case SpvExecutionModelGeometry: return "GS";
-        case SpvExecutionModelTessellationControl: return "TCS";
-        case SpvExecutionModelTessellationEvaluation: return "TES";
-        case SpvExecutionModelGLCompute: return "CS";
-        default: return "UNKNOWN";
-    }
-}
-
 static void spv_scan(SpvMod *m)
 {
     m->bound = m->words[3];
@@ -258,28 +208,6 @@ static void spv_scan(SpvMod *m)
 
     if (m->pos_is_block)
         do_scan(m,true);
-
-    /* ── SKY CLASSIFICATION (FINAL PASS ONLY) ───────────────── */
-    if (m->exec_model == SpvExecVertex &&
-        m->has_matrix_ops &&
-        m->pos_var &&
-        !m->has_emit_vertex &&
-        m->emit_count == 0)
-    {
-        /* extra safety: exclude “geometry-like world shaders” */
-        if (m->view_var == 0 && m->has_mv_cap)
-        {
-            m->looks_like_sky = true;
-        }
-        else
-        {
-            m->looks_like_sky = false;
-        }
-    }
-    else
-    {
-        m->looks_like_sky = false;
-    } 
 }
 
 uint64_t hash_spv(const uint32_t *data, size_t words)
@@ -310,7 +238,6 @@ typedef struct {
     float lo_dbg;
     float ro_dbg;
     int   flip_dbg;
-    bool  force_far_depth;
 } BodyCtx;
 
 typedef struct {
@@ -350,20 +277,14 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     uint32_t lv=c->have_view?(*nid)++:0, isl=c->have_view?(*nid)++:0,
              sel=(*nid)++,
              px=(*nid)++, nx=(*nid)++, np=(*nid)++;
-    STEREO_LOG(
-        "[EMIT_VIEW] hash=%016llx have_view=%d view_var=%u",
-        (unsigned long long)hash_spv(m->words, m->count),
-        c->have_view ? 1 : 0,
-        m->view_var);
     if (c->have_view && m->view_var && m->it && c->bt) {
         { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
         { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
         STEREO_LOG(
-            "[EMIT_VIEW] projection=%d have_view=%d view_var=%u bt=%u",
+            "emit_body: projection=%d have_view=%d view_var=%u",
             c->projection_mode,
             c->have_view,
-            m->view_var,
-            c->bt);
+            m->view_var);
         { uint32_t w[]={op_(SpvOpSelect,6),m->ft,sel,isl,c->cr,c->cl}; sb_push_n(out,w,6); }
     } else { sel=c->cl; }
     { uint32_t w[]={op_(SpvOpCompositeExtract,5),m->ft,px,lp,0u};    sb_push_n(out,w,5); }
@@ -426,102 +347,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         }
     }
     { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
-
-    STEREO_LOG(
-        "[FARDEPTH] hash=%016llx force=%d pos_var=%u block=%d emit=%d",
-        (unsigned long long)hash_spv(m->words, m->count),
-        c->force_far_depth,
-        m->pos_var,
-        m->pos_is_block ? 1 : 0,
-        m->has_emit_vertex ? 1 : 0);
-
-    if (c->force_far_depth)
-    {
-        STEREO_LOG("[FARDEPTH] APPLYING override to shader hash=%016llx",
-                   (unsigned long long)hash_spv(m->words, m->count));
-    }
-
-    /* ── SKY / FAR DEPTH OVERRIDE ─────────────────────────────── */
-    if (c->force_far_depth && m->exec_model == SpvExecVertex &&
-        m->pos_var && !m->has_emit_vertex &&
-        m->emit_count == 0)
-    {
-        /* FARDEPTH SAFE MODE:
-           Do NOT rebuild SSA chains (causes ID corruption).
-           Just push position to far clip plane by biasing z. */
-        
-        uint32_t tmp = (*nid)++;
-        /* tmp = load(position) */
-        uint32_t a1[] = {op_(SpvOpLoad,4), m->v4t, tmp, np};
-        sb_push_n(out, a1, 4);
-    
-        /* tmp.z = 0.9999 (force far plane) */
-        uint32_t zc = (*nid)++;
-        uint32_t wv = (*nid)++;
-        uint32_t a2[] = {op_(SpvOpCompositeExtract,5), m->ft, zc, tmp, 2u};
-        sb_push_n(out, a2, 5);
-    
-        uint32_t a3[] = {op_(SpvOpFAdd,5), m->ft, wv, zc, c->cc};
-        sb_push_n(out, a3, 5);
-    
-        uint32_t a4[] = {op_(SpvOpCompositeInsert,6), m->v4t, tmp, wv, tmp, 2u};
-        sb_push_n(out, a4, 6);
-        STEREO_LOG(
-            "[FINAL_STORE] hash=%016llx pptr=%u tmp=%u view=%u",
-            (unsigned long long)hash_spv(m->words, m->count),
-            pptr,
-            tmp,
-            m->view_var);
-
-        uint32_t a5[] = {op_(SpvOpStore,3), pptr, tmp};
-        sb_push_n(out, a5, 3);
-    }
-    else
-    {
-    STEREO_LOG(
-        "[FINAL_STORE] hash=%016llx pptr=%u np=%u view=%u",
-        (unsigned long long)hash_spv(m->words, m->count),
-        pptr,
-        np,
-        m->view_var);
-    uint32_t w[]={op_(SpvOpStore,3),pptr,np};
-        sb_push_n(out,w,3);
-    }
-
-
-    STEREO_LOG(
-        "STEREO_INJECTED hash=%016llx pos_var=%u block=%d matrix=%d emit=%d",
-        (unsigned long long)hash_spv(m->words, m->count),
-        m->pos_var,
-        m->pos_is_block ? 1 : 0,
-        m->has_matrix_ops ? 1 : 0,
-        m->has_emit_vertex ? 1 : 0);
-}
-
-static uint32_t safe_id_base(SpvMod *m)
-{
-    uint32_t max_id = m->bound;
-
-    for (size_t i = 5; i < m->count; i++) {
-        uint32_t op = m->words[i] & 0xffff;
-        uint32_t wc  = m->words[i] >> 16;
-        if (!wc) break;
-
-        for (uint32_t k = 1; k < wc; k++) {
-            uint32_t id = m->words[i + k];
-            if (id > max_id) max_id = id;
-        }
-
-        i += wc - 1;
-    }
-
-    uint32_t base = max_id + 1;
-    
-    /* SPIR-V safety: avoid reuse of low reserved ID ranges */
-    if (base < 1000)
-        base = 1000;
-    
-    return base;
+    { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
 }
 
 /* ── Public patcher ──────────────────────────────────────────────────────── */
@@ -547,44 +373,8 @@ bool spirv_patch_stereo_vertex(
     SpvMod m={0};
     m.words=in;
     m.count=in_c;
-    m.looks_like_sky = false;
-    m.next_id = m.bound;
     spv_scan(&m);
 
-    /* ───────────────────────────────────────────────
-     * SKY CANDIDATE CLASSIFICATION (DEBUG ONLY)
-     * ─────────────────────────────────────────────── */
-    uint32_t sky_direct =
-        (m.exec_model == SpvExecVertex) &&
-        (m.pos_var != 0) &&
-        (!m.has_emit_vertex) &&
-        (m.emit_count == 0) &&
-        (!m.has_direct_position_write);
-
-    STEREO_LOG(
-        "[SKYCAND] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u direct=%d matrix=%d sky=%d",
-        hash_spv(m.words, m.count),
-        m.count,
-        m.pos_var,
-        m.pos_is_block ? 1 : 0,
-        m.emit_count,
-        m.view_var,
-        m.has_direct_position_write,
-        m.has_matrix_ops,
-        sky_direct
-    );
-
-    STEREO_LOG(
-        "SHADER_ANALYSIS exec=%d pos=%u view=%u block=%d emits=%u emitv=%d mvcap=%d matrix=%d patchable=%d",
-        m.exec_model,
-        m.pos_var,
-        m.view_var,
-        m.pos_is_block ? 1 : 0,
-        (unsigned)m.emit_count,
-        m.has_emit_vertex ? 1 : 0,
-        m.has_mv_cap,
-        m.has_matrix_ops,
-        m.is_patchable ? 1 : 0);
     STEREO_LOG(
         "SPIRV scan: exec=%d pos=%u view=%u emits=%u mvcap=%d matrix=%d",
         m.exec_model,
@@ -594,19 +384,8 @@ bool spirv_patch_stereo_vertex(
         m.has_mv_cap,
         m.has_matrix_ops);
     uint64_t spv_hash = hash_spv(m.words, m.count);
-    if (spv_hash == 0xb1b54a745edeb68aULL)
-    {
-        STEREO_LOG(
-            "[SKYHASH] pipeline_stage=%d words=%zu pos=%u block=%d",
-            m.exec_model,
-            m.count,
-            m.pos_var,
-            m.pos_is_block ? 1 : 0);
-    }
     STEREO_LOG(
-        "PIPE_SHADER stage=%s exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
-        spv_stage_str(m.exec_model),
-        m.exec_model,
+        "PATCHABLE shader: hash=%016llx-vs.spv words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
         (unsigned long long)spv_hash,
         m.count,
         m.has_matrix_ops,
@@ -614,25 +393,7 @@ bool spirv_patch_stereo_vertex(
         m.emit_count,
         m.pos_var,
         m.view_var);
-    if (m.exec_model == SpvExecutionModelFragment)
-    {
-        STEREO_LOG(
-            "[FS_PIPELINE] hash=%016llx words=%zu uv=%d frag_coord=%d",
-            (unsigned long long)spv_hash,
-            m.count,
-            !!m.has_matrix_ops,
-            !!m.pos_var);
-    }
-    if (spv_hash == 0xb1b54a745edeb68aULL && m.exec_model == SpvExecutionModelFragment)
-    {
-        STEREO_LOG("[PIPE_KILL_FS_TEST] blocking fragment shader sky candidate");
-        return false;
-    }
-    if (spv_hash == 0xb1b54a745edeb68aULL)
-    {
-        STEREO_LOG("[FS_KILL_TEST] killing fragment shader sky candidate");
-        return black_output_fragment_shader();
-    }
+
     if (m.exec_model == SpvExecVertex)
     {
         STEREO_LOG(
@@ -640,52 +401,26 @@ bool spirv_patch_stereo_vertex(
             m.has_matrix_ops);
     }
 
-    /* ─────────────────────────────────────────────
-     * SKY / WORLD BACKGROUND OVERRIDE
-     * These are NOT HUD or screenspace quads.
-     * They often have:
-     *   - no emit vertex
-     *   - position writes
-     *   - no matrix ops (procedural skybox / cubemap)
-     * ───────────────────────────────────────────── */
-    bool is_fullscreen_like =
-        (!m.has_matrix_ops) &&
-        (m.pos_var != 0) &&
-        (m.exec_model == SpvExecVertex);
-
-    /* detect clip-space quads (UI / HUD / postprocess) */
-    bool is_clip_quad =
-        (m.has_direct_position_write) &&
-        (!m.has_matrix_ops);
-
-    /* SKY heuristic (IMPORTANT: allow no-matrix shaders) */
-    bool is_sky_like =
-        (m.exec_model == SpvExecVertex) &&
-        (m.pos_var != 0) &&
-        (!is_clip_quad);
-
-    /* HUD/text/fullscreen shaders */
-    bool is_screenspace_ui =
-        (m.exec_model == SpvExecVertex) &&
-        (!m.has_matrix_ops) &&
-        (m.has_direct_position_write);
-
-    /* ─────────────────────────────────────────────
-     * SCREENSPACE SKIP (STRICTLY UI ONLY)
-     * ───────────────────────────────────────────── */
-    if (is_screenspace_ui && !is_sky_like)
+    /* HUD/text/fullscreen shaders often write clip-space coordinates
+     * directly and contain no matrix math. Stereoizing them pushes
+     * them in front of the screen and causes excessive negative
+     * parallax.
+     *
+     * Examples:
+     *   gl_Position = vec4(pos.xy, 0.0, 1.0);
+     *
+     * Leave these monoscopic at screen depth.
+     */
+    if (m.exec_model == SpvExecVertex &&
+        !m.has_matrix_ops)
     {
         STEREO_LOG(
-            "[SCREENSPACE_SKIP] hash=%016llx words=%zu pos=%u block=%d emit=%d view=%u sky=%d",
-            (unsigned long long)hash_spv(m.words, m.count),
-            m.count,
-            m.pos_var,
-            m.pos_is_block ? 1 : 0,
-            m.has_emit_vertex ? 1 : 0,
-            m.view_var,
-            is_sky_like ? 1 : 0);
+            "Skipping stereo patch: likely screen-space shader");
         return false;
     }
+
+    if (!m.is_patchable || !m.pos_var)
+        return false;
 
     if (!m.is_patchable || !m.pos_var)
         return false;
@@ -694,42 +429,21 @@ bool spirv_patch_stereo_vertex(
      * write clip-space positions. These are responsible for the
      * duplicated shadow/composite artifacts seen in deferredshadows.
      */
-    /*
-    if (!m.has_matrix_ops &&
-        m.exec_model != SpvExecutionModelVertex)
-    {
-        STEREO_LOG(
-            "Skipping stereo patch: no matrix operations detected");
-        return false;
-    }
-    */
+/*     if (!m.has_matrix_ops && m.exec_model != SpvExecutionModelVertex) {*/
+/*         STEREO_LOG("Skipping stereo patch: no matrix operations detected");*/
+/*         return false;*/
+/*     }*/
 
     bool is_gs = (m.exec_model == SpvExecGeometry);
 
-    uint32_t nid = safe_id_base(&m);
+    uint32_t nid=m.bound;
     uint32_t id_ptr_v4=nid++, id_ptr_int=nid++;
     uint32_t id_new_it=0;
     if (!m.it && inj_vi && !m.view_var) { id_new_it=nid++; m.it=id_new_it; }
 
     bool     will_inj_vi = inj_vi && !m.view_var && m.it;
-    STEREO_LOG(
-        "[VIEW_INJECT] hash=%016llx inj_vi=%d view_var=%u m.it=%u will=%d",
-        (unsigned long long)hash_spv(m.words, m.count),
-        inj_vi ? 1 : 0,
-        m.view_var,
-        m.it,
-        will_inj_vi ? 1 : 0);
     uint32_t id_inj_view = will_inj_vi ? nid++ : 0;
     bool     have_view   = (m.view_var || will_inj_vi);
-
-    STEREO_LOG(
-        "[VIEWPATH] hash=%016llx view_var=%u inj_vi=%d will_inj_vi=%d have_view=%d m.it=%u",
-        (unsigned long long)hash_spv(m.words, m.count),
-        m.view_var,
-        inj_vi ? 1 : 0,
-        will_inj_vi ? 1 : 0,
-        have_view ? 1 : 0,
-        m.it);
     uint32_t id_new_bt=0;
     if (!m.bt && have_view && m.it) id_new_bt=nid++;
 
@@ -777,28 +491,19 @@ bool spirv_patch_stereo_vertex(
         m.view_var=id_inj_view;
     }
 
-    STEREO_LOG(
-        "[VIEWPATH_AFTER] hash=%016llx view_var=%u id_inj_view=%u",
-        (unsigned long long)hash_spv(m.words, m.count),
-        m.view_var,
-        id_inj_view);
     BodyCtx bc={&m, have_view, uv4, uint_, bt,
              id_cz, id_cf0,
              id_cl, id_cr, id_cc,
              projection_mode,
              lo,
              ro,
-             0,
-             m.looks_like_sky};
+             0};
     STEREO_LOG(
         "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
         ro,
         conv,
         projection_mode);
-    STEREO_LOG("[BC] shader=%016llx force_far_depth=%d",
-               (unsigned long long)hash_spv(m.words, m.count),
-               bc.force_far_depth);
 
     size_t ins_t=0, ins_b=0;
     for (size_t i=5;i<in_c;) {
@@ -817,20 +522,9 @@ bool spirv_patch_stereo_vertex(
     }
     if (m.pos_is_block && !is_gs) {
         for (size_t i=5;i<in_c;) {
-            uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
-            if (!wcx) break;
-
-            if (opx==253 || opx==254) {
-                ins_b=i;
-                break;
-            }
-            i+=wcx;
+            uint32_t opx=in[i]&0xffff, wcx=in[i]>>16; if (!wcx) break;
+            if (opx==253||opx==254) { ins_b=i; break; } i+=wcx;
         }
-        STEREO_LOG(
-            "[INSERT_POINT] hash=%016llx block=%d ins_b=%zu",
-            (unsigned long long)hash_spv(m.words, m.count),
-            m.pos_is_block ? 1 : 0,
-            ins_b);
     }
     if (!is_gs && !ins_b) { sb_free(&te); return false; }
     if (!is_gs && ins_b < ins_t) { sb_free(&te); return false; }
@@ -1498,37 +1192,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     (uint32_t)VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT
                 };
 
-                {
-                    SpvMod dbg_m = {0};
-                    dbg_m.words = code;
-                    dbg_m.count = code_words;
-                    spv_scan(&dbg_m);
-                
-                    uint64_t dbg_hash = hash_spv(code, code_words);
-                
-                    STEREO_LOG(
-                        "PIPE_SHADER Path A stage=%s exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
-                        spv_stage_str(dbg_m.exec_model),
-                        dbg_m.exec_model,
-                        (unsigned long long)dbg_hash,
-                        code_words,
-                        dbg_m.has_matrix_ops,
-                        dbg_m.exec_model == SpvExecutionModelGeometry,
-                        dbg_m.emit_count,
-                        dbg_m.pos_var,
-                        dbg_m.view_var);
-                }
-
-                if (dbg_hash == 0xb1b54a745edeb68aULL)
-                {
-                    STEREO_LOG(
-                        "[PIPE_KILL_TEST] PIPE B blocking shader hash=%016llx stage=%s",
-                        (unsigned long long)dbg_hash,
-                        spv_stage_str(dbg_m.exec_model));
-                
-                    return false;
-                }
-
                 if (!spirv_patch_stereo_vertex(
                         e->spv, e->words,
                         &patched, &pc2,
@@ -1617,37 +1280,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 in_mv_rp,
                 (uint32_t)VK_SHADER_STAGE_VERTEX_BIT
             };
-
-            {
-                SpvMod dbg_m = {0};
-                dbg_m.words = code;
-                dbg_m.count = code_words;
-                spv_scan(&dbg_m);
-            
-                uint64_t dbg_hash = hash_spv(code, code_words);
-            
-                STEREO_LOG(
-                    "PIPE_SHADER Path B stage=%s exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
-                    spv_stage_str(dbg_m.exec_model),
-                    dbg_m.exec_model,
-                    (unsigned long long)dbg_hash,
-                    code_words,
-                    dbg_m.has_matrix_ops,
-                    dbg_m.exec_model == SpvExecutionModelGeometry,
-                    dbg_m.emit_count,
-                    dbg_m.pos_var,
-                    dbg_m.view_var);
-            }
-
-            if (dbg_hash == 0xb1b54a745edeb68aULL)
-            {
-                STEREO_LOG(
-                    "[PIPE_KILL_TEST] PIPE B blocking shader hash=%016llx stage=%s",
-                    (unsigned long long)dbg_hash,
-                    spv_stage_str(dbg_m.exec_model));
-            
-                return false;
-            }
 
             if (!spirv_patch_stereo_vertex(
                     e->spv, e->words,
