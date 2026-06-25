@@ -1123,24 +1123,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             in_mv_rp = (rpi != NULL && rpi->has_multiview);
         }
 
-        /* ── PATCH 3: Pipeline Multiview enable (CRITICAL) ─────────────── */
-        VkPipelineMultiviewCreateInfo *mv_pipe_ci = NULL;
-        
+        /* ── PATCH 3: Pipeline multiview FIXED (NO pipeline struct exists) ─────────────── */
+        /* Multiview is render-pass driven ONLY.
+         * Pipeline pNext must NOT contain VkPipelineMultiviewCreateInfo (invalid Vulkan API). */
         if (in_mv_rp) {
-            mv_pipe_ci = malloc(sizeof(*mv_pipe_ci));
-            *mv_pipe_ci = (VkPipelineMultiviewCreateInfo){
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTIVIEW_CREATE_INFO,
-                .pNext = (void*)infos[p].pNext,
-                .subpassCount = ci->subpassCount,
-                .pViewMasks = NULL,
-                .correlationMaskCount = 0,
-                .pCorrelationMasks = NULL
-            };
-        
-            infos[p].pNext = mv_pipe_ci;
-        
-            STEREO_LOG("Pipe %u: PIPELINE multiview enabled (subpasses=%u)",
+            STEREO_LOG("Pipe %u: MV RP detected (subpassCount=%u) - no pipeline pNext needed",
                        p, ci->subpassCount);
+            /* optional: mark via internal flag if needed later */
+            infos[p].renderPass = rpi->mv_handle;
         }
 
         if (!in_mv_rp) {
@@ -1378,31 +1368,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                    p, ci->stageCount, has_vs, has_tes, has_tcs);
     }
 
-    /* ── Multiview pipeline enable (CRITICAL) ───────────────────────────
-     * Without this, gl_ViewIndex may always resolve to 0 even if the
-     * render pass is multiview-capable.
-     */
-    VkPipelineMultiviewCreateInfo mv_ci = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTIVIEW_CREATE_INFO,
-        .pNext = NULL,
-        .subpassCount = 0,
-        .pViewMasks = NULL,
-        .dependencyCount = 0,
-        .pViewOffsets = NULL,
-        .correlationMaskCount = 0,
-        .pCorrelationMasks = NULL
-    };
-    
+    /* ── PATCH 5: RenderPass-based multiview binding ─────────────── */
     for (uint32_t p = 0; p < N; p++) {
         StereoRenderPassInfo *rpi = NULL;
         if (pCI[p].renderPass != VK_NULL_HANDLE)
             rpi = stereo_rp_lookup(sd, pCI[p].renderPass);
     
         if (rpi && rpi->has_multiview) {
-            mv_ci.subpassCount = 1;
-    
-            /* attach via pNext chain */
-            infos[p].pNext = &mv_ci;
+            STEREO_LOG("Pipe %u: binding MV render pass %p", p, (void*)rpi->mv_handle);
+            infos[p].renderPass = rpi->mv_handle;
         }
     }
     STEREO_LOG(
