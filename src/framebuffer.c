@@ -80,6 +80,11 @@ stereo_CreateFramebuffer(
         pCreateInfo->renderPass,
         fci.renderPass,
         use_mv);
+    STEREO_LOG(
+        "FB_FINAL rp_in=%p fci.renderPass=%p use_mv=%p",
+        pCreateInfo->renderPass,
+        fci.renderPass,
+        use_mv);
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
     if (fci.renderPass == VK_NULL_HANDLE)
     {
@@ -102,7 +107,9 @@ stereo_CreateFramebuffer(
         memset(t, 0, sizeof(*t));
 
         t->fb     = *pFramebuffer;
-        t->rp     = fci.renderPass;   // IMPORTANT: actual used RP
+        /* ORIGINAL RP used by application */
+        t->rp     = original_rp;
+        /* MV replacement RP */
         t->mv_rp  = use_mv;
         if (use_mv != VK_NULL_HANDLE && !sd->stereo.multiview)
         {
@@ -114,12 +121,14 @@ stereo_CreateFramebuffer(
         {
             STEREO_LOG("[HARD ASSERT] MV RP created but global flag not set fb=%p", t->fb);
         }
+        STEREO_LOG(
+            "MV_BOOL_CHECK multiview=%d",
+            (int)sd->stereo.multiview);
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
-                    sd->stereo.multiview &&
-                    (use_mv == fci.renderPass || use_mv == pCreateInfo->renderPass);
+                    sd->stereo.multiview;
 
         STEREO_LOG(
-            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u mv_enabled=%u",
+            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u mv_enabled=%d",
             idx,
             t->fb,
             t->rp,
