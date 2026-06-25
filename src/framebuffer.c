@@ -124,6 +124,21 @@ stereo_CreateFramebuffer(
         STEREO_LOG(
             "MV_BOOL_CHECK multiview=%d",
             (int)sd->stereo.multiview);
+        STEREO_LOG(
+            "FB_ADDR_CHECK sd=%p stereo=%p fb_tracks=%p track=%p",
+            sd,
+            &sd->stereo,
+            sd->fb_tracks,
+            t);
+        STEREO_LOG(
+            "FB_BOOL_CHECK multiview=%d use_mv=%p",
+            (int)sd->stereo.multiview,
+            use_mv);
+        STEREO_LOG(
+            "FB_RAW_VALUES fb=%p rp=%p mv_rp=%p",
+            t->fb,
+            t->rp,
+            t->mv_rp);
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
                     sd->stereo.multiview;
 
