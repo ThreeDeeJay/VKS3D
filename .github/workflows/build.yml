@@ -40,10 +40,10 @@ jobs:
     - name: Clone repo and submodules
       run: git clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git "${{github.workspace}}" --branch ${{env.Branch}}
 
-    - name: Get current date, commit hash and count
+    - name: Update version strings
       run: |
-        echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
-        echo "AttemptCount=${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_ENV
+        echo "#define VKS3D_VER_PATCH $(git rev-list --count HEAD)" >> src/VKS3D.rc
+        echo "#define VKS3D_VER_BUILD ${env:GITHUB_RUN_ATTEMPT}" >> src/VKS3D.rc
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
@@ -106,8 +106,6 @@ jobs:
         -DVKS3D_BUILD_TESTS=OFF
         -DVKS3D_BUILD_DEMO=OFF
         -DSTEREO_BUILD_DEMO=OFF
-        -DVKS3D_VER_PATCH=${{env.CommitCount}}
-        -DVKS3D_VER_BUILD=${{env.AttemptCount}}
 
     - name: Build
       run: cmake --build "${{github.workspace}}/build" --config "${{matrix.Configuration}}"
