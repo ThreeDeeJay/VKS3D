@@ -111,16 +111,24 @@ stereo_CreateFramebuffer(
         t->rp     = original_rp;
         /* MV replacement RP */
         t->mv_rp  = use_mv;
-        if (use_mv != VK_NULL_HANDLE && !sd->stereo.multiview)
-        {
-            STEREO_LOG("[HARD ASSERT] MV RP exists but multiview disabled?? fb=%p rp=%p",
+
+        /* ================= HARD ASSERT SECTION ================= */
+        if (sd->stereo.enabled && sd->stereo.multiview && use_mv == VK_NULL_HANDLE) {
+            STEREO_LOG("[HARD ASSERT] multiview enabled but use_mv == NULL fb=%p rp=%p",
                        t->fb, t->rp);
         }
         
-        if (use_mv != VK_NULL_HANDLE && sd->multiview_pass_exists == false)
-        {
-            STEREO_LOG("[HARD ASSERT] MV RP created but global flag not set fb=%p", t->fb);
+        if (use_mv != VK_NULL_HANDLE && fci.renderPass == VK_NULL_HANDLE) {
+            STEREO_LOG("[HARD ASSERT] mv_rp valid but fci.renderPass NULL fb=%p",
+                       t->fb);
         }
+        
+        if (use_mv != VK_NULL_HANDLE && !sd->stereo.multiview) {
+            STEREO_LOG("[HARD ASSERT] mv_rp exists but stereo.multiview OFF fb=%p",
+                       t->fb);
+        }
+        /* ======================================================= */
+
         STEREO_LOG(
             "MV_BOOL_CHECK multiview=%d",
             (int)sd->stereo.multiview);
@@ -141,9 +149,16 @@ stereo_CreateFramebuffer(
             t->mv_rp);
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
                     sd->stereo.multiview;
-
+        /* ===== FINAL CONSISTENCY CHECK ===== */
+        if (t->has_mv && use_mv == VK_NULL_HANDLE) {
+            STEREO_LOG("[HARD ASSERT] has_mv=1 but use_mv NULL fb=%p", t->fb);
+        }
+        
+        if (!t->has_mv && use_mv != VK_NULL_HANDLE && sd->stereo.multiview) {
+            STEREO_LOG("[HARD ASSERT] mv exists but has_mv=0 fb=%p", t->fb);
+        }
         STEREO_LOG(
-            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u mv_enabled=%d",
+            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p (unsigned)t->has_mv mv_enabled=%d",
             idx,
             t->fb,
             t->rp,
@@ -162,7 +177,7 @@ stereo_CreateFramebuffer(
             &sd->fb_tracks[idx];
         
         STEREO_LOG(
-            "FB_TRACK_VERIFY idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u",
+            "FB_TRACK_VERIFY idx=%u fb=%p rp=%p mv_rp=%p (unsigned)t->has_mv",
             idx,
             verify->fb,
             verify->rp,
@@ -224,7 +239,7 @@ stereo_CmdBeginRenderPass(
                  dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass);
             if (fb_match) {
                 STEREO_LOG(
-                    "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
+                    "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p (unsigned)t->has_mv rp_match=%u",
                     d,
                     i,
                     pRenderPassBegin->framebuffer,
@@ -275,7 +290,7 @@ stereo_CmdBeginRenderPass(
                 }
 
                 STEREO_LOG(
-                    "FB_MATCH_RESOLVE fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u resolved_mv=%p",
+                    "FB_MATCH_RESOLVE fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p (unsigned)t->has_mv rp_match=%u resolved_mv=%p",
                     pRenderPassBegin->framebuffer,
                     pRenderPassBegin->renderPass,
                     dev->fb_tracks[i].rp,

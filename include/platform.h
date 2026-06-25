@@ -427,6 +427,9 @@ extern "C" {
 extern HANDLE g_vks3d_log_handle;
 extern int    g_vks3d_log_enabled;
 
+/* Ensures vks3d_log_open() is only executed once per process */
+static int g_vks3d_log_initialized = 0;
+
 #ifdef __cplusplus
 }
 #endif
@@ -439,7 +442,8 @@ extern int    g_vks3d_log_enabled;
 static inline void vks3d_log_open(void)
 {
     /* Already initialised? */
-    if (g_vks3d_log_enabled) return;
+    if (g_vks3d_log_initialized) return;
+    g_vks3d_log_initialized = 1;
 
     /* Read STEREO_LOGFILE_PATH using the Win32 API directly */
     char path[MAX_PATH];
