@@ -1183,8 +1183,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * per-view index (0 or 1).  Render-pass compatibility rules allow these
          * pipelines to be used with both MV and non-MV framebuffers since
          * viewMask is not part of the compatibility criteria. */
-        if (rpi && rpi->mv_handle)
-            infos[p].renderPass = rpi->mv_handle;
+
+        if (rpi && rpi->mv_handle && rpi->has_multiview)
+        {
+            /* IMPORTANT: DXVK safety gate
+             * Only swap renderpass if the actual active RP is MV-capable
+             */
+            if (in_mv_rp)
+                infos[p].renderPass = rpi->mv_handle;
+        }
 
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
