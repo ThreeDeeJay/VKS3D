@@ -1264,13 +1264,27 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         !(pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
     {
         STEREO_LOG(
-            "stereo_CreateImage: depth-only attachment left mono [%ux%u]",
+            "DEPTH_CREATE usage=0x%08X fmt=%u extent=%ux%u intercept_depth=%u intercept_color=%u",
+            pCreateInfo->usage,
+            pCreateInfo->format,
             pCreateInfo->extent.width,
-            pCreateInfo->extent.height);
+            pCreateInfo->extent.height,
+            intercept_depth,
+            intercept_color);
     }
 
     if (!intercept_depth && !intercept_color)
         return sd->real.CreateImage(sd->real_device, pCreateInfo, pAllocator, pImage);
+
+    STEREO_LOG(
+        "IMAGE_UPGRADE usage=0x%08X fmt=%u extent=%ux%u depth=%u color=%u layers %u->2",
+        pCreateInfo->usage,
+        pCreateInfo->format,
+        pCreateInfo->extent.width,
+        pCreateInfo->extent.height,
+        intercept_depth,
+        intercept_color,
+        pCreateInfo->arrayLayers);
 
     VkImageCreateInfo modified = *pCreateInfo;
     modified.arrayLayers = 2;
@@ -1507,8 +1521,13 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     //    upgraded.viewType,
     //    pCreateInfo->subresourceRange.layerCount,
     //    upgraded.subresourceRange.layerCount);
-    STEREO_LOG("stereo_CreateImageView: upgraded %p → 2D_ARRAY/layerCount=2 [multiview=1]",
-               (void*)(uintptr_t)pCreateInfo->image);
+    STEREO_LOG(
+        "VIEW_UPGRADE image=%p fmt=%u usageDepth=%u usageColor=%u viewType=%u",
+        image,
+        pCreateInfo->format,
+        is_depth_image,
+        is_color_image,
+        modified.viewType);
     VkResult _r = sd->real.CreateImageView(sd->real_device, &upgraded, pAllocator, pView);
     //STEREO_LOG(
     //    "[VIEW TRACK CANDIDATE] view=%p image=%p",
