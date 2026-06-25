@@ -106,7 +106,7 @@ jobs:
         -DVKS3D_BUILD_DEMO=OFF
         -DSTEREO_BUILD_DEMO=OFF
         -DVKS3D_VER_PATCH=${{env.CommitCount}}
-        -DVKS3D_VER_BUILD=${GITHUB_RUN_ATTEMPT}
+        -DVKS3D_VER_BUILD=1
 
     - name: Build
       run: cmake --build "${{github.workspace}}/build" --config "${{matrix.Configuration}}"
