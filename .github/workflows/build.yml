@@ -43,12 +43,6 @@ jobs:
     - name: Get current date, commit hash and count
       run: |
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
-        echo 1 GITHUB_RUN_ATTEMPT
-        echo 2 {GITHUB_RUN_ATTEMPT}
-        echo 3 $GITHUB_RUN_ATTEMPT
-        echo 4 ${GITHUB_RUN_ATTEMPT}
-        echo 5 ${env.GITHUB_RUN_ATTEMPT}
-        echo 6 ${env:GITHUB_RUN_ATTEMPT}
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
@@ -112,7 +106,7 @@ jobs:
         -DVKS3D_BUILD_DEMO=OFF
         -DSTEREO_BUILD_DEMO=OFF
         -DVKS3D_VER_PATCH=${{env.CommitCount}}
-        -DVKS3D_VER_BUILD=1
+        -DVKS3D_VER_BUILD=${env:GITHUB_RUN_ATTEMPT}
 
     - name: Build
       run: cmake --build "${{github.workspace}}/build" --config "${{matrix.Configuration}}"
