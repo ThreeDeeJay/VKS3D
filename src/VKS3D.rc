@@ -26,13 +26,13 @@ BEGIN
     BEGIN
         BLOCK "040904b0"   /* Language: US English, Unicode */
         BEGIN
-            VALUE "CompanyName",      "VKS3D Project"
-            VALUE "FileDescription",  "Vulkan Stereoscopic 3D ICD"
+            VALUE "CompanyName",      "3DJ"
+            VALUE "FileDescription",  "Vulkan stereoscopic 3D driver"
             VALUE "FileVersion",      "1.0.0.0"
             VALUE "InternalName",     "VKS3D"
-            VALUE "LegalCopyright",   "MIT License"
+            VALUE "LegalCopyright",   "GPLv3 License"
             VALUE "OriginalFilename", "VKS3D.dll"
-            VALUE "ProductName",      "VKS3D — Vulkan Stereoscopic ICD"
+            VALUE "ProductName",      "VKS3D"
             VALUE "ProductVersion",   "1.0.0.0"
         END
     END
