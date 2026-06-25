@@ -234,12 +234,12 @@ static const char* spv_stage_str(int exec_model)
 {
     switch (exec_model)
     {
-        case SpvExecVertex:   return "VS";
-        case SpvExecFragment: return "FS";
-        case SpvExecGeometry: return "GS";
-        case SpvExecTessellationControl: return "TCS";
-        case SpvExecTessellationEvaluation: return "TES";
-        case SpvExecCompute: return "CS";
+        case SpvExecutionModelVertex:   return "VS";
+        case SpvExecutionModelFragment: return "FS";
+        case SpvExecutionModelGeometry: return "GS";
+        case SpvExecutionModelTessellationControl: return "TCS";
+        case SpvExecutionModelTessellationEvaluation: return "TES";
+        case SpvExecutionModelGLCompute: return "CS";
         default: return "UNKNOWN";
     }
 }
@@ -594,7 +594,7 @@ bool spirv_patch_stereo_vertex(
         m.has_mv_cap,
         m.has_matrix_ops);
     uint64_t spv_hash = hash_spv(m.words, m.count);
-    if (spv_hash == 0x4316779e1c0bcc4dULL)
+    if (spv_hash == 0xb1b54a745edeb68aULL)
     {
         STEREO_LOG(
             "[SKYHASH] pipeline_stage=%d words=%zu pos=%u block=%d",
@@ -614,7 +614,7 @@ bool spirv_patch_stereo_vertex(
         m.emit_count,
         m.pos_var,
         m.view_var);
-    if (m.exec_model == SpvExecFragment)
+    if (m.exec_model == SpvExecutionModelFragment)
     {
         STEREO_LOG(
             "[FS_PIPELINE] hash=%016llx words=%zu uv=%d frag_coord=%d",
@@ -623,7 +623,7 @@ bool spirv_patch_stereo_vertex(
             !!m.has_matrix_ops,
             !!m.pos_var);
     }
-    if (spv_hash == 0xb1b54a745edeb68aULL && m.exec_model == SpvExecFragment)
+    if (spv_hash == 0xb1b54a745edeb68aULL && m.exec_model == SpvExecutionModelFragment)
     {
         STEREO_LOG("[PIPE_KILL_FS_TEST] blocking fragment shader sky candidate");
         return false;
@@ -1498,6 +1498,37 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     (uint32_t)VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT
                 };
 
+                {
+                    SpvMod dbg_m = {0};
+                    dbg_m.words = code;
+                    dbg_m.count = code_words;
+                    spv_scan(&dbg_m);
+                
+                    uint64_t dbg_hash = hash_spv(code, code_words);
+                
+                    STEREO_LOG(
+                        "PIPE_SHADER Path A stage=%s exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+                        spv_stage_str(dbg_m.exec_model),
+                        dbg_m.exec_model,
+                        (unsigned long long)dbg_hash,
+                        code_words,
+                        dbg_m.has_matrix_ops,
+                        dbg_m.exec_model == SpvExecutionModelGeometry,
+                        dbg_m.emit_count,
+                        dbg_m.pos_var,
+                        dbg_m.view_var);
+                }
+
+                if (dbg_hash == 0xb1b54a745edeb68aULL)
+                {
+                    STEREO_LOG(
+                        "[PIPE_KILL_TEST] PIPE B blocking shader hash=%016llx stage=%s",
+                        (unsigned long long)dbg_hash,
+                        spv_stage_str(dbg_m.exec_model));
+                
+                    return false;
+                }
+
                 if (!spirv_patch_stereo_vertex(
                         e->spv, e->words,
                         &patched, &pc2,
@@ -1586,6 +1617,37 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 in_mv_rp,
                 (uint32_t)VK_SHADER_STAGE_VERTEX_BIT
             };
+
+            {
+                SpvMod dbg_m = {0};
+                dbg_m.words = code;
+                dbg_m.count = code_words;
+                spv_scan(&dbg_m);
+            
+                uint64_t dbg_hash = hash_spv(code, code_words);
+            
+                STEREO_LOG(
+                    "PIPE_SHADER Path B stage=%s exec=%d hash=%016llx words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+                    spv_stage_str(dbg_m.exec_model),
+                    dbg_m.exec_model,
+                    (unsigned long long)dbg_hash,
+                    code_words,
+                    dbg_m.has_matrix_ops,
+                    dbg_m.exec_model == SpvExecutionModelGeometry,
+                    dbg_m.emit_count,
+                    dbg_m.pos_var,
+                    dbg_m.view_var);
+            }
+
+            if (dbg_hash == 0xb1b54a745edeb68aULL)
+            {
+                STEREO_LOG(
+                    "[PIPE_KILL_TEST] PIPE B blocking shader hash=%016llx stage=%s",
+                    (unsigned long long)dbg_hash,
+                    spv_stage_str(dbg_m.exec_model));
+            
+                return false;
+            }
 
             if (!spirv_patch_stereo_vertex(
                     e->spv, e->words,
