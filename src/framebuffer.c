@@ -74,32 +74,34 @@ stereo_CreateFramebuffer(
             }
         }
     }
-
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
-    if (res == VK_SUCCESS && sd->fb_track_count < MAX_FB_TRACK) {
 
+    if (res == VK_SUCCESS && sd->fb_track_count < MAX_FB_TRACK)
+    {
         uint32_t idx = sd->fb_track_count;
 
-        /* CRITICAL: zero-initialize to prevent garbage bool/padding */
-        memset(&sd->fb_tracks[idx], 0, sizeof(StereoFramebufferTrack));
-        STEREO_LOG("TRACK_SIZE_CHECK idx=%u expected=%zu actual=%zu",
-                    idx,
-                    sizeof(StereoFramebufferTrack),
-                    sizeof(sd->fb_tracks[idx]));
-        sd->fb_tracks[idx].fb     = *pFramebuffer;
-        VkRenderPass real_rp = *pRenderPass;
-        sd->fb_tracks[idx].rp = real_rp;
-        sd->fb_tracks[idx].mv_rp  = use_mv;
-        sd->fb_tracks[idx].has_mv = (use_mv != VK_NULL_HANDLE && sd->stereo.multiview);
+        VkRenderPass real_rp = pCreateInfo->renderPass;
+
+        /* IMPORTANT: snapshot BEFORE increment */
+        StereoFramebufferTrack *t = &sd->fb_tracks[idx];
+        memset(t, 0, sizeof(*t));
+
+        t->fb     = *pFramebuffer;
+        t->rp     = real_rp;
+        t->mv_rp  = use_mv;
+
+        t->has_mv = (use_mv != VK_NULL_HANDLE) &&
+                    sd->stereo.multiview &&
+                    sd->multiview_pass_exists;
 
         STEREO_LOG(
-            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u sizeof(track)=%u",
+            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u mv_enabled=%u",
             idx,
-            *pFramebuffer,
-            pCreateInfo->renderPass,
-            use_mv,
-            (unsigned)sd->fb_tracks[idx].has_mv,
-            (unsigned)sizeof(StereoFramebufferTrack));
+            t->fb,
+            t->rp,
+            t->mv_rp,
+            t->has_mv,
+            sd->stereo.multiview);
 
         sd->fb_track_count++;
     }
@@ -146,33 +148,50 @@ stereo_CmdBeginRenderPass(
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
         StereoDevice *dev = &g_devices[d];
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
-             bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
-             bool rp_match = (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass);
-             if (fb_match) {
-                 STEREO_LOG(
-                     "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
-                     d,
-                     i,
-                     pRenderPassBegin->framebuffer,
-                     pRenderPassBegin->renderPass,
-                     dev->fb_tracks[i].rp,
-                     dev->fb_tracks[i].mv_rp,
-                     dev->fb_tracks[i].has_mv,
-                     rp_match);
-             }
-            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer &&
-                (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass ||
-                 dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass))
-            {
-                if (fb_tracks[i].mv_rp != VK_NULL_HANDLE)
-                    mv_rp = dev->fb_tracks[i].mv_rp;
-                sd = dev;
+
+            bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
+            bool rp_match = (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass || dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass);
+
+            if (fb_match) {
                 STEREO_LOG(
-                    "FB_MATCH_RESOLVE fb=%p rp_begin=%p resolved_mv_rp=%p has_mv=%u",
+                    "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
+                    d,
+                    i,
                     pRenderPassBegin->framebuffer,
                     pRenderPassBegin->renderPass,
-                    mv_rp,
-                    dev->fb_tracks[i].has_mv);
+                    dev->fb_tracks[i].rp,
+                    dev->fb_tracks[i].mv_rp,
+                    dev->fb_tracks[i].has_mv,
+                    rp_match);
+            }
+            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
+            {
+                bool rp_match = (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass);
+
+                VkRenderPass resolved_mv = VK_NULL_HANDLE;
+
+                if (dev->fb_tracks[i].has_mv &&
+                    (rp_match || dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass))
+                {
+                    resolved_mv = dev->fb_tracks[i].mv_rp;
+                    sd = dev;
+                }
+
+                STEREO_LOG(
+                    "FB_MATCH_RESOLVE fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u resolved_mv=%p",
+                    pRenderPassBegin->framebuffer,
+                    pRenderPassBegin->renderPass,
+                    dev->fb_tracks[i].rp,
+                    dev->fb_tracks[i].mv_rp,
+                    dev->fb_tracks[i].has_mv,
+                    rp_match,
+                    resolved_mv);
+
+                if (resolved_mv)
+                {
+                    mv_rp = resolved_mv;
+                }
+
                 break;
             }
         }
