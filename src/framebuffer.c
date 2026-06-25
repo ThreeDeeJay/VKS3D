@@ -40,7 +40,10 @@ stereo_CreateFramebuffer(
         }
         if (all) {
             StereoRenderPassInfo *rpi = stereo_rp_lookup(sd, pCreateInfo->renderPass);
-            if (rpi && rpi->mv_handle) {
+            if (rpi &&
+                rpi->mv_handle &&
+                rpi->handle == pCreateInfo->renderPass)
+            {
                 fci.renderPass = rpi->mv_handle;
                 use_mv         = rpi->mv_handle;
                 STEREO_LOG("CreateFramebuffer: all %u att upgraded → mv_rp=%p",
@@ -61,33 +64,12 @@ stereo_CreateFramebuffer(
                         break;
                     }
                 }
-        
-                if (!found) {
-                    STEREO_LOG(
-                        "[FB CHECK] att=%u view=%p tracked_count=%u",
-                        i,
-                        pCreateInfo->pAttachments[i],
-                        sd->upgraded_view_count);
-                    STEREO_LOG(
-                        "[FB SEARCH START] target=%p count=%u",
-                        pCreateInfo->pAttachments[i],
-                        sd->upgraded_view_count);
-                for (uint32_t k = 0; k < sd->upgraded_view_count; k++)
+                if (!found)
                 {
-                    if (k < 5 ||
-                        k >= sd->upgraded_view_count - 5)
-                    {
-                        STEREO_LOG(
-                            "[FB SEARCH] target=%p slot[%u]=%p",
-                            pCreateInfo->pAttachments[i],
-                            k,
-                            sd->upgraded_views[k]);
-                    }
-                }
-                    STEREO_LOG(
-                        "[FB NON-UPGRADED] att=%u view=%p",
-                        i,
-                        pCreateInfo->pAttachments[i]);
+                    STEREO_LOG("[FB NON-UPGRADED] att=%u view=%p tracked=%u",
+                               i,
+                               pCreateInfo->pAttachments[i],
+                               sd->upgraded_view_count);
                 }
             }
         }
@@ -95,8 +77,10 @@ stereo_CreateFramebuffer(
 
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
     if (res == VK_SUCCESS && use_mv && sd->fb_track_count < MAX_FB_TRACK) {
-        sd->fb_track_handles[sd->fb_track_count] = *pFramebuffer;
-        sd->fb_track_mv_rps [sd->fb_track_count] = use_mv;
+        sd->fb_tracks[sd->fb_track_count].fb     = *pFramebuffer;
+        sd->fb_tracks[sd->fb_track_count].rp     = pCreateInfo->renderPass;
+        sd->fb_tracks[sd->fb_track_count].mv_rp  = use_mv;
+        sd->fb_tracks[sd->fb_track_count].has_mv =(use_mv != VK_NULL_HANDLE);
         sd->fb_track_count++;
     }
     return res;
@@ -131,16 +115,18 @@ stereo_CmdBeginRenderPass(
 {
     extern StereoDevice g_devices[];
     extern uint32_t     g_device_count;
-
     StereoDevice *sd   = NULL;
-    VkRenderPass  mv_rp = VK_NULL_HANDLE;
-
+    VkRenderPass mv_rp = VK_NULL_HANDLE;
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
         StereoDevice *dev = &g_devices[d];
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
-            if (dev->fb_track_handles[i] == pRenderPassBegin->framebuffer) {
-                sd    = dev;
-                mv_rp = dev->fb_track_mv_rps[i];
+
+            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer &&
+                dev->fb_tracks[i].rp == pRenderPassBegin->renderPass)
+            {
+                if (dev->fb_tracks[i].has_mv)
+                    mv_rp = dev->fb_tracks[i].mv_rp;
+                sd = dev;
                 break;
             }
         }
@@ -174,5 +160,4 @@ stereo_CmdBeginRenderPass(
     } else {
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
-
 }
