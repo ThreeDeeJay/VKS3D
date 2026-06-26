@@ -175,6 +175,12 @@ stereo_CreateFramebuffer(
         VkRenderPass log_used    = t->rp_used_at_create;
         VkRenderPass log_mv      = t->mv_rp;
         VkFramebuffer log_fb     = t->fb;
+         STEREO_LOG(
+            "FB_LOCALS A=%08x B=%08x C=%08x D=%08x",
+            (unsigned)rp,
+            (unsigned)rp_used,
+            (unsigned)mv,
+            (unsigned)fb);
         STEREO_LOG(
             "FB_ASSIGN A=%08x B=%08x C=%08x D=%08x",
             (unsigned)log_rp,
