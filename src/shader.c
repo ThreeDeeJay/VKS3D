@@ -587,6 +587,7 @@ bool spirv_patch_stereo_vertex(
                m.exec_model, in_c, ob.n, nid, (int)(id_inj_view!=0));
     return true;
 }
+
 void spirv_patched_free(uint32_t *w) { free(w); }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1236,6 +1237,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (unsigned long long)hash_spv(e->spv, e->words),
                 e->words,
                 (void*)ci->pStages[vs_stage].module);
+            if (dump) {
+                uint64_t spv_hash = hash_spv(e->spv, e->words);
+                char dp[512];
+                _snprintf(
+                    dp,
+                    sizeof(dp)-1,
+                    "%s\\%016llx-fs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f = fopen(dp, "wb");
+                if (f) {
+                    fwrite(e->spv,4,e->words,f);
+                    fclose(f);
+                }
+            }
             uint32_t *patched = NULL; size_t pc2 = 0;
             if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
                 STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
@@ -1247,7 +1263,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 _snprintf(
                     dp,
                     sizeof(dp)-1,
-                    "%s\\%016llx-fs.spv",
+                    "%s\\%016llx+fs.spv",
                     dump,
                     (unsigned long long)spv_hash);
                 FILE *f=fopen(dp,"wb");
@@ -1277,6 +1293,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         if (has_tes && tes_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[tes_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
+            if (dump) {
+                uint64_t spv_hash = hash_spv(e->spv, e->words);
+                char dp[512];
+                _snprintf(
+                    dp,
+                    sizeof(dp)-1,
+                    "%s\\%016llx-ts.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f = fopen(dp, "wb");
+                if (f) {
+                    fwrite(e->spv,4,e->words,f);
+                    fclose(f);
+                }
+            }
             uint32_t *patched=NULL; size_t pc2=0;
             STEREO_LOG(
                 "[CALL A] lo=%f ro=%f conv=%f flip=%d",
@@ -1315,7 +1346,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         fclose(f);
                     }
                 }
-
                 STEREO_LOG("Pipe %u PathA: patch failed",p);
                 continue;
             }
@@ -1325,7 +1355,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 _snprintf(
                     dp,
                     sizeof(dp)-1,
-                    "%s\\%016llx-ts.spv",
+                    "%s\\%016llx+ts.spv",
                     dump,
                     (unsigned long long)spv_hash);
                 FILE *f=fopen(dp,"wb");
@@ -1358,6 +1388,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         if (ci->stageCount > 0 && has_vs && !has_tcs && vs_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
+            if (dump) {
+                uint64_t spv_hash = hash_spv(e->spv, e->words);
+                char dp[512];
+                _snprintf(
+                    dp,
+                    sizeof(dp)-1,
+                    "%s\\%016llx-vs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f = fopen(dp, "wb");
+                if (f) {
+                    fwrite(e->spv, 4, e->words, f);
+                    fclose(f);
+                }
+            }
             uint32_t *patched=NULL; size_t pc2=0;
             STEREO_LOG(
                 "[CALL B] lo=%f ro=%f conv=%f flip=%d",
@@ -1393,7 +1438,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 _snprintf(
                     dp,
                     sizeof(dp)-1,
-                    "%s\\%016llx-vs.spv",
+                    "%s\\%016llx+vs.spv",
                     dump,
                     (unsigned long long)spv_hash);
                 FILE *f=fopen(dp,"wb");
