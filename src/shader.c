@@ -1412,17 +1412,26 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         StereoRenderPassInfo *rpi = NULL;
         if (pCI[p].renderPass != VK_NULL_HANDLE)
             rpi = stereo_rp_lookup(sd, pCI[p].renderPass);
-    
+        STEREO_LOG(
+            "PIPE_RP p=%u ci_rp=%p rpi=%p has_mv=%u mv=%p",
+            p,
+            (void*)pCI[p].renderPass,
+            (void*)rpi,
+            rpi ? (unsigned)rpi->has_multiview : 0,
+            rpi ? (void*)rpi->mv_handle : NULL);
         if (rpi && rpi->has_multiview) {
             STEREO_LOG("Pipe %u: binding MV render pass %p", p, (void*)rpi->mv_handle);
             infos[p].renderPass = rpi->mv_handle;
         }
     }
-    STEREO_LOG(
-        "PIPE_CREATE_CALL N=%u first_renderPass=%p first_stageCount=%u",
-        N,
-        infos[0].renderPass,
-        infos[0].stageCount);
+    for (uint32_t p = 0; p < N; p++) {
+        STEREO_LOG(
+            "PIPE_FINAL p=%u ci_rp=%p final_rp=%p stages=%u",
+            p,
+            (void*)pCI[p].renderPass,
+            (void*)infos[p].renderPass,
+            infos[p].stageCount);
+    }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG(
         "PIPE_CREATE_END result=%d multiview_pass_exists=%d",
