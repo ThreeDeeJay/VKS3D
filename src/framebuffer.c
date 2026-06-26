@@ -332,14 +332,13 @@ stereo_CmdBeginRenderPass(
                 }
 
                 STEREO_LOG(
-                    "FB_MATCH_RESOLVE fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p (unsigned)t->has_mv rp_match=%u resolved_mv=%p",
+                    "FB_MATCH_RESOLVE fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
                     pRenderPassBegin->framebuffer,
                     pRenderPassBegin->renderPass,
                     dev->fb_tracks[i].rp,
                     dev->fb_tracks[i].mv_rp,
                     dev->fb_tracks[i].has_mv,
-                    rp_match,
-                    resolved_mv);
+                    rp_match);
                 break;
             }
         }
