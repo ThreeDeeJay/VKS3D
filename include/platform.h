@@ -505,7 +505,7 @@ static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
     if (rem > 1) {
         va_list ap;
         va_start(ap, fmt);
-        int n = _vsnprintf(msg + pos, (size_t)rem, fmt, ap);
+        int n = vsnprintf(msg + pos, (size_t)rem, fmt, ap);
         va_end(ap);
         if (n > 0) pos += (n < rem ? n : rem - 1);
     }
