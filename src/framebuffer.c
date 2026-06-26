@@ -152,6 +152,13 @@ stereo_CreateFramebuffer(
         /* MV replacement RP */
         t->mv_rp  = use_mv;
 
+        STEREO_LOG(
+            "FB_ASSIGN fb=%p rp=%p rp_used=%p mv_rp=%p",
+            t->fb,
+            t->rp,
+            t->rp_used_at_create,
+            t->mv_rp);
+
         /* HARD ASSERT: final framebuffer consistency */
         if (sd->stereo.enabled && sd->stereo.multiview) {
             if (use_mv == VK_NULL_HANDLE) {
