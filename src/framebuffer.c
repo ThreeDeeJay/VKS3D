@@ -167,11 +167,11 @@ stereo_CreateFramebuffer(
             t->rp_used_at_create,
             t->mv_rp);
         STEREO_LOG(
-            "FB_ASSIGN fb=%p rp=%p rp_used=%p mv_rp=%p",
-            t->fb,
+            "FB_ASSIGN rp=%p rp_used=%p mv_rp=%p fb=%p",
             t->rp,
             t->rp_used_at_create,
-            t->mv_rp);
+            t->mv_rp,
+            t->fb);
 
         /* HARD ASSERT: final framebuffer consistency */
         if (sd->stereo.enabled && sd->stereo.multiview) {
