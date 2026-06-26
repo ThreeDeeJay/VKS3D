@@ -130,10 +130,25 @@ stereo_CreateFramebuffer(
         StereoFramebufferTrack *t = &sd->fb_tracks[idx];
         memset(t, 0, sizeof(*t));
 
-        t->fb     = *pFramebuffer;
-        /* ORIGINAL RP used by application */
-        /* normalize: NULL renderpass breaks matching logic */
-        t->rp = original_rp;
+        t->fb = *pFramebuffer;
+        
+        /*
+         * Never propagate a NULL render pass into framebuffer tracking.
+         * Preserve the application's RP if present, otherwise fall back to
+         * whatever CreateFramebuffer actually received.
+         */
+        if (original_rp != VK_NULL_HANDLE)
+            t->rp = original_rp;
+        else
+            t->rp = fci.renderPass;
+        
+        t->rp_used_at_create = fci.renderPass;
+        STEREO_LOG(
+            "FB_STORE rp_original=%p rp_used=%p rp_tracked=%p",
+            original_rp,
+            fci.renderPass,
+            t->rp);
+
         /* MV replacement RP */
         t->mv_rp  = use_mv;
 
@@ -296,8 +311,10 @@ stereo_CmdBeginRenderPass(
             }
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
             {
-                bool rp_match = (dev->fb_tracks[i].rp == pRenderPassBegin->renderPass);
 
+                /* Reuse the rp_match computed above; do not recompute it with
+                 * a weaker comparison that ignores mv_rp and NULL guards.
+                 */
                 VkRenderPass resolved_mv = VK_NULL_HANDLE;
 
                 if (resolved_mv && dev->fb_tracks[i].mv_rp == VK_NULL_HANDLE)

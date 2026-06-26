@@ -483,6 +483,7 @@ typedef struct StereoRenderPassInfo {
 typedef struct StereoFramebufferTrack {
     VkFramebuffer fb;
     VkRenderPass  rp;      /* original RP */
+    VkRenderPass  rp_used_at_create;
     VkRenderPass  mv_rp;   /* multiview RP */
     bool          has_mv;
 } StereoFramebufferTrack;
