@@ -161,7 +161,11 @@ stereo_CreateFramebuffer(
 
         /* MV replacement RP */
         t->mv_rp  = use_mv;
-
+        STEREO_LOG(
+            "FB_FIELDS rp=%p rp_used=%p mv_rp=%p",
+            t->rp,
+            t->rp_used_at_create,
+            t->mv_rp);
         STEREO_LOG(
             "FB_ASSIGN fb=%p rp=%p rp_used=%p mv_rp=%p",
             t->fb,
