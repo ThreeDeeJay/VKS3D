@@ -254,10 +254,10 @@ stereo_CreateFramebuffer(
             (int)sd->stereo.multiview,
             use_mv);
         STEREO_LOG(
-            "FB_RAW_VALUES fb=%p rp=%p mv_rp=%p",
-            t->fb,
-            t->rp,
-            t->mv_rp);
+            "FB_RAW_VALUES fb=%08x rp=%08x mv=%08x",
+            (unsigned)t->fb,
+            (unsigned)t->rp,
+            (unsigned)t->mv_rp);
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
                     sd->stereo.multiview;
         /* ===== FINAL CONSISTENCY CHECK ===== */
