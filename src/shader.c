@@ -1154,6 +1154,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             rpi = stereo_rp_lookup(sd, ci->renderPass);
             in_mv_rp = (rpi != NULL && rpi->has_multiview);
         }
+        STEREO_LOG(
+            "PIPE_DECISION p=%u rp=%p rpi=%p in_mv=%u stages=%u has_vs=%u has_tes=%u quad=%u",
+            p,
+            (void*)ci->renderPass,
+            (void*)rpi,
+            (unsigned)in_mv_rp,
+            ci->stageCount,
+            (unsigned)has_vs,
+            (unsigned)has_tes,
+            (!ci->pVertexInputState ||
+             ci->pVertexInputState->vertexBindingDescriptionCount == 0));
 
         /* ── PATCH 3: Pipeline multiview FIXED (NO pipeline struct exists) ─────────────── */
         /* Multiview is render-pass driven ONLY.
