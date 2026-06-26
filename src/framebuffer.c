@@ -167,7 +167,7 @@ stereo_CreateFramebuffer(
             t->rp_used_at_create,
             t->mv_rp);
         STEREO_LOG(
-            "FB_ASSIGN A=%08x B=%08x C=%08x D=%08x",
+            "FB_ASSIGN %08x %08x %08x %08x",
             (unsigned)t->rp,
             (unsigned)t->rp_used_at_create,
             (unsigned)t->mv_rp,
