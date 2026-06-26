@@ -318,23 +318,6 @@ stereo_CmdBeginRenderPass(
             }
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
             {
-
-                /* Reuse the rp_match computed above; do not recompute it with
-                 * a weaker comparison that ignores mv_rp and NULL guards.
-                 */
-                VkRenderPass resolved_mv = VK_NULL_HANDLE;
-
-                if (resolved_mv && dev->fb_tracks[i].mv_rp == VK_NULL_HANDLE)
-                {
-                    dev->fb_tracks[i].mv_rp  = resolved_mv;
-                    dev->fb_tracks[i].has_mv = true;
-                
-                    STEREO_LOG(
-                        "[FB_MATCH_WRITEBACK] fb=%p rp=%p mv_rp=%p",
-                        dev->fb_tracks[i].fb,
-                        dev->fb_tracks[i].rp,
-                        resolved_mv);
-                }
                 if (dev->fb_tracks[i].has_mv)
                 {
                     VkRenderPass candidate = dev->fb_tracks[i].mv_rp;
@@ -357,12 +340,6 @@ stereo_CmdBeginRenderPass(
                     dev->fb_tracks[i].has_mv,
                     rp_match,
                     resolved_mv);
-
-                if (resolved_mv)
-                {
-                    mv_rp = resolved_mv;
-                }
-
                 break;
             }
         }
