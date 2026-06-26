@@ -659,10 +659,11 @@ StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp) {
                 b[16], b[17], b[18], b[19],
                 b[20], b[21], b[22], b[23]);
             STEREO_LOG(
-                "RP_LOOKUP hit handle=%p mv=%p has_mv=%u",
-                rpi->handle,
-                rpi->mv_handle,
-                (unsigned)rpi->has_multiview);
+                "RP_LOOKUP hit handle=%08x mv=%08x has_mv=%u addr=%08x",
+                (unsigned)(uintptr_t)rpi->handle,
+                (unsigned)(uintptr_t)rpi->mv_handle,
+                (unsigned)rpi->has_multiview,
+                (unsigned)(uintptr_t)rpi);
             return rpi;
         }
     }
