@@ -269,13 +269,13 @@ stereo_CreateFramebuffer(
             STEREO_LOG("[HARD ASSERT] mv exists but has_mv=0 fb=%p", t->fb);
         }
         STEREO_LOG(
-            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p (unsigned)t->has_mv mv_enabled=%d",
+            "FB_TRACK_CREATE idx=%u fb=%08x rp=%08x mv_rp=%08x has_mv=%u mv_enabled=%u",
             idx,
-            t->fb,
-            t->rp,
-            t->mv_rp,
-            t->has_mv,
-            sd->stereo.multiview);
+            (unsigned)(uintptr_t)t->fb,
+            (unsigned)(uintptr_t)t->rp,
+            (unsigned)(uintptr_t)t->mv_rp,
+            (unsigned)t->has_mv,
+            (unsigned)sd->stereo.multiview);
         if (use_mv == VK_NULL_HANDLE)
         {
             STEREO_LOG(
@@ -286,13 +286,12 @@ stereo_CreateFramebuffer(
         sd->fb_track_count++;
         StereoFramebufferTrack *verify =
             &sd->fb_tracks[idx];
-        
         STEREO_LOG(
-            "FB_TRACK_VERIFY idx=%u fb=%p rp=%p mv_rp=%p (unsigned)t->has_mv",
+            "FB_TRACK_VERIFY idx=%u fb=%08x rp=%08x mv_rp=%08x has_mv=%u",
             idx,
-            verify->fb,
-            verify->rp,
-            verify->mv_rp,
+            (unsigned)(uintptr_t)verify->fb,
+            (unsigned)(uintptr_t)verify->rp,
+            (unsigned)(uintptr_t)verify->mv_rp,
             (unsigned)verify->has_mv);
     }
     return res;
@@ -357,15 +356,15 @@ stereo_CmdBeginRenderPass(
                 );
             if (fb_match) {
                 STEREO_LOG(
-                    "FB_MATCH_CANDIDATE d=%u i=%u fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p (unsigned)t->has_mv rp_match=%u",
+                    "FB_MATCH_CANDIDATE d=%u i=%u fb=%08x rp_begin=%08x tracked_rp=%08x mv_rp=%08x has_mv=%u rp_match=%u",
                     d,
                     i,
-                    pRenderPassBegin->framebuffer,
-                    pRenderPassBegin->renderPass,
-                    dev->fb_tracks[i].rp,
-                    dev->fb_tracks[i].mv_rp,
-                    dev->fb_tracks[i].has_mv,
-                    rp_match);
+                    (unsigned)(uintptr_t)pRenderPassBegin->framebuffer,
+                    (unsigned)(uintptr_t)pRenderPassBegin->renderPass,
+                    (unsigned)(uintptr_t)dev->fb_tracks[i].rp,
+                    (unsigned)(uintptr_t)dev->fb_tracks[i].mv_rp,
+                    (unsigned)dev->fb_tracks[i].has_mv,
+                    (unsigned)rp_match);
             }
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
             {
