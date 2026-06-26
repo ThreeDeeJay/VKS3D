@@ -147,21 +147,11 @@ stereo_CreateFramebuffer(
          * Preserve the application's RP if present, otherwise fall back to
          * whatever CreateFramebuffer actually received.
          */
-        if (original_rp != VK_NULL_HANDLE)
-            t->rp = original_rp;
-        else
-            t->rp = fci.renderPass;
-        /* Capture source values before storing into the struct. */
         VkRenderPass tmp_rp =
             (original_rp != VK_NULL_HANDLE) ? original_rp : fci.renderPass;
         VkRenderPass tmp_used = fci.renderPass;
         VkRenderPass tmp_mv   = use_mv;
-        
-        STEREO_LOG(
-            "TMP_VALUES rp=%08x used=%08x mv=%08x",
-            (unsigned)tmp_rp,
-            (unsigned)tmp_used,
-            (unsigned)tmp_mv);
+
         t->rp = tmp_rp;
         t->rp_used_at_create = tmp_used;
         t->mv_rp = tmp_mv;
@@ -255,9 +245,9 @@ stereo_CreateFramebuffer(
             use_mv);
         STEREO_LOG(
             "FB_RAW_VALUES fb=%08x rp=%08x mv=%08x",
-            (unsigned)t->fb,
-            (unsigned)t->rp,
-            (unsigned)t->mv_rp);
+            (unsigned)(uintptr_t)t->fb,
+            (unsigned)(uintptr_t)t->rp,
+            (unsigned)(uintptr_t)t->mv_rp);
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
                     sd->stereo.multiview;
         /* ===== FINAL CONSISTENCY CHECK ===== */
@@ -371,9 +361,8 @@ stereo_CmdBeginRenderPass(
                 if (dev->fb_tracks[i].has_mv)
                 {
                     VkRenderPass candidate = dev->fb_tracks[i].mv_rp;
-                
-                    if (candidate != VK_NULL_HANDLE &&
-                        (rp_match || candidate == pRenderPassBegin->renderPass))
+                    //IMPORTANT: TEMPORARY CHANGE TEST           
+                    if (candidate != VK_NULL_HANDLE)
                     {
                         mv_rp = candidate;
                         sd = dev;
