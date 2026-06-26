@@ -1231,6 +1231,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 STEREO_LOG("Pipe %u: quad FS not cached (stageCount=%u)", p, ci->stageCount);
                 continue;
             }
+            STEREO_LOG(
+                "VS_PATCH hash=%016llx words=%zu module=%p",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                e->words,
+                (void*)ci->pStages[vs_stage].module);
             uint32_t *patched = NULL; size_t pc2 = 0;
             if (!spirv_patch_stereo_fs(e->spv, e->words, &patched, &pc2)) {
                 STEREO_LOG("Pipe %u: FS patch skipped (no 2D samplers — material-only?)", p);
