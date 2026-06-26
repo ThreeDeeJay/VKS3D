@@ -130,6 +130,16 @@ stereo_CreateFramebuffer(
         StereoFramebufferTrack *t = &sd->fb_tracks[idx];
         memset(t, 0, sizeof(*t));
 
+        STEREO_LOG(
+            "FB_LAYOUT t=%p &fb=%p &rp=%p &rp_used=%p &mv_rp=%p &has_mv=%p sizeof=%u",
+            t,
+            &t->fb,
+            &t->rp,
+            &t->rp_used_at_create,
+            &t->mv_rp,
+            &t->has_mv,
+            (unsigned)sizeof(*t));
+
         t->fb = *pFramebuffer;
         
         /*
