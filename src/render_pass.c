@@ -186,6 +186,10 @@ stereo_CreateRenderPass(
     if (create_mv_rp(sd, pCreateInfo, pAllocator, &mv) == VK_SUCCESS && mv)
     {
         rpi->mv_handle     = mv;
+        STEREO_LOG(
+            "RP_PAIR original=%p mv=%p",
+            (void*)*pRenderPass,
+            (void*)mv);
         rpi->has_multiview = true;
         STEREO_LOG(
             "RP_STORE slot=%u handle=%08x mv=%08x has_mv=%u addr=%08x",

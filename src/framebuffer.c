@@ -332,6 +332,10 @@ stereo_CmdBeginRenderPass(
     extern uint32_t     g_device_count;
     StereoDevice *sd   = NULL;
     VkRenderPass mv_rp = VK_NULL_HANDLE;
+    STEREO_LOG(
+        "RP_BEGIN_ORIGINAL rp=%p fb=%p",
+        (void*)pRenderPassBegin->renderPass,
+        (void*)pRenderPassBegin->framebuffer);
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
         StereoDevice *dev = &g_devices[d];
         STEREO_LOG(
