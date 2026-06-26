@@ -114,6 +114,10 @@ stereo_CreateFramebuffer(
         fci.renderPass,
         use_mv,
         original_rp);
+    STEREO_LOG(
+        "FB_CREATE_REAL fbCI_rp=%p orig_rp=%p",
+        (void*)fci.renderPass,
+        (void*)pCreateInfo->renderPass);
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
     
     if (before != fci.renderPass) {
