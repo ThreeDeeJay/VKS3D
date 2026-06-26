@@ -486,6 +486,12 @@ typedef struct StereoFramebufferTrack {
     VkRenderPass  rp_used_at_create;
     VkRenderPass  mv_rp;   /* multiview RP */
     bool          has_mv;
+    STEREO_LOG(
+        "FB_LOCALS A=%08x B=%08x C=%08x D=%08x",
+        (unsigned)rp,
+        (unsigned)rp_used,
+        (unsigned)mv,
+        (unsigned)fb);
 } StereoFramebufferTrack;
 
 typedef struct StereoDevice {

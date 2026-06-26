@@ -151,27 +151,58 @@ stereo_CreateFramebuffer(
             t->rp = original_rp;
         else
             t->rp = fci.renderPass;
+        /* Capture source values before storing into the struct. */
+        VkRenderPass tmp_rp =
+            (original_rp != VK_NULL_HANDLE) ? original_rp : fci.renderPass;
+        VkRenderPass tmp_used = fci.renderPass;
+        VkRenderPass tmp_mv   = use_mv;
         
-        t->rp_used_at_create = fci.renderPass;
         STEREO_LOG(
-            "FB_STORE rp_original=%p rp_used=%p rp_tracked=%p",
-            original_rp,
-            fci.renderPass,
-            t->rp);
+            "TMP_VALUES rp=%08x used=%08x mv=%08x",
+            (unsigned)tmp_rp,
+            (unsigned)tmp_used,
+            (unsigned)tmp_mv);
+        t->rp = tmp_rp;
+        t->rp_used_at_create = tmp_used;
+        t->mv_rp = tmp_mv;
 
-        /* MV replacement RP */
-        t->mv_rp  = use_mv;
         STEREO_LOG(
             "FB_FIELDS rp=%p rp_used=%p mv_rp=%p",
             t->rp,
             t->rp_used_at_create,
             t->mv_rp);
+        VkRenderPass log_rp      = t->rp;
+        VkRenderPass log_used    = t->rp_used_at_create;
+        VkRenderPass log_mv      = t->mv_rp;
+        VkFramebuffer log_fb     = t->fb;
         STEREO_LOG(
-            "FB_ASSIGN %08x %08x %08x %08x",
-            (unsigned)t->rp,
-            (unsigned)t->rp_used_at_create,
-            (unsigned)t->mv_rp,
-            (unsigned)t->fb);
+            "FB_ASSIGN A=%08x B=%08x C=%08x D=%08x",
+            (unsigned)log_rp,
+            (unsigned)log_used,
+            (unsigned)log_mv,
+            (unsigned)log_fb);
+
+        {
+            const unsigned char *b = (const unsigned char *)t;
+            STEREO_LOG(
+                "FB_BYTES "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x",
+                b[0],  b[1],  b[2],  b[3],
+                b[4],  b[5],  b[6],  b[7],
+                b[8],  b[9],  b[10], b[11],
+                b[12], b[13], b[14], b[15],
+                b[16], b[17], b[18], b[19],
+                b[20], b[21], b[22], b[23],
+                b[24], b[25], b[26], b[27],
+                b[28], b[29], b[30], b[31]);
+        }
 
         /* HARD ASSERT: final framebuffer consistency */
         if (sd->stereo.enabled && sd->stereo.multiview) {
