@@ -638,8 +638,16 @@ StereoSwapchain *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc) {
     return NULL;
 }
 StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp) {
+    STEREO_LOG(
+        "RP_LOOKUP hit handle=%p mv=%p has_mv=%u",
+        rpi->handle,
+        rpi->mv_handle,
+        rpi->has_multiview);
     for (uint32_t i = 0; i < dev->render_pass_count; i++)
         if (dev->render_passes[i].handle == rp) return &dev->render_passes[i];
+    STEREO_LOG(
+        "RP_LOOKUP miss handle=%p",
+        rp);
     return NULL;
 }
 

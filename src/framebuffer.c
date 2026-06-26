@@ -333,6 +333,11 @@ stereo_CmdBeginRenderPass(
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
 
             bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
+            STEREO_LOG(
+                "RP_COMPARE begin=%p tracked=%p tracked_mv=%p",
+                pRenderPassBegin->renderPass,
+                dev->fb_tracks[i].rp,
+                dev->fb_tracks[i].mv_rp);
             bool rp_match =
                 (
                     dev->fb_tracks[i].rp != VK_NULL_HANDLE &&
