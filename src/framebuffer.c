@@ -62,6 +62,9 @@ stereo_CreateFramebuffer(
             rpi->mv_handle && (rpi->handle == pCreateInfo->renderPass))
             {
                 fci.renderPass = rpi->mv_handle;
+                STEREO_LOG(
+                    "FB_SET renderPass=%p",
+                    fci.renderPass);
                 use_mv         = rpi->mv_handle;
                 STEREO_LOG("CreateFramebuffer: all %u att upgraded → mv_rp=%p",
                            pCreateInfo->attachmentCount, (void*)use_mv);
@@ -106,6 +109,11 @@ stereo_CreateFramebuffer(
                    debug_original, use_mv);
     }
     VkRenderPass before = fci.renderPass;
+    STEREO_LOG(
+        "FB_CALL renderPass=%p use_mv=%p original=%p",
+        fci.renderPass,
+        use_mv,
+        original_rp);
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
     
     if (before != fci.renderPass) {
@@ -369,9 +377,16 @@ stereo_CmdBeginRenderPass(
                     //IMPORTANT: TEMPORARY CHANGE TEST           
                     if (candidate != VK_NULL_HANDLE)
                     {
-                        mv_rp = candidate;
-                        sd = dev;
-                        break;
+                    STEREO_LOG(
+                        "MV_SELECT fb=%p candidate=%p",
+                        pRenderPassBegin->framebuffer,
+                        candidate);
+                    mv_rp = candidate;
+                    STEREO_LOG(
+                        "MV_SELECTED mv_rp=%p",
+                        mv_rp);
+                    sd = dev;
+                    break;
                     }
                 }
 
@@ -387,6 +402,10 @@ stereo_CmdBeginRenderPass(
             }
         }
     }
+    STEREO_LOG(
+        "MV_AFTER_SCAN sd=%p mv_rp=%p",
+        sd,
+        mv_rp);
     if (!sd) {
         /* Framebuffer not in our tracking → non-MV; find any live device */
         for (uint32_t d = 0; d < g_device_count; d++) {
