@@ -187,6 +187,13 @@ stereo_CreateRenderPass(
     {
         rpi->mv_handle     = mv;
         rpi->has_multiview = true;
+        STEREO_LOG(
+            "RP_STORE slot=%u handle=%p mv=%p has_mv=%u addr=%p",
+            sd->render_pass_count - 1,
+            rpi->handle,
+            rpi->mv_handle,
+            (unsigned)rpi->has_multiview,
+            rpi);
         rpi->view_mask     = STEREO_VIEW_MASK;
 
         sd->multiview_pass_exists = true;

@@ -643,6 +643,21 @@ StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp) {
         StereoRenderPassInfo *rpi = &dev->render_passes[i];
         if (rpi->handle == rp)
         {
+            const unsigned char *b = (const unsigned char *)rpi;
+            STEREO_LOG(
+                "RPINFO_BYTES "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x",
+                b[0],  b[1],  b[2],  b[3],
+                b[4],  b[5],  b[6],  b[7],
+                b[8],  b[9],  b[10], b[11],
+                b[12], b[13], b[14], b[15],
+                b[16], b[17], b[18], b[19],
+                b[20], b[21], b[22], b[23]);
             STEREO_LOG(
                 "RP_LOOKUP hit handle=%p mv=%p has_mv=%u",
                 rpi->handle,
