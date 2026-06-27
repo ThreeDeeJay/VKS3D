@@ -1411,6 +1411,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 conv,
                 sd->stereo.flip_eyes);
             STEREO_LOG(
+                "PATCH_CONSTS lo=%f ro=%f conv=%f",
+                lo,
+                ro,
+                conv);
+            STEREO_LOG(
                 "[CALL B] multiview=%d pass_exists=%d",
                 sd->stereo.multiview,
                 sd->multiview_pass_exists);
