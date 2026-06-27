@@ -21,7 +21,7 @@ stereo_CmdBindPipeline(
     VkPipelineBindPoint pipelineBindPoint,
     VkPipeline pipeline)
 {
-    StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
+    //StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
 
     STEREO_LOG(
         "BIND_PIPE cmd=%p pipeline=%p bindPoint=%u sd=%p",
@@ -44,7 +44,7 @@ stereo_CmdDraw(
     uint32_t firstVertex,
     uint32_t firstInstance)
 {
-    StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
+    //StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
 
     STEREO_LOG(
         "DRAW cmd=%p vertices=%u instances=%u firstVertex=%u firstInstance=%u",
@@ -71,7 +71,7 @@ stereo_CmdDrawIndexed(
     int32_t vertexOffset,
     uint32_t firstInstance)
 {
-    StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
+    //StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
 
     STEREO_LOG(
         "DRAW_INDEXED cmd=%p indices=%u instances=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
