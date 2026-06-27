@@ -24,10 +24,11 @@ stereo_CmdBindPipeline(
     StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
 
     STEREO_LOG(
-        "BIND_PIPE cmd=%p pipeline=%p bindPoint=%u",
+        "BIND_PIPE cmd=%p pipeline=%p bindPoint=%u sd=%p",
         commandBuffer,
         pipeline,
-        pipelineBindPoint);
+        pipelineBindPoint,
+        sd);
 
     sd->real.CmdBindPipeline(
         commandBuffer,
@@ -46,7 +47,8 @@ stereo_CmdDraw(
     StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
 
     STEREO_LOG(
-        "DRAW vertices=%u instances=%u firstVertex=%u firstInstance=%u",
+        "DRAW cmd=%p vertices=%u instances=%u firstVertex=%u firstInstance=%u",
+        commandBuffer,
         vertexCount,
         instanceCount,
         firstVertex,
@@ -72,7 +74,8 @@ stereo_CmdDrawIndexed(
     StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
 
     STEREO_LOG(
-        "DRAW_INDEXED indices=%u instances=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
+        "DRAW_INDEXED cmd=%p indices=%u instances=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
+        commandBuffer,
         indexCount,
         instanceCount,
         firstIndex,
