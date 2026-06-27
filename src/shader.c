@@ -339,8 +339,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             sb_push_n(out,w,5);
         }
 
-        //IMPORTANT: TEMPORARY TEST TO DISABLE ONLY CONVERGENCE
-        nx = tmp;
+        /* nx = tmp - signed convergence */
         {
             uint32_t w[]={op_(131,5),   /* OpFSub */
                           m->ft,nx,tmp,convsel};
@@ -509,15 +508,6 @@ bool spirv_patch_stereo_vertex(
              lo,
              ro,
              0};
-    STEREO_LOG(
-        "PATCH_MATH shader=%016llx proj=%d lo=%f ro=%f conv=%f have_view=%u injected_view=%u",
-        (unsigned long long)spv_hash,
-        projection_mode,
-        lo,
-        ro,
-        conv,
-        (unsigned)have_view,
-        (unsigned)will_inj_vi);
     STEREO_LOG(
         "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,

@@ -275,12 +275,6 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
         return (PFN_vkVoidFunction)stereo_DestroyFramebuffer;
     if (!strcmp(pName, "vkCmdBeginRenderPass"))
         return (PFN_vkVoidFunction)stereo_CmdBeginRenderPass;
-    if (!strcmp(pName, "vkCmdBindPipeline"))
-        return (PFN_vkVoidFunction)stereo_CmdBindPipeline;
-    if (!strcmp(pName, "vkCmdDraw"))
-        return (PFN_vkVoidFunction)stereo_CmdDraw;
-    if (!strcmp(pName, "vkCmdDrawIndexed"))
-        return (PFN_vkVoidFunction)stereo_CmdDrawIndexed;
     if (!strcmp(pName, "vkCreateRenderPass"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass;
 #ifdef VK_KHR_create_renderpass2
