@@ -15,6 +15,79 @@
 #include <string.h>
 #include "stereo_icd.h"
 
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBindPipeline(
+    VkCommandBuffer commandBuffer,
+    VkPipelineBindPoint pipelineBindPoint,
+    VkPipeline pipeline)
+{
+    StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
+
+    STEREO_LOG(
+        "BIND_PIPE cmd=%p pipeline=%p bindPoint=%u",
+        commandBuffer,
+        pipeline,
+        pipelineBindPoint);
+
+    sd->real.CmdBindPipeline(
+        commandBuffer,
+        pipelineBindPoint,
+        pipeline);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDraw(
+    VkCommandBuffer commandBuffer,
+    uint32_t vertexCount,
+    uint32_t instanceCount,
+    uint32_t firstVertex,
+    uint32_t firstInstance)
+{
+    StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
+
+    STEREO_LOG(
+        "DRAW vertices=%u instances=%u firstVertex=%u firstInstance=%u",
+        vertexCount,
+        instanceCount,
+        firstVertex,
+        firstInstance);
+
+    sd->real.CmdDraw(
+        commandBuffer,
+        vertexCount,
+        instanceCount,
+        firstVertex,
+        firstInstance);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDrawIndexed(
+    VkCommandBuffer commandBuffer,
+    uint32_t indexCount,
+    uint32_t instanceCount,
+    uint32_t firstIndex,
+    int32_t vertexOffset,
+    uint32_t firstInstance)
+{
+    StereoDevice *sd = stereo_device_from_cmd(commandBuffer);
+
+    STEREO_LOG(
+        "DRAW_INDEXED indices=%u instances=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
+        indexCount,
+        instanceCount,
+        firstIndex,
+        vertexOffset,
+        firstInstance);
+
+    sd->real.CmdDrawIndexed(
+        commandBuffer,
+        indexCount,
+        instanceCount,
+        firstIndex,
+        vertexOffset,
+        firstInstance);
+}
+
 /* ── vkCreateFramebuffer ────────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateFramebuffer(

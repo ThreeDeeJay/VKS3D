@@ -509,6 +509,15 @@ bool spirv_patch_stereo_vertex(
              ro,
              0};
     STEREO_LOG(
+        "PATCH_MATH shader=%016llx proj=%d lo=%f ro=%f conv=%f have_view=%u injected_view=%u",
+        (unsigned long long)spv_hash,
+        projection_mode,
+        lo,
+        ro,
+        conv,
+        (unsigned)have_view,
+        (unsigned)will_inj_vi);
+    STEREO_LOG(
         "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
         ro,
