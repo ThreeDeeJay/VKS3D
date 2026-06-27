@@ -340,7 +340,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         }
 
         /* nx = tmp - signed convergence */
-        nx = tmp; //IMPORTANT: TEMPORARY TEST TO DISABLE ONLY CONVERGENCE
         {
             uint32_t w[]={op_(131,5),   /* OpFSub */
                           m->ft,nx,tmp,convsel};
