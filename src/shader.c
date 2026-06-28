@@ -19,44 +19,45 @@
 #include "tes_inject.h"
 
 /* ── SPIR-V opcodes / constants ──────────────────────────────────────────── */
-#define SpvOpCapability       17
-#define SpvOpEntryPoint       15
-#define SpvOpTypeBool         20
-#define SpvOpTypeInt          21
-#define SpvOpTypeFloat        22
-#define SpvOpTypeVector       23
-#define SpvOpTypeMatrix       24
-#define SpvOpTypePointer      32
-#define SpvOpTypeArray        28
-#define SpvOpConstant         43
-#define SpvOpVariable         59
-#define SpvOpLoad             61
-#define SpvOpStore            62
-#define SpvOpAccessChain      65
-#define SpvOpDecorate         71
-#define SpvOpMemberDecorate   72
-#define SpvOpFunction         54
-#define SpvOpEmitVertex       218
-#define SpvOpCompositeExtract 81
-#define SpvOpCompositeInsert  82
-#define SpvOpFAdd             129
-#define SpvOpFMul             133
-#define SpvOpMatrixTimesVector 145
-#define SpvOpMatrixTimesMatrix 146
-#define SpvOpIEqual           170
-#define SpvOpINotEqual        171
-#define SpvOpSelect           169
+#define SpvOpCapability         17
+#define SpvOpEntryPoint         15
+#define SpvOpTypeBool           20
+#define SpvOpTypeInt            21
+#define SpvOpTypeFloat          22
+#define SpvOpTypeVector         23
+#define SpvOpTypeMatrix         24
+#define SpvOpTypePointer        32
+#define SpvOpTypeArray          28
+#define SpvOpConstant           43
+#define SpvOpVariable           59
+#define SpvOpLoad               61
+#define SpvOpStore              62
+#define SpvOpAccessChain        65
+#define SpvOpDecorate           71
+#define SpvOpMemberDecorate     72
+#define SpvOpFunction           54
+#define SpvOpEmitVertex         218
+#define SpvOpCompositeExtract   81
+#define SpvOpCompositeInsert    82
+#define SpvOpFAdd               129
+#define SpvOpFMul               133
+#define SpvOpMatrixTimesVector  145
+#define SpvOpMatrixTimesMatrix  146
+#define SpvOpIEqual             170
+#define SpvOpINotEqual          171
+#define SpvOpSelect             169
+#define SpvOpReturn             253
 
-#define SpvDecorationBuiltIn   11
+#define SpvDecorationBuiltIn    11
 #define SpvBuiltInPosition      0
-#define SpvBuiltInViewIndex  4440
+#define SpvBuiltInViewIndex     4440
 #define SpvStorageInput         1
 #define SpvStorageOutput        3
 #define SpvExecVertex           0
 #define SpvExecTessEval         2
 #define SpvExecGeometry         3
 #define SpvCapabilityMultiView  4439
-#define SPIRV_MAGIC  0x07230203u
+#define SPIRV_MAGIC             0x07230203u
 
 /* ── Dynamic word buffer ─────────────────────────────────────────────────── */
 typedef struct { uint32_t *w; size_t n, cap; } SpvBuf;
