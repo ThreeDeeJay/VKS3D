@@ -435,6 +435,15 @@ stereo_CmdBeginRenderPass(
         }
     }
     if (!sd) return;
+    StereoRenderPassInfo *lookup =
+        stereo_rp_lookup(sd, pRenderPassBegin->renderPass);
+    
+    STEREO_LOG(
+        "RP_LOOKUP_BEGIN requested=%p lookup=%p lookup_orig=%p lookup_mv=%p",
+        (void*)pRenderPassBegin->renderPass,
+        (void*)lookup,
+        lookup ? (void*)lookup->handle : NULL,
+        lookup ? (void*)lookup->mv_handle : NULL);
     /* CRITICAL DIAGNOSTIC: MV expected but not resolved */
     if (mv_rp == VK_NULL_HANDLE)
     {
