@@ -524,30 +524,27 @@ bool spirv_patch_stereo_vertex(
         ro,
         conv,
         projection_mode);
-
     size_t ins_t=0, ins_b=0;
     for (size_t i=5;i<in_c;) {
         uint32_t opx=in[i]&0xffff, wcx=in[i]>>16;
         if (!wcx||i+wcx>in_c) break;
-        if (opx==SpvOpFunction && !ins_t) ins_t=i;
-        if (!m.pos_is_block && opx==SpvOpStore && wcx>=3 && in[i+1]==m.pos_var) ins_b=i+wcx;
+
+        if (opx==SpvOpFunction && !ins_t)
+            ins_t=i;
+
+        /* Always inject immediately before the final OpReturn.
+         * Some shaders continue modifying gl_Position after its
+         * last apparent OpStore via helper logic or additional
+         * stores. Making the stereo adjustment the final operation
+         * guarantees it survives.
+         */
+        if (opx==SpvOpReturn)
+            ins_b=i;
         i+=wcx;
     }
     if (!ins_t) { sb_free(&te); return false; }
-    if (!m.pos_is_block && ins_b==0 && !is_gs) {
-        for (size_t i=5;i<in_c;) {
-            uint32_t opx=in[i]&0xffff, wcx=in[i]>>16; if (!wcx) break;
-            if (opx==253||opx==254) { ins_b=i; break; } i+=wcx;
-        }
-    }
-    if (m.pos_is_block && !is_gs) {
-        for (size_t i=5;i<in_c;) {
-            uint32_t opx=in[i]&0xffff, wcx=in[i]>>16; if (!wcx) break;
-            if (opx==253||opx==254) { ins_b=i; break; } i+=wcx;
-        }
-    }
     if (!is_gs && !ins_b) { sb_free(&te); return false; }
-    if (!is_gs && ins_b < ins_t) { sb_free(&te); return false; }
+    if (!is_gs && (!ins_b || ins_b < ins_t)) { sb_free(&te); return false; }
 
     bool need_mv_cap = id_inj_view && !m.has_mv_cap;
     bool mv_done=false, te_done=false, body_done=false;
