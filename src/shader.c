@@ -357,6 +357,10 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
     { uint32_t w[]={op_(SpvOpCompositeInsert,6),m->v4t,np,nx,lp,0u}; sb_push_n(out,w,6); }
     { uint32_t w[]={op_(SpvOpStore,3),pptr,np};                      sb_push_n(out,w,3); }
+    STEREO_LOG(
+        "emit_body complete projection=%d view=%d",
+        c->projection_mode,
+        c->have_view);
 }
 
 /* ── Public patcher ──────────────────────────────────────────────────────── */
@@ -519,6 +523,14 @@ bool spirv_patch_stereo_vertex(
              lo,
              ro,
              0};
+    STEREO_LOG(
+        "PATCH_BODY hash=%016llx lo=%f ro=%f conv=%f have_view=%d pos=%u",
+        (unsigned long long)spv_hash,
+        lo,
+        ro,
+        conv,
+        have_view,
+        m.pos_var);
     STEREO_LOG(
         "[SPIRV] build BodyCtx lo=%f ro=%f conv=%f proj=%d",
         lo,
