@@ -178,17 +178,17 @@ stereo_CreateFramebuffer(
         VkRenderPass log_mv      = t->mv_rp;
         VkFramebuffer log_fb     = t->fb;
         STEREO_LOG(
-            "FB_LOCALS A=%08x B=%08x C=%08x D=%08x",
-            (unsigned)log_rp,
-            (unsigned)log_used,
-            (unsigned)log_mv,
-            (unsigned)log_fb);
+            "FB_LOCALS A=%p B=%p C=%p D=%p",
+            (void*)log_rp,
+            (void*)log_used,
+            (void*)log_mv,
+            (void*)log_fb);
         STEREO_LOG(
-            "FB_ASSIGN A=%08x B=%08x C=%08x D=%08x",
-            (unsigned)log_rp,
-            (unsigned)log_used,
-            (unsigned)log_mv,
-            (unsigned)log_fb);
+            "FB_ASSIGN A=%p B=%p C=%p D=%p",
+            (void*)log_rp,
+            (void*)log_used,
+            (void*)log_mv,
+            (void*)log_fb);
 
         {
             const unsigned char *b = (const unsigned char *)t;
