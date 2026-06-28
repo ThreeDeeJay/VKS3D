@@ -259,9 +259,11 @@ typedef struct StereoDebugCtx {
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     STEREO_LOG(
-        "EMIT_STEREO hash=%016llx stage=%u",
-        (unsigned long long)hash_spv(c->m->words, c->m->count),
-        (unsigned)c->m->exec_model);
+        "EMIT_STEREO stage=%u pos=%u view=%u block=%u",
+        (unsigned)c->m->exec_model,
+        c->m->pos_var,
+        c->m->view_var,
+        c->m->pos_is_block);
     SpvMod *m=c->m;
     STEREO_LOG(
         "[EMIT] flip=%d lo=%f ro=%f proj=%d",
