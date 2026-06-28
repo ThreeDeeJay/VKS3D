@@ -376,11 +376,13 @@ bool spirv_patch_stereo_vertex(
     spv_scan(&m);
 
     STEREO_LOG(
-        "SPIRV scan: exec=%d pos=%u view=%u emits=%u mvcap=%d matrix=%d",
+        "SPIRV scan: exec=%d pos=%u pos_block=%u member=%u view=%u emits=%u mvcap=%d matrix=%d",
         m.exec_model,
         m.pos_var,
+        m.pos_is_block,
+        m.pos_member_idx,
         m.view_var,
-        (unsigned)m.emit_count,
+        m.emit_count,
         m.has_mv_cap,
         m.has_matrix_ops);
     uint64_t spv_hash = hash_spv(m.words, m.count);
