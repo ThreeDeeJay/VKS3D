@@ -386,6 +386,14 @@ stereo_CmdBeginRenderPass(
                     if (candidate != VK_NULL_HANDLE)
                     {
                     STEREO_LOG(
+                        "FB_SELECT fb=%p requested=%p tracked=%p tracked_used=%p tracked_mv=%p has_mv=%u",
+                        (void*)pRenderPassBegin->framebuffer,
+                        (void*)pRenderPassBegin->renderPass,
+                        (void*)dev->fb_tracks[i].rp,
+                        (void*)dev->fb_tracks[i].rp_used_at_create,
+                        (void*)dev->fb_tracks[i].mv_rp,
+                        (unsigned)dev->fb_tracks[i].has_mv);
+                    STEREO_LOG(
                         "MV_SELECT fb=%p candidate=%p",
                         pRenderPassBegin->framebuffer,
                         candidate);
