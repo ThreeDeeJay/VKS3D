@@ -92,15 +92,16 @@ static VkResult create_mv_rp(StereoDevice *sd,
     if (!vm || !cm || (pCI->dependencyCount && !vo)) {
         free(pa); free(vm); free(cm); free(vo); return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
-    for (uint32_t i = 0; i < sc; i++) { vm[i] = STEREO_VIEW_MASK; cm[i] = STEREO_CORRELATION_MASK; }
+    for (uint32_t i = 0; i < sc; i++) { vm[i] = 0x00000003; cm[i] = STEREO_CORRELATION_MASK; }
     VkRenderPassMultiviewCreateInfo mv = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
-        .pNext = pCI->pNext, .subpassCount = sc, .pViewMasks = vm,
+        .pNext = NULL, .subpassCount = sc, .pViewMasks = vm,
         .dependencyCount = pCI->dependencyCount, .pViewOffsets = vo,
         .correlationMaskCount = sc, .pCorrelationMasks = cm,
     };
     VkRenderPassCreateInfo mod = *pCI;
     if (pa) mod.pAttachments = pa;
+    mv.pNext = NULL;
     mod.pNext = &mv;
     VkResult res = sd->real.CreateRenderPass(sd->real_device, &mod, pA, pRP);
     free(pa); free(vm); free(cm); free(vo);
@@ -117,45 +118,102 @@ stereo_CreateRenderPass(
 {
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    STEREO_LOG("stereo_CreateRenderPass: attachments=%u", pCreateInfo->attachmentCount);
 
-    /* Step 1: create the ORIGINAL (non-MV) pass returned to app */
+    STEREO_LOG("stereo_CreateRenderPass: attachments=%u",
+               pCreateInfo ? pCreateInfo->attachmentCount : 0);
+
+    /* Step 1: create ORIGINAL render pass */
     VkResult res = create_patched_rp(sd, pCreateInfo, pAllocator, pRenderPass);
-    if (res != VK_SUCCESS) return res;
+    if (res != VK_SUCCESS)
+        return res;
 
-    if (sd->render_pass_count >= MAX_RENDER_PASSES) return VK_SUCCESS;
-    StereoRenderPassInfo *rpi = &sd->render_passes[sd->render_pass_count++];
+    if (sd->render_pass_count >= MAX_RENDER_PASSES)
+        return VK_SUCCESS;
+
+    StereoRenderPassInfo *rpi =
+        &sd->render_passes[sd->render_pass_count++];
+
     rpi->handle        = *pRenderPass;
     rpi->mv_handle     = VK_NULL_HANDLE;
     rpi->has_multiview = false;
     rpi->view_mask     = 0;
     rpi->subpass_count = pCreateInfo->subpassCount;
 
-    /* Step 2: create the multiview version (stored, not returned to app) */
+    /* Step 2: classify */
     bool depth_only = is_depth_only_renderpass(pCreateInfo);
 
-    STEREO_LOG(
-        "RenderPass classify: depth_only=%d attachments=%u",
-        depth_only,
-        pCreateInfo->attachmentCount);
+    STEREO_LOG("RenderPass classify: depth_only=%d attachments=%u",
+               depth_only,
+               pCreateInfo->attachmentCount);
 
-    if (sd->stereo.enabled &&
+    bool mv_eligible =
+        sd->stereo.enabled &&
         sd->stereo.multiview &&
-        !depth_only)
+        !depth_only;
+    if (!mv_eligible)
     {
-        VkRenderPass mv = VK_NULL_HANDLE;
-        if (create_mv_rp(sd, pCreateInfo, pAllocator, &mv) == VK_SUCCESS && mv) {
-            rpi->mv_handle     = mv;
-            rpi->has_multiview = true;
-            rpi->view_mask     = STEREO_VIEW_MASK;
-            sd->multiview_pass_exists = true;
-            STEREO_LOG("RenderPass %p: original=returned, mv=%p (att=%u, sub=%u)",
-                       (void*)*pRenderPass, (void*)mv,
-                       pCreateInfo->attachmentCount, pCreateInfo->subpassCount);
-        } else {
-            STEREO_ERR("RenderPass %p: mv creation failed", (void*)*pRenderPass);
+        return VK_SUCCESS;
+    }
+
+    /*
+     * FIX 2 CORE: DEDUPE MV render passes
+     * Ensure 1 base RP → 1 MV RP mapping.
+     */
+    if (sd->render_pass_count > 1)
+    {
+        for (uint32_t i = 0; i < sd->render_pass_count - 1; i++)
+        {
+            StereoRenderPassInfo *ex = &sd->render_passes[i];
+
+            if (ex->handle == *pRenderPass && ex->mv_handle)
+            {
+                rpi->mv_handle     = ex->mv_handle;
+                rpi->has_multiview = true;
+                rpi->view_mask     = STEREO_VIEW_MASK;
+
+                STEREO_LOG("RenderPass %p: reused existing mv=%p",
+                           (void*)*pRenderPass,
+                           (void*)ex->mv_handle);
+
+                return VK_SUCCESS;
+            }
         }
     }
+
+    /* Create MV render pass */
+    VkRenderPass mv = VK_NULL_HANDLE;
+
+    if (create_mv_rp(sd, pCreateInfo, pAllocator, &mv) == VK_SUCCESS && mv)
+    {
+        rpi->mv_handle     = mv;
+        STEREO_LOG(
+            "RP_PAIR original=%p mv=%p",
+            (void*)*pRenderPass,
+            (void*)mv);
+        rpi->has_multiview = true;
+        STEREO_LOG(
+            "RP_STORE slot=%u handle=%08x mv=%08x has_mv=%u addr=%08x",
+            (unsigned)(sd->render_pass_count - 1),
+            (unsigned)(uintptr_t)rpi->handle,
+            (unsigned)(uintptr_t)rpi->mv_handle,
+            (unsigned)rpi->has_multiview,
+            (unsigned)(uintptr_t)rpi);
+        rpi->view_mask     = STEREO_VIEW_MASK;
+
+        sd->multiview_pass_exists = true;
+
+        STEREO_LOG("RenderPass %p: original=returned mv=%p (att=%u sub=%u)",
+                   (void*)*pRenderPass,
+                   (void*)mv,
+                   pCreateInfo->attachmentCount,
+                   pCreateInfo->subpassCount);
+    }
+    else
+    {
+        STEREO_ERR("RenderPass %p: mv creation failed",
+                   (void*)*pRenderPass);
+    }
+
     return VK_SUCCESS;
 }
 

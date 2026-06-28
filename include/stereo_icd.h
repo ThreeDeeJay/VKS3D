@@ -477,7 +477,16 @@ typedef struct StereoRenderPassInfo {
     uint32_t      view_mask;
     uint32_t      subpass_count;
     VkRenderPass  mv_handle;     /* multiview version — VK_NULL_HANDLE until framebuffer confirms */
+    uint8_t       _pad[7];
 } StereoRenderPassInfo;
+
+typedef struct StereoFramebufferTrack {
+    VkFramebuffer fb;
+    VkRenderPass  rp;      /* original RP */
+    VkRenderPass  rp_used_at_create;
+    VkRenderPass  mv_rp;   /* multiview RP */
+    bool          has_mv;
+} StereoFramebufferTrack;
 
 typedef struct StereoDevice {
     /* MUST be first: loader reads *(void**)device for dispatch table. */
@@ -508,8 +517,7 @@ typedef struct StereoDevice {
     uint32_t               upgraded_view_count;
     /* Per-framebuffer: which render pass (multiview version) was used */
 #define MAX_FB_TRACK           512
-    VkFramebuffer          fb_track_handles[MAX_FB_TRACK];
-    VkRenderPass           fb_track_mv_rps [MAX_FB_TRACK];
+    StereoFramebufferTrack fb_tracks[MAX_FB_TRACK];
     uint32_t               fb_track_count;
     stereo_mutex_t         lock;
 
@@ -709,12 +717,14 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainK
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
 
+typedef struct StereoDebugCtx StereoDebugCtx;
 bool spirv_patch_stereo_vertex(
     const uint32_t *in, size_t in_c,
     uint32_t **out, size_t *out_c,
     float lo, float ro,
     float conv,
-    bool inj_vi);
+    bool inj_vi,
+    const StereoDebugCtx *dbg);
 void spirv_patched_free(uint32_t *w);
 
 VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*,

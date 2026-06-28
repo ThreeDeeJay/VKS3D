@@ -171,9 +171,9 @@ void stereo_config_init(StereoConfig *cfg)
     /* Sanity: separation must be positive.  Convergence must be in [0, sep).
      * If sep <= 0 or conv >= sep, the net eye offset is zero or reversed,
      * which produces no visible stereo or inverted depth.  Warn and clamp. */
-    if (cfg->separation <= 0.0f) {
-        STEREO_ERR("INI: separation=%.4f is <= 0 — clamping to 0.065", cfg->separation);
-        cfg->separation = 0.065f;
+    if (cfg->separation < 0.0f) {
+        STEREO_ERR("INI: separation=%.4f is negative — clamping to 0", cfg->separation);
+        cfg->separation = 0.0f;
     }
     if (cfg->convergence < 0.0f) {
         STEREO_ERR("INI: convergence=%.4f is negative — clamping to 0", cfg->convergence);
@@ -639,7 +639,37 @@ StereoSwapchain *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc) {
 }
 StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp) {
     for (uint32_t i = 0; i < dev->render_pass_count; i++)
-        if (dev->render_passes[i].handle == rp) return &dev->render_passes[i];
+    {
+        StereoRenderPassInfo *rpi = &dev->render_passes[i];
+        if (rpi->handle == rp)
+        {
+            const unsigned char *b = (const unsigned char *)rpi;
+            STEREO_LOG(
+                "RPINFO_BYTES "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x "
+                "%02x %02x %02x %02x",
+                b[0],  b[1],  b[2],  b[3],
+                b[4],  b[5],  b[6],  b[7],
+                b[8],  b[9],  b[10], b[11],
+                b[12], b[13], b[14], b[15],
+                b[16], b[17], b[18], b[19],
+                b[20], b[21], b[22], b[23]);
+            STEREO_LOG(
+                "RP_LOOKUP hit handle=%08x mv=%08x has_mv=%u addr=%08x",
+                (unsigned)(uintptr_t)rpi->handle,
+                (unsigned)(uintptr_t)rpi->mv_handle,
+                (unsigned)rpi->has_multiview,
+                (unsigned)(uintptr_t)rpi);
+            return rpi;
+        }
+    }
+    STEREO_LOG(
+        "RP_LOOKUP miss handle=%p",
+        rp);
     return NULL;
 }
 

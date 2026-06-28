@@ -238,6 +238,8 @@ stereo_CreateDevice(
     if (!sd) {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
+    memset(sd->fb_tracks, 0, sizeof(sd->fb_tracks));
+    sd->fb_track_count = 0;
     SET_LOADER_MAGIC_VALUE(sd);
 
     sd->real_device = real_dev;

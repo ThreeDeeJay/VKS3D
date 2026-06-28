@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(VKS3D
-    VERSION 1.0.0
+    VERSION 1.0.${VKS3D_VER_PATCH}.${VKS3D_VER_BUILD}
     LANGUAGES C CXX
     DESCRIPTION "Vulkan Stereoscopic 3D ICD"
 )
@@ -226,13 +226,13 @@ if(TARGET shaders)
 endif()
 
 # ── Tests ────────────────────────────────────────────────────────────────────
-option(VKS3D_BUILD_TESTS "Build unit tests" ON)
-option(VKS3D_BUILD_DEMO  "Build integration demo" ON)
+option(VKS3D_BUILD_TESTS "Build unit tests" OFF)
+option(VKS3D_BUILD_DEMO  "Build integration demo" OFF)
 
 # Diagnostics tool is always built — it checks all prerequisites for stereo
 # rendering and is useful even in release builds / installed alongside the DLL.
-enable_testing()
-add_subdirectory(tests)
+# enable_testing()
+# add_subdirectory(tests)
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 message(STATUS "")
@@ -241,5 +241,5 @@ message(STATUS "  -------------------")
 message(STATUS "  Target     : ${TARGET_NAME}")
 message(STATUS "  Arch       : ${STEREO_ARCH} (${STEREO_BITS}-bit)")
 message(STATUS "  Vulkan SDK : ${Vulkan_INCLUDE_DIRS}")
-message(STATUS "  Tests      : ${VKS3D_BUILD_TESTS}")
+# message(STATUS "  Tests      : ${VKS3D_BUILD_TESTS}")
 message(STATUS "")

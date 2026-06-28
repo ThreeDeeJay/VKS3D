@@ -427,6 +427,9 @@ extern "C" {
 extern HANDLE g_vks3d_log_handle;
 extern int    g_vks3d_log_enabled;
 
+/* Ensures vks3d_log_open() is only executed once per process */
+static int g_vks3d_log_initialized = 0;
+
 #ifdef __cplusplus
 }
 #endif
@@ -439,7 +442,8 @@ extern int    g_vks3d_log_enabled;
 static inline void vks3d_log_open(void)
 {
     /* Already initialised? */
-    if (g_vks3d_log_enabled) return;
+    if (g_vks3d_log_initialized) return;
+    g_vks3d_log_initialized = 1;
 
     /* Read STEREO_LOGFILE_PATH using the Win32 API directly */
     char path[MAX_PATH];
@@ -501,7 +505,7 @@ static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
     if (rem > 1) {
         va_list ap;
         va_start(ap, fmt);
-        int n = _vsnprintf(msg + pos, (size_t)rem, fmt, ap);
+        int n = vsnprintf(msg + pos, (size_t)rem, fmt, ap);
         va_end(ap);
         if (n > 0) pos += (n < rem ? n : rem - 1);
     }
@@ -512,6 +516,7 @@ static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
 }
 
 /* STEREO_LOG / STEREO_ERR: no-ops when logging is disabled */
+#  ifndef STEREO_LOG
 #  define STEREO_LOG(fmt, ...) \
     do { if (g_vks3d_log_enabled) \
         vks3d_logf("", fmt, ##__VA_ARGS__); \
@@ -520,6 +525,7 @@ static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
     do { if (g_vks3d_log_enabled) \
         vks3d_logf("[ERROR] ", fmt, ##__VA_ARGS__); \
     } while (0)
+#  endif
 
 #else
 /* ── Linux / macOS ────────────────────────────────────────────────────────── */
