@@ -409,6 +409,21 @@ bool spirv_patch_stereo_vertex(
         m.pos_var,
         m.view_var);
 
+    if (dbg) {
+        STEREO_LOG(
+            "PATCH_CTX pipe=%u stage=%u renderPass=%p multiview=%d",
+            dbg->pipeline_index,
+            dbg->stage,
+            (void*)dbg->render_pass,
+            dbg->is_multiview);
+    
+        if (!dbg->is_multiview) {
+            STEREO_LOG(
+                "PATCH_SKIP non-multiview render pass");
+            return false;
+        }
+    }
+
     if (m.exec_model == SpvExecVertex)
     {
         STEREO_LOG(
