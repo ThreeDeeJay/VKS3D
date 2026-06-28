@@ -136,6 +136,12 @@ stereo_CreateFramebuffer(
     }
     if (res == VK_SUCCESS && sd->fb_track_count < MAX_FB_TRACK)
     {
+        STEREO_LOG(
+            "FB_CREATE_TRACK fb=%p original=%p used=%p mv=%p",
+            (void*)*pFramebuffer,
+            (void*)original_rp,
+            (void*)fci.renderPass,
+            (void*)use_mv);
         uint32_t idx = sd->fb_track_count;
 
         /* IMPORTANT: snapshot BEFORE increment */
