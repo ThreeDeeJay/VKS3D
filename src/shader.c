@@ -249,7 +249,7 @@ typedef struct {
     int   flip_dbg;
 } BodyCtx;
 
-typedef struct {
+typedef struct StereoDebugCtx {
     uint32_t pipeline_index;
     VkRenderPass render_pass;
     int is_multiview;
