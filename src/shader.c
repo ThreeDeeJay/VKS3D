@@ -378,6 +378,9 @@ bool spirv_patch_stereo_vertex(
     bool inj_vi,
     const StereoDebugCtx *dbg)
 {
+    /* TEMP: disable all VS patching */
+    return false;
+
     const int projection_mode = STEREO_PROJECTION_OFF_AXIS;
 
     STEREO_LOG(
@@ -860,6 +863,8 @@ bool spirv_patch_stereo_fs(
     const uint32_t *in, size_t in_c,
     uint32_t **out, size_t *out_c)
 {
+     /* TEMP: disable all FS patching */
+     return false;
     if (!in || in_c < 5 || in[0] != SPIRV_MAGIC) return false;
 
     FsScan s;
