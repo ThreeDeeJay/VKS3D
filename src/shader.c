@@ -123,6 +123,13 @@ static void do_scan(SpvMod *m, bool p2)
 
         case SpvOpMatrixTimesVector:
         case SpvOpMatrixTimesMatrix:
+            STEREO_LOG(
+                "MATRIX_OPCODE op=%u word=%u exec=%u pos=%u pos_block=%u",
+                op,
+                i,
+                m->exec_model,
+                m->pos_var,
+                m->pos_is_block);
             m->has_matrix_ops = true;
             break;
         case SpvOpTypePointer:
@@ -194,6 +201,7 @@ static void do_scan(SpvMod *m, bool p2)
         i+=wc;
     }
 }
+
 static void spv_scan(SpvMod *m)
 {
     m->bound = m->words[3];
