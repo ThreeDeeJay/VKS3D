@@ -258,6 +258,10 @@ typedef struct StereoDebugCtx {
 
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
+    STEREO_LOG(
+        "EMIT_STEREO hash=%016llx stage=%u",
+        (unsigned long long)hash_spv(bc->m->words, bc->m->count),
+        (unsigned)bc->m->exec_model);
     SpvMod *m=c->m;
     STEREO_LOG(
         "[EMIT] flip=%d lo=%f ro=%f proj=%d",
@@ -399,6 +403,16 @@ bool spirv_patch_stereo_vertex(
         m.has_mv_cap,
         m.has_matrix_ops);
     uint64_t spv_hash = hash_spv(m.words, m.count);
+    if (dbg)
+    {
+        STEREO_LOG(
+            "PATCH_CTX hash=%016llx pipe=%u stage=%u rp=%p mv=%d",
+            (unsigned long long)spv_hash,
+            dbg->pipeline_index,
+            dbg->stage,
+            (void*)dbg->render_pass,
+            dbg->is_multiview);
+    }
     STEREO_LOG(
         "PATCHABLE shader: hash=%016llx-vs.spv words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
         (unsigned long long)spv_hash,
