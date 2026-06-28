@@ -316,7 +316,7 @@ static void test_null_input_rejected(void)
 
     uint32_t *out = NULL;
     size_t    out_c = 0;
-    bool ok = spirv_patch_stereo_vertex(NULL, 0, &out, &out_c, 0.f, 0.f, 0.f, false);
+    bool ok = spirv_patch_stereo_vertex(NULL, 0, &out, &out_c, 0.f, 0.f, 0.f, false, NULL);
 
     if (ok) {
         FAIL("should reject NULL input");
@@ -332,7 +332,7 @@ static void test_wrong_magic_rejected(void)
     const uint32_t bad[] = { 0xDEADBEEF, 0x00010300, 0x00000000, 0x00000005, 0x00000000 };
     uint32_t *out = NULL;
     size_t    out_c = 0;
-    bool ok = spirv_patch_stereo_vertex(bad, 5, &out, &out_c, -0.032f, 0.032f, 0.015f, false);
+    bool ok = spirv_patch_stereo_vertex(bad, 5, &out, &out_c, -0.032f, 0.032f, 0.015f, false, NULL);
 
     if (ok) {
         FAIL("should reject wrong magic");
