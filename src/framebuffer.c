@@ -439,6 +439,11 @@ stereo_CmdBeginRenderPass(
         VkRenderPassBeginInfo modified = *pRenderPassBegin;
         modified.renderPass = mv_rp;
         STEREO_LOG(
+            "BEGIN_PASS_DRIVER original=%p mv=%p framebuffer=%p",
+            (void*)pRenderPassBegin->renderPass,
+            (void*)modified.renderPass,
+            (void*)modified.framebuffer);
+        STEREO_LOG(
             "RP_BEGIN_DRIVER rp=%p fb=%p",
             (void*)modified.renderPass,
             (void*)modified.framebuffer);
@@ -455,6 +460,10 @@ stereo_CmdBeginRenderPass(
     } else {
         STEREO_LOG(
             "RP_BEGIN_DRIVER rp=%p fb=%p",
+            (void*)pRenderPassBegin->renderPass,
+            (void*)pRenderPassBegin->framebuffer);
+        STEREO_LOG(
+            "BEGIN_PASS_DRIVER original=%p framebuffer=%p",
             (void*)pRenderPassBegin->renderPass,
             (void*)pRenderPassBegin->framebuffer);
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
