@@ -260,8 +260,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     STEREO_LOG(
         "EMIT_STEREO hash=%016llx stage=%u",
-        (unsigned long long)hash_spv(bc->m->words, bc->m->count),
-        (unsigned)bc->m->exec_model);
+        (unsigned long long)hash_spv(c->m->words, c->m->count),
+        (unsigned)c->m->exec_model);
     SpvMod *m=c->m;
     STEREO_LOG(
         "[EMIT] flip=%d lo=%f ro=%f proj=%d",
