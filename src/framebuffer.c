@@ -386,9 +386,27 @@ stereo_CmdBeginRenderPass(
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
             {
                 if (dev->fb_tracks[i].has_mv)
-                {
-                    VkRenderPass candidate = dev->fb_tracks[i].mv_rp;
-                    //IMPORTANT: TEMPORARY CHANGE TEST           
+                {         
+                    VkRenderPass candidate = VK_NULL_HANDLE;
+                    StereoRenderPassInfo *rpi =
+                        stereo_rp_lookup(dev,
+                                         pRenderPassBegin->renderPass);
+                    if (rpi && rpi->mv_handle)
+                    {
+                        candidate = rpi->mv_handle;
+                        STEREO_LOG(
+                            "RP_LOOKUP_SELECTED requested=%p mv=%p",
+                            (void*)pRenderPassBegin->renderPass,
+                            (void*)candidate);
+                    }
+                    else
+                    {
+                        candidate = dev->fb_tracks[i].mv_rp;
+                        STEREO_LOG(
+                            "RP_LOOKUP_FALLBACK requested=%p fb_mv=%p",
+                            (void*)pRenderPassBegin->renderPass,
+                            (void*)candidate);
+                    }
                     if (candidate != VK_NULL_HANDLE)
                     {
                     STEREO_LOG(
