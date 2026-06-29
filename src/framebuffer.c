@@ -594,6 +594,11 @@ stereo_CmdBindPipeline(
     return;
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipeline);
+    remember_bound_pipeline(
+        sd,
+        commandBuffer,
+        pipeline);
+
     if (info)
     {
         STEREO_LOG(
@@ -622,4 +627,59 @@ stereo_CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,
         pipeline);
+}
+
+static StereoDevice *
+find_any_device(void)
+{
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real_device)
+            return &g_devices[i];
+    }
+
+    return NULL;
+}
+
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDrawIndexed(
+    VkCommandBuffer commandBuffer,
+    uint32_t indexCount,
+    uint32_t instanceCount,
+    uint32_t firstIndex,
+    int32_t vertexOffset,
+    uint32_t firstInstance)
+{
+    StereoDevice *sd = find_any_device();
+
+    if (sd)
+    {
+        VkPipeline pipe =
+            lookup_bound_pipeline(sd, commandBuffer);
+
+        StereoPipelineInfo *info =
+            find_pipeline_info(sd, pipe);
+
+        if (info)
+        {
+            STEREO_LOG(
+                "DRAW pipe=%p quad=%u patched_vs=%u patched_fs=%u",
+                (void *)pipe,
+                info->is_quad,
+                info->patched_vs,
+                info->patched_fs);
+        }
+    }
+
+    sd->real.CmdDrawIndexed(
+        commandBuffer,
+        indexCount,
+        instanceCount,
+        firstIndex,
+        vertexOffset,
+        firstInstance);
 }

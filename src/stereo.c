@@ -835,11 +835,18 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
         (PFN_vkImportMemoryWin32HandleKHR)
         g_real_giPA(real_inst,
             "vkImportMemoryWin32HandleKHR");
-
     sd->real.ImportSemaphoreWin32HandleKHR =
         (PFN_vkImportSemaphoreWin32HandleKHR)
         g_real_giPA(real_inst,
             "vkImportSemaphoreWin32HandleKHR");
+    sd->real.CmdDraw                = (PFN_vkCmdDraw)
+        g_real_giPA(real_inst, "vkCmdDraw");
+    sd->real.CmdDrawIndexed         = (PFN_vkCmdDrawIndexed)
+        g_real_giPA(real_inst, "vkCmdDrawIndexed");
+    sd->real.CmdDrawIndirect        = (PFN_vkCmdDrawIndirect)
+        g_real_giPA(real_inst, "vkCmdDrawIndirect");
+    sd->real.CmdDrawIndexedIndirect = (PFN_vkCmdDrawIndexedIndirect)
+        g_real_giPA(real_inst, "vkCmdDrawIndexedIndirect");
 #undef L
 }
 

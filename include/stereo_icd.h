@@ -613,6 +613,14 @@ typedef struct StereoDevice {
     StereoPipelineInfo *pipeline_info;
     uint32_t pipeline_info_count;
     uint32_t pipeline_info_capacity;
+
+    /* -- CommandBuffer -> currently bound graphics pipeline -------- */
+#define MAX_CB_TRACK 4096
+    struct {
+        VkCommandBuffer cb;
+        VkPipeline pipeline;
+    } cb_track[MAX_CB_TRACK];
+    uint32_t cb_track_count;
 } StereoDevice;
 
 /* -- Stereo UBO layout ----------------------------------------------------- */
@@ -742,6 +750,27 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainK
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDraw(VkCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
+
+/* shader.c */
+StereoPipelineInfo *
+find_pipeline_info(
+    StereoDevice *,
+    VkPipeline);
+
+void
+remember_bound_pipeline(
+    StereoDevice *,
+    VkCommandBuffer,
+    VkPipeline);
+
+VkPipeline
+lookup_bound_pipeline(
+    StereoDevice *,
+    VkCommandBuffer);
 
 typedef struct StereoDebugCtx StereoDebugCtx;
 bool spirv_patch_stereo_vertex(
