@@ -124,7 +124,14 @@ stereo_CreateFramebuffer(
         (void*)fci.renderPass,
         (void*)pCreateInfo->renderPass);
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
-    
+    if (res == VK_SUCCESS)
+    {
+        STEREO_LOG(
+            "FB_CREATED fb=%p rp_used=%p mv=%p",
+            (void*)*pFramebuffer,
+            (void*)fci.renderPass,
+            (void*)use_mv);
+    }
     if (before != fci.renderPass) {
         STEREO_LOG("[CRITICAL MUTATION] fci.renderPass changed during CreateFramebuffer: %p -> %p",
                    before, fci.renderPass);
@@ -372,13 +379,23 @@ stereo_CmdBeginRenderPass(
             dev,
             dev->fb_track_count);
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
-
-            bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
+            bool fb_match =
+                (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
             STEREO_LOG(
-                "RP_COMPARE begin=%p tracked=%p tracked_mv=%p",
-                pRenderPassBegin->renderPass,
-                dev->fb_tracks[i].rp,
-                dev->fb_tracks[i].mv_rp);
+                "FB_SCAN i=%u "
+                "begin_fb=%p tracked_fb=%p "
+                "begin_rp=%p tracked_rp=%p "
+                "tracked_used=%p tracked_mv=%p "
+                "has_mv=%u fb_match=%u",
+                i,
+                (void*)pRenderPassBegin->framebuffer,
+                (void*)dev->fb_tracks[i].fb,
+                (void*)pRenderPassBegin->renderPass,
+                (void*)dev->fb_tracks[i].rp,
+                (void*)dev->fb_tracks[i].rp_used_at_create,
+                (void*)dev->fb_tracks[i].mv_rp,
+                (unsigned)dev->fb_tracks[i].has_mv,
+                (unsigned)fb_match);
             bool rp_match =
                 (
                     dev->fb_tracks[i].rp != VK_NULL_HANDLE &&
