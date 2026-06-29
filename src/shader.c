@@ -1688,6 +1688,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 info->stage_count =
                     infos[p].stageCount;
 
+                info->is_quad =
+                    (!pCI[p].pVertexInputState ||
+                     pCI[p].pVertexInputState->vertexBindingDescriptionCount == 0);
+                
+                info->vertex_binding_count =
+                    pCI[p].pVertexInputState ?
+                    pCI[p].pVertexInputState->vertexBindingDescriptionCount : 0;
+
                 for (uint32_t s = 0; s < infos[p].stageCount; s++)
                 {
                     const VkPipelineShaderStageCreateInfo *st =

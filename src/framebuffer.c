@@ -601,12 +601,16 @@ stereo_CmdBindPipeline(
             "mv_rp=%p "
             "orig_rp=%p "
             "patched_vs=%u "
-            "patched_fs=%u",
+            "patched_fs=%u "
+            "quad=%u "
+            "bindings=%u",
             (void*)pipeline,
             (void*)info->mv_renderpass,
             (void*)info->original_renderpass,
             info->patched_vs,
-            info->patched_fs);
+            info->patched_fs,
+            info->is_quad,
+            info->vertex_binding_count);
     }
     else
     {
