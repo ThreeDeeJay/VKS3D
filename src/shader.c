@@ -434,6 +434,14 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
              sel=(*nid)++,
              px=(*nid)++, nx=(*nid)++, np=(*nid)++;
     if (c->have_view && m->view_var && m->it && c->bt) {
+        if (hash_spv(m->words, m->count) == 0xc3c35ab856282a97ULL)
+        {
+            STEREO_LOG(
+                "DXVK_UI_EMIT have_view=%d view_var=%u projection=%d",
+                c->have_view,
+                m->view_var,
+                c->projection_mode);
+        }
         { uint32_t w[]={op_(SpvOpLoad,4),m->it,lv,m->view_var};         sb_push_n(out,w,4); }
         { uint32_t w[]={op_(SpvOpIEqual,5),c->bt,isl,lv,c->cz};        sb_push_n(out,w,5); }
         STEREO_LOG(
@@ -546,19 +554,17 @@ bool spirv_patch_stereo_vertex(
         m.has_mv_cap,
         m.has_matrix_ops);
     uint64_t spv_hash = hash_spv(m.words, m.count);
-
-    /* TEMP: shader blacklist for debugging.
-     * Return the original shader unchanged so we can identify which
-     * patched shader is responsible for the remaining stereo artifact.
-     */
-    if (spv_hash == 0x1194cbb18ed7990full)
+    if (spv_hash == 0xc3c35ab856282a97ULL)
     {
         STEREO_LOG(
-            "BLACKLIST shader=%016llx",
-            (unsigned long long)spv_hash);
-        return false;
+            "DXVK_UI_CANDIDATE hash=%016llx matrix=%d pos_block=%d pos_member=%u view=%u exec=%u",
+            (unsigned long long)spv_hash,
+            m.has_matrix_ops,
+            m.pos_is_block,
+            m.pos_member_idx,
+            m.view_var,
+            (unsigned)m.exec_model);
     }
-
     if (dbg)
     {
         STEREO_LOG(
