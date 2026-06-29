@@ -694,17 +694,6 @@ stereo_CmdDrawIndexed(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
-    /* TEMP: hide candidate UI pipeline */
-    if (info &&
-        info->patched_fs &&
-        !info->patched_vs &&
-        info->is_quad)
-    {
-        STEREO_LOG(
-            "SKIP_DRAW_INDEXED quad candidate pipe=%p",
-            (void *)pipe);
-        return;
-    }
     if (info)
     {
         STEREO_LOG(
@@ -750,17 +739,6 @@ stereo_CmdDraw(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
-    /* TEMP: hide candidate UI pipeline */
-    if (info &&
-        info->patched_fs &&
-        !info->patched_vs &&
-        info->is_quad)
-    {
-        STEREO_LOG(
-            "SKIP_DRAW quad candidate pipe=%p",
-            (void *)pipe);
-        return;
-    }
     if (info)
     {
         STEREO_LOG(
@@ -808,17 +786,6 @@ stereo_CmdDrawIndirect(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
-    /* TEMP: hide candidate UI pipeline */
-    if (info &&
-        info->patched_fs &&
-        !info->patched_vs &&
-        info->is_quad)
-    {
-        STEREO_LOG(
-            "SKIP_DRAW_INDIRECT quad candidate pipe=%p",
-            (void *)pipe);
-        return;
-    }
     if (info)
     {
         STEREO_LOG(
@@ -865,17 +832,6 @@ stereo_CmdDrawIndexedIndirect(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
-    /* TEMP: hide candidate UI pipeline */
-    if (info &&
-        info->patched_fs &&
-        !info->patched_vs &&
-        info->is_quad)
-    {
-        STEREO_LOG(
-            "SKIP_DRAW_INDEXED_INDIRECT quad candidate pipe=%p",
-            (void *)pipe);
-        return;
-    }
     if (info)
     {
     STEREO_LOG(
