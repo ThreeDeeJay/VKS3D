@@ -565,6 +565,17 @@ bool spirv_patch_stereo_vertex(
             m.view_var,
             (unsigned)m.exec_model);
     }
+    /* TEMP: shader blacklist for debugging.
+     * Return the original shader unchanged so we can identify which
+     * patched shader is responsible for the remaining stereo artifact.
+     */
+    if (spv_hash == 0x1194cbb18ed7990full)
+    {
+        STEREO_LOG(
+            "BLACKLIST shader=%016llx",
+            (unsigned long long)spv_hash);
+        return false;
+    }
     if (dbg)
     {
         STEREO_LOG(
