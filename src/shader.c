@@ -1350,9 +1350,20 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             VkPipelineShaderStageCreateInfo *st=malloc(sc2*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc2*sizeof(*st));
-            st[fs_s].module=tmp;
-            infos[p].pStages=st; tmp_mod[p]=tmp; tst[p]=st;
-            STEREO_LOG("Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",p,sc2);
+            st[fs_s].module = tmp;
+            infos[p].pStages = st;
+            tmp_mod[p] = tmp;
+            tst[p] = st;
+            STEREO_LOG(
+                "PATCHED_STAGE PathFS p=%u stage=%u orig=%p patched=%p",
+                p,
+                fs_s,
+                (void *)ci->pStages[fs_s].module,
+                (void *)tmp);
+            STEREO_LOG(
+                "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
+                p,
+                sc2);
             continue;
         }
 
@@ -1442,9 +1453,19 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
-            st[tes_stage].module=tmp;
-            infos[p].pStages=st; tmp_mod[p]=tmp; tst[p]=st;
-            STEREO_LOG("Pipe %u: Path A — TES patched (gl_ViewIndex)",p);
+            st[tes_stage].module = tmp;
+            infos[p].pStages = st;
+            tmp_mod[p] = tmp;
+            tst[p] = st;
+            STEREO_LOG(
+                "PATCHED_STAGE PathA p=%u stage=%u orig=%p patched=%p",
+                p,
+                tes_stage,
+                (void *)ci->pStages[tes_stage].module,
+                (void *)tmp);
+            STEREO_LOG(
+                "Pipe %u: Path A — TES patched (gl_ViewIndex)",
+                p);
             continue;
         }
 
@@ -1530,9 +1551,19 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
-            st[vs_stage].module=tmp;
-            infos[p].pStages=st; tmp_mod[p]=tmp; tst[p]=st;
-            STEREO_LOG("Pipe %u: Path B — VS gl_ViewIndex patch",p);
+            st[vs_stage].module = tmp;
+            infos[p].pStages = st;
+            tmp_mod[p] = tmp;
+            tst[p] = st;
+            STEREO_LOG(
+                "PATCHED_STAGE PathB p=%u stage=%u orig=%p patched=%p",
+                p,
+                vs_stage,
+                (void *)ci->pStages[vs_stage].module,
+                (void *)tmp);
+            STEREO_LOG(
+                "Pipe %u: Path B — VS gl_ViewIndex patch",
+                p);
             continue;
         }
 
@@ -1572,6 +1603,18 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             p,
             infos[p].renderPass,
             infos[p].subpass);
+        for (uint32_t s = 0; s < infos[p].stageCount; s++)
+        {
+            STEREO_LOG(
+                "PIPE_STAGE p=%u stage=%u vkstage=0x%x module=%p patched_tmp=%u",
+                p,
+                s,
+                infos[p].pStages[s].stage,
+                (void *)infos[p].pStages[s].module,
+                (unsigned)(
+                    tmp_mod[p] != VK_NULL_HANDLE &&
+                    infos[p].pStages[s].module == tmp_mod[p]));
+        }
     }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     for (uint32_t p = 0; p < N; p++) {
