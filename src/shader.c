@@ -281,20 +281,6 @@ remember_bound_pipeline(
     sd->cb_track_count++;
 }
 
-VkPipeline
-lookup_bound_pipeline(
-    StereoDevice *sd,
-    VkCommandBuffer cb)
-{
-    for (uint32_t i = 0; i < sd->cb_track_count; i++)
-    {
-        if (sd->cb_track[i].cb == cb)
-            return sd->cb_track[i].pipeline;
-    }
-
-    return VK_NULL_HANDLE;
-}
-
 static StereoPipelineInfo *
 add_pipeline_info(
     StereoDevice *sd)
