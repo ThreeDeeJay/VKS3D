@@ -590,15 +590,30 @@ stereo_CmdBindPipeline(
             break;
         }
     }
-
     if (!sd)
-        return;
-
-    STEREO_LOG(
-        "PIPE_BIND cb=%p pipeline=%p bindPoint=%u",
-        (void*)commandBuffer,
-        (void*)pipeline,
-        (unsigned)pipelineBindPoint);
+    return;
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipeline);
+    if (info)
+    {
+        STEREO_LOG(
+            "PIPE_BIND pipe=%p "
+            "mv_rp=%p "
+            "orig_rp=%p "
+            "patched_vs=%u "
+            "patched_fs=%u",
+            (void*)pipeline,
+            (void*)info->mv_renderpass,
+            (void*)info->original_renderpass,
+            info->patched_vs,
+            info->patched_fs);
+    }
+    else
+    {
+        STEREO_LOG(
+            "PIPE_BIND pipe=%p UNKNOWN",
+            (void*)pipeline);
+    }
     sd->real.CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,

@@ -488,6 +488,22 @@ typedef struct StereoFramebufferTrack {
     bool          has_mv;
 } StereoFramebufferTrack;
 
+typedef struct StereoPipelineInfo
+{
+    VkPipeline pipeline;
+
+    VkRenderPass original_renderpass;
+    VkRenderPass mv_renderpass;
+
+    uint32_t stage_count;
+
+    VkShaderModule vs_module;
+    VkShaderModule fs_module;
+
+    VkBool32 patched_vs;
+    VkBool32 patched_fs;
+} StereoPipelineInfo;
+
 typedef struct StereoDevice {
     /* MUST be first: loader reads *(void**)device for dispatch table. */
     VK_LOADER_DATA         loader_data;
@@ -588,6 +604,11 @@ typedef struct StereoDevice {
     HWND                   comp_hwnd;
     void                  *comp_composed;
     uint32_t               comp_w, comp_h;
+
+    /* -- Pipelines ------------------------------------------- */
+    StereoPipelineInfo *pipeline_info;
+    uint32_t pipeline_info_count;
+    uint32_t pipeline_info_capacity;
 } StereoDevice;
 
 /* -- Stereo UBO layout ----------------------------------------------------- */

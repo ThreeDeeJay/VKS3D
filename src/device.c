@@ -315,6 +315,11 @@ stereo_DestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator)
         sd->real.FreeMemory(sd->real_device, sd->stereo_ubo_mem, NULL);
     }
 
+    free(sd->pipeline_info);
+    sd->pipeline_info = NULL;
+    sd->pipeline_info_count = 0;
+    sd->pipeline_info_capacity = 0;
+
     sd->real.DestroyDevice(sd->real_device, pAllocator);
     stereo_device_free(device);
     STEREO_LOG("Device destroyed: %p", (void*)device);

@@ -230,6 +230,51 @@ uint64_t hash_spv(const uint32_t *data, size_t words)
     return h;
 }
 
+static StereoPipelineInfo *
+find_pipeline_info(
+    StereoDevice *sd,
+    VkPipeline pipeline)
+{
+    for (uint32_t i = 0; i < sd->pipeline_info_count; i++)
+    {
+        if (sd->pipeline_info[i].pipeline == pipeline)
+            return &sd->pipeline_info[i];
+    }
+
+    return NULL;
+}
+
+static StereoPipelineInfo *
+add_pipeline_info(
+    StereoDevice *sd)
+{
+    if (sd->pipeline_info_count == sd->pipeline_info_capacity)
+    {
+        uint32_t new_cap =
+            sd->pipeline_info_capacity ?
+            sd->pipeline_info_capacity * 2 :
+            128;
+
+        StereoPipelineInfo *new_array =
+            realloc(
+                sd->pipeline_info,
+                sizeof(*new_array) * new_cap);
+
+        if (!new_array)
+            return NULL;
+
+        sd->pipeline_info = new_array;
+        sd->pipeline_info_capacity = new_cap;
+    }
+
+    StereoPipelineInfo *info =
+        &sd->pipeline_info[sd->pipeline_info_count++];
+
+    memset(info, 0, sizeof(*info));
+
+    return info;
+}
+
 /* ── Stereo offset injection body ────────────────────────────────────────── */
 typedef struct {
     SpvMod  *m;
@@ -1303,7 +1348,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 "VS_PATCH hash=%016llx words=%zu module=%p",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 e->words,
-                (void*)ci->pStages[vs_stage].module);
+                (void*)(has_vs ? ci->pStages[vs_stage].module : VK_NULL_HANDLE);
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
@@ -1625,15 +1670,53 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (void*)infos[p].renderPass,
             (void*)pCI[p].renderPass,
             infos[p].stageCount);
-        if (res == VK_SUCCESS) {
-            for (uint32_t s = 0; s < infos[p].stageCount; s++) {
-                STEREO_LOG(
-                    "PIPE_CREATED_STAGE pipe=%p stage=%u vkstage=0x%x module=%p",
-                    (void*)pP[p],
-                    s,
-                    infos[p].pStages[s].stage,
-                    (void*)infos[p].pStages[s].module);
+        if (res == VK_SUCCESS)
+        {
+            StereoPipelineInfo *info =
+                add_pipeline_info(sd);
+
+            if (info)
+            {
+                info->pipeline = pP[p];
+
+                info->original_renderpass =
+                    pCI[p].renderPass;
+
+                info->mv_renderpass =
+                    infos[p].renderPass;
+
+                info->stage_count =
+                    infos[p].stageCount;
+
+                for (uint32_t s = 0; s < infos[p].stageCount; s++)
+                {
+                    const VkPipelineShaderStageCreateInfo *st =
+                        &infos[p].pStages[s];
+
+                    if (st->stage == VK_SHADER_STAGE_VERTEX_BIT)
+                    {
+                        info->vs_module = st->module;
+                        info->patched_vs =
+                            (tmp_mod[p] != VK_NULL_HANDLE &&
+                             st->module == tmp_mod[p]);
+                    }
+
+                    if (st->stage == VK_SHADER_STAGE_FRAGMENT_BIT)
+                    {
+                        info->fs_module = st->module;
+                        info->patched_fs =
+                            (tmp_mod[p] != VK_NULL_HANDLE &&
+                             st->module == tmp_mod[p]);
+                    }
+                }
             }
+
+            STEREO_LOG(
+                "PIPE_INFO pipe=%p rp=%p orig_rp=%p stages=%u",
+                (void*)pP[p],
+                (void*)infos[p].renderPass,
+                (void*)pCI[p].renderPass,
+                infos[p].stageCount);
         }
     }
     STEREO_LOG(
