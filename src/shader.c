@@ -280,6 +280,8 @@ remember_bound_pipeline(
     sd->cb_track[sd->cb_track_count].pipeline = pipe;
     sd->cb_track[sd->cb_track_count].render_pass = VK_NULL_HANDLE;
     sd->cb_track[sd->cb_track_count].subpass = 0;
+    sd->cb_track[sd->cb_track_count].render_pass = VK_NULL_HANDLE;
+    sd->cb_track[sd->cb_track_count].framebuffer = VK_NULL_HANDLE;
     sd->cb_track_count++;
 }
 
@@ -324,6 +326,19 @@ lookup_bound_renderpass(
     return VK_NULL_HANDLE;
 }
 
+VkFramebuffer
+lookup_bound_framebuffer(
+    StereoDevice *sd,
+    VkCommandBuffer cb)
+{
+    for (uint32_t i = 0; i < sd->cb_track_count; i++)
+    {
+        if (sd->cb_track[i].cb == cb)
+            return sd->cb_track[i].framebuffer;
+    }
+
+    return VK_NULL_HANDLE;
+}
 
 static StereoPipelineInfo *
 add_pipeline_info(
