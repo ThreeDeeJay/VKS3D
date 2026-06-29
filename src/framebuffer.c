@@ -28,6 +28,11 @@ stereo_CreateFramebuffer(
                pCreateInfo->renderPass,
                pCreateInfo->attachmentCount);
     StereoDevice *sd = stereo_device_from_handle(device);
+    STEREO_LOG(
+        "FB_DEVICE sd=%p real_device=%p fb_track_count(before)=%u",
+        sd,
+        sd ? sd->real_device : NULL,
+        sd ? sd->fb_track_count : 0);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     VkFramebufferCreateInfo fci = *pCreateInfo;
@@ -346,12 +351,26 @@ stereo_CmdBeginRenderPass(
         "RP_BEGIN_ORIGINAL rp=%p fb=%p",
         (void*)pRenderPassBegin->renderPass,
         (void*)pRenderPassBegin->framebuffer);
+    STEREO_LOG(
+        "RP_BEGIN_SCAN device_count=%u",
+        g_device_count);
+
+    for (uint32_t d = 0; d < g_device_count; d++)
+    {
+        StereoDevice *dev = &g_devices[d];
+        STEREO_LOG(
+            "DEVICE[%u] dev=%p real_device=%p fb_track_count=%u",
+            d,
+            dev,
+            dev->real_device,
+            dev->fb_track_count);
+    }
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
         StereoDevice *dev = &g_devices[d];
         STEREO_LOG(
-            "FB_TRACK_SCAN count=%u sizeof(track)=%u",
-            dev->fb_track_count,
-            (unsigned)sizeof(StereoFramebufferTrack));
+            "FB_TRACK_SCAN dev=%p count=%u",
+            dev,
+            dev->fb_track_count);
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
 
             bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);

@@ -1076,11 +1076,14 @@ static bool is_patchable_spv(const uint32_t *w, size_t c)
     }
     return false;
 }
-static StereoShaderCache *cache_find(StereoDevice *sd, VkShaderModule h) {
+
+static StereoShaderCache *cache_find(StereoDevice *sd, VkShaderModule h)
+{
     for (uint32_t i=0;i<sd->shader_cache_count;i++)
         if (sd->shader_cache[i].handle==h) return &sd->shader_cache[i];
     return NULL;
 }
+
 static void cache_add(StereoDevice *sd, VkShaderModule h,
                       const uint32_t *spv, size_t words) {
     if (sd->shader_cache_count>=MAX_SHADER_CACHE) return;
