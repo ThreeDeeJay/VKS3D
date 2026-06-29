@@ -505,7 +505,17 @@ stereo_CmdBeginRenderPass(
     if (!sd) return;
     StereoRenderPassInfo *lookup =
         stereo_rp_lookup(sd, pRenderPassBegin->renderPass);
-    
+    STEREO_LOG(
+        "BEGIN_RP cb=%p rp=%p mv=%u mv_handle=%p",
+        (void *)commandBuffer,
+        (void *)(mv_rp ? mv_rp : pRenderPassBegin->renderPass),
+        lookup ? lookup->has_multiview : 0,
+        lookup ? (void *)lookup->mv_handle : NULL);
+    remember_begin_renderpass(
+        sd,
+        commandBuffer,
+        mv_rp ? mv_rp : pRenderPassBegin->renderPass,
+        0);
     STEREO_LOG(
         "RP_LOOKUP_BEGIN requested=%p lookup=%p lookup_orig=%p lookup_mv=%p",
         (void*)pRenderPassBegin->renderPass,
@@ -659,13 +669,16 @@ stereo_CmdDrawIndexed(
         return;
     VkPipeline pipe =
         lookup_bound_pipeline(sd, commandBuffer);
+    VkRenderPass rp =
+        lookup_bound_renderpass(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
     if (info)
     {
         STEREO_LOG(
-            "DRAW_INDEXED pipe=%p quad=%u patched_vs=%u patched_fs=%u",
+            "DRAW_INDEXED pipe=%p rp=%p quad=%u patched_vs=%u patched_fs=%u",
             (void *)pipe,
+            (void *)rp,
             info->is_quad,
             info->patched_vs,
             info->patched_fs);
@@ -698,14 +711,19 @@ stereo_CmdDraw(
         return;
     VkPipeline pipe =
         lookup_bound_pipeline(sd, commandBuffer);
-        StereoPipelineInfo *info =
-            find_pipeline_info(sd, pipe);
+    VkRenderPass rp =
+        lookup_bound_renderpass(sd, commandBuffer);
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipe);
     if (info)
     {
+        VkRenderPass rp =
+            lookup_bound_renderpass(sd, commandBuffer);
         STEREO_LOG(
-            "DRAW pipe=%p quad=%u patched_vs=%u patched_fs=%u "
+            "DRAW pipe=%p rp=%p quad=%u patched_vs=%u patched_fs=%u "
             "verts=%u inst=%u",
             (void *)pipe,
+            (void *)rp,
             info->is_quad,
             info->patched_vs,
             info->patched_fs,
@@ -739,14 +757,17 @@ stereo_CmdDrawIndirect(
         return;
     VkPipeline pipe =
         lookup_bound_pipeline(sd, commandBuffer);
+    VkRenderPass rp =
+        lookup_bound_renderpass(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
     if (info)
     {
         STEREO_LOG(
-            "DRAW_INDIRECT pipe=%p quad=%u patched_vs=%u patched_fs=%u "
+            "DRAW_INDIRECT pipe=%p rp=%p quad=%u patched_vs=%u patched_fs=%u "
             "draws=%u",
             (void *)pipe,
+            (void *)rp,
             info->is_quad,
             info->patched_vs,
             info->patched_fs,
@@ -779,14 +800,17 @@ stereo_CmdDrawIndexedIndirect(
         return;
     VkPipeline pipe =
         lookup_bound_pipeline(sd, commandBuffer);
+    VkRenderPass rp =
+        lookup_bound_renderpass(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
     if (info)
     {
         STEREO_LOG(
-            "DRAW_INDEXED_INDIRECT pipe=%p quad=%u patched_vs=%u patched_fs=%u "
+            "DRAW_INDEXED_INDIRECT pipe=%p rp=%p quad=%u patched_vs=%u patched_fs=%u "
             "draws=%u",
             (void *)pipe,
+            (void *)rp,
             info->is_quad,
             info->patched_vs,
             info->patched_fs,

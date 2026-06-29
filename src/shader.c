@@ -278,8 +278,52 @@ remember_bound_pipeline(
 
     sd->cb_track[sd->cb_track_count].cb = cb;
     sd->cb_track[sd->cb_track_count].pipeline = pipe;
+    sd->cb_track[sd->cb_track_count].render_pass = VK_NULL_HANDLE;
+    sd->cb_track[sd->cb_track_count].subpass = 0;
     sd->cb_track_count++;
 }
+
+void
+remember_begin_renderpass(
+    StereoDevice *sd,
+    VkCommandBuffer cb,
+    VkRenderPass rp,
+    uint32_t subpass)
+{
+    for (uint32_t i = 0; i < sd->cb_track_count; i++)
+    {
+        if (sd->cb_track[i].cb == cb)
+        {
+            sd->cb_track[i].render_pass = rp;
+            sd->cb_track[i].subpass = subpass;
+            return;
+        }
+    }
+
+    if (sd->cb_track_count >= MAX_CB_TRACK)
+        return;
+
+    sd->cb_track[sd->cb_track_count].cb = cb;
+    sd->cb_track[sd->cb_track_count].pipeline = VK_NULL_HANDLE;
+    sd->cb_track[sd->cb_track_count].render_pass = rp;
+    sd->cb_track[sd->cb_track_count].subpass = subpass;
+    sd->cb_track_count++;
+}
+
+VkRenderPass
+lookup_bound_renderpass(
+    StereoDevice *sd,
+    VkCommandBuffer cb)
+{
+    for (uint32_t i = 0; i < sd->cb_track_count; i++)
+    {
+        if (sd->cb_track[i].cb == cb)
+            return sd->cb_track[i].render_pass;
+    }
+
+    return VK_NULL_HANDLE;
+}
+
 
 static StereoPipelineInfo *
 add_pipeline_info(
