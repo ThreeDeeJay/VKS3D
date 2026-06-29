@@ -749,6 +749,11 @@ bool spirv_patch_stereo_vertex(
     const StereoDebugCtx *dbg);
 void spirv_patched_free(uint32_t *w);
 
+StereoPipelineInfo *
+find_pipeline_info(
+    StereoDevice *sd,
+    VkPipeline pipeline);
+
 VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*,
     uint32_t, uint32_t, const VkSemaphore*);
 

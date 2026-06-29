@@ -230,7 +230,7 @@ uint64_t hash_spv(const uint32_t *data, size_t words)
     return h;
 }
 
-static StereoPipelineInfo *
+StereoPipelineInfo *
 find_pipeline_info(
     StereoDevice *sd,
     VkPipeline pipeline)
