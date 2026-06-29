@@ -426,6 +426,12 @@ stereo_CmdBeginRenderPass(
             }
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
             {
+                STEREO_LOG(
+                    "FB_MATCH requested=%p fb_original=%p fb_used=%p fb_mv=%p",
+                    pRenderPassBegin->renderPass,
+                    dev->fb_tracks[i].rp,
+                    dev->fb_tracks[i].rp_used_at_create,
+                    dev->fb_tracks[i].mv_rp);
                 if (dev->fb_tracks[i].has_mv)
                 {     
                     VkRenderPass candidate =

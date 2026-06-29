@@ -1565,6 +1565,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (void*)infos[p].renderPass,
             infos[p].stageCount);
     }
+    for (uint32_t p = 0; p < N; ++p)
+    {
+        STEREO_LOG(
+            "PIPE_CREATE pipeline=%u renderPass=%p subpass=%u",
+            p,
+            infos[p].renderPass,
+            infos[p].subpass);
+    }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     for (uint32_t p = 0; p < N; p++) {
         STEREO_LOG(
