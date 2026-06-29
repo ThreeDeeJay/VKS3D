@@ -508,6 +508,14 @@ typedef struct StereoPipelineInfo
     uint32_t vertex_binding_count;
 } StereoPipelineInfo;
 
+typedef struct StereoCommandBufferInfo
+{
+    VkCommandBuffer command_buffer;
+
+    VkPipeline current_pipeline;
+    VkPipelineBindPoint bind_point;
+} StereoCommandBufferInfo;
+
 typedef struct StereoDevice {
     /* MUST be first: loader reads *(void**)device for dispatch table. */
     VK_LOADER_DATA         loader_data;
@@ -613,6 +621,18 @@ typedef struct StereoDevice {
     StereoPipelineInfo *pipeline_info;
     uint32_t pipeline_info_count;
     uint32_t pipeline_info_capacity;
+
+    /* -- Command buffer tracking --------------------------------------- */
+    StereoCommandBufferInfo *cmd_info;
+    uint32_t cmd_info_count;
+    uint32_t cmd_info_capacity;
+
+#define MAX_CB_TRACK 4096
+    struct {
+        VkCommandBuffer cb;
+        VkPipeline pipeline;
+    } cb_track[MAX_CB_TRACK];
+    uint32_t cb_track_count;
 } StereoDevice;
 
 /* -- Stereo UBO layout ----------------------------------------------------- */
@@ -742,6 +762,10 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainK
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDraw(VkCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 
 typedef struct StereoDebugCtx StereoDebugCtx;
 bool spirv_patch_stereo_vertex(

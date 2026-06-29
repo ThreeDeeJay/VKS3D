@@ -244,6 +244,43 @@ find_pipeline_info(
     return NULL;
 }
 
+static void
+remember_bound_pipeline(
+    StereoDevice *sd,
+    VkCommandBuffer cb,
+    VkPipeline pipe)
+{
+    for (uint32_t i = 0; i < sd->cb_track_count; i++)
+    {
+        if (sd->cb_track[i].cb == cb)
+        {
+            sd->cb_track[i].pipeline = pipe;
+            return;
+        }
+    }
+
+    if (sd->cb_track_count < MAX_CB_TRACK)
+    {
+        sd->cb_track[sd->cb_track_count].cb = cb;
+        sd->cb_track[sd->cb_track_count].pipeline = pipe;
+        sd->cb_track_count++;
+    }
+}
+
+static VkPipeline
+lookup_bound_pipeline(
+    StereoDevice *sd,
+    VkCommandBuffer cb)
+{
+    for (uint32_t i = 0; i < sd->cb_track_count; i++)
+    {
+        if (sd->cb_track[i].cb == cb)
+            return sd->cb_track[i].pipeline;
+    }
+
+    return VK_NULL_HANDLE;
+}
+
 static StereoPipelineInfo *
 add_pipeline_info(
     StereoDevice *sd)
