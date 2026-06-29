@@ -716,6 +716,7 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(VkDevice, VkSwapchai
 VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
 
 typedef struct StereoDebugCtx StereoDebugCtx;
 bool spirv_patch_stereo_vertex(

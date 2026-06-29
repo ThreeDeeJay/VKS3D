@@ -570,3 +570,38 @@ stereo_CmdBeginRenderPass(
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
 }
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBindPipeline(
+    VkCommandBuffer commandBuffer,
+    VkPipelineBindPoint pipelineBindPoint,
+    VkPipeline pipeline)
+{
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+
+    StereoDevice *sd = NULL;
+
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real_device)
+        {
+            sd = &g_devices[i];
+            break;
+        }
+    }
+
+    if (!sd)
+        return;
+
+    STEREO_LOG(
+        "PIPE_BIND cb=%p pipeline=%p bindPoint=%u",
+        (void*)commandBuffer,
+        (void*)pipeline,
+        (unsigned)pipelineBindPoint);
+
+    sd->real.CmdBindPipeline(
+        commandBuffer,
+        pipelineBindPoint,
+        pipeline);
+}
