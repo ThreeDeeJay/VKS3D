@@ -619,7 +619,6 @@ typedef struct StereoDevice {
     struct {
         VkCommandBuffer cb;
         VkPipeline pipeline;
-        VkRenderPass render_pass;
         uint32_t subpass;
         VkRenderPass render_pass;
         VkFramebuffer framebuffer;
