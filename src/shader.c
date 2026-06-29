@@ -569,7 +569,16 @@ bool spirv_patch_stereo_vertex(
      * Return the original shader unchanged so we can identify which
      * patched shader is responsible for the remaining stereo artifact.
      */
+    //Flatten ShadowMap.exe UI
     if (spv_hash == 0x1194cbb18ed7990full)
+    {
+        STEREO_LOG(
+            "BLACKLIST shader=%016llx",
+            (unsigned long long)spv_hash);
+        return false;
+    }
+    //Flatten SimpleSample.exe UI
+    if (spv_hash == 0xc3c35ab856282a97ull)
     {
         STEREO_LOG(
             "BLACKLIST shader=%016llx",
