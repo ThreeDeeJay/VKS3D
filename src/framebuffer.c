@@ -595,11 +595,10 @@ stereo_CmdBindPipeline(
         return;
 
     STEREO_LOG(
-        "PIPE_BIND cb=%p pipeline=%p bindPoint=%u cmd=%p",
+        "PIPE_BIND cb=%p pipeline=%p bindPoint=%u",
         (void*)commandBuffer,
         (void*)pipeline,
-        bindPoint,
-        (void*)commandBuffer);
+        (unsigned)pipelineBindPoint);
     sd->real.CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,
