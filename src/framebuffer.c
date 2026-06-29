@@ -355,6 +355,11 @@ stereo_CmdBeginRenderPass(
     StereoDevice *sd   = NULL;
     VkRenderPass mv_rp = VK_NULL_HANDLE;
     STEREO_LOG(
+        "CB_BEGIN cb=%p rp=%p fb=%p",
+        commandBuffer,
+        pRenderPassBegin->renderPass,
+        pRenderPassBegin->framebuffer);
+    STEREO_LOG(
         "RP_BEGIN_ORIGINAL rp=%p fb=%p",
         (void*)pRenderPassBegin->renderPass,
         (void*)pRenderPassBegin->framebuffer);
@@ -529,6 +534,11 @@ stereo_CmdBeginRenderPass(
             pRenderPassBegin->framebuffer,
             pRenderPassBegin->renderPass,
             mv_rp);
+        STEREO_LOG(
+            "CB_DISPATCH cb=%p sd=%p real_dev=%p",
+            commandBuffer,
+            sd,
+            sd->real_device);
         sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
         STEREO_LOG(
             "[RP BEGIN MONO] fb=%p rp=%p",
@@ -543,6 +553,11 @@ stereo_CmdBeginRenderPass(
             "BEGIN_PASS_DRIVER original=%p framebuffer=%p",
             (void*)pRenderPassBegin->renderPass,
             (void*)pRenderPassBegin->framebuffer);
+        STEREO_LOG(
+            "CB_DISPATCH cb=%p sd=%p real_dev=%p",
+            commandBuffer,
+            sd,
+            sd->real_device);
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
 }
