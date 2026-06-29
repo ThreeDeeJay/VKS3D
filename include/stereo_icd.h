@@ -502,6 +502,10 @@ typedef struct StereoPipelineInfo
 
     VkBool32 patched_vs;
     VkBool32 patched_fs;
+
++    /* Classification recorded at pipeline creation */
++    VkBool32 is_quad;
++    uint32_t vertex_binding_count;
 } StereoPipelineInfo;
 
 typedef struct StereoDevice {
