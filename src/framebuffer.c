@@ -655,26 +655,27 @@ stereo_CmdDrawIndexed(
     uint32_t firstInstance)
 {
     StereoDevice *sd = find_any_device();
-
-    if (sd)
+    if (!sd)
+        return;
+    VkPipeline pipe =
+        lookup_bound_pipeline(sd, commandBuffer);
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipe);
+    if (info)
     {
-        VkPipeline pipe =
-            lookup_bound_pipeline(sd, commandBuffer);
-
-        StereoPipelineInfo *info =
-            find_pipeline_info(sd, pipe);
-
-        if (info)
-        {
-            STEREO_LOG(
-                "DRAW pipe=%p quad=%u patched_vs=%u patched_fs=%u",
-                (void *)pipe,
-                info->is_quad,
-                info->patched_vs,
-                info->patched_fs);
-        }
+        STEREO_LOG(
+            "DRAW_INDEXED pipe=%p quad=%u patched_vs=%u patched_fs=%u",
+            (void *)pipe,
+            info->is_quad,
+            info->patched_vs,
+            info->patched_fs);
     }
-
+    else
+    {
+        STEREO_LOG(
+            "DRAW_INDEXED pipe=%p UNKNOWN",
+            (void *)pipe);
+    }
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
@@ -682,4 +683,125 @@ stereo_CmdDrawIndexed(
         firstIndex,
         vertexOffset,
         firstInstance);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDraw(
+    VkCommandBuffer commandBuffer,
+    uint32_t vertexCount,
+    uint32_t instanceCount,
+    uint32_t firstVertex,
+    uint32_t firstInstance)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
+    VkPipeline pipe =
+        lookup_bound_pipeline(sd, commandBuffer);
+        StereoPipelineInfo *info =
+            find_pipeline_info(sd, pipe);
+    if (info)
+    {
+        STEREO_LOG(
+            "DRAW pipe=%p quad=%u patched_vs=%u patched_fs=%u "
+            "verts=%u inst=%u",
+            (void *)pipe,
+            info->is_quad,
+            info->patched_vs,
+            info->patched_fs,
+            vertexCount,
+            instanceCount);
+    }
+    else
+    {
+        STEREO_LOG(
+            "DRAW_INDEXED pipe=%p UNKNOWN",
+            (void *)pipe);
+    }
+    sd->real.CmdDraw(
+        commandBuffer,
+        vertexCount,
+        instanceCount,
+        firstVertex,
+        firstInstance);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDrawIndirect(
+    VkCommandBuffer commandBuffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    uint32_t drawCount,
+    uint32_t stride)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
+    VkPipeline pipe =
+        lookup_bound_pipeline(sd, commandBuffer);
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipe);
+    if (info)
+    {
+        STEREO_LOG(
+            "DRAW_INDIRECT pipe=%p quad=%u patched_vs=%u patched_fs=%u "
+            "draws=%u",
+            (void *)pipe,
+            info->is_quad,
+            info->patched_vs,
+            info->patched_fs,
+            drawCount);
+    }
+    else
+    {
+        STEREO_LOG(
+            "DRAW_INDEXED pipe=%p UNKNOWN",
+            (void *)pipe);
+    }
+    sd->real.CmdDrawIndirect(
+        commandBuffer,
+        buffer,
+        offset,
+        drawCount,
+        stride);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDrawIndexedIndirect(
+    VkCommandBuffer commandBuffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    uint32_t drawCount,
+    uint32_t stride)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
+    VkPipeline pipe =
+        lookup_bound_pipeline(sd, commandBuffer);
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipe);
+    if (info)
+    {
+        STEREO_LOG(
+            "DRAW_INDEXED_INDIRECT pipe=%p quad=%u patched_vs=%u patched_fs=%u "
+            "draws=%u",
+            (void *)pipe,
+            info->is_quad,
+            info->patched_vs,
+            info->patched_fs,
+            drawCount);
+    }
+    else
+    {
+        STEREO_LOG(
+            "DRAW_INDEXED pipe=%p UNKNOWN",
+            (void *)pipe);
+    }
+    sd->real.CmdDrawIndexedIndirect(
+        commandBuffer,
+        buffer,
+        offset,
+        drawCount,
+        stride);
 }
