@@ -1348,7 +1348,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 "VS_PATCH hash=%016llx words=%zu module=%p",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 e->words,
-                (void*)(has_vs ? ci->pStages[vs_stage].module : VK_NULL_HANDLE);
+                (void*)(has_vs ? ci->pStages[vs_stage].module : VK_NULL_HANDLE));
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
