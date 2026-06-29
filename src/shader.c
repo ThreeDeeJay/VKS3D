@@ -1619,11 +1619,22 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     for (uint32_t p = 0; p < N; p++) {
         STEREO_LOG(
-            "PIPE_CREATED pipe=%p result=%d rp=%p stages=%u",
+            "PIPE_CREATED pipe=%p result=%d rp=%p orig_rp=%p stages=%u",
             (res == VK_SUCCESS) ? (void*)pP[p] : NULL,
             res,
             (void*)infos[p].renderPass,
+            (void*)pCI[p].renderPass,
             infos[p].stageCount);
+        if (res == VK_SUCCESS) {
+            for (uint32_t s = 0; s < infos[p].stageCount; s++) {
+                STEREO_LOG(
+                    "PIPE_CREATED_STAGE pipe=%p stage=%u vkstage=0x%x module=%p",
+                    (void*)pP[p],
+                    s,
+                    infos[p].pStages[s].stage,
+                    (void*)infos[p].pStages[s].module);
+            }
+        }
     }
     STEREO_LOG(
         "PIPE_CREATE_END result=%d multiview_pass_exists=%d",
