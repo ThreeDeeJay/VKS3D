@@ -1491,19 +1491,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             VkPipelineShaderStageCreateInfo *st=malloc(sc2*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc2*sizeof(*st));
-            st[fs_s].module = tmp;
+            /* TEMP: Build pipeline with the original FS instead of the patched one. */
+            st[fs_s].module = ci->pStages[fs_s].module;
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
             STEREO_LOG(
-                "PATCHED_STAGE PathFS p=%u stage=%u orig=%p patched=%p",
+                "PATCHED_STAGE PathFS DISABLED p=%u stage=%u orig=%p patched=%p",
                 p,
                 fs_s,
                 (void *)ci->pStages[fs_s].module,
                 (void *)tmp);
             STEREO_LOG(
-                "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
+                "Pipe %u: Path FS patch DISABLED (using original FS, patched module=%p, %u stages)",
                 p,
+                (void *)tmp,
                 sc2);
             continue;
         }
