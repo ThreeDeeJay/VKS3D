@@ -1483,35 +1483,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
 
-        bool has_depth = false;
-        bool depth_write = false;
-        if (ci->pDepthStencilState)
-        {
-            has_depth =
-                ci->pDepthStencilState->depthTestEnable ||
-                ci->pDepthStencilState->depthWriteEnable;
-            depth_write =
-                ci->pDepthStencilState->depthWriteEnable;
-        }
-        bool is_postprocess_quad =
-            is_quad &&
-            has_depth &&
-            !depth_write;
-        STEREO_LOG(
-            "PIPE_CLASSIFY p=%u quad=%u post=%u depth=%u depthWrite=%u bindings=%u attrs=%u topo=%u rp=%p",
-            p,
-            is_quad,
-            is_postprocess_quad,
-            has_depth,
-            depth_write,
-            ci->pVertexInputState ?
-                ci->pVertexInputState->vertexBindingDescriptionCount : 0,
-            ci->pVertexInputState ?
-                ci->pVertexInputState->vertexAttributeDescriptionCount : 0,
-            ci->pInputAssemblyState ?
-                ci->pInputAssemblyState->topology : 0,
-            (void*)ci->renderPass);
-
         if (is_quad && ci->stageCount > 0) {
             /* Find FS stage */
             uint32_t fs_s = ~0u;
