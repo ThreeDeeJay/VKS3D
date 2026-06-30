@@ -43,6 +43,7 @@
 #define SpvOpFMul               133
 #define SpvOpMatrixTimesVector  145
 #define SpvOpMatrixTimesMatrix  146
+#define SpvOpDot                148
 #define SpvOpIEqual             170
 #define SpvOpINotEqual          171
 #define SpvOpSelect             169
@@ -85,6 +86,7 @@ typedef struct {
     /* Geometry classification */
     bool has_matrix_ops;
     bool has_direct_position_write;
+    uint32_t dot_count;
 
     int  exec_model;
     uint32_t pos_var, pos_member_idx, pos_ptr_type;
@@ -106,6 +108,9 @@ static void do_scan(SpvMod *m, bool p2)
         uint32_t op=w[i]&0xffff, wc=w[i]>>16;
         if (!wc||i+wc>m->count) break;
         if (!p2) switch(op) {
+        case SpvOpDot:
+            m->dot_count++;
+            break;
         case SpvOpCapability:
             if(wc>=2&&w[i+1]==SpvCapabilityMultiView) m->has_mv_cap=true; break;
         case SpvOpEntryPoint:
@@ -542,17 +547,18 @@ bool spirv_patch_stereo_vertex(
     m.words=in;
     m.count=in_c;
     spv_scan(&m);
-
     STEREO_LOG(
-        "SPIRV scan: exec=%d pos=%u pos_block=%u member=%u view=%u emits=%u mvcap=%d matrix=%d",
+        "SCAN exec=%u patchable=%d pos=%u posBlock=%d posMember=%u view=%u emit=%u matrix=%d directPos=%d dots=%u",
         m.exec_model,
+        m.is_patchable,
         m.pos_var,
         m.pos_is_block,
         m.pos_member_idx,
         m.view_var,
         m.emit_count,
-        m.has_mv_cap,
-        m.has_matrix_ops);
+        m.has_matrix_ops,
+        m.has_direct_position_write,
+        m.dot_count);
     uint64_t spv_hash = hash_spv(m.words, m.count);
     if (spv_hash == 0xc3c35ab856282a97ULL)
     {
@@ -620,15 +626,17 @@ bool spirv_patch_stereo_vertex(
             dbg->is_multiview);
     }
     STEREO_LOG(
-        "PATCHABLE shader: hash=%016llx-vs.spv words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+    "PATCHABLE hash=%016llx words=%zu exec=%u matrix=%d direct=%d dots=%u block=%d emits=%u pos=%u view=%u",
         (unsigned long long)spv_hash,
         m.count,
-        m.has_matrix_ops,
         m.exec_model,
+        m.has_matrix_ops,
+        m.has_direct_position_write,
+        m.dot_count,
+        m.pos_is_block,
         m.emit_count,
         m.pos_var,
         m.view_var);
-
     if (dbg) {
         STEREO_LOG(
             "PATCH_CTX pipe=%u stage=%u renderPass=%p multiview=%d",
