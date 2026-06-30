@@ -19,6 +19,11 @@
 #include "tes_inject.h"
 #include "spirv/unified1/spirv.h"
 
+#define SpvExecVertex           0
+#define SpvExecTessEval         2
+#define SpvExecGeometry         3
+#define SpvStorageOutput        3
+#define SpvStorageInput         1
 #define SPIRV_MAGIC             0x07230203u
 
 /* ── Dynamic word buffer ─────────────────────────────────────────────────── */
