@@ -544,18 +544,6 @@ bool spirv_patch_stereo_vertex(
     m.words=in;
     m.count=in_c;
     spv_scan(&m);
-    STEREO_LOG(
-        "SCAN exec=%u patchable=%d pos=%u posBlock=%d posMember=%u view=%u emit=%u matrix=%d directPos=%d dots=%u",
-        m.exec_model,
-        m.is_patchable,
-        m.pos_var,
-        m.pos_is_block,
-        m.pos_member_idx,
-        m.view_var,
-        m.emit_count,
-        m.has_matrix_ops,
-        m.has_direct_position_write,
-        m.dot_count);
     uint64_t spv_hash = hash_spv(m.words, m.count);
     {
         static int skip_list_init = 0;
@@ -592,6 +580,20 @@ bool spirv_patch_stereo_vertex(
             }
         }
     }
+    STEREO_LOG(
+        "SCAN_CLASS hash=%016llx exec=%u patchable=%d pos=%u posBlock=%d posMember=%u view=%u emit=%u matrix=%d directPos=%d dots=%u mvbuiltin=%d",
+        (unsigned long long)spv_hash,
+        m.exec_model,
+        m.is_patchable,
+        m.pos_var,
+        m.pos_is_block,
+        m.pos_member_idx,
+        m.view_var,
+        m.emit_count,
+        m.has_matrix_ops,
+        m.has_direct_position_write,
+        m.dot_count,
+        m.has_viewindex_builtin);
     //if (spv_hash == 0xc3c35ab856282a97ULL)
     //{
     //    STEREO_LOG(
