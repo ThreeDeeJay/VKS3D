@@ -123,9 +123,6 @@ static void do_scan(SpvMod *m, bool p2)
             if(wc==4&&w[i+2]==m->ft&&w[i+3]==4) m->v4t=w[i+1]; break;
         case SpvOpTypeInt:
             if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
-        case SpvOpTypeMatrix:
-            m->has_matrix_ops = true;
-            break;
 
         case SpvOpMatrixTimesVector:
         case SpvOpMatrixTimesMatrix:
@@ -595,17 +592,17 @@ bool spirv_patch_stereo_vertex(
             }
         }
     }
-    if (spv_hash == 0xc3c35ab856282a97ULL)
-    {
-        STEREO_LOG(
-            "DXVK_UI_CANDIDATE hash=%016llx matrix=%d pos_block=%d pos_member=%u view=%u exec=%u",
-            (unsigned long long)spv_hash,
-            m.has_matrix_ops,
-            m.pos_is_block,
-            m.pos_member_idx,
-            m.view_var,
-            (unsigned)m.exec_model);
-    }
+    //if (spv_hash == 0xc3c35ab856282a97ULL)
+    //{
+    //    STEREO_LOG(
+    //        "DXVK_UI_CANDIDATE hash=%016llx matrix=%d pos_block=%d pos_member=%u view=%u exec=%u",
+    //        (unsigned long long)spv_hash,
+    //        m.has_matrix_ops,
+    //        m.pos_is_block,
+    //        m.pos_member_idx,
+    //        m.view_var,
+    //        (unsigned)m.exec_model);
+    //}
     /* TEMP: shader blacklist for debugging.
      * Return the original shader unchanged so we can identify which
      * patched shader is responsible for the remaining stereo artifact.
