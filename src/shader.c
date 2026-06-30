@@ -35,18 +35,20 @@
 #define SpvOpAccessChain        65
 #define SpvOpDecorate           71
 #define SpvOpMemberDecorate     72
+#define SpvOpCopyObject         83
 #define SpvOpFunction           54
-#define SpvOpEmitVertex         218
 #define SpvOpCompositeExtract   81
 #define SpvOpCompositeInsert    82
+#define SpvOpBitcast            124
 #define SpvOpFAdd               129
 #define SpvOpFMul               133
 #define SpvOpMatrixTimesVector  145
 #define SpvOpMatrixTimesMatrix  146
 #define SpvOpDot                148
+#define SpvOpSelect             169
 #define SpvOpIEqual             170
 #define SpvOpINotEqual          171
-#define SpvOpSelect             169
+#define SpvOpEmitVertex         218
 #define SpvOpReturn             253
 
 #define SpvDecorationBuiltIn    11
