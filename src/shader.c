@@ -560,6 +560,41 @@ bool spirv_patch_stereo_vertex(
         m.has_direct_position_write,
         m.dot_count);
     uint64_t spv_hash = hash_spv(m.words, m.count);
+    {
+        static int skip_list_init = 0;
+        static char skip_list[1024];
+
+        if (!skip_list_init)
+        {
+            const char *env = stereo_getenv("VKS3D_SKIP_SHADER_PATCHES");
+            if (env)
+            {
+                strncpy(skip_list, env, sizeof(skip_list) - 1);
+                skip_list[sizeof(skip_list) - 1] = '\0';
+            }
+
+            STEREO_LOG(
+                "SKIP_SHADER_LIST=\"%s\"",
+                skip_list);
+
+            skip_list_init = 1;
+        }
+
+        if (skip_list[0])
+        {
+            char hashstr[17];
+            snprintf(hashstr, sizeof(hashstr), "%016llx",
+                (unsigned long long)spv_hash);
+
+            if (strstr(skip_list, hashstr))
+            {
+                STEREO_LOG(
+                    "SKIP_SHADER_PATCH hash=%s",
+                    hashstr);
+                return false;
+            }
+        }
+    }
     if (spv_hash == 0xc3c35ab856282a97ULL)
     {
         STEREO_LOG(
@@ -601,15 +636,16 @@ bool spirv_patch_stereo_vertex(
     //        (unsigned long long)spv_hash);
     //    return false;
     //}
-    //Flatten RBR UI
-    if (spv_hash == 0x898ca1de82f2ced7ull)
-    {
-        STEREO_LOG(
-            "BLACKLIST shader=%016llx",
-            (unsigned long long)spv_hash);
-        return false;
-    }
-    
+
+    ////Flatten RBR UI
+    //if (spv_hash == 0x898ca1de82f2ced7ull)
+    //{
+    //    STEREO_LOG(
+    //        "BLACKLIST shader=%016llx",
+    //        (unsigned long long)spv_hash);
+    //    return false;
+    //}
+
     if (dbg)
     {
         STEREO_LOG(
