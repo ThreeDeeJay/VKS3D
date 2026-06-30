@@ -162,8 +162,18 @@ static void do_scan(SpvMod *m, bool p2)
                             break;
                         }
                     }
-            
+                    uint8_t old = m->value_from_matrix[w[i+2]];
                     m->value_from_matrix[w[i+2]] = matrix;
+
+                    if (old && !matrix)
+                    {
+                        STEREO_LOG(
+                            "MATRIX_OVERWRITE result=%u old=%u new=%u op=%u",
+                            w[i+2],
+                            old,
+                            matrix,
+                            op);
+                    }
                 }
             }
             break;
@@ -198,18 +208,33 @@ static void do_scan(SpvMod *m, bool p2)
                     w[i+2] < m->value_capacity)
                 {
                     m->value_from_matrix[w[i+2]] = 1;
+                    STEREO_LOG(
+                        "MATRIX_MARK result=%u now=%u",
+                        w[i+2],
+                        m->value_from_matrix[w[i+2]]);
                 }
                 break;
             case SpvOpCopyObject:
             case SpvOpBitcast:
-                if (wc >= 4 &&
-                    w[i+2] < m->value_capacity &&
-                    w[i+3] < m->value_capacity)
+            if (wc >= 4 &&
+                w[i+2] < m->value_capacity &&
+                w[i+3] < m->value_capacity)
+            {
+                uint8_t old = m->value_from_matrix[w[i+2]];
+                uint8_t matrix = m->value_from_matrix[w[i+3]];
+                m->value_from_matrix[w[i+2]] = matrix;
+
+                if (old && !matrix)
                 {
-                    m->value_from_matrix[w[i+2]] =
-                        m->value_from_matrix[w[i+3]];
+                    STEREO_LOG(
+                        "MATRIX_OVERWRITE result=%u old=%u new=%u op=%u",
+                        w[i+2],
+                        old,
+                        matrix,
+                        op);
                 }
-                break;
+            }
+            break;
             case SpvOpFAdd:
             case SpvOpFSub:
             case SpvOpFMul:
@@ -218,14 +243,22 @@ static void do_scan(SpvMod *m, bool p2)
                     w[i+2] < m->value_capacity)
                 {
                     uint8_t matrix = 0;
-            
                     if (w[i+3] < m->value_capacity)
                         matrix |= m->value_from_matrix[w[i+3]];
-            
                     if (w[i+4] < m->value_capacity)
                         matrix |= m->value_from_matrix[w[i+4]];
-            
+                    uint8_t old = m->value_from_matrix[w[i+2]];
                     m->value_from_matrix[w[i+2]] = matrix;
+
+                    if (old && !matrix)
+                    {
+                        STEREO_LOG(
+                            "MATRIX_OVERWRITE result=%u old=%u new=%u op=%u",
+                            w[i+2],
+                            old,
+                            matrix,
+                            op);
+                    }
                 }
                 break;
             case SpvOpTypePointer:
