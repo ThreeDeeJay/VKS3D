@@ -165,7 +165,7 @@ jobs:
           cp "vks3d.ini" "Release/vks3d.ini"
           cp "scripts\install.bat" "Release/Install.bat"
           cp "scripts\uninstall.bat" "Release/Uninstall.bat"
-          cp "scripts\log.bat" "Release/log.bat"
+          cp "scripts\debug.cmd" "Release/debug.cmd"
           cp "LICENSE" "Release/License.txt"
           cp "README.md" "Release/ReadMe.txt"
   
