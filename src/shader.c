@@ -577,27 +577,13 @@ bool spirv_patch_stereo_vertex(
      */
 
     //Flatten ShadowMap.exe world geometry
-    //GEOMETRY? if (spv_hash == 0xe019379afc782113ull)
-    //GEOMETRY? {
-    //GEOMETRY?     STEREO_LOG(
-    //GEOMETRY?         "BLACKLIST shader=%016llx",
-    //GEOMETRY?         (unsigned long long)spv_hash);
-    //GEOMETRY?     return false;
-    //GEOMETRY? }
-    //if (spv_hash == 0xe716bddc3641b1f2ull)
-    //{
-    //    STEREO_LOG(
-    //        "BLACKLIST shader=%016llx",
-    //        (unsigned long long)spv_hash);
-    //    return false;
-    //}
-    //if (spv_hash == 0x45470ec20eeeba84ull)
-    //{
-    //    STEREO_LOG(
-    //        "BLACKLIST shader=%016llx",
-    //        (unsigned long long)spv_hash);
-    //    return false;
-    //}
+    // if (spv_hash == 0xe019379afc782113ull)
+    // {
+    //     STEREO_LOG(
+    //         "BLACKLIST shader=%016llx",
+    //         (unsigned long long)spv_hash);
+    //     return false;
+    // }
 
     ////Flatten ShadowMap.exe UI
     //if (spv_hash == 0x1194cbb18ed7990full)
@@ -615,6 +601,15 @@ bool spirv_patch_stereo_vertex(
     //        (unsigned long long)spv_hash);
     //    return false;
     //}
+    //Flatten RBR UI
+    if (spv_hash == 0x2f00db4c9b163376ull)
+    {
+        STEREO_LOG(
+            "BLACKLIST shader=%016llx",
+            (unsigned long long)spv_hash);
+        return false;
+    }
+    
     if (dbg)
     {
         STEREO_LOG(
