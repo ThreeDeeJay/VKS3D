@@ -132,6 +132,11 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpAccessChain:
             if (wc >= 5)
             {
+                STEREO_LOG(
+                    "ACCESSCHAIN result=%u base=%u indexes=%u",
+                    w[i+1],
+                    w[i+2],
+                    wc - 3);
                 /*
                  * AccessChain result:
                  *
@@ -154,6 +159,11 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpLoad:
             if (wc >= 4)
             {
+                STEREO_LOG(
+                    "LOAD result=%u ptr=%u type=%u",
+                    w[i+2],
+                    w[i+3],
+                    w[i+1]);
                 uint32_t ptr = w[i + 3];
 
                 if (ptr == m->projection_ptr)
@@ -170,13 +180,24 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpMatrixTimesVector:
         case SpvOpMatrixTimesMatrix:
             STEREO_LOG(
-                "MATRIX_OPCODE op=%u word=%u exec=%u pos=%u pos_block=%u",
-                op,
-                i,
-                m->exec_model,
-                m->pos_var,
-                m->pos_is_block);
+                "MATRIX_MUL resultType=%u result=%u matrix=%u vector=%u",
+                w[i+1],
+                w[i+2],
+                w[i+3],
+                w[i+4]);
             m->has_matrix_ops = true;
+            break;
+        case SpvOpCopyObject:
+            STEREO_LOG(
+                "COPY dst=%u src=%u",
+                w[i+2],
+                w[i+3]);
+            break;
+        case SpvOpBitcast:
+            STEREO_LOG(
+                "BITCAST dst=%u src=%u",
+                w[i+2],
+                w[i+3]);
             break;
         case SpvOpTypePointer:
             if(wc>=4){
