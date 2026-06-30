@@ -85,6 +85,7 @@ typedef struct {
     /* Geometry classification */
     bool has_matrix_ops;
     bool has_direct_position_write;
+    uint32_t clipdistance_store_count;
 
     int  exec_model;
     uint32_t pos_var, pos_member_idx, pos_ptr_type;
@@ -142,6 +143,12 @@ static void do_scan(SpvMod *m, bool p2)
             if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                 if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                     m->pos_var=w[i+1];
+                    if (w[i+3] == SpvBuiltInClipDistance)
+                    {
+                        STEREO_LOG(
+                            "BUILTIN ClipDistance id=%u",
+                            w[i+1]);
+                    }
                 if(w[i+3]==SpvBuiltInViewIndex) {
                     m->view_var = w[i+1];
                     m->has_viewindex_builtin = true;
@@ -171,7 +178,13 @@ static void do_scan(SpvMod *m, bool p2)
                 w[i+1] == m->pos_var)
             {
                 uint32_t source = w[i+2];
-
+                STEREO_LOG(
+                    "POS_STORE hash_pending exec=%u word=%zu src=%u matrix=%d block=%d",
+                    m->exec_model,
+                    i,
+                    source,
+                    m->has_matrix_ops,
+                    m->pos_is_block);
                 if (!m->has_matrix_ops)
                     m->has_direct_position_write = true;
             }
@@ -544,15 +557,17 @@ bool spirv_patch_stereo_vertex(
     spv_scan(&m);
 
     STEREO_LOG(
-        "SPIRV scan: exec=%d pos=%u pos_block=%u member=%u view=%u emits=%u mvcap=%d matrix=%d",
+        "SCAN exec=%u patchable=%d pos=%u posBlock=%d posMember=%u "
+        "view=%u emit=%u matrix=%d directPos=%d",
         m.exec_model,
+        m.is_patchable,
         m.pos_var,
         m.pos_is_block,
         m.pos_member_idx,
         m.view_var,
         m.emit_count,
-        m.has_mv_cap,
-        m.has_matrix_ops);
+        m.has_matrix_ops,
+        m.has_direct_position_write);
     uint64_t spv_hash = hash_spv(m.words, m.count);
     if (spv_hash == 0xc3c35ab856282a97ULL)
     {
@@ -620,15 +635,17 @@ bool spirv_patch_stereo_vertex(
             dbg->is_multiview);
     }
     STEREO_LOG(
-        "PATCHABLE shader: hash=%016llx-vs.spv words=%zu matrix=%d geom=%d emits=%u pos=%u view=%u",
+    "PATCHABLE hash=%016llx words=%zu exec=%u matrix=%d direct=%d "
+    "block=%d emits=%u pos=%u view=%u",
         (unsigned long long)spv_hash,
         m.count,
-        m.has_matrix_ops,
         m.exec_model,
+        m.has_matrix_ops,
+        m.has_direct_position_write,
+        m.pos_is_block,
         m.emit_count,
         m.pos_var,
         m.view_var);
-
     if (dbg) {
         STEREO_LOG(
             "PATCH_CTX pipe=%u stage=%u renderPass=%p multiview=%d",
