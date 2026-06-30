@@ -1471,6 +1471,18 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 infos[p].renderPass = rpi->mv_handle;
         }
 
+        /* ── Full-screen quad detection ──────────────────────────────────
+         * Pipelines with no vertex input bindings are full-screen quads used
+         * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from
+         * G-buffer / render-target textures (all upgraded to 2D_ARRAY by
+         * stereo_CreateImage).  We patch the FS to use sampler2DArray +
+         * gl_ViewIndex so each eye reads its own G-buffer layer.
+         * The VS of a quad must NOT be patched — shifting the quad position
+         * would prevent it covering the full screen for one eye.
+         * Geometry pipelines (has vertex input) use Path A/B VS patching. */
+        bool is_quad = !ci->pVertexInputState ||
+                       ci->pVertexInputState->vertexBindingDescriptionCount == 0;
+
         bool has_depth = false;
         bool depth_write = false;
         if (ci->pDepthStencilState)
@@ -1493,18 +1505,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             ci->pVertexInputState ?
                 ci->pVertexInputState->vertexBindingDescriptionCount : 0,
             (void*)ci->renderPass);
-
-        /* ── Full-screen quad detection ──────────────────────────────────
-         * Pipelines with no vertex input bindings are full-screen quads used
-         * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from
-         * G-buffer / render-target textures (all upgraded to 2D_ARRAY by
-         * stereo_CreateImage).  We patch the FS to use sampler2DArray +
-         * gl_ViewIndex so each eye reads its own G-buffer layer.
-         * The VS of a quad must NOT be patched — shifting the quad position
-         * would prevent it covering the full screen for one eye.
-         * Geometry pipelines (has vertex input) use Path A/B VS patching. */
-        bool is_quad = !ci->pVertexInputState ||
-                       ci->pVertexInputState->vertexBindingDescriptionCount == 0;
 
         if (is_postprocess_quad && ci->stageCount > 0) {
             /* Find FS stage */
