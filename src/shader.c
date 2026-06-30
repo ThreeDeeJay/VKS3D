@@ -1471,6 +1471,29 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 infos[p].renderPass = rpi->mv_handle;
         }
 
+        bool has_depth = false;
+        bool depth_write = false;
+        if (ci->pDepthStencilState)
+        {
+            has_depth = ci->pDepthStencilState->depthTestEnable ||
+                        ci->pDepthStencilState->depthWriteEnable;
+            depth_write = ci->pDepthStencilState->depthWriteEnable;
+        }
+        bool is_postprocess_quad =
+            is_quad &&
+            has_depth &&
+            !depth_write;
+        STEREO_LOG(
+            "PIPE_CLASSIFY p=%u quad=%u post=%u depth=%u depthWrite=%u bindings=%u rp=%p",
+            p,
+            is_quad,
+            is_postprocess_quad,
+            has_depth,
+            depth_write,
+            ci->pVertexInputState ?
+                ci->pVertexInputState->vertexBindingDescriptionCount : 0,
+            (void*)ci->renderPass);
+
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
          * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from
@@ -1483,7 +1506,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
 
-        if (is_quad && ci->stageCount > 0) {
+        if (is_postprocess_quad && ci->stageCount > 0) {
             /* Find FS stage */
             uint32_t fs_s = ~0u;
             for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
