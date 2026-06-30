@@ -569,6 +569,7 @@ bool spirv_patch_stereo_vertex(
      * Return the original shader unchanged so we can identify which
      * patched shader is responsible for the remaining stereo artifact.
      */
+
     //Flatten ShadowMap.exe world geometry
     if (spv_hash == 0xe019379afc782113ull)
     {
@@ -577,20 +578,21 @@ bool spirv_patch_stereo_vertex(
             (unsigned long long)spv_hash);
         return false;
     }
-    if (spv_hash == 0xe716bddc3641b1f2ull)
-    {
-        STEREO_LOG(
-            "BLACKLIST shader=%016llx",
-            (unsigned long long)spv_hash);
-        return false;
-    }
-    if (spv_hash == 0x45470ec20eeeba84ull)
-    {
-        STEREO_LOG(
-            "BLACKLIST shader=%016llx",
-            (unsigned long long)spv_hash);
-        return false;
-    }
+    //if (spv_hash == 0xe716bddc3641b1f2ull)
+    //{
+    //    STEREO_LOG(
+    //        "BLACKLIST shader=%016llx",
+    //        (unsigned long long)spv_hash);
+    //    return false;
+    //}
+    //if (spv_hash == 0x45470ec20eeeba84ull)
+    //{
+    //    STEREO_LOG(
+    //        "BLACKLIST shader=%016llx",
+    //        (unsigned long long)spv_hash);
+    //    return false;
+    //}
+    
     ////Flatten ShadowMap.exe UI
     //if (spv_hash == 0x1194cbb18ed7990full)
     //{
