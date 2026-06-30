@@ -28,6 +28,11 @@ stereo_CreateFramebuffer(
                pCreateInfo->renderPass,
                pCreateInfo->attachmentCount);
     StereoDevice *sd = stereo_device_from_handle(device);
+    STEREO_LOG(
+        "FB_DEVICE sd=%p real_device=%p fb_track_count(before)=%u",
+        sd,
+        sd ? sd->real_device : NULL,
+        sd ? sd->fb_track_count : 0);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
     VkFramebufferCreateInfo fci = *pCreateInfo;
@@ -119,7 +124,14 @@ stereo_CreateFramebuffer(
         (void*)fci.renderPass,
         (void*)pCreateInfo->renderPass);
     VkResult res = sd->real.CreateFramebuffer(sd->real_device, &fci, pAllocator, pFramebuffer);
-    
+    if (res == VK_SUCCESS)
+    {
+        STEREO_LOG(
+            "FB_CREATED fb=%p rp_used=%p mv=%p",
+            (void*)*pFramebuffer,
+            (void*)fci.renderPass,
+            (void*)use_mv);
+    }
     if (before != fci.renderPass) {
         STEREO_LOG("[CRITICAL MUTATION] fci.renderPass changed during CreateFramebuffer: %p -> %p",
                    before, fci.renderPass);
@@ -343,23 +355,52 @@ stereo_CmdBeginRenderPass(
     StereoDevice *sd   = NULL;
     VkRenderPass mv_rp = VK_NULL_HANDLE;
     STEREO_LOG(
+        "CB_BEGIN cb=%p rp=%p fb=%p",
+        commandBuffer,
+        pRenderPassBegin->renderPass,
+        pRenderPassBegin->framebuffer);
+    STEREO_LOG(
         "RP_BEGIN_ORIGINAL rp=%p fb=%p",
         (void*)pRenderPassBegin->renderPass,
         (void*)pRenderPassBegin->framebuffer);
+    STEREO_LOG(
+        "RP_BEGIN_SCAN device_count=%u",
+        g_device_count);
+
+    for (uint32_t d = 0; d < g_device_count; d++)
+    {
+        StereoDevice *dev = &g_devices[d];
+        STEREO_LOG(
+            "DEVICE[%u] dev=%p real_device=%p fb_track_count=%u",
+            d,
+            dev,
+            dev->real_device,
+            dev->fb_track_count);
+    }
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
         StereoDevice *dev = &g_devices[d];
         STEREO_LOG(
-            "FB_TRACK_SCAN count=%u sizeof(track)=%u",
-            dev->fb_track_count,
-            (unsigned)sizeof(StereoFramebufferTrack));
+            "FB_TRACK_SCAN dev=%p count=%u",
+            dev,
+            dev->fb_track_count);
         for (uint32_t i = 0; i < dev->fb_track_count; i++) {
-
-            bool fb_match = (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
+            bool fb_match =
+                (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer);
             STEREO_LOG(
-                "RP_COMPARE begin=%p tracked=%p tracked_mv=%p",
-                pRenderPassBegin->renderPass,
-                dev->fb_tracks[i].rp,
-                dev->fb_tracks[i].mv_rp);
+                "FB_SCAN i=%u "
+                "begin_fb=%p tracked_fb=%p "
+                "begin_rp=%p tracked_rp=%p "
+                "tracked_used=%p tracked_mv=%p "
+                "has_mv=%u fb_match=%u",
+                i,
+                (void*)pRenderPassBegin->framebuffer,
+                (void*)dev->fb_tracks[i].fb,
+                (void*)pRenderPassBegin->renderPass,
+                (void*)dev->fb_tracks[i].rp,
+                (void*)dev->fb_tracks[i].rp_used_at_create,
+                (void*)dev->fb_tracks[i].mv_rp,
+                (unsigned)dev->fb_tracks[i].has_mv,
+                (unsigned)fb_match);
             bool rp_match =
                 (
                     dev->fb_tracks[i].rp != VK_NULL_HANDLE &&
@@ -385,8 +426,14 @@ stereo_CmdBeginRenderPass(
             }
             if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
             {
+                STEREO_LOG(
+                    "FB_MATCH requested=%p fb_original=%p fb_used=%p fb_mv=%p",
+                    pRenderPassBegin->renderPass,
+                    dev->fb_tracks[i].rp,
+                    dev->fb_tracks[i].rp_used_at_create,
+                    dev->fb_tracks[i].mv_rp);
                 if (dev->fb_tracks[i].has_mv)
-                {         
+                {
                     VkRenderPass candidate = VK_NULL_HANDLE;
                     StereoRenderPassInfo *rpi =
                         stereo_rp_lookup(dev,
@@ -395,17 +442,20 @@ stereo_CmdBeginRenderPass(
                     {
                         candidate = rpi->mv_handle;
                         STEREO_LOG(
-                            "RP_LOOKUP_SELECTED requested=%p mv=%p",
+                            "RP_LOOKUP_SELECTED requested=%p original=%p mv=%p",
                             (void*)pRenderPassBegin->renderPass,
-                            (void*)candidate);
+                            (void*)rpi->handle,
+                            (void*)rpi->mv_handle);
                     }
                     else
                     {
-                        candidate = dev->fb_tracks[i].mv_rp;
                         STEREO_LOG(
-                            "RP_LOOKUP_FALLBACK requested=%p fb_mv=%p",
+                            "RP_LOOKUP_FAILED requested=%p fb=%p tracked_original=%p tracked_used=%p tracked_mv=%p",
                             (void*)pRenderPassBegin->renderPass,
-                            (void*)candidate);
+                            (void*)pRenderPassBegin->framebuffer,
+                            (void*)dev->fb_tracks[i].rp,
+                            (void*)dev->fb_tracks[i].rp_used_at_create,
+                            (void*)dev->fb_tracks[i].mv_rp);
                     }
                     if (candidate != VK_NULL_HANDLE)
                     {
@@ -455,7 +505,17 @@ stereo_CmdBeginRenderPass(
     if (!sd) return;
     StereoRenderPassInfo *lookup =
         stereo_rp_lookup(sd, pRenderPassBegin->renderPass);
-    
+    STEREO_LOG(
+        "BEGIN_RP cb=%p rp=%p mv=%u mv_handle=%p",
+        (void *)commandBuffer,
+        (void *)(mv_rp ? mv_rp : pRenderPassBegin->renderPass),
+        lookup ? lookup->has_multiview : 0,
+        lookup ? (void *)lookup->mv_handle : NULL);
+    remember_begin_renderpass(
+        sd,
+        commandBuffer,
+        mv_rp ? mv_rp : pRenderPassBegin->renderPass,
+        0);
     STEREO_LOG(
         "RP_LOOKUP_BEGIN requested=%p lookup=%p lookup_orig=%p lookup_mv=%p",
         (void*)pRenderPassBegin->renderPass,
@@ -493,6 +553,20 @@ stereo_CmdBeginRenderPass(
             pRenderPassBegin->framebuffer,
             pRenderPassBegin->renderPass,
             mv_rp);
+        STEREO_LOG(
+            "CB_DISPATCH cb=%p sd=%p real_dev=%p",
+            commandBuffer,
+            sd,
+            sd->real_device);
+        for (uint32_t i = 0; i < sd->cb_track_count; i++)
+        {
+            if (sd->cb_track[i].cb == commandBuffer)
+            {
+                sd->cb_track[i].render_pass = modified.renderPass;
+                sd->cb_track[i].framebuffer = modified.framebuffer;
+                break;
+            }
+        }
         sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
         STEREO_LOG(
             "[RP BEGIN MONO] fb=%p rp=%p",
@@ -507,6 +581,280 @@ stereo_CmdBeginRenderPass(
             "BEGIN_PASS_DRIVER original=%p framebuffer=%p",
             (void*)pRenderPassBegin->renderPass,
             (void*)pRenderPassBegin->framebuffer);
+        STEREO_LOG(
+            "CB_DISPATCH cb=%p sd=%p real_dev=%p",
+            commandBuffer,
+            sd,
+            sd->real_device);
+        for (uint32_t i = 0; i < sd->cb_track_count; i++)
+        {
+            if (sd->cb_track[i].cb == commandBuffer)
+            {
+                sd->cb_track[i].render_pass = pRenderPassBegin->renderPass;
+                sd->cb_track[i].framebuffer = pRenderPassBegin->framebuffer;
+                break;
+            }
+        }
+        
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBindPipeline(
+    VkCommandBuffer commandBuffer,
+    VkPipelineBindPoint pipelineBindPoint,
+    VkPipeline pipeline)
+{
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+
+    StereoDevice *sd = NULL;
+
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real_device)
+        {
+            sd = &g_devices[i];
+            break;
+        }
+    }
+    if (!sd)
+    return;
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipeline);
+    remember_bound_pipeline(
+        sd,
+        commandBuffer,
+        pipeline);
+
+    if (info)
+    {
+        STEREO_LOG(
+            "PIPE_BIND pipe=%p "
+            "mv_rp=%p "
+            "orig_rp=%p "
+            "patched_vs=%u "
+            "patched_fs=%u "
+            "quad=%u "
+            "bindings=%u",
+            (void*)pipeline,
+            (void*)info->mv_renderpass,
+            (void*)info->original_renderpass,
+            info->patched_vs,
+            info->patched_fs,
+            info->is_quad,
+            info->vertex_binding_count);
+    }
+    else
+    {
+        STEREO_LOG(
+            "PIPE_BIND pipe=%p UNKNOWN",
+            (void*)pipeline);
+    }
+    sd->real.CmdBindPipeline(
+        commandBuffer,
+        pipelineBindPoint,
+        pipeline);
+}
+
+static StereoDevice *
+find_any_device(void)
+{
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real_device)
+            return &g_devices[i];
+    }
+
+    return NULL;
+}
+
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDrawIndexed(
+    VkCommandBuffer commandBuffer,
+    uint32_t indexCount,
+    uint32_t instanceCount,
+    uint32_t firstIndex,
+    int32_t vertexOffset,
+    uint32_t firstInstance)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
+    VkPipeline pipe =
+        lookup_bound_pipeline(sd, commandBuffer);
+    VkRenderPass rp =
+        lookup_bound_renderpass(sd, commandBuffer);
+    VkFramebuffer fb =
+        lookup_bound_framebuffer(sd, commandBuffer);
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipe);
+    if (info)
+    {
+        STEREO_LOG(
+            "DRAW_INDEXED pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u",
+            (void *)pipe,
+            (void *)rp,
+            (void *)fb,
+            info->is_quad,
+            info->patched_vs,
+            info->patched_fs);
+    }
+    else
+    {
+        STEREO_LOG(
+            "DRAW_INDEXED pipe=%p UNKNOWN",
+            (void *)pipe);
+    }
+    sd->real.CmdDrawIndexed(
+        commandBuffer,
+        indexCount,
+        instanceCount,
+        firstIndex,
+        vertexOffset,
+        firstInstance);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDraw(
+    VkCommandBuffer commandBuffer,
+    uint32_t vertexCount,
+    uint32_t instanceCount,
+    uint32_t firstVertex,
+    uint32_t firstInstance)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
+    VkPipeline pipe =
+        lookup_bound_pipeline(sd, commandBuffer);
+    VkRenderPass rp =
+        lookup_bound_renderpass(sd, commandBuffer);
+    VkFramebuffer fb =
+        lookup_bound_framebuffer(sd, commandBuffer);
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipe);
+    if (info)
+    {
+        STEREO_LOG(
+            "DRAW pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
+            "verts=%u inst=%u",
+            (void *)pipe,
+            (void *)rp,
+            (void *)fb,
+            info->is_quad,
+            info->patched_vs,
+            info->patched_fs,
+            vertexCount,
+            instanceCount);
+    }
+    else
+    {
+        STEREO_LOG(
+            "DRAW pipe=%p UNKNOWN",
+            (void *)pipe);
+    }
+    sd->real.CmdDraw(
+        commandBuffer,
+        vertexCount,
+        instanceCount,
+        firstVertex,
+        firstInstance);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDrawIndirect(
+    VkCommandBuffer commandBuffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    uint32_t drawCount,
+    uint32_t stride)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
+    VkPipeline pipe =
+        lookup_bound_pipeline(sd, commandBuffer);
+    VkRenderPass rp =
+        lookup_bound_renderpass(sd, commandBuffer);
+    VkFramebuffer fb =
+        lookup_bound_framebuffer(sd, commandBuffer);
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipe);
+    if (info)
+    {
+        STEREO_LOG(
+            "DRAW_INDIRECT pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
+            "draws=%u",
+            (void *)pipe,
+            (void *)rp,
+            (void *)fb,
+            info->is_quad,
+            info->patched_vs,
+            info->patched_fs,
+            drawCount);
+    }
+    else
+    {
+        STEREO_LOG(
+            "DRAW_INDIRECT pipe=%p UNKNOWN",
+            (void *)pipe);
+    }
+    sd->real.CmdDrawIndirect(
+        commandBuffer,
+        buffer,
+        offset,
+        drawCount,
+        stride);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdDrawIndexedIndirect(
+    VkCommandBuffer commandBuffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    uint32_t drawCount,
+    uint32_t stride)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
+    VkPipeline pipe =
+        lookup_bound_pipeline(sd, commandBuffer);
+    VkRenderPass rp =
+        lookup_bound_renderpass(sd, commandBuffer);
+    VkFramebuffer fb =
+        lookup_bound_framebuffer(sd, commandBuffer);
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipe);
+    if (info)
+    {
+    STEREO_LOG(
+        "DRAW_INDEXED_INDIRECT pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
+        "draws=%u",
+        (void *)pipe,
+        (void *)rp,
+        (void *)fb,
+        info->is_quad,
+        info->patched_vs,
+        info->patched_fs,
+        drawCount);
+    }
+    else
+    {
+        STEREO_LOG(
+            "DRAW_INDEXED_INDIRECT pipe=%p UNKNOWN",
+            (void *)pipe);
+    }
+    sd->real.CmdDrawIndexedIndirect(
+        commandBuffer,
+        buffer,
+        offset,
+        drawCount,
+        stride);
 }

@@ -488,6 +488,26 @@ typedef struct StereoFramebufferTrack {
     bool          has_mv;
 } StereoFramebufferTrack;
 
+typedef struct StereoPipelineInfo
+{
+    VkPipeline pipeline;
+
+    VkRenderPass original_renderpass;
+    VkRenderPass mv_renderpass;
+
+    uint32_t stage_count;
+
+    VkShaderModule vs_module;
+    VkShaderModule fs_module;
+
+    VkBool32 patched_vs;
+    VkBool32 patched_fs;
+
+    /* Classification recorded at pipeline creation */
+    VkBool32 is_quad;
+    uint32_t vertex_binding_count;
+} StereoPipelineInfo;
+
 typedef struct StereoDevice {
     /* MUST be first: loader reads *(void**)device for dispatch table. */
     VK_LOADER_DATA         loader_data;
@@ -588,6 +608,22 @@ typedef struct StereoDevice {
     HWND                   comp_hwnd;
     void                  *comp_composed;
     uint32_t               comp_w, comp_h;
+
+    /* -- Pipelines ------------------------------------------- */
+    StereoPipelineInfo *pipeline_info;
+    uint32_t pipeline_info_count;
+    uint32_t pipeline_info_capacity;
+
+    /* -- CommandBuffer -> currently bound graphics pipeline -------- */
+#define MAX_CB_TRACK 4096
+    struct {
+        VkCommandBuffer cb;
+        VkPipeline pipeline;
+        uint32_t subpass;
+        VkRenderPass render_pass;
+        VkFramebuffer framebuffer;
+    } cb_track[MAX_CB_TRACK];
+    uint32_t cb_track_count;
 } StereoDevice;
 
 /* -- Stereo UBO layout ----------------------------------------------------- */
@@ -716,6 +752,28 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(VkDevice, VkSwapchai
 VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDraw(VkCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
+
+/* shader.c */
+StereoPipelineInfo *
+find_pipeline_info(
+    StereoDevice *,
+    VkPipeline);
+
+void
+remember_bound_pipeline(
+    StereoDevice *,
+    VkCommandBuffer,
+    VkPipeline);
+
+VkPipeline
+lookup_bound_pipeline(
+    StereoDevice *,
+    VkCommandBuffer);
 
 typedef struct StereoDebugCtx StereoDebugCtx;
 bool spirv_patch_stereo_vertex(
@@ -726,6 +784,11 @@ bool spirv_patch_stereo_vertex(
     bool inj_vi,
     const StereoDebugCtx *dbg);
 void spirv_patched_free(uint32_t *w);
+
+StereoPipelineInfo *
+find_pipeline_info(
+    StereoDevice *sd,
+    VkPipeline pipeline);
 
 VkResult stereo_dxgi_present(StereoDevice*, VkQueue, StereoSwapchain*,
     uint32_t, uint32_t, const VkSemaphore*);
