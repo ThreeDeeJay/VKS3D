@@ -183,19 +183,22 @@ static void do_scan(SpvMod *m, bool p2)
                 break;
             case SpvOpMatrixTimesVector:
             case SpvOpMatrixTimesMatrix:
-                if (wc >= 4 &&
+            case SpvOpVectorTimesScalar:
+            case SpvOpVectorTimesMatrix:
+            case SpvOpMatrixTimesScalar:
+                STEREO_LOG(
+                    "MATRIX_RESULT op=%u wc=%u result=%u matrix=%u vector=%u",
+                    op,
+                    wc,
+                    (wc > 2) ? w[i+2] : 0,
+                    (wc > 3) ? w[i+3] : 0,
+                    (wc > 4) ? w[i+4] : 0);
+            
+                if (wc >= 5 &&
                     w[i+2] < m->value_capacity)
                 {
                     m->value_from_matrix[w[i+2]] = 1;
                 }
-                STEREO_LOG(
-                    "MATRIX_OPCODE op=%u word=%u exec=%u pos=%u pos_block=%u",
-                    op,
-                    i,
-                    m->exec_model,
-                    m->pos_var,
-                    m->pos_is_block);
-                m->has_matrix_ops = true;
                 break;
             case SpvOpCopyObject:
             case SpvOpBitcast:
