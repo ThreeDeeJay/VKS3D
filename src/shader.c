@@ -602,7 +602,7 @@ bool spirv_patch_stereo_vertex(
     //    return false;
     //}
     //Flatten RBR UI
-    if (spv_hash == 0x2f00db4c9b163376ull)
+    if (spv_hash == 0x08848dc121671dd6ull)
     {
         STEREO_LOG(
             "BLACKLIST shader=%016llx",
