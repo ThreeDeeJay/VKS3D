@@ -89,6 +89,11 @@ jobs:
         /p:Platform="${{matrix.Settings.Architecture}}"
         /p:PlatformToolset=v143
         /t:NV3DLib
+
+    - name: Download SPIR-V header
+      run: |
+        curl --ssl-revoke-best-effort --create-dirs -L "https://raw.githubusercontent.com/KhronosGroup/SPIRV-Headers/refs/heads/main/include/spirv/unified1/spirv.h" -o "third_party/SPIRV-Headers/include/spirv/unified1/spirv.h"
+
     - name: Collect dependencies
       if: steps.cache-nv3dlib.outputs.cache-hit != 'true'
       run: |
