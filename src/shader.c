@@ -85,11 +85,14 @@ typedef struct {
 
     /* Geometry classification */
     bool has_matrix_ops;
+    bool has_projection_matrix;
+    bool uses_projection_matrix;
     bool has_direct_position_write;
     uint32_t dot_count;
 
     int  exec_model;
     uint32_t pos_var, pos_member_idx, pos_ptr_type;
+    uint32_t projection_ptr;
 
     /* TES shaders may contain both an input gl_in[] Position block
        and an output gl_PerVertex Position block. */
@@ -126,7 +129,32 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpTypeMatrix:
             m->has_matrix_ops = true;
             break;
-
+        case SpvOpAccessChain:
+            if (wc >= 4)
+            {
+                /* D3D9FixedFunctionVS member 3 = Projection */
+                if (w[i + 3] == 3)
+                {
+                    m->has_projection_matrix = true;
+                    m->projection_ptr = w[i + 2];
+                }
+            }
+            break;
+        case SpvOpLoad:
+            if (wc >= 3)
+            {
+                uint32_t ptr = w[i + 2];
+        
+                /* crude but useful:
+                   Projection pointer IDs always come from
+                   OpAccessChain(... member 3)
+                 */
+                if (ptr == m->projection_ptr)
+                {
+                    m->uses_projection_matrix = true;
+                }
+            }
+            break;
         case SpvOpMatrixTimesVector:
         case SpvOpMatrixTimesMatrix:
             STEREO_LOG(
@@ -584,10 +612,15 @@ bool spirv_patch_stereo_vertex(
         }
     }
     STEREO_LOG(
-        "SCAN_CLASS hash=%016llx exec=%u patchable=%d pos=%u posBlock=%d posMember=%u view=%u emit=%u matrix=%d directPos=%d dots=%u mvbuiltin=%d",
+    "SCAN_CLASS hash=%016llx exec=%u patchable=%d "
+    "proj=%d projUse=%d "
+    "pos=%u posBlock=%d posMember=%u "
+    "view=%u emit=%u matrix=%d directPos=%d dots=%u mvbuiltin=%d",
         (unsigned long long)spv_hash,
         m.exec_model,
         m.is_patchable,
+        m.has_projection_matrix,
+        m.uses_projection_matrix,
         m.pos_var,
         m.pos_is_block,
         m.pos_member_idx,
@@ -597,21 +630,6 @@ bool spirv_patch_stereo_vertex(
         m.has_direct_position_write,
         m.dot_count,
         m.has_viewindex_builtin);
-    //if (spv_hash == 0xc3c35ab856282a97ULL)
-    //{
-    //    STEREO_LOG(
-    //        "DXVK_UI_CANDIDATE hash=%016llx matrix=%d pos_block=%d pos_member=%u view=%u exec=%u",
-    //        (unsigned long long)spv_hash,
-    //        m.has_matrix_ops,
-    //        m.pos_is_block,
-    //        m.pos_member_idx,
-    //        m.view_var,
-    //        (unsigned)m.exec_model);
-    //}
-    /* TEMP: shader blacklist for debugging.
-     * Return the original shader unchanged so we can identify which
-     * patched shader is responsible for the remaining stereo artifact.
-     */
 
     //Flatten ShadowMap.exe world geometry
     // if (spv_hash == 0xe019379afc782113ull)
@@ -621,32 +639,6 @@ bool spirv_patch_stereo_vertex(
     //         (unsigned long long)spv_hash);
     //     return false;
     // }
-
-    ////Flatten ShadowMap.exe UI
-    //if (spv_hash == 0x1194cbb18ed7990full)
-    //{
-    //    STEREO_LOG(
-    //        "BLACKLIST shader=%016llx",
-    //        (unsigned long long)spv_hash);
-    //    return false;
-    //}
-    ////Flatten SimpleSample.exe UI
-    //if (spv_hash == 0xc3c35ab856282a97ull)
-    //{
-    //    STEREO_LOG(
-    //        "BLACKLIST shader=%016llx",
-    //        (unsigned long long)spv_hash);
-    //    return false;
-    //}
-
-    ////Flatten RBR UI
-    //if (spv_hash == 0x898ca1de82f2ced7ull)
-    //{
-    //    STEREO_LOG(
-    //        "BLACKLIST shader=%016llx",
-    //        (unsigned long long)spv_hash);
-    //    return false;
-    //}
 
     if (dbg)
     {
