@@ -35,20 +35,18 @@
 #define SpvOpAccessChain        65
 #define SpvOpDecorate           71
 #define SpvOpMemberDecorate     72
-#define SpvOpCopyObject         83
 #define SpvOpFunction           54
+#define SpvOpEmitVertex         218
 #define SpvOpCompositeExtract   81
 #define SpvOpCompositeInsert    82
-#define SpvOpBitcast            124
 #define SpvOpFAdd               129
 #define SpvOpFMul               133
 #define SpvOpMatrixTimesVector  145
 #define SpvOpMatrixTimesMatrix  146
 #define SpvOpDot                148
-#define SpvOpSelect             169
 #define SpvOpIEqual             170
 #define SpvOpINotEqual          171
-#define SpvOpEmitVertex         218
+#define SpvOpSelect             169
 #define SpvOpReturn             253
 
 #define SpvDecorationBuiltIn    11
@@ -87,14 +85,11 @@ typedef struct {
 
     /* Geometry classification */
     bool has_matrix_ops;
-    bool has_projection_matrix;
-    bool uses_projection_matrix;
     bool has_direct_position_write;
     uint32_t dot_count;
 
     int  exec_model;
     uint32_t pos_var, pos_member_idx, pos_ptr_type;
-    uint32_t projection_ptr;
 
     /* TES shaders may contain both an input gl_in[] Position block
        and an output gl_PerVertex Position block. */
@@ -131,75 +126,17 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpTypeMatrix:
             m->has_matrix_ops = true;
             break;
-        case SpvOpAccessChain:
-            if (wc >= 5)
-            {
-                STEREO_LOG(
-                    "ACCESSCHAIN result=%u base=%u indexes=%u",
-                    w[i+1],
-                    w[i+2],
-                    wc - 3);
-                /*
-                 * AccessChain result:
-                 *
-                 *   %result = OpAccessChain %ptr %consts 3
-                 *
-                 * We want the RESULT id, not the base object.
-                 */
-                if (w[i + 4] == 3)
-                {
-                    m->has_projection_matrix = true;
-                    m->projection_ptr = w[i + 1];
 
-                    STEREO_LOG(
-                        "PROJECTION_ACCESS result=%u base=%u",
-                        w[i + 1],
-                        w[i + 2]);
-                }
-            }
-            break;
-        case SpvOpLoad:
-            if (wc >= 4)
-            {
-                STEREO_LOG(
-                    "LOAD result=%u ptr=%u type=%u",
-                    w[i+2],
-                    w[i+3],
-                    w[i+1]);
-                uint32_t ptr = w[i + 3];
-
-                if (ptr == m->projection_ptr)
-                {
-                    m->uses_projection_matrix = true;
-
-                    STEREO_LOG(
-                        "PROJECTION_LOAD ptr=%u result=%u",
-                        ptr,
-                        w[i + 2]);
-                }
-            }
-            break;
         case SpvOpMatrixTimesVector:
         case SpvOpMatrixTimesMatrix:
             STEREO_LOG(
-                "MATRIX_MUL resultType=%u result=%u matrix=%u vector=%u",
-                w[i+1],
-                w[i+2],
-                w[i+3],
-                w[i+4]);
+                "MATRIX_OPCODE op=%u word=%u exec=%u pos=%u pos_block=%u",
+                op,
+                i,
+                m->exec_model,
+                m->pos_var,
+                m->pos_is_block);
             m->has_matrix_ops = true;
-            break;
-        case SpvOpCopyObject:
-            STEREO_LOG(
-                "COPY dst=%u src=%u",
-                w[i+2],
-                w[i+3]);
-            break;
-        case SpvOpBitcast:
-            STEREO_LOG(
-                "BITCAST dst=%u src=%u",
-                w[i+2],
-                w[i+3]);
             break;
         case SpvOpTypePointer:
             if(wc>=4){
@@ -647,12 +584,10 @@ bool spirv_patch_stereo_vertex(
         }
     }
     STEREO_LOG(
-        "SCAN_CLASS hash=%016llx exec=%u patchable=%d proj=%d projUse=%d pos=%u posBlock=%d posMember=%u view=%u emit=%u matrix=%d directPos=%d dots=%u mvbuiltin=%d",
+        "SCAN_CLASS hash=%016llx exec=%u patchable=%d pos=%u posBlock=%d posMember=%u view=%u emit=%u matrix=%d directPos=%d dots=%u mvbuiltin=%d",
         (unsigned long long)spv_hash,
         m.exec_model,
         m.is_patchable,
-        m.has_projection_matrix,
-        m.uses_projection_matrix,
         m.pos_var,
         m.pos_is_block,
         m.pos_member_idx,
@@ -662,6 +597,21 @@ bool spirv_patch_stereo_vertex(
         m.has_direct_position_write,
         m.dot_count,
         m.has_viewindex_builtin);
+    //if (spv_hash == 0xc3c35ab856282a97ULL)
+    //{
+    //    STEREO_LOG(
+    //        "DXVK_UI_CANDIDATE hash=%016llx matrix=%d pos_block=%d pos_member=%u view=%u exec=%u",
+    //        (unsigned long long)spv_hash,
+    //        m.has_matrix_ops,
+    //        m.pos_is_block,
+    //        m.pos_member_idx,
+    //        m.view_var,
+    //        (unsigned)m.exec_model);
+    //}
+    /* TEMP: shader blacklist for debugging.
+     * Return the original shader unchanged so we can identify which
+     * patched shader is responsible for the remaining stereo artifact.
+     */
 
     //Flatten ShadowMap.exe world geometry
     // if (spv_hash == 0xe019379afc782113ull)
@@ -671,6 +621,32 @@ bool spirv_patch_stereo_vertex(
     //         (unsigned long long)spv_hash);
     //     return false;
     // }
+
+    ////Flatten ShadowMap.exe UI
+    //if (spv_hash == 0x1194cbb18ed7990full)
+    //{
+    //    STEREO_LOG(
+    //        "BLACKLIST shader=%016llx",
+    //        (unsigned long long)spv_hash);
+    //    return false;
+    //}
+    ////Flatten SimpleSample.exe UI
+    //if (spv_hash == 0xc3c35ab856282a97ull)
+    //{
+    //    STEREO_LOG(
+    //        "BLACKLIST shader=%016llx",
+    //        (unsigned long long)spv_hash);
+    //    return false;
+    //}
+
+    ////Flatten RBR UI
+    //if (spv_hash == 0x898ca1de82f2ced7ull)
+    //{
+    //    STEREO_LOG(
+    //        "BLACKLIST shader=%016llx",
+    //        (unsigned long long)spv_hash);
+    //    return false;
+    //}
 
     if (dbg)
     {
