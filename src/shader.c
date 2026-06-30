@@ -123,6 +123,9 @@ static void do_scan(SpvMod *m, bool p2)
             if(wc==4&&w[i+2]==m->ft&&w[i+3]==4) m->v4t=w[i+1]; break;
         case SpvOpTypeInt:
             if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
+        case SpvOpTypeMatrix:
+            m->has_matrix_ops = true;
+            break;
 
         case SpvOpMatrixTimesVector:
         case SpvOpMatrixTimesMatrix:
