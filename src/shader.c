@@ -130,28 +130,40 @@ static void do_scan(SpvMod *m, bool p2)
             m->has_matrix_ops = true;
             break;
         case SpvOpAccessChain:
-            if (wc >= 4)
+            if (wc >= 5)
             {
-                /* D3D9FixedFunctionVS member 3 = Projection */
-                if (w[i + 3] == 3)
+                /*
+                 * AccessChain result:
+                 *
+                 *   %result = OpAccessChain %ptr %consts 3
+                 *
+                 * We want the RESULT id, not the base object.
+                 */
+                if (w[i + 4] == 3)
                 {
                     m->has_projection_matrix = true;
-                    m->projection_ptr = w[i + 2];
+                    m->projection_ptr = w[i + 1];
+
+                    STEREO_LOG(
+                        "PROJECTION_ACCESS result=%u base=%u",
+                        w[i + 1],
+                        w[i + 2]);
                 }
             }
             break;
         case SpvOpLoad:
-            if (wc >= 3)
+            if (wc >= 4)
             {
-                uint32_t ptr = w[i + 2];
-        
-                /* crude but useful:
-                   Projection pointer IDs always come from
-                   OpAccessChain(... member 3)
-                 */
+                uint32_t ptr = w[i + 3];
+
                 if (ptr == m->projection_ptr)
                 {
                     m->uses_projection_matrix = true;
+
+                    STEREO_LOG(
+                        "PROJECTION_LOAD ptr=%u result=%u",
+                        ptr,
+                        w[i + 2]);
                 }
             }
             break;
@@ -612,10 +624,7 @@ bool spirv_patch_stereo_vertex(
         }
     }
     STEREO_LOG(
-    "SCAN_CLASS hash=%016llx exec=%u patchable=%d "
-    "proj=%d projUse=%d "
-    "pos=%u posBlock=%d posMember=%u "
-    "view=%u emit=%u matrix=%d directPos=%d dots=%u mvbuiltin=%d",
+        "SCAN_CLASS hash=%016llx exec=%u patchable=%d proj=%d projUse=%d pos=%u posBlock=%d posMember=%u view=%u emit=%u matrix=%d directPos=%d dots=%u mvbuiltin=%d",
         (unsigned long long)spv_hash,
         m.exec_model,
         m.is_patchable,
