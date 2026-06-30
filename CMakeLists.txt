@@ -124,6 +124,8 @@ target_include_directories(${TARGET_NAME} PRIVATE
 )
 target_include_directories(${TARGET_NAME} PRIVATE
     third_party/NV3D-Lib/NV3DLib/include)
+target_include_directories(${TARGET_NAME} PRIVATE
+    third_party/SPIRV-Headers/include)
 
 # ── Version string: embed git commit hash + build date ───────────────────────
 # Baked in at configure time so it appears in the log without any runtime
