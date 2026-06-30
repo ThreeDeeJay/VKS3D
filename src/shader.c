@@ -146,9 +146,7 @@ static void do_scan(SpvMod *m, bool p2)
         case SpvOpTypeInt:
             if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
         case SpvOpTypeMatrix:
-            m->has_matrix_ops = true;
             break;
-
         case SpvOpMatrixTimesVector:
         case SpvOpMatrixTimesMatrix:
             if (wc >= 4 &&
@@ -164,6 +162,34 @@ static void do_scan(SpvMod *m, bool p2)
                 m->pos_var,
                 m->pos_is_block);
             m->has_matrix_ops = true;
+            break;
+        case SpvOpCopyObject:
+        case SpvOpBitcast:
+            if (wc >= 4 &&
+                w[i+2] < m->value_capacity &&
+                w[i+3] < m->value_capacity)
+            {
+                m->value_from_matrix[w[i+2]] =
+                    m->value_from_matrix[w[i+3]];
+            }
+            break;
+        case SpvOpFAdd:
+        case SpvOpFSub:
+        case SpvOpFMul:
+        case SpvOpFDiv:
+            if (wc >= 5 &&
+                w[i+2] < m->value_capacity)
+            {
+                uint8_t matrix = 0;
+        
+                if (w[i+3] < m->value_capacity)
+                    matrix |= m->value_from_matrix[w[i+3]];
+        
+                if (w[i+4] < m->value_capacity)
+                    matrix |= m->value_from_matrix[w[i+4]];
+        
+                m->value_from_matrix[w[i+2]] = matrix;
+            }
             break;
         case SpvOpTypePointer:
             if(wc>=4){
@@ -203,6 +229,12 @@ static void do_scan(SpvMod *m, bool p2)
                 w[i+1] == m->pos_var)
             {
                 uint32_t source = w[i+2];
+                STEREO_LOG(
+                    "STORE_POS source=%u matrix=%u",
+                    source,
+                    (source < m->value_capacity)
+                        ? m->value_from_matrix[source]
+                        : 0);
                 if (source >= m->value_capacity ||
                     !m->value_from_matrix[source])
                     m->has_direct_position_write = true;
