@@ -77,170 +77,205 @@ static void do_scan(SpvMod *m, bool p2)
     for (size_t i=5;i<m->count;) {
         uint32_t op=w[i]&0xffff, wc=w[i]>>16;
         if (!wc||i+wc>m->count) break;
-        if (!p2) switch(op) {
-        case SpvOpDot:
-            m->dot_count++;
-            break;
-        case SpvOpLoad:
-            if (wc >= 4 &&
-                w[i+2] < m->value_capacity &&
-                w[i+3] < m->value_capacity)
-            {
-                m->value_from_matrix[w[i+2]] =
-                    m->value_from_matrix[w[i+3]];
-            }
-            break;
-        
-        case SpvOpCompositeExtract:
-            if (wc >= 5 &&
-                w[i+2] < m->value_capacity &&
-                w[i+3] < m->value_capacity)
-            {
-                m->value_from_matrix[w[i+2]] =
-                    m->value_from_matrix[w[i+3]];
-            }
-            break;
-        
-        case SpvOpVectorShuffle:
-            if (wc >= 6 &&
-                w[i+2] < m->value_capacity &&
-                w[i+3] < m->value_capacity)
-            {
-                m->value_from_matrix[w[i+2]] =
-                    m->value_from_matrix[w[i+3]];
-            }
-            break;
-        
-        case SpvOpCompositeConstruct:
+        if (!p2)
         {
-            if (wc >= 5 &&
-                w[i+2] < m->value_capacity)
+            /* Debug: find instructions that consume a matrix-derived value
+             * but currently do not propagate the provenance bit.
+             */
+            if (wc >= 4)
             {
-                uint8_t matrix = 0;
+                uint32_t dest = w[i + 2];
+                bool src_matrix = false;
         
-                for (uint32_t k = 3; k < wc; k++)
+                for (uint32_t k = 3; k < wc; ++k)
                 {
-                    uint32_t id = w[i+k];
+                    uint32_t id = w[i + k];
                     if (id < m->value_capacity &&
                         m->value_from_matrix[id])
                     {
-                        matrix = 1;
+                        src_matrix = true;
                         break;
                     }
                 }
         
-                m->value_from_matrix[w[i+2]] = matrix;
-            }
-        }
-        break;
-        case SpvOpCapability:
-            if(wc>=2&&w[i+1]==SpvCapabilityMultiView) m->has_mv_cap=true; break;
-        case SpvOpEntryPoint:
-            if(wc>=2){uint32_t e=w[i+1];
-                if(e==SpvExecVertex||e==SpvExecTessEval||e==SpvExecGeometry)
-                    {m->is_patchable=true;m->exec_model=(int)e;}} break;
-        case SpvOpTypeFloat:
-            if(wc==3&&w[i+2]==32) m->ft=w[i+1]; break;
-        case SpvOpTypeVector:
-            if(wc==4&&w[i+2]==m->ft&&w[i+3]==4) m->v4t=w[i+1]; break;
-        case SpvOpTypeInt:
-            if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
-        case SpvOpTypeMatrix:
-            break;
-        case SpvOpMatrixTimesVector:
-        case SpvOpMatrixTimesMatrix:
-            if (wc >= 4 &&
-                w[i+2] < m->value_capacity)
-            {
-                m->value_from_matrix[w[i+2]] = 1;
-            }
-            STEREO_LOG(
-                "MATRIX_OPCODE op=%u word=%u exec=%u pos=%u pos_block=%u",
-                op,
-                i,
-                m->exec_model,
-                m->pos_var,
-                m->pos_is_block);
-            m->has_matrix_ops = true;
-            break;
-        case SpvOpCopyObject:
-        case SpvOpBitcast:
-            if (wc >= 4 &&
-                w[i+2] < m->value_capacity &&
-                w[i+3] < m->value_capacity)
-            {
-                m->value_from_matrix[w[i+2]] =
-                    m->value_from_matrix[w[i+3]];
-            }
-            break;
-        case SpvOpFAdd:
-        case SpvOpFSub:
-        case SpvOpFMul:
-        case SpvOpFDiv:
-            if (wc >= 5 &&
-                w[i+2] < m->value_capacity)
-            {
-                uint8_t matrix = 0;
-        
-                if (w[i+3] < m->value_capacity)
-                    matrix |= m->value_from_matrix[w[i+3]];
-        
-                if (w[i+4] < m->value_capacity)
-                    matrix |= m->value_from_matrix[w[i+4]];
-        
-                m->value_from_matrix[w[i+2]] = matrix;
-            }
-            break;
-        case SpvOpTypePointer:
-            if(wc>=4){
-                if(w[i+2]==SpvStorageOutput&&m->v4t&&w[i+3]==m->v4t) m->ptr_out_v4=w[i+1];
-                if(w[i+2]==SpvStorageInput &&m->it  &&w[i+3]==m->it ) m->ptr_in_int=w[i+1];
-            } break;
-        case SpvOpDecorate:
-            if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
-                if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
-                    m->pos_var=w[i+1];
-                if(w[i+3]==SpvBuiltInViewIndex) {
-                    m->view_var = w[i+1];
-                    m->has_viewindex_builtin = true;
+                if (src_matrix &&
+                    (dest >= m->value_capacity ||
+                     !m->value_from_matrix[dest]))
+                {
+                    STEREO_LOG(
+                        "MATRIX_FLOW_BREAK op=%u word=%zu wc=%u dest=%u",
+                        op,
+                        i,
+                        wc,
+                        dest);
                 }
-            } break;
-        case SpvOpMemberDecorate:
-            if (wc >= 5 &&
-                w[i+3] == SpvDecorationBuiltIn &&
-                w[i+4] == SpvBuiltInPosition)
+            }
+        
+        switch(op) {
+            case SpvOpDot:
+                m->dot_count++;
+                break;
+            case SpvOpLoad:
+                if (wc >= 4 &&
+                    w[i+2] < m->value_capacity &&
+                    w[i+3] < m->value_capacity)
+                {
+                    m->value_from_matrix[w[i+2]] =
+                        m->value_from_matrix[w[i+3]];
+                }
+                break;
+            
+            case SpvOpCompositeExtract:
+                if (wc >= 5 &&
+                    w[i+2] < m->value_capacity &&
+                    w[i+3] < m->value_capacity)
+                {
+                    m->value_from_matrix[w[i+2]] =
+                        m->value_from_matrix[w[i+3]];
+                }
+                break;
+            
+            case SpvOpVectorShuffle:
+                if (wc >= 6 &&
+                    w[i+2] < m->value_capacity &&
+                    w[i+3] < m->value_capacity)
+                {
+                    m->value_from_matrix[w[i+2]] =
+                        m->value_from_matrix[w[i+3]];
+                }
+                break;
+            
+            case SpvOpCompositeConstruct:
             {
-                if (m->pos_block_count < 8)
-                    m->pos_block_type[m->pos_block_count++] = w[i+1];
-
-                m->pos_member_idx = w[i+2];
-                m->pos_is_block   = true;
-                m->pos_var        = 0;
+                if (wc >= 5 &&
+                    w[i+2] < m->value_capacity)
+                {
+                    uint8_t matrix = 0;
+            
+                    for (uint32_t k = 3; k < wc; k++)
+                    {
+                        uint32_t id = w[i+k];
+                        if (id < m->value_capacity &&
+                            m->value_from_matrix[id])
+                        {
+                            matrix = 1;
+                            break;
+                        }
+                    }
+            
+                    m->value_from_matrix[w[i+2]] = matrix;
+                }
             }
             break;
-        case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
-        case SpvOpEmitVertex:
-            m->emit_count++;
-            m->has_emit_vertex = true;
-            break;
-        case SpvOpStore:
-        {
-            if (wc >= 3 &&
-                w[i+1] == m->pos_var)
-            {
-                uint32_t source = w[i+2];
+            case SpvOpCapability:
+                if(wc>=2&&w[i+1]==SpvCapabilityMultiView) m->has_mv_cap=true; break;
+            case SpvOpEntryPoint:
+                if(wc>=2){uint32_t e=w[i+1];
+                    if(e==SpvExecVertex||e==SpvExecTessEval||e==SpvExecGeometry)
+                        {m->is_patchable=true;m->exec_model=(int)e;}} break;
+            case SpvOpTypeFloat:
+                if(wc==3&&w[i+2]==32) m->ft=w[i+1]; break;
+            case SpvOpTypeVector:
+                if(wc==4&&w[i+2]==m->ft&&w[i+3]==4) m->v4t=w[i+1]; break;
+            case SpvOpTypeInt:
+                if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
+            case SpvOpTypeMatrix:
+                break;
+            case SpvOpMatrixTimesVector:
+            case SpvOpMatrixTimesMatrix:
+                if (wc >= 4 &&
+                    w[i+2] < m->value_capacity)
+                {
+                    m->value_from_matrix[w[i+2]] = 1;
+                }
                 STEREO_LOG(
-                    "STORE_POS source=%u matrix=%u",
-                    source,
-                    (source < m->value_capacity)
-                        ? m->value_from_matrix[source]
-                        : 0);
-                if (source >= m->value_capacity ||
-                    !m->value_from_matrix[source])
-                    m->has_direct_position_write = true;
+                    "MATRIX_OPCODE op=%u word=%u exec=%u pos=%u pos_block=%u",
+                    op,
+                    i,
+                    m->exec_model,
+                    m->pos_var,
+                    m->pos_is_block);
+                m->has_matrix_ops = true;
+                break;
+            case SpvOpCopyObject:
+            case SpvOpBitcast:
+                if (wc >= 4 &&
+                    w[i+2] < m->value_capacity &&
+                    w[i+3] < m->value_capacity)
+                {
+                    m->value_from_matrix[w[i+2]] =
+                        m->value_from_matrix[w[i+3]];
+                }
+                break;
+            case SpvOpFAdd:
+            case SpvOpFSub:
+            case SpvOpFMul:
+            case SpvOpFDiv:
+                if (wc >= 5 &&
+                    w[i+2] < m->value_capacity)
+                {
+                    uint8_t matrix = 0;
+            
+                    if (w[i+3] < m->value_capacity)
+                        matrix |= m->value_from_matrix[w[i+3]];
+            
+                    if (w[i+4] < m->value_capacity)
+                        matrix |= m->value_from_matrix[w[i+4]];
+            
+                    m->value_from_matrix[w[i+2]] = matrix;
+                }
+                break;
+            case SpvOpTypePointer:
+                if(wc>=4){
+                    if(w[i+2]==SpvStorageOutput&&m->v4t&&w[i+3]==m->v4t) m->ptr_out_v4=w[i+1];
+                    if(w[i+2]==SpvStorageInput &&m->it  &&w[i+3]==m->it ) m->ptr_in_int=w[i+1];
+                } break;
+            case SpvOpDecorate:
+                if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
+                    if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
+                        m->pos_var=w[i+1];
+                    if(w[i+3]==SpvBuiltInViewIndex) {
+                        m->view_var = w[i+1];
+                        m->has_viewindex_builtin = true;
+                    }
+                } break;
+            case SpvOpMemberDecorate:
+                if (wc >= 5 &&
+                    w[i+3] == SpvDecorationBuiltIn &&
+                    w[i+4] == SpvBuiltInPosition)
+                {
+                    if (m->pos_block_count < 8)
+                        m->pos_block_type[m->pos_block_count++] = w[i+1];
+
+                    m->pos_member_idx = w[i+2];
+                    m->pos_is_block   = true;
+                    m->pos_var        = 0;
+                }
+                break;
+            case SpvOpFunction: if(!m->fn_word) m->fn_word=i; break;
+            case SpvOpEmitVertex:
+                m->emit_count++;
+                m->has_emit_vertex = true;
+                break;
+            case SpvOpStore:
+            {
+                if (wc >= 3 &&
+                    w[i+1] == m->pos_var)
+                {
+                    uint32_t source = w[i+2];
+                    STEREO_LOG(
+                        "STORE_POS source=%u matrix=%u",
+                        source,
+                        (source < m->value_capacity)
+                            ? m->value_from_matrix[source]
+                            : 0);
+                    if (source >= m->value_capacity ||
+                        !m->value_from_matrix[source])
+                        m->has_direct_position_write = true;
+                }
             }
-        }
         break;
+        }
         } else {
             if(op==SpvOpTypePointer && wc>=4 &&
                w[i+2]==SpvStorageOutput)
