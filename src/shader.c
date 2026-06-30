@@ -1512,7 +1512,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 ci->pInputAssemblyState->topology : 0,
             (void*)ci->renderPass);
 
-        if (is_postprocess_quad && ci->stageCount > 0) {
+        if (is_quad && ci->stageCount > 0) {
             /* Find FS stage */
             uint32_t fs_s = ~0u;
             for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
