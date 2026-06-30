@@ -19,7 +19,6 @@
 #include "tes_inject.h"
 
 /* ── SPIR-V opcodes / constants ──────────────────────────────────────────── */
-#define SpvBuiltInClipDistance  3
 #define SpvOpCapability         17
 #define SpvOpEntryPoint         15
 #define SpvOpTypeBool           20
