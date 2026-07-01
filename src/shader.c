@@ -117,7 +117,32 @@ static void do_scan(SpvMod *m, bool p2)
                         dest);
                 }
             }
-        
+        /* Debug: find who defines result id 162 */
+        if (wc >= 3 && w[i + 2] == 162)
+        {
+            const char *name =
+                (op == SpvOpCompositeConstruct) ? "CompositeConstruct" :
+                (op == SpvOpCompositeExtract)   ? "CompositeExtract" :
+                (op == SpvOpCompositeInsert)    ? "CompositeInsert" :
+                (op == SpvOpCopyObject)         ? "CopyObject" :
+                (op == SpvOpBitcast)            ? "Bitcast" :
+                (op == SpvOpPhi)                ? "Phi" :
+                (op == SpvOpSelect)             ? "Select" :
+                (op == SpvOpVectorShuffle)      ? "VectorShuffle" :
+                (op == SpvOpFAdd)               ? "FAdd" :
+                (op == SpvOpFSub)               ? "FSub" :
+                (op == SpvOpFMul)               ? "FMul" :
+                (op == SpvOpFDiv)               ? "FDiv" :
+                (op == SpvOpFunctionCall)       ? "FunctionCall" :
+                (op == SpvOpExtInst)            ? "ExtInst" :
+                "Other";
+            STEREO_LOG(
+                "DEF162 op=%u (%s) wc=%u word=%zu",
+                op,
+                name,
+                wc,
+                i);
+        }
         switch(op) {
             case SpvOpDot:
                 m->dot_count++;
