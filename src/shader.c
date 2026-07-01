@@ -74,6 +74,7 @@ typedef struct {
 static void do_scan(SpvMod *m, bool p2)
 {
     const uint32_t *w=m->words;
+    uint64_t spv_hash = hash_spv(m->words, m->count);
     for (size_t i=5;i<m->count;) {
         uint32_t op=w[i]&0xffff, wc=w[i]>>16;
         if (!wc||i+wc>m->count) break;
@@ -137,8 +138,9 @@ static void do_scan(SpvMod *m, bool p2)
                 (op == SpvOpExtInst)            ? "ExtInst" :
                 "Other";
             STEREO_LOG(
-                "DEF%u op=%u wc=%u word=%zu",
+                "DEF%u hash=%016llx op=%u wc=%u word=%zu",
                 w[i+2],
+                (unsigned long long)spv_hash,
                 op,
                 wc,
                 i);
