@@ -169,6 +169,15 @@ static void do_scan(SpvMod *m, bool p2)
                 if (wc >= 5 &&
                     w[i+2] < m->value_capacity)
                 {
+                    if (w[i+2] == 162)
+                    {
+                        STEREO_LOG(
+                            "DEF162 CONSTRUCT %u %u %u %u",
+                            (wc > 3) ? w[i+3] : 0,
+                            (wc > 4) ? w[i+4] : 0,
+                            (wc > 5) ? w[i+5] : 0,
+                            (wc > 6) ? w[i+6] : 0);
+                    }
                     uint8_t matrix = 0;
             
                     for (uint32_t k = 3; k < wc; k++)
@@ -255,6 +264,13 @@ static void do_scan(SpvMod *m, bool p2)
                 w[i+2] < m->value_capacity &&
                 w[i+3] < m->value_capacity)
             {
+                if (w[i+2] == 162)
+                {
+                    STEREO_LOG(
+                        "DEF162 COPY src=%u matrix=%u",
+                        w[i+3],
+                        m->value_from_matrix[w[i+3]]);
+                }
                 uint8_t old = m->value_from_matrix[w[i+2]];
                 uint8_t matrix = m->value_from_matrix[w[i+3]];
                 m->value_from_matrix[w[i+2]] = matrix;
@@ -277,6 +293,20 @@ static void do_scan(SpvMod *m, bool p2)
                 if (wc >= 5 &&
                     w[i+2] < m->value_capacity)
                 {
+                    if (w[i+2] == 162)
+                    {
+                        STEREO_LOG(
+                            "DEF162 FOP op=%u src0=%u(%u) src1=%u(%u)",
+                            op,
+                            w[i+3],
+                            (w[i+3] < m->value_capacity)
+                                ? m->value_from_matrix[w[i+3]]
+                                : 0,
+                            w[i+4],
+                            (w[i+4] < m->value_capacity)
+                                ? m->value_from_matrix[w[i+4]]
+                                : 0);
+                    }
                     uint8_t matrix = 0;
                     if (w[i+3] < m->value_capacity)
                         matrix |= m->value_from_matrix[w[i+3]];
@@ -296,6 +326,34 @@ static void do_scan(SpvMod *m, bool p2)
                     }
                 }
                 break;
+            case SpvOpCompositeInsert:
+            {
+                if (wc >= 6 &&
+                    w[i+2] < m->value_capacity)
+                {
+                    uint8_t matrix = 0;
+                    /* inserted object */
+                    if (w[i+3] < m->value_capacity)
+                        matrix |= m->value_from_matrix[w[i+3]];
+                    /* destination composite */
+                    if (w[i+4] < m->value_capacity)
+                        matrix |= m->value_from_matrix[w[i+4]];
+                    m->value_from_matrix[w[i+2]] = matrix;
+                    STEREO_LOG(
+                        "INSERT result=%u object=%u(%u) composite=%u(%u) -> %u",
+                        w[i+2],
+                        w[i+3],
+                        (w[i+3] < m->value_capacity)
+                            ? m->value_from_matrix[w[i+3]]
+                            : 0,
+                        w[i+4],
+                        (w[i+4] < m->value_capacity)
+                            ? m->value_from_matrix[w[i+4]]
+                            : 0,
+                        matrix);
+                }
+            }
+            break;
             case SpvOpTypePointer:
                 if(wc>=4){
                     if(w[i+2]==SpvStorageOutput&&m->v4t&&w[i+3]==m->v4t) m->ptr_out_v4=w[i+1];
