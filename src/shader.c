@@ -131,8 +131,20 @@ static void do_scan(SpvMod *m, bool p2)
                         m->value_from_matrix[w[i+3]];
                 }
                 break;
-            
             case SpvOpCompositeExtract:
+            {
+                STEREO_LOG(
+                    "EXTRACT wc=%u result=%u type=%u composite=%u idx0=%u idx1=%u matrix=%u",
+                    wc,
+                    (wc > 2) ? w[i+2] : 0,
+                    (wc > 1) ? w[i+1] : 0,
+                    (wc > 3) ? w[i+3] : 0,
+                    (wc > 4) ? w[i+4] : 0,
+                    (wc > 5) ? w[i+5] : 0,
+                    (wc > 3 && w[i+3] < m->value_capacity)
+                        ? m->value_from_matrix[w[i+3]]
+                        : 0);
+
                 if (wc >= 5 &&
                     w[i+2] < m->value_capacity &&
                     w[i+3] < m->value_capacity)
@@ -140,8 +152,8 @@ static void do_scan(SpvMod *m, bool p2)
                     m->value_from_matrix[w[i+2]] =
                         m->value_from_matrix[w[i+3]];
                 }
-                break;
-            
+            }
+            break;
             case SpvOpVectorShuffle:
                 if (wc >= 6 &&
                     w[i+2] < m->value_capacity &&
