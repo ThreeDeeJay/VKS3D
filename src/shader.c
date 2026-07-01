@@ -508,6 +508,10 @@ static void do_scan(SpvMod *m, bool p2)
     }
 }
 
+static uint64_t hash_spv(
+    const uint32_t *data,
+    size_t words);
+
 static void spv_scan(SpvMod *m)
 {
     /* First pass: discover decorations/types. */

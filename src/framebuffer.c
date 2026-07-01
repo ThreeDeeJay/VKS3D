@@ -673,6 +673,19 @@ find_any_device(void)
     return NULL;
 }
 
+static void remember_begin_renderpass(
+    StereoDevice *sd,
+    VkCommandBuffer commandBuffer,
+    VkRenderPass renderPass,
+    uint32_t subpass);
+
+static VkRenderPass lookup_bound_renderpass(
+    StereoDevice *sd,
+    VkCommandBuffer commandBuffer);
+
+static VkFramebuffer lookup_bound_framebuffer(
+    StereoDevice *sd,
+    VkCommandBuffer commandBuffer);
 
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdDrawIndexed(
