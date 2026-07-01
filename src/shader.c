@@ -356,8 +356,6 @@ static void do_scan(SpvMod *m, bool p2)
 
 static void spv_scan(SpvMod *m)
 {
-    m->bound = m->words[3];
-
     /* First pass: discover decorations/types. */
     do_scan(m,false);
 
@@ -692,12 +690,17 @@ bool spirv_patch_stereo_vertex(
     SpvMod m={0};
     m.words=in;
     m.count=in_c;
-    spv_scan(&m);
+
+    /* We need the bound before allocating the provenance table. */
+    m.bound = m.words[3];
     m.value_capacity = m.bound + 64;
     m.value_from_matrix =
         calloc(m.value_capacity, sizeof(uint8_t));
     if (!m.value_from_matrix)
         return false;
+
+    spv_scan(&m);
+
     uint64_t spv_hash = hash_spv(m.words, m.count);
     {
         static int skip_list_init = 0;
