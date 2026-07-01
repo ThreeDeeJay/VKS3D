@@ -311,6 +311,41 @@ static void do_scan(SpvMod *m, bool p2)
                 }
             }
             break;
+            case SpvOpExtInst:
+            if (wc >= 7)
+            {
+                uint8_t matrix = 0;
+
+                for (uint32_t k = 5; k < wc; ++k)
+                {
+                    uint32_t id = w[i + k];
+                    if (id < m->value_capacity)
+                        matrix |= m->value_from_matrix[id];
+                }
+
+                if (w[i+2] == 162)
+                {
+                    STEREO_LOG(
+                        "DEF162 EXTINST set=%u inst=%u result=%u matrix=%u",
+                        w[i+3],   /* instruction set */
+                        w[i+4],   /* instruction number */
+                        w[i+2],
+                        matrix);
+
+                    for (uint32_t k = 5; k < wc; ++k)
+                    {
+                        uint32_t id = w[i+k];
+                        STEREO_LOG(
+                            "  EXTARG%u id=%u matrix=%u",
+                            k - 5,
+                            id,
+                            (id < m->value_capacity)
+                                ? m->value_from_matrix[id]
+                                : 0);
+                    }
+                }
+            }
+            break;
             case SpvOpFAdd:
             case SpvOpFSub:
             case SpvOpFMul:
