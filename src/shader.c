@@ -196,24 +196,40 @@ static void do_scan(SpvMod *m, bool p2)
             case SpvOpVectorTimesScalar:
             case SpvOpVectorTimesMatrix:
             case SpvOpMatrixTimesScalar:
+            {
+                uint32_t result = (wc > 2) ? w[i+2] : 0;
+
                 STEREO_LOG(
-                    "MATRIX_RESULT op=%u wc=%u result=%u matrix=%u vector=%u",
+                    "MATRIX_RESULT op=%u wc=%u result=%u cap=%u matrix=%u vector=%u",
                     op,
                     wc,
-                    (wc > 2) ? w[i+2] : 0,
+                    result,
+                    m->value_capacity,
                     (wc > 3) ? w[i+3] : 0,
                     (wc > 4) ? w[i+4] : 0);
-            
-                if (wc >= 5 &&
-                    w[i+2] < m->value_capacity)
+
+                if (wc >= 5)
                 {
-                    m->value_from_matrix[w[i+2]] = 1;
-                    STEREO_LOG(
-                        "MATRIX_MARK result=%u now=%u",
-                        w[i+2],
-                        m->value_from_matrix[w[i+2]]);
+                    if (result < m->value_capacity)
+                    {
+                        m->value_from_matrix[result] = 1;
+
+                        STEREO_LOG(
+                            "MATRIX_MARK result=%u now=%u",
+                            result,
+                            m->value_from_matrix[result]);
+                    }
+                    else
+                    {
+                        STEREO_LOG(
+                            "MATRIX_CAP_FAIL result=%u cap=%u",
+                            result,
+                            m->value_capacity);
+                    }
                 }
-                break;
+            }
+            break;
+
             case SpvOpCopyObject:
             case SpvOpBitcast:
             if (wc >= 4 &&
