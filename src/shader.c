@@ -118,7 +118,7 @@ static void do_scan(SpvMod *m, bool p2)
                 }
             }
         /* Debug: find who defines result id 162 */
-        if (wc >= 3 && w[i + 2] == 162)
+        if (wc >= 3 && w[i+2] >= 159 && w[i+2] <= 162)
         {
             const char *name =
                 (op == SpvOpCompositeConstruct) ? "CompositeConstruct" :
@@ -137,9 +137,9 @@ static void do_scan(SpvMod *m, bool p2)
                 (op == SpvOpExtInst)            ? "ExtInst" :
                 "Other";
             STEREO_LOG(
-                "DEF162 op=%u (%s) wc=%u word=%zu",
+                "DEF%u op=%u wc=%u word=%zu",
+                w[i+2],
                 op,
-                name,
                 wc,
                 i);
         }
