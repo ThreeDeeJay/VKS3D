@@ -103,8 +103,15 @@ static void do_scan(SpvMod *m, bool p2)
                      !m->value_from_matrix[dest]))
                 {
                     STEREO_LOG(
-                        "MATRIX_FLOW_BREAK op=%u word=%zu wc=%u dest=%u",
+                        "MATRIX_FLOW_BREAK op=%u (%s) word=%zu wc=%u dest=%u",
                         op,
+                        (op == SpvOpAccessChain) ? "AccessChain" :
+                        (op == SpvOpInBoundsAccessChain) ? "InBoundsAccessChain" :
+                        (op == SpvOpPtrAccessChain) ? "PtrAccessChain" :
+                        (op == SpvOpVectorShuffle) ? "VectorShuffle" :
+                        (op == SpvOpCompositeExtract) ? "CompositeExtract" :
+                        (op == SpvOpCompositeConstruct) ? "CompositeConstruct" :
+                        "other",
                         i,
                         wc,
                         dest);
