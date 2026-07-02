@@ -353,27 +353,17 @@ static void do_scan(SpvMod *m, bool p2)
                                 : 0);
                     }
                 }
-                if (w[i+2] == 162)
+                if (w[i+4] == 50)   /* GLSLstd450 Fma */
                 {
                     STEREO_LOG(
-                        "DEF162 hash=%016llx EXTINST set=%u inst=%u result=%u matrix=%d",
-                        (unsigned long long)hash_spv(m->words, m->count),
-                        w[i+3],   /* instruction set */
-                        w[i+4],   /* instruction number */
+                        "FMA result=%u src0=%u(%u) src1=%u(%u) src2=%u(%u)",
                         w[i+2],
-                        matrix);
-
-                    for (uint32_t k = 5; k < wc; ++k)
-                    {
-                        uint32_t id = w[i+k];
-                        STEREO_LOG(
-                            "  EXTARG%u id=%u matrix=%u",
-                            k - 5,
-                            id,
-                            (id < m->value_capacity)
-                                ? m->value_from_matrix[id]
-                                : 0);
-                    }
+                        w[i+5],
+                        w[i+5] < m->value_capacity ? m->value_from_matrix[w[i+5]] : 0,
+                        w[i+6],
+                        w[i+6] < m->value_capacity ? m->value_from_matrix[w[i+6]] : 0,
+                        w[i+7],
+                        w[i+7] < m->value_capacity ? m->value_from_matrix[w[i+7]] : 0);
                 }
             }
             break;
