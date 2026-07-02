@@ -469,7 +469,8 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     uint32_t source = w[i+2];
                     STEREO_LOG(
-                        "STORE_POS source=%u matrix=%u",
+                        "STORE_POS module=%p source=%u matrix=%u",
+                        (const void *)m->words,
                         source,
                         (source < m->value_capacity)
                             ? m->value_from_matrix[source]
