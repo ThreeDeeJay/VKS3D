@@ -137,9 +137,10 @@ static void do_scan(SpvMod *m, bool p2)
                 (op == SpvOpExtInst)            ? "ExtInst" :
                 "Other";
             STEREO_LOG(
-                "DEF%u module=%p op=%u wc=%u word=%zu",
+                "DEF%u hash=%016llx module=%p op=%u wc=%u word=%zu",
                 w[i+2],
-                (const void *)m->words,
+                (unsigned long long)spv_hash,
+                (const void *)m.words,
                 op,
                 wc,
                 i);
@@ -327,7 +328,8 @@ static void do_scan(SpvMod *m, bool p2)
                 if (w[i+2] == 162)
                 {
                     STEREO_LOG(
-                        "DEF162 EXTINST set=%u inst=%u result=%u matrix=%u",
+                        "DEF162 hash=%016llx EXTINST set=%u inst=%u result=%u matrix=%d",
+                        (unsigned long long)spv_hash,
                         w[i+3],   /* instruction set */
                         w[i+4],   /* instruction number */
                         w[i+2],
@@ -357,7 +359,8 @@ static void do_scan(SpvMod *m, bool p2)
                 if (w[i+2] == 162)
                 {
                     STEREO_LOG(
-                        "DEF162 FOP op=%u src0=%u(%u) src1=%u(%u)",
+                        "DEF162 hash=%016llx FOP op=%u src0=%u(%d) src1=%u(%d)",
+                        (unsigned long long)spv_hash,
                         op,
                         w[i+3],
                         (w[i+3] < m->value_capacity)
@@ -389,7 +392,8 @@ static void do_scan(SpvMod *m, bool p2)
                 if (w[i+2] == 162)
                 {
                     STEREO_LOG(
-                        "DEF162 SELECT true=%u(%u) false=%u(%u) -> %u",
+                        "DEF162 hash=%016llx SELECT true=%u(%d) false=%u(%d) -> %d",
+                        (unsigned long long)spv_hash,
                         w[i+4],
                         (w[i+4] < m->value_capacity)
                             ? m->value_from_matrix[w[i+4]]
@@ -469,12 +473,10 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     uint32_t source = w[i+2];
                     STEREO_LOG(
-                        "STORE_POS module=%p source=%u matrix=%u",
-                        (const void *)m->words,
-                        source,
-                        (source < m->value_capacity)
-                            ? m->value_from_matrix[source]
-                            : 0);
+                        "STORE_POS hash=%016llx source=%u matrix=%d",
+                        (unsigned long long)spv_hash,
+                        src,
+                        matrix);
                     if (source >= m->value_capacity ||
                         !m->value_from_matrix[source])
                         m->has_direct_position_write = true;
@@ -892,6 +894,16 @@ bool spirv_patch_stereo_vertex(
             }
         }
     }
+    STEREO_LOG(
+        "PATCH_MODULE hash=%016llx words=%zu module=%p",
+        (unsigned long long)spv_hash,
+        m.count,
+        (const void *)m.words);
+    STEREO_LOG(
+        "PATCH_BEGIN hash=%016llx words=%zu bound=%u",
+        (unsigned long long)spv_hash,
+        m.count,
+        m.bound);
     STEREO_LOG(
         "SCAN_CLASS hash=%016llx exec=%u patchable=%d pos=%u posBlock=%d posMember=%u view=%u emit=%u matrix=%d directPos=%d dots=%u mvbuiltin=%d",
         (unsigned long long)spv_hash,
