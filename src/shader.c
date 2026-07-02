@@ -55,6 +55,10 @@ typedef struct {
 
     /* SSA tracking: value id -> derived from matrix multiply */
     uint8_t *value_from_matrix;
+    /* id -> is a matrix type */
+    uint8_t *is_matrix_type;
+    /* id -> points/references a matrix */
+    uint8_t *is_matrix_ptr;
     uint32_t value_capacity;
     uint32_t dot_count;
 
@@ -151,14 +155,34 @@ static void do_scan(SpvMod *m, bool p2)
             case SpvOpDot:
                 m->dot_count++;
                 break;
+            case SpvOpAccessChain:
+            case SpvOpInBoundsAccessChain:
+            case SpvOpPtrAccessChain:
+            if (wc >= 4 &&
+                w[i+2] < m->value_capacity &&
+                w[i+3] < m->value_capacity)
+            {
+                m->is_matrix_ptr[w[i+2]] =
+                    m->is_matrix_ptr[w[i+3]];
+            
+                if (w[i+2] == 23)
+                {
+                    STEREO_LOG(
+                        "TRACE_ACCESSCHAIN result=%u base=%u matrixptr=%u",
+                        w[i+2],
+                        w[i+3],
+                        m->is_matrix_ptr[w[i+2]]);
+                }
+            }
+            break;
             case SpvOpLoad:
                 if (wc >= 4 &&
                     w[i+2] < m->value_capacity &&
                     w[i+3] < m->value_capacity)
                 {
                     m->value_from_matrix[w[i+2]] =
-                        m->value_from_matrix[w[i+3]];
-
+                        m->value_from_matrix[w[i+3]] ||
+                        m->is_matrix_ptr[w[i+3]];
                     if (w[i+2] == 24)
                     {
                         STEREO_LOG(
@@ -485,9 +509,26 @@ static void do_scan(SpvMod *m, bool p2)
             break;
             case SpvOpTypePointer:
                 if(wc>=4){
+                    if (w[i+1] < m->value_capacity &&
+                        w[i+3] < m->value_capacity &&
+                        m->is_matrix_type[w[i+3]])
+                    {
+                        m->is_matrix_ptr[w[i+1]] = 1;
+                    }
                     if(w[i+2]==SpvStorageOutput&&m->v4t&&w[i+3]==m->v4t) m->ptr_out_v4=w[i+1];
                     if(w[i+2]==SpvStorageInput &&m->it  &&w[i+3]==m->it ) m->ptr_in_int=w[i+1];
                 } break;
+            case SpvOpVariable:
+            if (wc >= 4)
+            {
+                if (w[i+2] < m->value_capacity &&
+                    w[i+1] < m->value_capacity &&
+                    m->is_matrix_ptr[w[i+1]])
+                {
+                    m->is_matrix_ptr[w[i+2]] = 1;
+                }
+            }
+            break;
             case SpvOpDecorate:
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
@@ -903,6 +944,11 @@ bool spirv_patch_stereo_vertex(
     m.value_capacity = m.bound + 64;
     m.value_from_matrix =
         calloc(m.value_capacity, sizeof(uint8_t));
+    m.is_matrix_type =
+        calloc(m.value_capacity, sizeof(uint8_t));
+    
+    m.is_matrix_ptr =
+        calloc(m.value_capacity, sizeof(uint8_t));
     if (!m.value_from_matrix)
         return false;
 
@@ -941,6 +987,8 @@ bool spirv_patch_stereo_vertex(
                     "SKIP_SHADER_PATCH hash=%s",
                     hashstr);
                 free(m.value_from_matrix);
+                free(m.is_matrix_type);
+                free(m.is_matrix_ptr);
                 return false;
             }
         }
@@ -1054,6 +1102,8 @@ bool spirv_patch_stereo_vertex(
             STEREO_LOG(
                 "PATCH_SKIP non-multiview render pass");
             free(m.value_from_matrix);
+            free(m.is_matrix_type);
+            free(m.is_matrix_ptr);
             return false;
         }
     }
@@ -1081,6 +1131,8 @@ bool spirv_patch_stereo_vertex(
         {
             STEREO_LOG("Skipping stereo patch: no gl_Position detected");
             free(m.value_from_matrix);
+            free(m.is_matrix_type);
+            free(m.is_matrix_ptr);
             return false;
         }
     
@@ -1089,6 +1141,8 @@ bool spirv_patch_stereo_vertex(
         {
             STEREO_LOG("Skipping stereo patch: confirmed screen-space (pos block)");
             free(m.value_from_matrix);
+            free(m.is_matrix_type);
+            free(m.is_matrix_ptr);
             return false;
         }
     
@@ -1098,6 +1152,8 @@ bool spirv_patch_stereo_vertex(
     if (!m.is_patchable)
     {
         free(m.value_from_matrix);
+        free(m.is_matrix_type);
+        free(m.is_matrix_ptr);
         return false;
     }
 
@@ -1136,6 +1192,8 @@ bool spirv_patch_stereo_vertex(
     if (!sb_init(&te,96))
     {
         free(m.value_from_matrix);
+        free(m.is_matrix_type);
+        free(m.is_matrix_ptr);
         return false;
     }
     if (id_new_it) { uint32_t w[]={op_(SpvOpTypeInt,4),id_new_it,32,1}; sb_push_n(&te,w,4); }
@@ -1211,15 +1269,17 @@ bool spirv_patch_stereo_vertex(
             ins_b=i;
         i+=wcx;
     }
-    if (!ins_t) { sb_free(&te); free(m.value_from_matrix); return false; }
-    if (!is_gs && !ins_b) { sb_free(&te); free(m.value_from_matrix); return false; }
-    if (!is_gs && (!ins_b || ins_b < ins_t)) { sb_free(&te); free(m.value_from_matrix); return false; }
+    if (!ins_t) { sb_free(&te); free(m.value_from_matrix); free(m.is_matrix_type); free(m.is_matrix_ptr); return false; }
+    if (!is_gs && !ins_b) { sb_free(&te); free(m.value_from_matrix); free(m.is_matrix_type); free(m.is_matrix_ptr); return false; }
+    if (!is_gs && (!ins_b || ins_b < ins_t)) { sb_free(&te); free(m.value_from_matrix); free(m.is_matrix_type); free(m.is_matrix_ptr); return false; }
+
+free(m.is_matrix_type); free(m.is_matrix_ptr); 
 
     bool need_mv_cap = id_inj_view && !m.has_mv_cap;
     bool mv_done=false, te_done=false, body_done=false;
 
     SpvBuf ob;
-    if (!sb_init(&ob, in_c + te.n + 64)) { sb_free(&te); free(m.value_from_matrix); return false; }
+    if (!sb_init(&ob, in_c + te.n + 64)) { sb_free(&te); free(m.value_from_matrix); free(m.is_matrix_type); free(m.is_matrix_ptr); return false; }
     sb_push_n(&ob, in, 5);
 
     for (size_t i=5;i<in_c;) {
@@ -1262,6 +1322,8 @@ bool spirv_patch_stereo_vertex(
     STEREO_LOG("Patched: model=%d  %zu->%zu words  bound=%u  vi=%d",
                m.exec_model, in_c, ob.n, nid, (int)(id_inj_view!=0));
     free(m.value_from_matrix);
+    free(m.is_matrix_type);
+    free(m.is_matrix_ptr);
     return true;
 }
 
