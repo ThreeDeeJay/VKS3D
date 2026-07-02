@@ -137,9 +137,8 @@ static void do_scan(SpvMod *m, bool p2)
                 (op == SpvOpExtInst)            ? "ExtInst" :
                 "Other";
             STEREO_LOG(
-                "DEF%u hash=%016llx module=%p op=%u wc=%u word=%zu",
+                "DEF%u module=%p op=%u wc=%u word=%zu",
                 w[i+2],
-                (unsigned long long)spv_hash,
                 (const void *)m->words,
                 op,
                 wc,
