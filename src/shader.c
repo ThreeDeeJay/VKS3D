@@ -139,8 +139,8 @@ static void do_scan(SpvMod *m, bool p2)
             STEREO_LOG(
                 "DEF%u hash=%016llx module=%p op=%u wc=%u word=%zu",
                 w[i+2],
-                (unsigned long long)spv_hash,
-                (const void *)m.words,
+                (unsigned long long)hash_spv(m->words, m->count),
+                (const void *)m->words,
                 op,
                 wc,
                 i);
@@ -329,7 +329,7 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     STEREO_LOG(
                         "DEF162 hash=%016llx EXTINST set=%u inst=%u result=%u matrix=%d",
-                        (unsigned long long)spv_hash,
+                        (unsigned long long)hash_spv(m->words, m->count),
                         w[i+3],   /* instruction set */
                         w[i+4],   /* instruction number */
                         w[i+2],
@@ -360,7 +360,7 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     STEREO_LOG(
                         "DEF162 hash=%016llx FOP op=%u src0=%u(%d) src1=%u(%d)",
-                        (unsigned long long)spv_hash,
+                        (unsigned long long)hash_spv(m->words, m->count),
                         op,
                         w[i+3],
                         (w[i+3] < m->value_capacity)
@@ -393,7 +393,7 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     STEREO_LOG(
                         "DEF162 hash=%016llx SELECT true=%u(%d) false=%u(%d) -> %d",
-                        (unsigned long long)spv_hash,
+                        (unsigned long long)hash_spv(m->words, m->count),
                         w[i+4],
                         (w[i+4] < m->value_capacity)
                             ? m->value_from_matrix[w[i+4]]
@@ -473,10 +473,12 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     uint32_t source = w[i+2];
                     STEREO_LOG(
-                        "STORE_POS hash=%016llx source=%u matrix=%d",
-                        (unsigned long long)spv_hash,
-                        src,
-                        matrix);
+                        "STORE_POS hash=%016llx source=%u matrix=%u",
+                        (unsigned long long)hash_spv(m->words, m->count),
+                        source,
+                        (source < m->value_capacity)
+                            ? m->value_from_matrix[source]
+                            : 0);
                     if (source >= m->value_capacity ||
                         !m->value_from_matrix[source])
                         m->has_direct_position_write = true;
