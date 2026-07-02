@@ -158,6 +158,14 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     m->value_from_matrix[w[i+2]] =
                         m->value_from_matrix[w[i+3]];
+                    if (w[i+2] >= 20 && w[i+2] <= 40)
+                    {
+                        STEREO_LOG(
+                            "LOAD id=%u from=%u matrix=%u",
+                            w[i+2],
+                            w[i+3],
+                            m->value_from_matrix[w[i+2]]);
+                    }
                 }
                 break;
             case SpvOpCompositeExtract:
@@ -326,7 +334,25 @@ static void do_scan(SpvMod *m, bool p2)
                     if (id < m->value_capacity)
                         matrix |= m->value_from_matrix[id];
                 }
+                if (w[i+2] >= 130 && w[i+2] <= 165)
+                {
+                    STEREO_LOG(
+                        "EXTINST result=%u inst=%u matrix=%u",
+                        w[i+2],
+                        w[i+4],
+                        matrix);
 
+                    for (uint32_t k = 5; k < wc; ++k)
+                    {
+                        uint32_t id = w[i+k];
+                        STEREO_LOG(
+                            "  arg id=%u matrix=%u",
+                            id,
+                            (id < m->value_capacity)
+                                ? m->value_from_matrix[id]
+                                : 0);
+                    }
+                }
                 if (w[i+2] == 162)
                 {
                     STEREO_LOG(
@@ -378,6 +404,21 @@ static void do_scan(SpvMod *m, bool p2)
                     matrix |= m->value_from_matrix[w[i+3]];
                 if (w[i+4] < m->value_capacity)
                     matrix |= m->value_from_matrix[w[i+4]];
+                if (w[i+2] >= 130 && w[i+2] <= 165)
+                {
+                    STEREO_LOG(
+                        "FOP result=%u src0=%u(%u) src1=%u(%u) -> %u",
+                        w[i+2],
+                        w[i+3],
+                        (w[i+3] < m->value_capacity)
+                            ? m->value_from_matrix[w[i+3]]
+                            : 0,
+                        w[i+4],
+                        (w[i+4] < m->value_capacity)
+                            ? m->value_from_matrix[w[i+4]]
+                            : 0,
+                        matrix);
+                }
                 m->value_from_matrix[w[i+2]] = matrix;
             }
             break;
