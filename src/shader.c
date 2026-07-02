@@ -158,10 +158,11 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     m->value_from_matrix[w[i+2]] =
                         m->value_from_matrix[w[i+3]];
-                    if (w[i+2] >= 20 && w[i+2] <= 40)
+
+                    if (w[i+2] == 24)
                     {
                         STEREO_LOG(
-                            "LOAD id=%u from=%u matrix=%u",
+                            "TRACE_LOAD result=%u ptr=%u matrix=%u",
                             w[i+2],
                             w[i+3],
                             m->value_from_matrix[w[i+2]]);
@@ -170,24 +171,21 @@ static void do_scan(SpvMod *m, bool p2)
                 break;
             case SpvOpCompositeExtract:
             {
-                STEREO_LOG(
-                    "EXTRACT wc=%u result=%u type=%u composite=%u idx0=%u idx1=%u matrix=%u",
-                    wc,
-                    (wc > 2) ? w[i+2] : 0,
-                    (wc > 1) ? w[i+1] : 0,
-                    (wc > 3) ? w[i+3] : 0,
-                    (wc > 4) ? w[i+4] : 0,
-                    (wc > 5) ? w[i+5] : 0,
-                    (wc > 3 && w[i+3] < m->value_capacity)
-                        ? m->value_from_matrix[w[i+3]]
-                        : 0);
-
                 if (wc >= 5 &&
                     w[i+2] < m->value_capacity &&
                     w[i+3] < m->value_capacity)
                 {
                     m->value_from_matrix[w[i+2]] =
                         m->value_from_matrix[w[i+3]];
+
+                    if (w[i+2] == 131)
+                    {
+                        STEREO_LOG(
+                            "TRACE_EXTRACT result=%u composite=%u matrix=%u",
+                            w[i+2],
+                            w[i+3],
+                            m->value_from_matrix[w[i+2]]);
+                    }
                 }
             }
             break;
@@ -255,6 +253,24 @@ static void do_scan(SpvMod *m, bool p2)
             case SpvOpTypeInt:
                 if(wc==4&&w[i+2]==32) m->it=w[i+1]; break;
             case SpvOpTypeMatrix:
+                break;
+            case SpvOpTranspose:
+                if (wc >= 4 &&
+                    w[i+2] < m->value_capacity &&
+                    w[i+3] < m->value_capacity)
+                {
+                    m->value_from_matrix[w[i+2]] =
+                        m->value_from_matrix[w[i+3]];
+
+                    if (w[i+2] == 129)
+                    {
+                        STEREO_LOG(
+                            "TRACE_TRANSPOSE result=%u src=%u matrix=%u",
+                            w[i+2],
+                            w[i+3],
+                            m->value_from_matrix[w[i+2]]);
+                    }
+                }
                 break;
             case SpvOpMatrixTimesVector:
             case SpvOpMatrixTimesMatrix:
