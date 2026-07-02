@@ -71,6 +71,8 @@ typedef struct {
     uint32_t emit_count;
 } SpvMod;
 
+static uint64_t hash_spv(const uint32_t *data, size_t words);
+
 static void do_scan(SpvMod *m, bool p2)
 {
     const uint32_t *w=m->words;
