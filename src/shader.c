@@ -1850,15 +1850,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 continue;
             }
             STEREO_LOG(
-                "VS_PATCH hash=%016llx words=%zu module=%p pos=%u direct=%u matrix=%u",
+                "VS_PATCH hash=%016llx words=%zu module=%p vs_stage=%u",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 e->words,
                 (void*)(has_vs ? ci->pStages[vs_stage].module : VK_NULL_HANDLE),
-                m.pos_var,
-                m.has_direct_position_write,
-                (m.pos_var < m.value_capacity && m.value_from_matrix)
-                    ? m.value_from_matrix[m.pos_var]
-                    : 0);
+                vs_stage);
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
