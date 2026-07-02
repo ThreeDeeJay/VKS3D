@@ -1850,6 +1850,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 continue;
             }
             STEREO_LOG(
+                "SHADER_MODULE stage=FS hash=%016llx words=%zu module=%p",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                e->words,
+                (void*)ci->pStages[fs_s].module);
+            STEREO_LOG(
                 "VS_PATCH hash=%016llx words=%zu module=%p vs_stage=%u",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 e->words,
@@ -1922,6 +1927,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         if (has_tes && tes_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[tes_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathA: TES not cached",p); continue; }
+            STEREO_LOG(
+                "SHADER_MODULE stage=TES hash=%016llx words=%zu module=%p",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                e->words,
+                (void*)ci->pStages[tes_stage].module);
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
@@ -2027,6 +2037,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         if (ci->stageCount > 0 && has_vs && !has_tcs && vs_stage!=~0u) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
+            STEREO_LOG(
+                "SHADER_MODULE stage=VS hash=%016llx words=%zu module=%p",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                e->words,
+                (void*)ci->pStages[vs_stage].module);
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
