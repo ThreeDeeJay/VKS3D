@@ -10422,6 +10422,13 @@ stereo_CreateShadersEXT(
                 &patched,
                 &out_words);
         }
+        STEREO_LOG(
+            "SHADER_OBJECT_PATCH_RESULT i=%u stage=0x%x ok=%u patched=%p outWords=%zu",
+            i,
+            ci->stage,
+            ok ? 1u : 0u,
+            (void*)patched,
+            out_words);
         if (ok && patched && out_words) {
             patched_infos[i].pCode = patched;
             patched_infos[i].codeSize =
@@ -10434,6 +10441,23 @@ stereo_CreateShadersEXT(
                 ci->stage,
                 in_words,
                 out_words);
+            char path[256];
+            const char *stage_name =
+            ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "vs" :
+            ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "fs" : "other";
+            _snprintf_s(path, sizeof(path), _TRUNCATE,
+                "shaderobject-%u-%s.spv", i, stage_name);
+            FILE *fp = fopen(path, "wb");
+            if (fp) {
+                fwrite(patched, sizeof(uint32_t), out_words, fp);
+                fclose(fp);
+                STEREO_LOG(
+                    "SHADER_OBJECT_DUMP i=%u stage=0x%x path=%s words=%zu",
+                    i,
+                    ci->stage,
+                    path,
+                    out_words);
+            }
         } else if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT ||
             ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
             STEREO_LOG(
