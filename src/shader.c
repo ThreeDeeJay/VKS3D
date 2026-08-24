@@ -10331,12 +10331,21 @@ stereo_CreateShadersEXT(
             ci->pCode,
             ci->codeSize,
             sd->stereo.enabled ? 1u : 0u);
-        if (ci->codeType != VK_SHADER_CODE_TYPE_SPIRV_EXT ||
-            !ci->pCode || ci->codeSize < 20)
-        {
+        if (!ci->pCode || ci->codeSize < 20) {
             STEREO_LOG(
-                "SHADER_OBJECT_SKIP i=%u reason=codeType_or_code",
+                "SHADER_OBJECT_SKIP i=%u reason=no_code",
                 i);
+            continue;
+        }
+        if (ci->codeType != VK_SHADER_CODE_TYPE_SPIRV_EXT) {
+            const uint32_t *probe = (const uint32_t *)ci->pCode;
+            STEREO_LOG(
+                "SHADER_OBJECT_NON_SPIRV_TYPE i=%u codeType=%u "
+                "spirv_magic=%08x words=%zu",
+                i,
+                ci->codeType,
+                probe[0],
+                ci->codeSize / sizeof(uint32_t));
             continue;
         }
         const uint32_t *in = (const uint32_t *)ci->pCode;
