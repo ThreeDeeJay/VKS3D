@@ -10284,6 +10284,19 @@ stereo_CreateShadersEXT(
     StereoDevice *sd=stereo_device_from_handle(device);
     if (!sd || !sd->real.CreateShadersEXT)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    VkShaderCreateInfoEXT *patched_infos = NULL;
+    uint32_t *patched_words = NULL;
+    if (createInfoCount) {
+        patched_infos = calloc(createInfoCount, sizeof(*patched_infos));
+        patched_words = calloc(createInfoCount, sizeof(*patched_words));
+        if (!patched_infos || !patched_words) {
+            free(patched_infos);
+            free(patched_words);
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        memcpy(patched_infos, pCreateInfos,
+            (size_t)createInfoCount * sizeof(*patched_infos));
+    }
     for (uint32_t i=0; i<createInfoCount; i++) {
         const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
         STEREO_LOG(
@@ -10299,12 +10312,66 @@ stereo_CreateShadersEXT(
             ci->pName ? ci->pName : "<NULL>",
             ci->pCode);
     }
+    for (uint32_t i=0; i<createInfoCount; i++) {
+        const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
+        if (ci->codeType != VK_SHADER_CODE_TYPE_SPIRV_EXT ||
+            !ci->pCode || ci->codeSize < 20)
+            continue;
+        const uint32_t *in = (const uint32_t *)ci->pCode;
+        size_t in_words = ci->codeSize / sizeof(uint32_t);
+        uint32_t *patched = NULL;
+        size_t out_words = 0;
+        bool ok = false;
+        if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT) {
+            ok = spirv_patch_stereo_vertex(
+                &sd->stereo,
+                in,
+                in_words,
+                &patched,
+                &out_words);
+        } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+            ok = spirv_patch_stereo_fs(
+                in,
+                in_words,
+                &patched,
+                &out_words);
+        }
+        if (ok && patched && out_words) {
+            patched_infos[i].pCode = patched;
+            patched_infos[i].codeSize =
+            out_words * sizeof(uint32_t);
+            patched_words[i] = (uint32_t)out_words;
+            STEREO_LOG(
+                "SHADER_OBJECT_PATCHED i=%u stage=0x%x "
+                "oldWords=%zu newWords=%zu",
+                i,
+                ci->stage,
+                in_words,
+                out_words);
+        } else if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT ||
+            ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+            STEREO_LOG(
+                "SHADER_OBJECT_PATCH_SKIP i=%u stage=0x%x "
+                "codeType=%u words=%zu patched=%u",
+                i,
+                ci->stage,
+                ci->codeType,
+                in_words,
+                ok ? 1u : 0u);
+        }
+    }
     VkResult res=sd->real.CreateShadersEXT(
         sd->real_device,
         createInfoCount,
-        pCreateInfos,
+        patched_infos ? patched_infos : pCreateInfos,
         pAllocator,
         pShaders);
+    for (uint32_t i=0; i<createInfoCount; i++) {
+        if (patched_words[i])
+            free((void *)patched_infos[i].pCode);
+    }
+    free(patched_words);
+    free(patched_infos);
     STEREO_LOG("SHADER_OBJECT_CREATE_RESULT res=%d count=%u", res, createInfoCount);
     if (res == VK_SUCCESS && pShaders) {
         for (uint32_t i=0; i<createInfoCount; i++) {
