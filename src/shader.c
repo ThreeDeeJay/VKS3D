@@ -10284,6 +10284,13 @@ stereo_CreateShadersEXT(
     StereoDevice *sd=stereo_device_from_handle(device);
     if (!sd || !sd->real.CreateShadersEXT)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (!sd->stereo.enabled)
+        return sd->real.CreateShadersEXT(
+            sd->real_device,
+            createInfoCount,
+            pCreateInfos,
+            pAllocator,
+            pShaders);
     VkShaderCreateInfoEXT *patched_infos = NULL;
     bool *patched_owned = NULL;
     if (createInfoCount) {
