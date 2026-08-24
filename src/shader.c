@@ -10329,9 +10329,9 @@ stereo_CreateShadersEXT(
                 in_words,
                 &patched,
                 &out_words,
-                lo,
-                ro,
-                conv,
+                &lo,
+                &ro,
+                &conv,
                 false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
