@@ -10321,6 +10321,14 @@ stereo_CreateShadersEXT(
     }
     for (uint32_t i=0; i<createInfoCount; i++) {
         const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
+        if (ci->codeType == VK_SHADER_CODE_TYPE_BINARY_EXT) {
+            STEREO_LOG(
+                "SHADER_OBJECT_BINARY_REJECT i=%u stage=0x%x "
+                "returning VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT",
+                i,
+                ci->stage);
+            return VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT;
+        }
         STEREO_LOG(
             "SHADER_OBJECT_CHECK i=%u stage=0x%x codeType=%u expectedSpirv=%u "
             "pCode=%p codeSize=%zu stereo=%u",
