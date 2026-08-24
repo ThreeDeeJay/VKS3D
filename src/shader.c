@@ -10336,9 +10336,9 @@ stereo_CreateShadersEXT(
                 in_words,
                 &patched,
                 &out_words,
-                sd->stereo.lo,
-                sd->stereo.ro,
-                sd->stereo.conv,
+                sd->stereo.left_eye_offset,
+                sd->stereo.right_eye_offset,
+                sd->stereo.convergence,
                 false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
