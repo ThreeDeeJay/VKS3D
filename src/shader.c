@@ -10285,13 +10285,13 @@ stereo_CreateShadersEXT(
     if (!sd || !sd->real.CreateShadersEXT)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     VkShaderCreateInfoEXT *patched_infos = NULL;
-    uint32_t *patched_words = NULL;
+    bool *patched_owned = NULL;
     if (createInfoCount) {
         patched_infos = calloc(createInfoCount, sizeof(*patched_infos));
-        patched_words = calloc(createInfoCount, sizeof(*patched_words));
-        if (!patched_infos || !patched_words) {
+        patched_owned = calloc(createInfoCount, sizeof(*patched_owned));
+        if (!patched_infos || !patched_owned) {
             free(patched_infos);
-            free(patched_words);
+            free(patched_owned);
             return VK_ERROR_OUT_OF_HOST_MEMORY;
         }
         memcpy(patched_infos, pCreateInfos,
@@ -10345,7 +10345,7 @@ stereo_CreateShadersEXT(
             patched_infos[i].pCode = patched;
             patched_infos[i].codeSize =
             out_words * sizeof(uint32_t);
-            patched_words[i] = (uint32_t)out_words;
+            patched_owned[i] = true;
             STEREO_LOG(
                 "SHADER_OBJECT_PATCHED i=%u stage=0x%x "
                 "oldWords=%zu newWords=%zu",
@@ -10372,10 +10372,10 @@ stereo_CreateShadersEXT(
         pAllocator,
         pShaders);
     for (uint32_t i=0; i<createInfoCount; i++) {
-        if (patched_words[i])
+        if (patched_owned[i])
             free((void *)patched_infos[i].pCode);
     }
-    free(patched_words);
+    free(patched_owned);
     free(patched_infos);
     STEREO_LOG("SHADER_OBJECT_CREATE_RESULT res=%d count=%u", res, createInfoCount);
     if (res == VK_SUCCESS && pShaders) {
