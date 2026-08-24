@@ -10369,6 +10369,29 @@ stereo_CreateShadersEXT(
                 probe[5],
                 probe[6],
                 probe[7]);
+            STEREO_LOG(
+                "SHADER_OBJECT_BYTES i=%u "
+                "b0=%02x b1=%02x b2=%02x b3=%02x "
+                "b4=%02x b5=%02x b6=%02x b7=%02x "
+                "b8=%02x b9=%02x b10=%02x b11=%02x "
+                "b12=%02x b13=%02x b14=%02x b15=%02x",
+                i,
+                ((const uint8_t *)ci->pCode)[0],
+                ((const uint8_t *)ci->pCode)[1],
+                ((const uint8_t *)ci->pCode)[2],
+                ((const uint8_t *)ci->pCode)[3],
+                ((const uint8_t *)ci->pCode)[4],
+                ((const uint8_t *)ci->pCode)[5],
+                ((const uint8_t *)ci->pCode)[6],
+                ((const uint8_t *)ci->pCode)[7],
+                ((const uint8_t *)ci->pCode)[8],
+                ((const uint8_t *)ci->pCode)[9],
+                ((const uint8_t *)ci->pCode)[10],
+                ((const uint8_t *)ci->pCode)[11],
+                ((const uint8_t *)ci->pCode)[12],
+                ((const uint8_t *)ci->pCode)[13],
+                ((const uint8_t *)ci->pCode)[14],
+                ((const uint8_t *)ci->pCode)[15]);
             continue;
         }
         const uint32_t *in = (const uint32_t *)ci->pCode;
