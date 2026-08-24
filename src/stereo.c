@@ -799,6 +799,7 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(CreateImage); L(DestroyImage); L(GetImageSubresourceLayout);
     L(CreateImageView); L(DestroyImageView);
     L(CreateShaderModule); L(DestroyShaderModule);
+    L(CreateShadersEXT); L(DestroyShaderEXT); L(CmdBindShadersEXT);
     L(CreatePipelineCache); L(DestroyPipelineCache);
     L(GetPipelineCacheData); L(MergePipelineCaches);
     L(CreateGraphicsPipelines); L(CreateComputePipelines); L(DestroyPipeline);

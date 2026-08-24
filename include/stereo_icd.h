@@ -327,6 +327,9 @@ typedef struct RealDeviceDispatch {
     PFN_vkDestroyImageView           DestroyImageView;
     PFN_vkCreateShaderModule         CreateShaderModule;
     PFN_vkDestroyShaderModule        DestroyShaderModule;
+    PFN_vkCreateShadersEXT           CreateShadersEXT;
+    PFN_vkDestroyShaderEXT           DestroyShaderEXT;
+    PFN_vkCmdBindShadersEXT          CmdBindShadersEXT;
     PFN_vkCreatePipelineCache        CreatePipelineCache;
     PFN_vkDestroyPipelineCache       DestroyPipelineCache;
     PFN_vkGetPipelineCacheData       GetPipelineCacheData;
@@ -761,6 +764,9 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass2KHR(VkDevice, const VkRen
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateGraphicsPipelines(VkDevice, VkPipelineCache, uint32_t, const VkGraphicsPipelineCreateInfo*, const VkAllocationCallbacks*, VkPipeline*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyShaderModule(VkDevice, VkShaderModule, const VkAllocationCallbacks*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShadersEXT(VkDevice, uint32_t, const VkShaderCreateInfoEXT*, const VkAllocationCallbacks*, VkShaderEXT*);
+VKAPI_ATTR void VKAPI_CALL stereo_DestroyShaderEXT(VkDevice, VkShaderEXT, const VkAllocationCallbacks*);
+VKAPI_ATTR void VKAPI_CALL stereo_CmdBindShadersEXT(VkCommandBuffer, uint32_t, const VkShaderStageFlagBits*, const VkShaderEXT*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateSwapchainKHR(VkDevice, const VkSwapchainCreateInfoKHR*, const VkAllocationCallbacks*, VkSwapchainKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroySwapchainKHR(VkDevice, VkSwapchainKHR, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(VkDevice, VkSwapchainKHR, uint32_t*, VkImage*);

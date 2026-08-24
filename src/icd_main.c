@@ -213,6 +213,12 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_CreateShaderModule;
     if (!strcmp(name, "vkDestroyShaderModule"))
         return (PFN_vkVoidFunction)stereo_DestroyShaderModule;
+    if (!strcmp(name, "vkCreateShadersEXT"))
+        return (PFN_vkVoidFunction)stereo_CreateShadersEXT;
+    if (!strcmp(name, "vkDestroyShaderEXT"))
+        return (PFN_vkVoidFunction)stereo_DestroyShaderEXT;
+    if (!strcmp(name, "vkCmdBindShadersEXT"))
+        return (PFN_vkVoidFunction)stereo_CmdBindShadersEXT;
     if (!strcmp(name, "vkCreateSwapchainKHR"))
         return (PFN_vkVoidFunction)stereo_CreateSwapchainKHR;
     if (!strcmp(name, "vkDestroySwapchainKHR"))
@@ -331,6 +337,12 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CreateShaderModule);
     GDPA_WRAP("vkDestroyShaderModule",
               stereo_DestroyShaderModule);
+    GDPA_WRAP("vkCreateShadersEXT",
+              stereo_CreateShadersEXT);
+    GDPA_WRAP("vkDestroyShaderEXT",
+              stereo_DestroyShaderEXT);
+    GDPA_WRAP("vkCmdBindShadersEXT",
+              stereo_CmdBindShadersEXT);
     if (!strcmp(pName, "vkCreateGraphicsPipelines")) {
         STEREO_LOG(
             "GDPA wrapper addr=%p stereo_CreateGraphicsPipelines=%p",
