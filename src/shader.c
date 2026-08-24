@@ -10337,16 +10337,6 @@ stereo_CreateShadersEXT(
                 i);
             continue;
         }
-        STEREO_LOG(
-            "SHADER_OBJECT_CHECK i=%u stage=0x%x codeType=%u expectedSpirv=%u "
-            "pCode=%p codeSize=%zu stereo=%u",
-            i,
-            ci->stage,
-            ci->codeType,
-            VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            ci->pCode,
-            ci->codeSize,
-            sd->stereo.enabled ? 1u : 0u);
         if (ci->codeType != VK_SHADER_CODE_TYPE_SPIRV_EXT) {
             const uint32_t *probe = (const uint32_t *)ci->pCode;
             STEREO_LOG(
