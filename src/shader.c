@@ -10307,20 +10307,3 @@ stereo_DestroyShaderEXT(
         shader,
         pAllocator);
 }
-VKAPI_ATTR void VKAPI_CALL
-stereo_CmdBindShadersEXT(
-    VkCommandBuffer commandBuffer,
-    uint32_t stageCount,
-    const VkShaderStageFlagBits *pStages,
-    const VkShaderEXT *pShaders)
-{
-    STEREO_LOG("CALLED stereo_CmdBindShadersEXT count=%u", stageCount);
-    StereoDevice *sd=find_any_device();
-    if (!sd || !sd->real.CmdBindShadersEXT)
-        return;
-    sd->real.CmdBindShadersEXT(
-        commandBuffer,
-        stageCount,
-        pStages,
-        pShaders);
-}
