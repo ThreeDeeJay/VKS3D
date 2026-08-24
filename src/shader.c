@@ -10337,15 +10337,38 @@ stereo_CreateShadersEXT(
                 i);
             continue;
         }
+        STEREO_LOG(
+            "SHADER_OBJECT_CHECK i=%u stage=0x%x codeType=%u expectedSpirv=%u "
+            "pCode=%p codeSize=%zu stereo=%u",
+            i,
+            ci->stage,
+            ci->codeType,
+            VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            ci->pCode,
+            ci->codeSize,
+            sd->stereo.enabled ? 1u : 0u);
         if (ci->codeType != VK_SHADER_CODE_TYPE_SPIRV_EXT) {
             const uint32_t *probe = (const uint32_t *)ci->pCode;
             STEREO_LOG(
                 "SHADER_OBJECT_NON_SPIRV_TYPE i=%u codeType=%u "
-                "spirv_magic=%08x words=%zu",
+                "words=%zu pCode=%p",
                 i,
                 ci->codeType,
+                ci->codeSize / sizeof(uint32_t),
+                ci->pCode);
+            STEREO_LOG(
+                "SHADER_OBJECT_CODE i=%u "
+                "w0=%08x w1=%08x w2=%08x w3=%08x "
+                "w4=%08x w5=%08x w6=%08x w7=%08x",
+                i,
                 probe[0],
-                ci->codeSize / sizeof(uint32_t));
+                probe[1],
+                probe[2],
+                probe[3],
+                probe[4],
+                probe[5],
+                probe[6],
+                probe[7]);
             continue;
         }
         const uint32_t *in = (const uint32_t *)ci->pCode;
