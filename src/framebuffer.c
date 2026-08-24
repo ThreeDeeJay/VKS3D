@@ -1363,6 +1363,9 @@ stereo_CmdBindShadersEXT(
     STEREO_LOG("CALLED stereo_CmdBindShadersEXT cb=%p count=%u",
         (void*)commandBuffer,
         stageCount);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdBindShadersEXT)
+        return;
     for (uint32_t i = 0; i < stageCount; i++)
     {
         STEREO_LOG(
