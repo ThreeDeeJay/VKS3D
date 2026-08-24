@@ -56,6 +56,22 @@ static const char **stereo_filter_extensions(
             enumDevExts(physDev, NULL, &dev_count, dev_props);
     }
 
+    STEREO_LOG(
+        "EXT_FILTER device_ext_count=%u app_ext_count=%u",
+        dev_count,
+        app_ext_count);
+    for (uint32_t d = 0; d < dev_count && dev_props; d++) {
+        if (!strcmp(dev_props[d].extensionName, "VK_EXT_shader_object"))
+            STEREO_LOG(
+                "EXT_FILTER shader_object driver_supported=1 version=%u",
+                dev_props[d].specVersion);
+    }
+    for (uint32_t i = 0; i < app_ext_count; i++) {
+        if (app_exts[i] && !strcmp(app_exts[i], "VK_EXT_shader_object"))
+            STEREO_LOG(
+                "EXT_FILTER shader_object app_requested=1");
+    }
+
     const char **merged = malloc(
         (app_ext_count + STEREO_CANDIDATE_EXT_COUNT) * sizeof(char*));
     uint32_t total = 0;
@@ -233,6 +249,12 @@ stereo_CreateDevice(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     dci.enabledExtensionCount   = total_exts;
     dci.ppEnabledExtensionNames  = (const char* const*)new_exts;
+    for (uint32_t i = 0; i < total_exts; i++) {
+        if (new_exts[i] &&
+            !strcmp(new_exts[i], "VK_EXT_shader_object"))
+            STEREO_LOG(
+                "CREATEDEVICE shader_object extension_enabled=1");
+    }
     VkDevice real_dev = VK_NULL_HANDLE;
     VkResult res = sp_si->real.CreateDevice(
         real_physdev, &dci, pAllocator, &real_dev);
