@@ -1360,10 +1360,17 @@ stereo_CmdBindShadersEXT(
     const VkShaderStageFlagBits *pStages,
     const VkShaderEXT *pShaders)
 {
-    STEREO_LOG("CALLED stereo_CmdBindShadersEXT count=%u", stageCount);
-    StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdBindShadersEXT)
-        return;
+    STEREO_LOG("CALLED stereo_CmdBindShadersEXT cb=%p count=%u",
+        (void*)commandBuffer,
+        stageCount);
+    for (uint32_t i = 0; i < stageCount; i++)
+    {
+        STEREO_LOG(
+            "SHADER_OBJECT_BIND i=%u stage=0x%x shader=%p",
+            i,
+            pStages ? pStages[i] : 0,
+            pShaders ? (void*)(uintptr_t)pShaders[i] : NULL);
+    }
     sd->real.CmdBindShadersEXT(
         commandBuffer,
         stageCount,
