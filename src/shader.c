@@ -10284,12 +10284,38 @@ stereo_CreateShadersEXT(
     StereoDevice *sd=stereo_device_from_handle(device);
     if (!sd || !sd->real.CreateShadersEXT)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-    return sd->real.CreateShadersEXT(
+    for (uint32_t i=0; i<createInfoCount; i++) {
+        const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
+        STEREO_LOG(
+            "SHADER_OBJECT_CREATE i=%u stage=0x%x nextStage=0x%x codeType=%u "
+            "codeSize=%zu setLayouts=%u pushRanges=%u pName=%s pCode=%p",
+            i,
+            ci->stage,
+            ci->nextStage,
+            ci->codeType,
+            ci->codeSize,
+            ci->setLayoutCount,
+            ci->pushConstantRangeCount,
+            ci->pName ? ci->pName : "<NULL>",
+            ci->pCode);
+    }
+    VkResult res=sd->real.CreateShadersEXT(
         sd->real_device,
         createInfoCount,
         pCreateInfos,
         pAllocator,
         pShaders);
+    STEREO_LOG("SHADER_OBJECT_CREATE_RESULT res=%d count=%u", res, createInfoCount);
+    if (res == VK_SUCCESS && pShaders) {
+        for (uint32_t i=0; i<createInfoCount; i++) {
+            STEREO_LOG(
+                "SHADER_OBJECT_HANDLE i=%u shader=%p stage=0x%x",
+                i,
+                (void *)(uintptr_t)pShaders[i],
+                pCreateInfos[i].stage);
+        }
+    }
+    return res;
 }
 VKAPI_ATTR void VKAPI_CALL
 stereo_DestroyShaderEXT(
