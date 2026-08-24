@@ -713,28 +713,41 @@ stereo_CmdBeginRendering(
     VkCommandBuffer commandBuffer,
     const VkRenderingInfo *pRenderingInfo)
 {
-    STEREO_LOG("CALLED stereo_CmdBeginRendering");
-    STEREO_LOG(
-        "BEGIN_RENDERING ENTER cb=%p info=%p",
+    STEREO_LOG("CALLED stereo_CmdBeginRendering cb=%p info=%p",
         (void*)commandBuffer,
         (void*)pRenderingInfo);
+    STEREO_LOG("BEGIN_RENDERING STEP=1");
     extern StereoDevice g_devices[];
     extern uint32_t g_device_count;
+    STEREO_LOG("BEGIN_RENDERING STEP=2 device_count=%u", g_device_count);
     StereoDevice *sd = NULL;
     for (uint32_t i = 0; i < g_device_count; i++)
     {
+        STEREO_LOG("BEGIN_RENDERING STEP=3 i=%u real_device=%p",
+            i,
+            (void*)g_devices[i].real_device);
         if (g_devices[i].real_device)
         {
             sd = &g_devices[i];
             break;
         }
     }
-    STEREO_LOG(
-        "BEGIN_RENDERING LOOKUP sd=%p real=%p",
-        (void*)sd,
-        sd ? (void*)sd->real.CmdBeginRendering : NULL);
-    if (!sd || !sd->real.CmdBeginRendering)
+    STEREO_LOG("BEGIN_RENDERING STEP=4 sd=%p", (void*)sd);
+    if (!sd)
+    {
+        STEREO_LOG("BEGIN_RENDERING RETURN reason=no_device");
         return;
+    }
+    STEREO_LOG("BEGIN_RENDERING STEP=5 real_CmdBeginRendering=%p",
+        (void*)sd->real.CmdBeginRendering);
+    if (!sd->real.CmdBeginRendering)
+    {
+        STEREO_LOG("BEGIN_RENDERING RETURN reason=no_real_function");
+        return;
+    }
+    STEREO_LOG("BEGIN_RENDERING STEP=6 viewMask=%x layerCount=%u",
+        pRenderingInfo ? pRenderingInfo->viewMask : 0,
+        pRenderingInfo ? pRenderingInfo->layerCount : 0);
     VkRenderingInfo modified = *pRenderingInfo;
     if (sd->stereo.multiview && modified.viewMask == 0)
     {
