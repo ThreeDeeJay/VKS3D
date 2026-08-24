@@ -34,6 +34,9 @@ EXPORTS
     vkCreateRenderPass2KHR
     vkCreateShaderModule
     vkDestroyShaderModule
+    vkCreateShadersEXT
+    vkDestroyShaderEXT
+    vkCmdBindShadersEXT
     vkCreateImageView
     ; Internal marker used by self-detection (prevents VKS3D loading itself)
     vks3d_internal_marker
