@@ -10321,14 +10321,35 @@ stereo_CreateShadersEXT(
     }
     for (uint32_t i=0; i<createInfoCount; i++) {
         const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
+        STEREO_LOG(
+            "SHADER_OBJECT_CHECK i=%u stage=0x%x codeType=%u expectedSpirv=%u "
+            "pCode=%p codeSize=%zu stereo=%u",
+            i,
+            ci->stage,
+            ci->codeType,
+            VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            ci->pCode,
+            ci->codeSize,
+            sd->stereo.enabled ? 1u : 0u);
         if (ci->codeType != VK_SHADER_CODE_TYPE_SPIRV_EXT ||
             !ci->pCode || ci->codeSize < 20)
+        {
+            STEREO_LOG(
+                "SHADER_OBJECT_SKIP i=%u reason=codeType_or_code",
+                i);
             continue;
+        }
         const uint32_t *in = (const uint32_t *)ci->pCode;
         size_t in_words = ci->codeSize / sizeof(uint32_t);
         uint32_t *patched = NULL;
         size_t out_words = 0;
         bool ok = false;
+        STEREO_LOG(
+            "SHADER_OBJECT_STAGE i=%u stage=0x%x VS=%u FS=%u",
+            i,
+            ci->stage,
+            ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? 1u : 0u,
+            ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? 1u : 0u);
         if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT) {
             ok = spirv_patch_stereo_vertex(
                 &sd->stereo,
