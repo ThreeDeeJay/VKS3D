@@ -171,22 +171,22 @@ void stereo_config_init(StereoConfig *cfg)
     /* Sanity: separation must be positive.  Convergence must be in [0, sep).
      * If sep <= 0 or conv >= sep, the net eye offset is zero or reversed,
      * which produces no visible stereo or inverted depth.  Warn and clamp. */
-    if (cfg->separation < 0.0f) {
-        STEREO_ERR("INI: separation=%.4f is negative — clamping to 0", cfg->separation);
-        cfg->separation = 0.0f;
-    }
-    if (cfg->convergence < 0.0f) {
-        STEREO_ERR("INI: convergence=%.4f is negative — clamping to 0", cfg->convergence);
-        cfg->convergence = 0.0f;
-    }
-    if (cfg->convergence >= cfg->separation) {
-        STEREO_ERR("INI: convergence=%.4f >= separation=%.4f — "
-                   "this cancels the stereo offset to zero or less! "
-                   "Clamping convergence to 0.0. "
-                   "Set convergence < separation (e.g. sep=0.065 conv=0.030).",
-                   cfg->convergence, cfg->separation);
-        cfg->convergence = 0.0f;
-    }
+    //if (cfg->separation < 0.0f) {
+    //    STEREO_ERR("INI: separation=%.4f is negative — clamping to 0", cfg->separation);
+    //    cfg->separation = 0.0f;
+    //}
+    //if (cfg->convergence < 0.0f) {
+    //    STEREO_ERR("INI: convergence=%.4f is negative — clamping to 0", cfg->convergence);
+    //    cfg->convergence = 0.0f;
+    //}
+    //if (cfg->convergence >= cfg->separation) {
+    //    STEREO_ERR("INI: convergence=%.4f >= separation=%.4f — "
+    //               "this cancels the stereo offset to zero or less! "
+    //               "Clamping convergence to 0.0. "
+    //               "Set convergence < separation (e.g. sep=0.065 conv=0.030).",
+    //               cfg->convergence, cfg->separation);
+    //    cfg->convergence = 0.0f;
+    //}
     cfg->flip_eyes   = cfg_bool ("flip_eyes",   false);
 
     /* ── presentation mode ── */
