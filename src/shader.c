@@ -10271,3 +10271,56 @@ stereo_DestroyShaderModule(VkDevice device, VkShaderModule sm,
     cache_remove(sd,sm);
     sd->real.DestroyShaderModule(sd->real_device,sm,pAlloc);
 }
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateShadersEXT(
+    VkDevice device,
+    uint32_t createInfoCount,
+    const VkShaderCreateInfoEXT *pCreateInfos,
+    const VkAllocationCallbacks *pAllocator,
+    VkShaderEXT *pShaders)
+{
+    STEREO_LOG("CALLED stereo_CreateShadersEXT count=%u", createInfoCount);
+    StereoDevice *sd=stereo_device_from_handle(device);
+    if (!sd || !sd->real.CreateShadersEXT)
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return sd->real.CreateShadersEXT(
+        sd->real_device,
+        createInfoCount,
+        pCreateInfos,
+        pAllocator,
+        pShaders);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyShaderEXT(
+    VkDevice device,
+    VkShaderEXT shader,
+    const VkAllocationCallbacks *pAllocator)
+{
+    STEREO_LOG("CALLED stereo_DestroyShaderEXT shader=%p",
+        (void *)(uintptr_t)shader);
+    StereoDevice *sd=stereo_device_from_handle(device);
+    if (!sd || !sd->real.DestroyShaderEXT)
+        return;
+    sd->real.DestroyShaderEXT(
+        sd->real_device,
+        shader,
+        pAllocator);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBindShadersEXT(
+    VkCommandBuffer commandBuffer,
+    uint32_t stageCount,
+    const VkShaderStageFlagBits *pStages,
+    const VkShaderEXT *pShaders)
+{
+    STEREO_LOG("CALLED stereo_CmdBindShadersEXT count=%u", stageCount);
+    StereoDevice *sd=find_any_device();
+    if (!sd || !sd->real.CmdBindShadersEXT)
+        return;
+    sd->real.CmdBindShadersEXT(
+        commandBuffer,
+        stageCount,
+        pStages,
+        pShaders);
+}

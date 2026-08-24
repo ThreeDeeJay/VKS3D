@@ -800,6 +800,11 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(CreateImageView); L(DestroyImageView);
     L(CreateShaderModule); L(DestroyShaderModule);
     L(CreateShadersEXT); L(DestroyShaderEXT); L(CmdBindShadersEXT);
+    STEREO_LOG(
+        "ShaderObject dispatch Create=%p Destroy=%p Bind=%p",
+        (void*)sd->real.CreateShadersEXT,
+        (void*)sd->real.DestroyShaderEXT,
+        (void*)sd->real.CmdBindShadersEXT);
     L(CreatePipelineCache); L(DestroyPipelineCache);
     L(GetPipelineCacheData); L(MergePipelineCaches);
     L(CreateGraphicsPipelines); L(CreateComputePipelines); L(DestroyPipeline);
