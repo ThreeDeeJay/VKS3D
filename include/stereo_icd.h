@@ -768,8 +768,13 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateGraphicsPipelines(VkDevice, VkPipeli
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyShaderModule(VkDevice, VkShaderModule, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShadersEXT(VkDevice, uint32_t, const VkShaderCreateInfoEXT*, const VkAllocationCallbacks*, VkShaderEXT*);
-VKAPI_ATTR void VKAPI_CALL stereo_DestroyShaderEXT(VkDevice, VkShaderEXT, const VkAllocationCallbacks*);
-VKAPI_ATTR void VKAPI_CALL stereo_CmdBindShadersEXT(VkCommandBuffer, uint32_t, const VkShaderStageFlagBits*, const VkShaderEXT*);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyShaderEXT(VkDevice, VkShaderEXT, const VkAllocationCallbacks*);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindShadersEXT(VkCommandBuffer, uint32_t, const VkShaderStageFlagBits*, const VkShaderEXT*);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdSetViewport(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount, const VkViewport *pViewports);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor, uint32_t scissorCount, const VkRect2D *pScissors);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdSetCullMode(VkCommandBuffer commandBuffer, VkCullModeFlags cullMode);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdSetFrontFace(VkCommandBuffer commandBuffer, VkFrontFace frontFace);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdSetPrimitiveTopology(VkCommandBuffer commandBuffer, VkPrimitiveTopology primitiveTopology);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateSwapchainKHR(VkDevice, const VkSwapchainCreateInfoKHR*, const VkAllocationCallbacks*, VkSwapchainKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroySwapchainKHR(VkDevice, VkSwapchainKHR, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetSwapchainImagesKHR(VkDevice, VkSwapchainKHR, uint32_t*, VkImage*);
