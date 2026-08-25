@@ -10329,7 +10329,7 @@ stereo_CreateShadersEXT(
             i,
             ci->flags,
             (ci->flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) ? 1u : 0u,
-            (ci->flags & VK_SHADER_CREATE_ALLOW_DERIVATIVES_BIT_EXT) ? 1u : 0u);
+            (ci->flags & VK_SHADER_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) ? 1u : 0u);
     }
     for (uint32_t i=0; i<createInfoCount; i++) {
         const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
