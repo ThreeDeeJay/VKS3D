@@ -745,9 +745,35 @@ stereo_CmdBeginRendering(
         STEREO_LOG("BEGIN_RENDERING RETURN reason=no_real_function");
         return;
     }
-    STEREO_LOG("BEGIN_RENDERING STEP=6 viewMask=%x layerCount=%u",
-        pRenderingInfo ? pRenderingInfo->viewMask : 0,
-        pRenderingInfo ? pRenderingInfo->layerCount : 0);
+    STEREO_LOG("BEGIN_RENDERING STEP=6 viewMask=%u layerCount=%u colorCount=%u depthView=%p",
+        pRenderingInfo->viewMask,
+        pRenderingInfo->layerCount,
+        pRenderingInfo->colorAttachmentCount,
+        pRenderingInfo->pDepthAttachment ?
+        (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView : NULL);
+    if (pRenderingInfo->colorAttachmentCount &&
+        pRenderingInfo->pColorAttachments)
+    {
+        for (uint32_t ci = 0; ci < pRenderingInfo->colorAttachmentCount; ci++)
+        {
+            STEREO_LOG(
+                "BEGIN_RENDERING_COLOR ci=%u view=%p layout=%u loadOp=%u storeOp=%u",
+                ci,
+                (void *)(uintptr_t)pRenderingInfo->pColorAttachments[ci].imageView,
+                pRenderingInfo->pColorAttachments[ci].imageLayout,
+                pRenderingInfo->pColorAttachments[ci].loadOp,
+                pRenderingInfo->pColorAttachments[ci].storeOp);
+        }
+    }
+    if (pRenderingInfo->pDepthAttachment)
+    {
+        STEREO_LOG(
+            "BEGIN_RENDERING_DEPTH view=%p layout=%u loadOp=%u storeOp=%u",
+            (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView,
+            pRenderingInfo->pDepthAttachment->imageLayout,
+            pRenderingInfo->pDepthAttachment->loadOp,
+            pRenderingInfo->pDepthAttachment->storeOp);
+    }
     VkRenderingInfo modified = *pRenderingInfo;
     if (sd->stereo.multiview && modified.viewMask == 0)
     {
