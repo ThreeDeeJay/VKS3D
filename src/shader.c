@@ -10441,22 +10441,38 @@ stereo_CreateShadersEXT(
                 ci->stage,
                 in_words,
                 out_words);
-            char path[256];
-            const char *stage_name =
-            ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "vs" :
-            ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "fs" : "other";
-            _snprintf_s(path, sizeof(path), _TRUNCATE,
-                "shaderobject-%u-%s.spv", i, stage_name);
-            FILE *fp = fopen(path, "wb");
-            if (fp) {
-                fwrite(patched, sizeof(uint32_t), out_words, fp);
-                fclose(fp);
-                STEREO_LOG(
-                    "SHADER_OBJECT_DUMP i=%u stage=0x%x path=%s words=%zu",
-                    i,
-                    ci->stage,
+            const char *dump = getenv("VKS3D_DUMP_SPIRV");
+            if (dump) {
+                uint64_t spv_hash = hash_spv(patched, out_words);
+                char path[512];
+                const char *stage_suffix =
+                ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "+vs.spv" :
+                ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "+fs.spv" : "+other.spv";
+                _snprintf_s(
                     path,
-                    out_words);
+                    sizeof(path),
+                    _TRUNCATE,
+                    "%s\\%016llx%s",
+                    dump,
+                    (unsigned long long)spv_hash,
+                    stage_suffix);
+                FILE *fp = fopen(path, "rb");
+                if (!fp) {
+                    fp = fopen(path, "wb");
+                    if (fp) {
+                        fwrite(patched, sizeof(uint32_t), out_words, fp);
+                        fclose(fp);
+                        STEREO_LOG(
+                            "SHADER_OBJECT_DUMP i=%u stage=0x%x path=%s words=%zu hash=%016llx",
+                            i,
+                            ci->stage,
+                            path,
+                            out_words,
+                            (unsigned long long)spv_hash);
+                    }
+                } else {
+                    fclose(fp);
+                }
             }
         } else if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT ||
             ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
