@@ -10434,6 +10434,40 @@ stereo_CreateShadersEXT(
             ok ? 1u : 0u,
             (void*)patched,
             out_words);
+        const char *dump = getenv("VKS3D_DUMP_SPIRV");
+        if (dump &&
+            (ci->stage == VK_SHADER_STAGE_VERTEX_BIT ||
+               ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT)) {
+            uint64_t spv_hash = hash_spv(in, in_words);
+            char path[512];
+            const char *stage_suffix =
+            ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "+vso.spv" : "+fso.spv";
+            _snprintf_s(
+                path,
+                sizeof(path),
+                _TRUNCATE,
+                "%s\\%016llx%s",
+                dump,
+                (unsigned long long)spv_hash,
+                stage_suffix);
+            FILE *fp = fopen(path, "rb");
+            if (!fp) {
+                fp = fopen(path, "wb");
+                if (fp) {
+                    fwrite(in, sizeof(uint32_t), in_words, fp);
+                    fclose(fp);
+                    STEREO_LOG(
+                        "SHADER_OBJECT_DUMP_ORIGINAL i=%u stage=0x%x path=%s words=%zu hash=%016llx",
+                        i,
+                        ci->stage,
+                        path,
+                        in_words,
+                        (unsigned long long)spv_hash);
+                }
+            } else {
+                fclose(fp);
+            }
+        }
         if (ok && patched && out_words) {
             patched_infos[i].pCode = patched;
             patched_infos[i].codeSize =
@@ -10446,7 +10480,6 @@ stereo_CreateShadersEXT(
                 ci->stage,
                 in_words,
                 out_words);
-            const char *dump = getenv("VKS3D_DUMP_SPIRV");
             if (dump) {
                 uint64_t spv_hash = hash_spv(patched, out_words);
                 char path[512];
