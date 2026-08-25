@@ -10323,6 +10323,13 @@ stereo_CreateShadersEXT(
             ci->pNext,
             ci->pName ? ci->pName : "<NULL>",
             ci->pCode);
+        STEREO_LOG(
+            "SHADER_OBJECT_FLAGS i=%u flags=0x%x LINK_STAGE=%u "
+            "ALLOW_VARYING_SUBGROUP_SIZE=%u",
+            i,
+            ci->flags,
+            (ci->flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) ? 1u : 0u,
+            (ci->flags & VK_SHADER_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) ? 1u : 0u);
     }
     for (uint32_t i=0; i<createInfoCount; i++) {
         const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
