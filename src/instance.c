@@ -336,7 +336,6 @@ stereo_EnumeratePhysicalDevices(
     if (res == VK_SUCCESS && pPhysicalDevices) {
         STEREO_LOG("stereo_EnumeratePhysicalDevices: wrapping %u real physical devices",
                    *pPhysicalDeviceCount);
-    if (res == VK_SUCCESS && pPhysicalDevices) {
         /* Wrap each real physdev in a StereoPhysdev and return the wrapper.
          *
          * WHY: The Vulkan loader dispatches vkCreateDevice (and all physdev-
