@@ -49,6 +49,11 @@ stereo_GetPhysicalDeviceProperties2(
     LOOKUP_PD(pd);
     if (_si->real.GetPhysicalDeviceProperties2)
         _si->real.GetPhysicalDeviceProperties2(_real, p);
+    STEREO_LOG("PHYSDEV_PROPERTIES wrapper=%p real=%p name='%s' vendor=0x%04x device=0x%04x",
+               (void*)spd, (void*)spd->real_pd,
+               pProperties->deviceName,
+               pProperties->vendorID,
+               pProperties->deviceID);
 }
 
 VKAPI_ATTR void VKAPI_CALL
