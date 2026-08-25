@@ -1010,10 +1010,8 @@ stereo_CmdDraw(
             (void *)pipe);
     }
     STEREO_LOG(
-        "DRAW_STEREO cmd=%p active=%u viewMask=0x%x",
-        (void*)commandBuffer,
-        sd && sd->stereo.active_rendering ? 1u : 0u,
-        sd ? sd->stereo.active_view_mask : 0u);
+        "DRAW_STEREO cmd=%p",
+        (void*)commandBuffer);
     sd->real.CmdDraw(
         commandBuffer,
         vertexCount,
