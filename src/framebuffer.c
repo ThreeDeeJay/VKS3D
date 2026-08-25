@@ -1236,16 +1236,6 @@ stereo_CmdBindDescriptorSets(
     {
         VkPipeline pipe = lookup_bound_pipeline(sd, commandBuffer);
         StereoPipelineInfo *info = find_pipeline_info(sd, pipe);
-        STEREO_LOG(
-            "BIND_DESC cmd=%p pipe=%p info=%p firstSet=%u setCount=%u set0=%p",
-            (void*)commandBuffer,
-            (void*)(uintptr_t)pipelineLayout,
-            (void*)pDescriptorSets,
-            firstSet,
-            descriptorSetCount,
-            descriptorSetCount && pDescriptorSets
-                ? (void*)(uintptr_t)pDescriptorSets[0]
-                : NULL);
         if (info &&
             info->has_proj_ubo &&
             info->proj_set != UINT32_MAX &&
@@ -1366,6 +1356,16 @@ stereo_CmdBindDescriptorSets(
                 info->proj_var);
         }
     }
+    STEREO_LOG(
+        "BIND_DESC cmd=%p pipe=%p info=%p firstSet=%u setCount=%u set0=%p",
+        (void*)commandBuffer,
+        (void*)(uintptr_t)layout,
+        (void*)pDescriptorSets,
+        firstSet,
+        descriptorSetCount,
+        descriptorSetCount && pDescriptorSets
+            ? (void*)(uintptr_t)pDescriptorSets[0]
+            : NULL);
     sd->real.CmdBindDescriptorSets(
         commandBuffer,
         pipelineBindPoint,
