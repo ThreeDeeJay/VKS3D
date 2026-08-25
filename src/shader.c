@@ -10446,8 +10446,8 @@ stereo_CreateShadersEXT(
                 uint64_t spv_hash = hash_spv(patched, out_words);
                 char path[512];
                 const char *stage_suffix =
-                ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "+vs.spv" :
-                ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "+fs.spv" : "+other.spv";
+                ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "_shaderobject_+vs.spv" :
+                ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "_shaderobject_+fs.spv" : "_shaderobject_+other.spv";
                 _snprintf_s(
                     path,
                     sizeof(path),
