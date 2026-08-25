@@ -10307,15 +10307,20 @@ stereo_CreateShadersEXT(
     for (uint32_t i=0; i<createInfoCount; i++) {
         const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
         STEREO_LOG(
-            "SHADER_OBJECT_CREATE i=%u stage=0x%x nextStage=0x%x codeType=%u "
-            "codeSize=%zu setLayouts=%u pushRanges=%u pName=%s pCode=%p",
+            "SHADER_OBJECT_CREATE i=%u stage=0x%x nextStage=0x%x flags=0x%x "
+            "codeType=%u codeSize=%zu setLayouts=%u pSetLayouts=%p "
+            "pushRanges=%u pPushConstantRanges=%p pNext=%p pName=%s pCode=%p",
             i,
             ci->stage,
             ci->nextStage,
+            ci->flags,
             ci->codeType,
             ci->codeSize,
             ci->setLayoutCount,
+            ci->pSetLayouts,
             ci->pushConstantRangeCount,
+            ci->pPushConstantRanges,
+            ci->pNext,
             ci->pName ? ci->pName : "<NULL>",
             ci->pCode);
     }
