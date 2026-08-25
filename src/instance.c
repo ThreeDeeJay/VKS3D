@@ -327,11 +327,11 @@ stereo_EnumeratePhysicalDevices(
         STEREO_ERR("stereo_EnumeratePhysicalDevices: unknown instance handle %p", (void*)instance);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    STEREO_LOG("stereo_EnumeratePhysicalDevices: real_instance=%p", (void*)si->real_instance);
+    STEREO_LOG("stereo_EnumeratePhysicalDevices: real_instance=%p si=%p", (void*)si->real_instance, (void*)si);
     VkResult res = si->real.EnumeratePhysicalDevices(
         si->real_instance, pPhysicalDeviceCount, pPhysicalDevices);
 
-    STEREO_LOG("stereo_EnumeratePhysicalDevices: real EnumeratePhysicalDevices res=%d count=%u",
+    STEREO_LOG("ENUM_PHYSDEV si=%p real_instance=%p res=%d count=%u", (void*)si, (void*)si->real_instance,
                res, pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0);
     if (res == VK_SUCCESS && pPhysicalDevices) {
         STEREO_LOG("stereo_EnumeratePhysicalDevices: wrapping %u real physical devices",
