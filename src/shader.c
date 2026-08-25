@@ -16,7 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <errno.h>
 #include "stereo_icd.h"
 #include "tes_inject.h"
 #include "spirv/unified1/spirv.h"
@@ -10442,43 +10441,22 @@ stereo_CreateShadersEXT(
                 ci->stage,
                 in_words,
                 out_words);
-            if (ok && patched && out_words) {
-                patched_infos[i].pCode = patched;
-                patched_infos[i].codeSize =
-                out_words * sizeof(uint32_t);
-                patched_owned[i] = true;
+            char path[256];
+            const char *stage_name =
+            ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "vs" :
+            ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "fs" : "other";
+            _snprintf_s(path, sizeof(path), _TRUNCATE,
+                "shaderobject-%u-%s.spv", i, stage_name);
+            FILE *fp = fopen(path, "wb");
+            if (fp) {
+                fwrite(patched, sizeof(uint32_t), out_words, fp);
+                fclose(fp);
                 STEREO_LOG(
-                    "SHADER_OBJECT_PATCHED i=%u stage=0x%x "
-                    "oldWords=%zu newWords=%zu",
+                    "SHADER_OBJECT_DUMP i=%u stage=0x%x path=%s words=%zu",
                     i,
                     ci->stage,
-                    in_words,
+                    path,
                     out_words);
-                char path[256];
-                const char *stage_name =
-                ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "vs" :
-                ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "fs" : "other";
-                _snprintf_s(path, sizeof(path), _TRUNCATE,
-                    "shaderobject-%u-%s.spv", i, stage_name);
-                FILE *fp = fopen(path, "wb");
-                if (fp) {
-                    size_t written = fwrite(patched, sizeof(uint32_t), out_words, fp);
-                    int close_rc = fclose(fp);
-                    STEREO_LOG(
-                        "SHADER_OBJECT_DUMP i=%u stage=0x%x path=%s words=%zu written=%zu close=%d",
-                        i,
-                        ci->stage,
-                        path,
-                        out_words,
-                        written,
-                        close_rc);
-                } else {
-                    STEREO_LOG(
-                        "SHADER_OBJECT_DUMP_FAIL i=%u stage=0x%x path=%s errno=%d",
-                        i,
-                        ci->stage,
-                        path,
-                        errno);
             }
         } else if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT ||
             ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
