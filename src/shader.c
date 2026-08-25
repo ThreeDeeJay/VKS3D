@@ -10323,13 +10323,6 @@ stereo_CreateShadersEXT(
             ci->pNext,
             ci->pName ? ci->pName : "<NULL>",
             ci->pCode);
-        STEREO_LOG(
-            "SHADER_OBJECT_FLAGS i=%u flags=0x%x LINK_STAGE=%u "
-            "ALLOW_DERIVATIVES=%u",
-            i,
-            ci->flags,
-            (ci->flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) ? 1u : 0u,
-            (ci->flags & VK_SHADER_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) ? 1u : 0u);
     }
     for (uint32_t i=0; i<createInfoCount; i++) {
         const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
@@ -10459,7 +10452,7 @@ stereo_CreateShadersEXT(
                 char path[512];
                 const char *stage_suffix =
                 ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "+vso.spv" :
-                ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "+fso.spv" : "+xso.spv";
+                ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "+fso.spv" : "+so.spv";
                 _snprintf_s(
                     path,
                     sizeof(path),
