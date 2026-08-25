@@ -10323,6 +10323,13 @@ stereo_CreateShadersEXT(
             ci->pNext,
             ci->pName ? ci->pName : "<NULL>",
             ci->pCode);
+        STEREO_LOG(
+            "SHADER_OBJECT_FLAGS i=%u flags=0x%x LINK_STAGE=%u "
+            "ALLOW_DERIVATIVES=%u",
+            i,
+            ci->flags,
+            (ci->flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) ? 1u : 0u,
+            (ci->flags & VK_SHADER_CREATE_ALLOW_DERIVATIVES_BIT_EXT) ? 1u : 0u);
     }
     for (uint32_t i=0; i<createInfoCount; i++) {
         const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
@@ -10490,6 +10497,19 @@ stereo_CreateShadersEXT(
                 in_words,
                 ok ? 1u : 0u);
         }
+    }
+    for (uint32_t i=0; i<createInfoCount; i++) {
+        STEREO_LOG(
+            "SHADER_OBJECT_SUBMIT i=%u stage=0x%x nextStage=0x%x flags=0x%x "
+            "codeType=%u codeSize=%zu pCode=%p patched=%u",
+            i,
+            patched_infos[i].stage,
+            patched_infos[i].nextStage,
+            patched_infos[i].flags,
+            patched_infos[i].codeType,
+            patched_infos[i].codeSize,
+            patched_infos[i].pCode,
+            patched_owned[i] ? 1u : 0u);
     }
     VkResult res=sd->real.CreateShadersEXT(
         sd->real_device,
