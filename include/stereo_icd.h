@@ -330,6 +330,9 @@ typedef struct RealDeviceDispatch {
     PFN_vkCreateShadersEXT           CreateShadersEXT;
     PFN_vkDestroyShaderEXT           DestroyShaderEXT;
     PFN_vkCmdBindShadersEXT          CmdBindShadersEXT;
+    PFN_vkCmdSetCullMode             CmdSetCullMode;
+    PFN_vkCmdSetFrontFace            CmdSetFrontFace;
+    PFN_vkCmdSetPrimitiveTopology    CmdSetPrimitiveTopology;
     PFN_vkCreatePipelineCache        CreatePipelineCache;
     PFN_vkDestroyPipelineCache       DestroyPipelineCache;
     PFN_vkGetPipelineCacheData       GetPipelineCacheData;
