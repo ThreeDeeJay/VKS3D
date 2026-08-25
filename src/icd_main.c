@@ -343,6 +343,16 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_DestroyShaderEXT);
     GDPA_WRAP("vkCmdBindShadersEXT",
               stereo_CmdBindShadersEXT);
+    GDPA_WRAP("vkCmdSetViewport",
+              stereo_CmdSetViewport);
+    GDPA_WRAP("vkCmdSetScissor",
+              stereo_CmdSetScissor);
+    GDPA_WRAP("vkCmdSetCullMode",
+              stereo_CmdSetCullMode);
+    GDPA_WRAP("vkCmdSetFrontFace",
+              stereo_CmdSetFrontFace);
+    GDPA_WRAP("vkCmdSetPrimitiveTopology",
+              stereo_CmdSetPrimitiveTopology);
     if (!strcmp(pName, "vkCreateGraphicsPipelines")) {
         STEREO_LOG(
             "GDPA wrapper addr=%p stereo_CreateGraphicsPipelines=%p",

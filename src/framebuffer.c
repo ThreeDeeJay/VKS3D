@@ -1407,3 +1407,83 @@ stereo_CmdBindShadersEXT(
         pStages,
         pShaders);
 }
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdSetViewport(
+    VkCommandBuffer commandBuffer,
+    uint32_t firstViewport,
+    uint32_t viewportCount,
+    const VkViewport *pViewports)
+{
+    STEREO_LOG("CMD_SET_VIEWPORT cb=%p first=%u count=%u",
+        (void*)commandBuffer,
+        firstViewport,
+        viewportCount);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdSetViewport)
+        return;
+    sd->real.CmdSetViewport(
+        commandBuffer,
+        firstViewport,
+        viewportCount,
+        pViewports);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdSetScissor(
+    VkCommandBuffer commandBuffer,
+    uint32_t firstScissor,
+    uint32_t scissorCount,
+    const VkRect2D *pScissors)
+{
+    STEREO_LOG("CMD_SET_SCISSOR cb=%p first=%u count=%u",
+        (void*)commandBuffer,
+        firstScissor,
+        scissorCount);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdSetScissor)
+        return;
+    sd->real.CmdSetScissor(
+        commandBuffer,
+        firstScissor,
+        scissorCount,
+        pScissors);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdSetCullMode(
+    VkCommandBuffer commandBuffer,
+    VkCullModeFlags cullMode)
+{
+    STEREO_LOG("CMD_SET_CULL_MODE cb=%p mode=0x%x",
+        (void*)commandBuffer,
+        cullMode);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdSetCullMode)
+        return;
+    sd->real.CmdSetCullMode(commandBuffer, cullMode);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdSetFrontFace(
+    VkCommandBuffer commandBuffer,
+    VkFrontFace frontFace)
+{
+    STEREO_LOG("CMD_SET_FRONT_FACE cb=%p frontFace=%u",
+        (void*)commandBuffer,
+        frontFace);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdSetFrontFace)
+        return;
+    sd->real.CmdSetFrontFace(commandBuffer, frontFace);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdSetPrimitiveTopology(
+    VkCommandBuffer commandBuffer,
+    VkPrimitiveTopology primitiveTopology)
+{
+    STEREO_LOG("CMD_SET_PRIMITIVE_TOPOLOGY cb=%p topology=%u",
+        (void*)commandBuffer,
+        primitiveTopology);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdSetPrimitiveTopology)
+        return;
+    sd->real.CmdSetPrimitiveTopology(commandBuffer, primitiveTopology);
+}
