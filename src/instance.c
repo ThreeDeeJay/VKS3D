@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <intrin.h>
 #include "stereo_icd.h"
 
 /* Extensions we transparently add to every instance */
@@ -185,6 +186,7 @@ stereo_CreateInstance(
     VkInstance                    *pInstance)
 {
     STEREO_LOG("CALLED stereo_CreateInstance");
+    STEREO_LOG("CREATE_CALLER return=%p", _ReturnAddress());
     STEREO_LOG("stereo_CreateInstance: called pCreateInfo=%p", (void*)pCreateInfo);
     if (!stereo_load_real_icd()) {
         STEREO_ERR("stereo_CreateInstance: no real ICD");
@@ -321,6 +323,7 @@ stereo_EnumeratePhysicalDevices(
     VkPhysicalDevice  *pPhysicalDevices)
 {
     STEREO_LOG("CALLED stereo_EnumeratePhysicalDevices");
+    STEREO_LOG("ENUM_CALLER return=%p", _ReturnAddress());
     STEREO_LOG("stereo_EnumeratePhysicalDevices: called instance=%p", (void*)instance);
     StereoInstance *si = stereo_instance_from_handle(instance);
     if (!si) {
