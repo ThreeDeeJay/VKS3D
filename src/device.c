@@ -201,6 +201,8 @@ stereo_CreateDevice(
                    (void*)physicalDevice, (void*)real_physdev);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    STEREO_LOG("CREATE_DEVICE wrapper=%p real=%p",
+        (void*)sp, (void*)sp->real_pd);
     STEREO_LOG("stereo_CreateDevice: wrapper=%p real_pd=%p si=%p",
                (void*)physicalDevice, (void*)real_physdev, (void*)sp_si);
     VkPhysicalDeviceMultiviewFeatures multiview_feat = {
