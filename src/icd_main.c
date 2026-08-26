@@ -343,54 +343,54 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_DestroyShaderEXT);
     GDPA_WRAP("vkCmdBindShadersEXT",
               stereo_CmdBindShadersEXT);
-    //GDPA_WRAP("vkCmdSetViewport",
-    //          stereo_CmdSetViewport);
-    //GDPA_WRAP("vkCmdSetScissor",
-    //          stereo_CmdSetScissor);
-    //GDPA_WRAP("vkCmdSetCullMode",
-    //          stereo_CmdSetCullMode);
-    //GDPA_WRAP("vkCmdSetCullModeEXT",
-    //          stereo_CmdSetCullMode);
-    //GDPA_WRAP("vkCmdSetFrontFace",
-    //          stereo_CmdSetFrontFace);
-    //GDPA_WRAP("vkCmdSetFrontFaceEXT",
-    //          stereo_CmdSetFrontFace);
-    //GDPA_WRAP("vkCmdSetPrimitiveTopology",
-    //          stereo_CmdSetPrimitiveTopology);
-    //GDPA_WRAP("vkCmdSetPrimitiveTopologyEXT",
-    //          stereo_CmdSetPrimitiveTopology);
-    //GDPA_WRAP("vkCmdSetViewportWithCountEXT",
-    //          stereo_CmdSetViewportWithCountEXT);
-    //GDPA_WRAP("vkCmdSetScissorWithCountEXT",
-    //          stereo_CmdSetScissorWithCountEXT);
-    //GDPA_WRAP("vkCmdSetDepthTestEnableEXT",
-    //          stereo_CmdSetDepthTestEnableEXT);
-    //GDPA_WRAP("vkCmdSetDepthWriteEnableEXT",
-    //          stereo_CmdSetDepthWriteEnableEXT);
-    //GDPA_WRAP("vkCmdSetDepthCompareOpEXT",
-    //          stereo_CmdSetDepthCompareOpEXT);
-    //GDPA_WRAP("vkCmdSetRasterizerDiscardEnableEXT",
-    //          stereo_CmdSetRasterizerDiscardEnableEXT);
-    //GDPA_WRAP("vkCmdSetPolygonModeEXT",
-    //          stereo_CmdSetPolygonModeEXT);
-    //GDPA_WRAP("vkCmdSetRasterizationSamplesEXT",
-    //          stereo_CmdSetRasterizationSamplesEXT);
-    //GDPA_WRAP("vkCmdSetAlphaToCoverageEnableEXT",
-    //          stereo_CmdSetAlphaToCoverageEnableEXT);
-    //GDPA_WRAP("vkCmdSetDepthBiasEnableEXT",
-    //          stereo_CmdSetDepthBiasEnableEXT);
-    //GDPA_WRAP("vkCmdSetStencilTestEnableEXT",
-    //          stereo_CmdSetStencilTestEnableEXT);
-    //GDPA_WRAP("vkCmdSetPrimitiveRestartEnableEXT",
-    //          stereo_CmdSetPrimitiveRestartEnableEXT);
-    //GDPA_WRAP("vkCmdSetSampleMaskEXT",
-    //          stereo_CmdSetSampleMaskEXT);
-    //GDPA_WRAP("vkCmdSetColorBlendEnableEXT",
-    //          stereo_CmdSetColorBlendEnableEXT);
-    //GDPA_WRAP("vkCmdSetColorWriteMaskEXT",
-    //          stereo_CmdSetColorWriteMaskEXT);
-    //GDPA_WRAP("vkCmdSetVertexInputEXT",
-    //          stereo_CmdSetVertexInputEXT);
+    GDPA_WRAP("vkCmdSetViewport",
+              stereo_CmdSetViewport);
+    GDPA_WRAP("vkCmdSetScissor",
+              stereo_CmdSetScissor);
+    GDPA_WRAP("vkCmdSetCullMode",
+              stereo_CmdSetCullMode);
+    GDPA_WRAP("vkCmdSetCullModeEXT",
+              stereo_CmdSetCullMode);
+    GDPA_WRAP("vkCmdSetFrontFace",
+              stereo_CmdSetFrontFace);
+    GDPA_WRAP("vkCmdSetFrontFaceEXT",
+              stereo_CmdSetFrontFace);
+    GDPA_WRAP("vkCmdSetPrimitiveTopology",
+              stereo_CmdSetPrimitiveTopology);
+    GDPA_WRAP("vkCmdSetPrimitiveTopologyEXT",
+              stereo_CmdSetPrimitiveTopology);
+    GDPA_WRAP("vkCmdSetViewportWithCountEXT",
+              stereo_CmdSetViewportWithCountEXT);
+    GDPA_WRAP("vkCmdSetScissorWithCountEXT",
+              stereo_CmdSetScissorWithCountEXT);
+    GDPA_WRAP("vkCmdSetDepthTestEnableEXT",
+              stereo_CmdSetDepthTestEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthWriteEnableEXT",
+              stereo_CmdSetDepthWriteEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthCompareOpEXT",
+              stereo_CmdSetDepthCompareOpEXT);
+    GDPA_WRAP("vkCmdSetRasterizerDiscardEnableEXT",
+              stereo_CmdSetRasterizerDiscardEnableEXT);
+    GDPA_WRAP("vkCmdSetPolygonModeEXT",
+              stereo_CmdSetPolygonModeEXT);
+    GDPA_WRAP("vkCmdSetRasterizationSamplesEXT",
+              stereo_CmdSetRasterizationSamplesEXT);
+    GDPA_WRAP("vkCmdSetAlphaToCoverageEnableEXT",
+              stereo_CmdSetAlphaToCoverageEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthBiasEnableEXT",
+              stereo_CmdSetDepthBiasEnableEXT);
+    GDPA_WRAP("vkCmdSetStencilTestEnableEXT",
+              stereo_CmdSetStencilTestEnableEXT);
+    GDPA_WRAP("vkCmdSetPrimitiveRestartEnableEXT",
+              stereo_CmdSetPrimitiveRestartEnableEXT);
+    GDPA_WRAP("vkCmdSetSampleMaskEXT",
+              stereo_CmdSetSampleMaskEXT);
+    GDPA_WRAP("vkCmdSetColorBlendEnableEXT",
+              stereo_CmdSetColorBlendEnableEXT);
+    GDPA_WRAP("vkCmdSetColorWriteMaskEXT",
+              stereo_CmdSetColorWriteMaskEXT);
+    GDPA_WRAP("vkCmdSetVertexInputEXT",
+              stereo_CmdSetVertexInputEXT);
     if (!strcmp(pName, "vkCreateGraphicsPipelines")) {
         STEREO_LOG(
             "GDPA wrapper addr=%p stereo_CreateGraphicsPipelines=%p",
