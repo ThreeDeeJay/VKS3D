@@ -333,8 +333,11 @@ typedef struct RealDeviceDispatch {
     PFN_vkCmdSetViewport             CmdSetViewport;
     PFN_vkCmdSetScissor              CmdSetScissor;
     PFN_vkCmdSetCullMode             CmdSetCullMode;
+    PFN_vkCmdSetCullModeEXT          CmdSetCullModeEXT;
     PFN_vkCmdSetFrontFace            CmdSetFrontFace;
+    PFN_vkCmdSetFrontFaceEXT         CmdSetFrontFaceEXT;
     PFN_vkCmdSetPrimitiveTopology    CmdSetPrimitiveTopology;
+    PFN_vkCmdSetPrimitiveTopologyEXT CmdSetPrimitiveTopologyEXT;
     PFN_vkCmdSetViewportWithCountEXT CmdSetViewportWithCountEXT;
     PFN_vkCmdSetScissorWithCountEXT  CmdSetScissorWithCountEXT;
     PFN_vkCmdSetDepthTestEnableEXT   CmdSetDepthTestEnableEXT;
