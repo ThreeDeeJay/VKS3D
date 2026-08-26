@@ -9650,6 +9650,18 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
+            uint64_t spv_hash = hash_spv(in, in_words);
+            if (stereo_skip_shader_patch(spv_hash))
+            {
+                STEREO_LOG(
+                    "SHADER_OBJECT_PATCH_SKIPPED i=%u stage=0x%x hash=%016llx",
+                    i,
+                    ci->stage,
+                    (unsigned long long)spv_hash);
+                ok = false;
+                patched = NULL;
+                out_words = 0;
+            }
             if (!spirv_patch_stereo_mesh(
                 &sd->stereo,
                 e->spv,
