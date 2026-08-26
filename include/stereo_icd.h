@@ -385,8 +385,6 @@ typedef struct RealDeviceDispatch {
     PFN_vkEndCommandBuffer           EndCommandBuffer;
     PFN_vkResetCommandBuffer         ResetCommandBuffer;
     PFN_vkCmdBindPipeline            CmdBindPipeline;
-    PFN_vkCmdSetViewport             CmdSetViewport;
-    PFN_vkCmdSetScissor              CmdSetScissor;
     PFN_vkCmdSetLineWidth            CmdSetLineWidth;
     PFN_vkCmdSetDepthBias            CmdSetDepthBias;
     PFN_vkCmdSetBlendConstants       CmdSetBlendConstants;
