@@ -1644,6 +1644,49 @@ static bool emit_mesh_position_adjust(
     *new_pos = np;
     return true;
 }
+
+static bool stereo_skip_shader_patch(uint64_t spv_hash)
+{
+    static bool skip_list_init;
+    static bool skip_all;
+    static char skip_list[1024];
+    if (!skip_list_init)
+    {
+        const char *env =
+        stereo_getenv("VKS3D_SKIP_SHADER_PATCHES");
+        if (env)
+        {
+            strncpy(skip_list, env, sizeof(skip_list) - 1);
+            skip_list[sizeof(skip_list) - 1] = '\0';
+            skip_all = strchr(skip_list, '*') != NULL;
+        }
+        skip_list_init = true;
+    }
+    if (!skip_list[0])
+        return false;
+    if (skip_all)
+    {
+        STEREO_LOG(
+            "SKIP_SHADER_PATCH hash=%016llx reason=wildcard",
+            (unsigned long long)spv_hash);
+        return true;
+    }
+    char hashstr[17];
+    snprintf(
+        hashstr,
+        sizeof(hashstr),
+        "%016llx",
+        (unsigned long long)spv_hash);
+    if (strstr(skip_list, hashstr))
+    {
+        STEREO_LOG(
+            "SKIP_SHADER_PATCH hash=%s reason=hash",
+            hashstr);
+        return true;
+    }
+    return false;
+}
+
 bool spirv_patch_stereo_mesh(
     const StereoConfig *cfg,
     const uint32_t *in,
@@ -10417,6 +10460,20 @@ stereo_CreateShadersEXT(
             ci->stage,
             ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? 1u : 0u,
             ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? 1u : 0u);
+        uint64_t spv_hash = hash_spv(in, in_words);
+        if (stereo_skip_shader_patch(spv_hash))
+        {
+            STEREO_LOG(
+                "SHADER_OBJECT_PATCH_SKIPPED i=%u stage=0x%x hash=%016llx",
+                i,
+                ci->stage,
+                (unsigned long long)spv_hash);
+            ok = false;
+            patched = NULL;
+            out_words = 0;
+        }
+        else if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT) {
+            ok = spirv_patch_stereo_vertex(
         if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT) {
             ok = spirv_patch_stereo_vertex(
                 &sd->stereo,
