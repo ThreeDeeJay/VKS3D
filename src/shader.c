@@ -10474,8 +10474,6 @@ stereo_CreateShadersEXT(
         }
         else if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT) {
             ok = spirv_patch_stereo_vertex(
-        if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT) {
-            ok = spirv_patch_stereo_vertex(
                 &sd->stereo,
                 in,
                 in_words,
