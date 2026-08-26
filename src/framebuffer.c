@@ -1396,11 +1396,17 @@ stereo_CmdBindShadersEXT(
     for (uint32_t i = 0; i < stageCount; i++)
     {
         STEREO_LOG(
-            "SHADER_OBJECT_BIND i=%u stage=0x%x shader=%p",
+            "SHADER_OBJECT_BIND i=%u cb=%p stage=0x%x shader=%p",
             i,
+            (void*)commandBuffer,
             pStages ? pStages[i] : 0,
             pShaders ? (void*)(uintptr_t)pShaders[i] : NULL);
     }
+    STEREO_LOG(
+        "SHADER_OBJECT_BIND_FORWARD cb=%p real=%p count=%u",
+        (void*)commandBuffer,
+        (void*)sd->real.CmdBindShadersEXT,
+        stageCount);
     sd->real.CmdBindShadersEXT(
         commandBuffer,
         stageCount,
@@ -1496,6 +1502,20 @@ stereo_CmdSetViewportWithCountEXT(
     STEREO_LOG("CMD_SET_VIEWPORT_WITH_COUNT_EXT cb=%p count=%u",
         (void*)commandBuffer,
         viewportCount);
+    for (uint32_t i = 0; i < viewportCount; i++)
+    {
+        STEREO_LOG(
+            "CMD_SET_VIEWPORT_WITH_COUNT_EXT_VALUE cb=%p i=%u "
+            "x=%f y=%f w=%f h=%f minDepth=%f maxDepth=%f",
+            (void*)commandBuffer,
+            i,
+            pViewports[i].x,
+            pViewports[i].y,
+            pViewports[i].width,
+            pViewports[i].height,
+            pViewports[i].minDepth,
+            pViewports[i].maxDepth);
+    }
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetViewportWithCountEXT)
         return;
@@ -1514,6 +1534,18 @@ stereo_CmdSetScissorWithCountEXT(
     STEREO_LOG("CMD_SET_SCISSOR_WITH_COUNT_EXT cb=%p count=%u",
         (void*)commandBuffer,
         scissorCount);
+    for (uint32_t i = 0; i < scissorCount; i++)
+    {
+        STEREO_LOG(
+            "CMD_SET_SCISSOR_WITH_COUNT_EXT_VALUE cb=%p i=%u "
+            "x=%d y=%d width=%u height=%u",
+            (void*)commandBuffer,
+            i,
+            pScissors[i].offset.x,
+            pScissors[i].offset.y,
+            pScissors[i].extent.width,
+            pScissors[i].extent.height);
+    }
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetScissorWithCountEXT)
         return;
