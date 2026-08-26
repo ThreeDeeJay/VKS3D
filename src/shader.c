@@ -2387,11 +2387,13 @@ bool spirv_patch_stereo_vertex(
                 sizeof(hashstr),
                 "%016llx",
                 (unsigned long long)spv_hash);
-            if (strstr(skip_list, hashstr))
+            if (strchr(skip_list, '*') ||
+                strstr(skip_list, hashstr))
             {
                 STEREO_LOG(
-                    "SKIP_SHADER_PATCH hash=%s",
-                    hashstr);
+                    "SKIP_SHADER_PATCH hash=%s reason=%s",
+                    hashstr,
+                    strchr(skip_list, '*') ? "wildcard" : "hash");
                 free_spv_provenance(&m);
                 return false;
             }
