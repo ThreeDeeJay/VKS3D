@@ -805,6 +805,21 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
         (void*)sd->real.CreateShadersEXT,
         (void*)sd->real.DestroyShaderEXT,
         (void*)sd->real.CmdBindShadersEXT);
+    L(CmdSetViewportWithCountEXT);
+    L(CmdSetScissorWithCountEXT);
+    L(CmdSetDepthTestEnableEXT);
+    L(CmdSetDepthWriteEnableEXT);
+    L(CmdSetDepthCompareOpEXT);
+    L(CmdSetRasterizerDiscardEnableEXT);
+    L(CmdSetPolygonModeEXT);
+    L(CmdSetRasterizationSamplesEXT);
+    L(CmdSetAlphaToCoverageEnableEXT);
+    L(CmdSetDepthBiasEnableEXT);
+    L(CmdSetStencilTestEnableEXT);
+    L(CmdSetPrimitiveRestartEnableEXT);
+    L(CmdSetSampleMaskEXT);
+    L(CmdSetColorBlendEnableEXT);
+    L(CmdSetColorWriteMaskEXT);
     L(CreatePipelineCache); L(DestroyPipelineCache);
     L(GetPipelineCacheData); L(MergePipelineCaches);
     L(CreateGraphicsPipelines); L(CreateComputePipelines); L(DestroyPipeline);
