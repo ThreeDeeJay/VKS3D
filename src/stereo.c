@@ -836,6 +836,8 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(BeginCommandBuffer); L(EndCommandBuffer); L(ResetCommandBuffer);
     L(CmdBindPipeline); L(CmdSetViewport); L(CmdSetScissor);
     L(CmdSetCullMode); L(CmdSetFrontFace); L(CmdSetPrimitiveTopology);
+    L(CmdSetCullModeEXT); L(CmdSetFrontFaceEXT); L(CmdSetPrimitiveTopologyEXT);
+    L(CmdSetVertexInputEXT);
     L(CmdSetLineWidth); L(CmdSetDepthBias); L(CmdSetBlendConstants);
     L(CmdSetDepthBounds); L(CmdSetStencilCompareMask);
     L(CmdSetStencilWriteMask); L(CmdSetStencilReference);
