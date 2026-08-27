@@ -1500,8 +1500,8 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         //if (sd->intercepted_depth[i] == pCreateInfo->image)
         //{
             depth_matches++;
-            needs_upgrade = true;
-            swapchain_match = true;
+            needs_upgrade = false;
+            swapchain_match = false;
         //}
     }
     for (uint32_t i = 0; i < sd->intercepted_color_count; i++)
@@ -1509,8 +1509,8 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         //if (sd->intercepted_color[i] == pCreateInfo->image)
         //{
             color_matches++;
-            needs_upgrade = true;
-            swapchain_match = true;
+            needs_upgrade = false;
+            swapchain_match = false;
         //}
     }
     for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
