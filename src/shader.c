@@ -9613,6 +9613,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     e->words,
                     (void*)ms_module,
                     e->exec_model);
+                if (stereo_skip_shader_patch(spv_hash))
+                {
+                    STEREO_LOG(
+                        "MESH_PATCH_SKIPPED p=%u hash=%016llx reason=skip_list",
+                        p,
+                        (unsigned long long)spv_hash);
+                    continue;
+                }
             if (dump)
             {
                 char dp[512];
