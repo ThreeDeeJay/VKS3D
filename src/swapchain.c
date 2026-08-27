@@ -1540,11 +1540,11 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     //        sd->intercepted_color_count);
     //    STEREO_LOG("CALL real CreateImageView");
     //    VkResult r =
-    //        sd->real.CreateImageView(
-    //        sd->real_device,
-    //        pCreateInfo,
-    //        pAllocator,
-    //        pView);
+            sd->real.CreateImageView(
+            sd->real_device,
+            pCreateInfo,
+            pAllocator,
+            pView);
     //    STEREO_LOG("RETURN real CreateImageView result=%d", r);
     //    STEREO_LOG(
     //        "IV_EXIT passthrough result=%d view=%p",
