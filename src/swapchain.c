@@ -1497,21 +1497,21 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     uint32_t color_matches = 0;
     for (uint32_t i = 0; i < sd->intercepted_depth_count; i++)
     {
-        if (sd->intercepted_depth[i] == pCreateInfo->image)
-        {
+        //if (sd->intercepted_depth[i] == pCreateInfo->image)
+        //{
             depth_matches++;
             needs_upgrade = true;
             swapchain_match = true;
-        }
+        //}
     }
     for (uint32_t i = 0; i < sd->intercepted_color_count; i++)
     {
-        if (sd->intercepted_color[i] == pCreateInfo->image)
-        {
+        //if (sd->intercepted_color[i] == pCreateInfo->image)
+        //{
             color_matches++;
             needs_upgrade = true;
             swapchain_match = true;
-        }
+        //}
     }
     for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
     {
