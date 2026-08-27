@@ -1527,31 +1527,31 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
          VK_IMAGE_ASPECT_DEPTH_BIT))
     {
     }
-    if (!needs_upgrade)
-       {
-        STEREO_LOG(
-            "VIEW_PASSTHROUGH image=%p fmt=%u aspect=0x%X viewType=%u layers=%u depthTracked=%u colorTracked=%u usage_unknown=1",
-            (void*)(uintptr_t)pCreateInfo->image,
-            pCreateInfo->format,
-            pCreateInfo->subresourceRange.aspectMask,
-            pCreateInfo->viewType,
-            pCreateInfo->subresourceRange.layerCount,
-            sd->intercepted_depth_count,
-            sd->intercepted_color_count);
-        STEREO_LOG("CALL real CreateImageView");
-        VkResult r =
+    //if (!needs_upgrade)
+    //   {
+    //    STEREO_LOG(
+    //        "VIEW_PASSTHROUGH image=%p fmt=%u aspect=0x%X viewType=%u layers=%u depthTracked=%u colorTracked=%u usage_unknown=1",
+    //        (void*)(uintptr_t)pCreateInfo->image,
+    //        pCreateInfo->format,
+    //        pCreateInfo->subresourceRange.aspectMask,
+    //        pCreateInfo->viewType,
+    //        pCreateInfo->subresourceRange.layerCount,
+    //        sd->intercepted_depth_count,
+    //        sd->intercepted_color_count);
+    //    STEREO_LOG("CALL real CreateImageView");
+    //    VkResult r =
             sd->real.CreateImageView(
             sd->real_device,
             pCreateInfo,
             pAllocator,
             pView);
-        STEREO_LOG("RETURN real CreateImageView result=%d", r);
-        STEREO_LOG(
-            "IV_EXIT passthrough result=%d view=%p",
-            r,
-            (r == VK_SUCCESS) ? (void *)(uintptr_t)*pView : NULL);
-        return r;
-       }
+    //    STEREO_LOG("RETURN real CreateImageView result=%d", r);
+    //    STEREO_LOG(
+    //        "IV_EXIT passthrough result=%d view=%p",
+    //        r,
+    //        (r == VK_SUCCESS) ? (void *)(uintptr_t)*pView : NULL);
+    //    return r;
+    //   }
     STEREO_LOG(
         "UPGRADE_REASON image=%p swapchain=%u depth=%u color=%u",
         (void *)(uintptr_t)pCreateInfo->image,
