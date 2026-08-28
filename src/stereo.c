@@ -207,6 +207,12 @@ void stereo_config_init(StereoConfig *cfg)
      * which cause VK_ERROR_DEVICE_LOST when multiview tries to write layer 1.
      * Set multiview=1 in vks3d.ini [global] only for apps that support it. */
     cfg->multiview = cfg_bool("multiview", false);
+    {
+        const char *shader_objects_mono =
+            stereo_getenv("VKS3D_SHADER_OBJECTS_MONO");
+        cfg->shader_objects_mono =
+            shader_objects_mono && atoi(shader_objects_mono) != 0;
+    }
 
     /* Flatten detected screen-space UI by skipping stereo patching. */
     cfg->mono_ui = cfg_bool("mono_ui", true);

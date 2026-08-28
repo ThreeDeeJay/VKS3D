@@ -775,7 +775,9 @@ stereo_CmdBeginRendering(
             pRenderingInfo->pDepthAttachment->storeOp);
     }
     VkRenderingInfo modified = *pRenderingInfo;
-    if (sd->stereo.multiview && modified.viewMask == 0)
+    if (sd->stereo.multiview &&
+        !sd->stereo.shader_objects_mono &&
+        modified.viewMask == 0)
     {
         modified.viewMask = 0x3;
         STEREO_LOG(

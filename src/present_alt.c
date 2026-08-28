@@ -284,7 +284,10 @@ VkResult alt_cpu_readback(StereoDevice *sd, StereoSwapchain *sc,
 
     /* gl_ViewIndex is broken on 426.06 — both layers are identical.
      * Read only layer 0; compose_present applies image-space stereo shift. */
-    uint32_t layer_count = (sd->stereo.multiview && sd->multiview_pass_exists) ? 2 : 1;
+    uint32_t layer_count =
+        (sd->stereo.multiview &&
+         sd->multiview_pass_exists &&
+         !sd->stereo.shader_objects_mono) ? 2 : 1;
 
     sd->real.ResetFences(sd->real_device, 1, &sc->cpu_fence);
     sd->real.ResetCommandBuffer(sc->cpu_cmd, 0);
@@ -582,8 +585,10 @@ VkResult dx9_present(StereoDevice *sd, StereoSwapchain *sc,
     if (res != VK_SUCCESS) return res;
 
     const uint8_t *left  = (const uint8_t *)sc->cpu_map;
-    const uint8_t *right = (sd->stereo.multiview && sd->multiview_pass_exists)
-                           ? left + sc->cpu_eye_bytes : left;
+    const uint8_t *right = (sd->stereo.multiview &&
+                             sd->multiview_pass_exists &&
+                             !sd->stereo.shader_objects_mono)
+                            ? left + sc->cpu_eye_bytes : left;
 
     uint32_t w = sc->app_width, h = sc->app_height;
     void *pSurf = sd->dx9_surf;
@@ -719,7 +724,10 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
      * renders: layer 0 = left eye, layer 1 = right eye.  Use them directly.
      * Fall back to image-space shift of layer 0 when only one layer is valid
      * (e.g. multiview disabled, or driver did not populate gl_ViewIndex).   */
-    bool two_layers = sd->stereo.multiview && sd->multiview_pass_exists;
+    bool two_layers =
+        sd->stereo.multiview &&
+        sd->multiview_pass_exists &&
+        !sd->stereo.shader_objects_mono;
     STEREO_LOG("[PRESENT] using present_alt compose path");
     const uint8_t *left_eye  = (const uint8_t *)sc->cpu_map;
     const uint8_t *right_eye = left_eye + sc->cpu_eye_bytes;
