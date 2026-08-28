@@ -210,7 +210,8 @@ void stereo_config_init(StereoConfig *cfg)
     {
         const char *shader_objects_mono =
             stereo_getenv("VKS3D_SHADER_OBJECTS_MONO");
-        cfg->shader_objects_mono = 1;
+        cfg->shader_objects_mono =
+            shader_objects_mono && atoi(shader_objects_mono) != 0;
     }
 
     /* Flatten detected screen-space UI by skipping stereo patching. */
