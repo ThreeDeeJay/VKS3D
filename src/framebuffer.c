@@ -1423,18 +1423,9 @@ stereo_CmdSetViewport(
     uint32_t viewportCount,
     const VkViewport *pViewports)
 {
-    STEREO_LOG("CMD_SET_VIEWPORT cb=%p first=%u count=%u",
-        (void*)commandBuffer,
-        firstViewport,
-        viewportCount);
     StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdSetViewport)
-        return;
-    sd->real.CmdSetViewport(
-        commandBuffer,
-        firstViewport,
-        viewportCount,
-        pViewports);
+    if (sd && sd->real.CmdSetViewport)
+        sd->real.CmdSetViewport(commandBuffer, firstViewport, viewportCount, pViewports);
 }
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdSetScissor(
@@ -1443,27 +1434,15 @@ stereo_CmdSetScissor(
     uint32_t scissorCount,
     const VkRect2D *pScissors)
 {
-    STEREO_LOG("CMD_SET_SCISSOR cb=%p first=%u count=%u",
-        (void*)commandBuffer,
-        firstScissor,
-        scissorCount);
     StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdSetScissor)
-        return;
-    sd->real.CmdSetScissor(
-        commandBuffer,
-        firstScissor,
-        scissorCount,
-        pScissors);
+    if (sd && sd->real.CmdSetScissor)
+        sd->real.CmdSetScissor(commandBuffer, firstScissor, scissorCount, pScissors);
 }
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdSetCullMode(
     VkCommandBuffer commandBuffer,
     VkCullModeFlags cullMode)
 {
-    STEREO_LOG("CMD_SET_CULL_MODE cb=%p mode=0x%x",
-        (void*)commandBuffer,
-        cullMode);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetCullMode)
         return;
@@ -1474,9 +1453,6 @@ stereo_CmdSetFrontFace(
     VkCommandBuffer commandBuffer,
     VkFrontFace frontFace)
 {
-    STEREO_LOG("CMD_SET_FRONT_FACE cb=%p frontFace=%u",
-        (void*)commandBuffer,
-        frontFace);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetFrontFace)
         return;
@@ -1487,9 +1463,6 @@ stereo_CmdSetPrimitiveTopology(
     VkCommandBuffer commandBuffer,
     VkPrimitiveTopology primitiveTopology)
 {
-    STEREO_LOG("CMD_SET_PRIMITIVE_TOPOLOGY cb=%p topology=%u",
-        (void*)commandBuffer,
-        primitiveTopology);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetPrimitiveTopology)
         return;
@@ -1501,23 +1474,6 @@ stereo_CmdSetViewportWithCountEXT(
     uint32_t viewportCount,
     const VkViewport *pViewports)
 {
-    STEREO_LOG("CMD_SET_VIEWPORT_WITH_COUNT_EXT cb=%p count=%u",
-        (void*)commandBuffer,
-        viewportCount);
-    for (uint32_t i = 0; i < viewportCount; i++)
-    {
-        STEREO_LOG(
-            "CMD_SET_VIEWPORT_WITH_COUNT_EXT_VALUE cb=%p i=%u "
-            "x=%f y=%f w=%f h=%f minDepth=%f maxDepth=%f",
-            (void*)commandBuffer,
-            i,
-            pViewports[i].x,
-            pViewports[i].y,
-            pViewports[i].width,
-            pViewports[i].height,
-            pViewports[i].minDepth,
-            pViewports[i].maxDepth);
-    }
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetViewportWithCountEXT)
         return;
@@ -1533,21 +1489,6 @@ stereo_CmdSetScissorWithCountEXT(
     uint32_t scissorCount,
     const VkRect2D *pScissors)
 {
-    STEREO_LOG("CMD_SET_SCISSOR_WITH_COUNT_EXT cb=%p count=%u",
-        (void*)commandBuffer,
-        scissorCount);
-    for (uint32_t i = 0; i < scissorCount; i++)
-    {
-        STEREO_LOG(
-            "CMD_SET_SCISSOR_WITH_COUNT_EXT_VALUE cb=%p i=%u "
-            "x=%d y=%d width=%u height=%u",
-            (void*)commandBuffer,
-            i,
-            pScissors[i].offset.x,
-            pScissors[i].offset.y,
-            pScissors[i].extent.width,
-            pScissors[i].extent.height);
-    }
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetScissorWithCountEXT)
         return;
@@ -1562,9 +1503,6 @@ stereo_CmdSetDepthTestEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 depthTestEnable)
 {
-    STEREO_LOG("CMD_SET_DEPTH_TEST_ENABLE_EXT cb=%p enable=%u",
-        (void*)commandBuffer,
-        depthTestEnable);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetDepthTestEnableEXT)
         return;
@@ -1578,9 +1516,6 @@ stereo_CmdSetDepthWriteEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 depthWriteEnable)
 {
-    STEREO_LOG("CMD_SET_DEPTH_WRITE_ENABLE_EXT cb=%p enable=%u",
-        (void*)commandBuffer,
-        depthWriteEnable);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetDepthWriteEnableEXT)
         return;
@@ -1594,9 +1529,6 @@ stereo_CmdSetDepthCompareOpEXT(
     VkCommandBuffer commandBuffer,
     VkCompareOp depthCompareOp)
 {
-    STEREO_LOG("CMD_SET_DEPTH_COMPARE_OP_EXT cb=%p op=%u",
-        (void*)commandBuffer,
-        depthCompareOp);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetDepthCompareOpEXT)
         return;
@@ -1610,9 +1542,6 @@ stereo_CmdSetRasterizerDiscardEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 rasterizerDiscardEnable)
 {
-    STEREO_LOG("CMD_SET_RASTERIZER_DISCARD_ENABLE_EXT cb=%p enable=%u",
-        (void*)commandBuffer,
-        rasterizerDiscardEnable);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetRasterizerDiscardEnableEXT)
         return;
@@ -1626,9 +1555,6 @@ stereo_CmdSetPolygonModeEXT(
     VkCommandBuffer commandBuffer,
     VkPolygonMode polygonMode)
 {
-    STEREO_LOG("CMD_SET_POLYGON_MODE_EXT cb=%p mode=%u",
-        (void*)commandBuffer,
-        polygonMode);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetPolygonModeEXT)
         return;
@@ -1642,9 +1568,6 @@ stereo_CmdSetRasterizationSamplesEXT(
     VkCommandBuffer commandBuffer,
     VkSampleCountFlagBits rasterizationSamples)
 {
-    STEREO_LOG("CMD_SET_RASTERIZATION_SAMPLES_EXT cb=%p samples=%u",
-        (void*)commandBuffer,
-        rasterizationSamples);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetRasterizationSamplesEXT)
         return;
@@ -1658,9 +1581,6 @@ stereo_CmdSetAlphaToCoverageEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 alphaToCoverageEnable)
 {
-    STEREO_LOG("CMD_SET_ALPHA_TO_COVERAGE_ENABLE_EXT cb=%p enable=%u",
-        (void*)commandBuffer,
-        alphaToCoverageEnable);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetAlphaToCoverageEnableEXT)
         return;
@@ -1674,9 +1594,6 @@ stereo_CmdSetDepthBiasEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 depthBiasEnable)
 {
-    STEREO_LOG("CMD_SET_DEPTH_BIAS_ENABLE_EXT cb=%p enable=%u",
-        (void*)commandBuffer,
-        depthBiasEnable);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetDepthBiasEnableEXT)
         return;
@@ -1690,9 +1607,6 @@ stereo_CmdSetStencilTestEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 stencilTestEnable)
 {
-    STEREO_LOG("CMD_SET_STENCIL_TEST_ENABLE_EXT cb=%p enable=%u",
-        (void*)commandBuffer,
-        stencilTestEnable);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetStencilTestEnableEXT)
         return;
@@ -1706,9 +1620,6 @@ stereo_CmdSetPrimitiveRestartEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 primitiveRestartEnable)
 {
-    STEREO_LOG("CMD_SET_PRIMITIVE_RESTART_ENABLE_EXT cb=%p enable=%u",
-        (void*)commandBuffer,
-        primitiveRestartEnable);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetPrimitiveRestartEnableEXT)
         return;
@@ -1723,9 +1634,6 @@ stereo_CmdSetSampleMaskEXT(
     VkSampleCountFlagBits samples,
     const VkSampleMask *pSampleMask)
 {
-    STEREO_LOG("CMD_SET_SAMPLE_MASK_EXT cb=%p samples=%u",
-        (void*)commandBuffer,
-        samples);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetSampleMaskEXT)
         return;
@@ -1742,10 +1650,6 @@ stereo_CmdSetColorBlendEnableEXT(
     uint32_t attachmentCount,
     const VkBool32 *pColorBlendEnables)
 {
-    STEREO_LOG("CMD_SET_COLOR_BLEND_ENABLE_EXT cb=%p first=%u count=%u",
-        (void*)commandBuffer,
-        firstAttachment,
-        attachmentCount);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetColorBlendEnableEXT)
         return;
@@ -1763,10 +1667,6 @@ stereo_CmdSetColorWriteMaskEXT(
     uint32_t attachmentCount,
     const VkColorComponentFlags *pColorWriteMasks)
 {
-    STEREO_LOG("CMD_SET_COLOR_WRITE_MASK_EXT cb=%p first=%u count=%u",
-        (void*)commandBuffer,
-        firstAttachment,
-        attachmentCount);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetColorWriteMaskEXT)
         return;
@@ -1785,10 +1685,6 @@ stereo_CmdSetVertexInputEXT(
     uint32_t vertexAttributeDescriptionCount,
     const VkVertexInputAttributeDescription2EXT *pVertexAttributeDescriptions)
 {
-    STEREO_LOG("CMD_SET_VERTEX_INPUT_EXT cb=%p bindings=%u attributes=%u",
-        (void*)commandBuffer,
-        vertexBindingDescriptionCount,
-        vertexAttributeDescriptionCount);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetVertexInputEXT)
         return;
