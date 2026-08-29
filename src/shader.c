@@ -10063,7 +10063,16 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo, ro, conv,
                     /*inj_vi=*/true,
                     dbgB)) {
-                STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
+                STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
+                continue;
+            }
+            STEREO_LOG(
+                "PATHB_RESULT p=%u orig_hash=%016llx orig_words=%zu patched_hash=%016llx patched_words=%zu",
+                p,
+                (unsigned long long)hash_spv(e->spv, e->words),
+                e->words,
+                (unsigned long long)hash_spv(patched, pc2),
+                pc2);
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
