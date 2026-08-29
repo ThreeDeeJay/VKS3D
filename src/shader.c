@@ -1648,43 +1648,49 @@ static bool emit_mesh_position_adjust(
 static bool stereo_skip_shader_patch(uint64_t spv_hash)
 {
     static bool skip_list_init;
-    static bool skip_all;
     static char skip_list[1024];
     if (!skip_list_init)
     {
-        const char *env =
-        stereo_getenv("VKS3D_SKIP_SHADER_PATCHES");
+        const char *env = stereo_getenv("VKS3D_SKIP_SHADER_PATCHES");
         if (env)
         {
             strncpy(skip_list, env, sizeof(skip_list) - 1);
             skip_list[sizeof(skip_list) - 1] = '\0';
-            skip_all = strchr(skip_list, '*') != NULL;
         }
         skip_list_init = true;
     }
-    if (!skip_list[0])
-        return false;
-    if (skip_all)
+    if (skip_list[0])
     {
-        STEREO_LOG(
-            "SKIP_SHADER_PATCH hash=%016llx reason=wildcard",
+        if (strcmp(skip_list, "*") == 0)
+        {
+            STEREO_LOG("SKIP_SHADER_PATCH_ALL");
+            free_spv_provenance(&m);
+            return false;
+        }
+        char hashstr[17];
+        snprintf(
+            hashstr,
+            sizeof(hashstr),
+            "%016llx",
             (unsigned long long)spv_hash);
-        return true;
+        char list_copy[1024];
+        strncpy(list_copy, skip_list, sizeof(list_copy) - 1);
+        list_copy[sizeof(list_copy) - 1] = '\0';
+        char *ctx = NULL;
+        char *tok = strtok_s(list_copy, ",; \t", &ctx);
+        while (tok)
+        {
+            if (strcmp(tok, hashstr) == 0)
+            {
+                STEREO_LOG(
+                    "SKIP_SHADER_PATCH hash=%s",
+                    hashstr);
+                free_spv_provenance(&m);
+                return false;
+            }
+            tok = strtok_s(NULL, ",; \t", &ctx);
+        }
     }
-    char hashstr[17];
-    snprintf(
-        hashstr,
-        sizeof(hashstr),
-        "%016llx",
-        (unsigned long long)spv_hash);
-    if (strstr(skip_list, hashstr))
-    {
-        STEREO_LOG(
-            "SKIP_SHADER_PATCH hash=%s reason=hash",
-            hashstr);
-        return true;
-    }
-    return false;
 }
 
 bool spirv_patch_stereo_mesh(
