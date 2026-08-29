@@ -6485,7 +6485,7 @@ bool spirv_patch_stereo_fs(
         if (replacement == 0)
         {
             replacement = nid++;
-            replacement_sampled = nid++;
+            replacement_sampled = s.images[img].sampled_type_id;
             STEREO_LOG(
                 "FS_REPLACEMENT_ALLOC "
                 "idx=%u "
@@ -6901,6 +6901,32 @@ bool spirv_patch_stereo_fs(
                 replacement_image = s.images[img].replacement_type;
                 replacement_sampled =
                     s.images[img].replacement_sampled_type;
+                if (replacement_sampled == sampled_id)
+                {
+                    patch_sampled = true;
+                    break;
+                }
+            }
+            if (patch_sampled)
+            {
+                STEREO_LOG(
+                    "FS_SAMPLED_IMAGE_PATCH "
+                    "result=%u "
+                    "oldImageType=%u "
+                    "newImageType=%u "
+                    "replacementSampled=%u",
+                    sampled_id,
+                    image_type,
+                    replacement_image,
+                    replacement_sampled);
+                uint32_t w[3];
+                memcpy(w, &in[i], sizeof(w));
+                w[2] = replacement_image;
+                sb_push_n(&ob, w, 3);
+                if (sampled_id < id_bound)
+                    emitted_type[sampled_id] = true;
+                i += wc;
+                continue;
             }
             if (sampled_id < id_bound && emitted_type[sampled_id])
             {
@@ -8221,6 +8247,7 @@ bool spirv_patch_stereo_fs(
                         s.images[img].replacement_type);
                     if (s.images[img].stereo &&
                         s.images[img].replacement_type &&
+                        s.images[img].replacement_sampled_type &&
                         s.images[img].replacement_sampled_type)
                     {
                         STEREO_LOG(
