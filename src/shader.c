@@ -5150,6 +5150,7 @@ fs_scan_image_operation(
     case SpvOpImageFetch:
     case SpvOpImageRead:
     case SpvOpImageWrite:
+    case SpvOpImageTexelPointer:
         STEREO_LOG(
             "FS_IMAGE_WRITE image=%u value=%u",
             ins[3],
