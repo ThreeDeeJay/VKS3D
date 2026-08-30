@@ -593,7 +593,7 @@ stereo_CmdBeginRenderPass(
         sd,
         mv_rp);
     if (!sd) {
-        /* Framebuffer not in our tracking → non-MV; find any live device */
+        /* Framebuffer not in our tracking → find any live device. */
         for (uint32_t d = 0; d < g_device_count; d++) {
             if (g_devices[d].real_device) { sd = &g_devices[d]; break; }
         }
@@ -607,17 +607,18 @@ stereo_CmdBeginRenderPass(
         (void *)(mv_rp ? mv_rp : pRenderPassBegin->renderPass),
         lookup ? lookup->has_multiview : 0,
         lookup ? (void *)lookup->mv_handle : NULL);
-    remember_begin_renderpass(
-        sd,
-        commandBuffer,
-        mv_rp ? mv_rp : pRenderPassBegin->renderPass,
-        0);
-    STEREO_LOG(
-        "RP_LOOKUP_BEGIN requested=%p lookup=%p lookup_orig=%p lookup_mv=%p",
-        (void*)pRenderPassBegin->renderPass,
-        (void*)lookup,
-        lookup ? (void*)lookup->handle : NULL,
-        lookup ? (void*)lookup->mv_handle : NULL);
+    if (mv_rp == VK_NULL_HANDLE &&
+        lookup &&
+        lookup->has_multiview &&
+        lookup->mv_handle != VK_NULL_HANDLE)
+    {
+        mv_rp = lookup->mv_handle;
+        STEREO_LOG(
+            "MV_RP_FALLBACK_FROM_RP cb=%p original=%p mv=%p",
+            (void *)commandBuffer,
+            (void *)pRenderPassBegin->renderPass,
+            (void *)mv_rp);
+    }
     /* CRITICAL DIAGNOSTIC: MV expected but not resolved */
     if (mv_rp == VK_NULL_HANDLE)
     {
