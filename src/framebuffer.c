@@ -660,6 +660,35 @@ stereo_CmdBeginRenderPass(
             pRenderPassBegin->renderPass,
             mv_rp);
         STEREO_LOG(
+            "RP_BEGIN_CORRELATE cb=%p original_rp=%p driver_rp=%p fb=%p lookup=%p "
+            "lookup_orig=%p lookup_mv=%p lookup_has_mv=%u",
+            (void*)commandBuffer,
+            (void*)pRenderPassBegin->renderPass,
+            (void*)modified.renderPass,
+            (void*)modified.framebuffer,
+            (void*)lookup,
+            lookup ? (void*)lookup->handle : NULL,
+            lookup ? (void*)lookup->mv_handle : NULL,
+            lookup ? lookup->has_multiview : 0);
+        for (uint32_t i = 0; i < sd->fb_track_count; i++)
+        {
+            if (sd->fb_tracks[i].fb == modified.framebuffer)
+            {
+                STEREO_LOG(
+                    "RP_BEGIN_FB_TRACK cb=%p fb=%p fb_rp=%p fb_used=%p fb_mv=%p "
+                    "has_mv=%u begin_orig=%p begin_driver=%p",
+                    (void*)commandBuffer,
+                    (void*)modified.framebuffer,
+                    (void*)sd->fb_tracks[i].rp,
+                    (void*)sd->fb_tracks[i].rp_used_at_create,
+                    (void*)sd->fb_tracks[i].mv_rp,
+                    sd->fb_tracks[i].has_mv,
+                    (void*)pRenderPassBegin->renderPass,
+                    (void*)modified.renderPass);
+                break;
+            }
+        }
+        STEREO_LOG(
             "CB_DISPATCH cb=%p sd=%p real_dev=%p",
             commandBuffer,
             sd,
