@@ -958,20 +958,33 @@ stereo_CmdDrawIndexed(
     if (info)
     {
         STEREO_LOG(
-            "DRAW_INDEXED pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u cb=%p",
+            "DRAW_INDEXED pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u cb=%p "
+            "indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
             (void *)pipe,
             (void *)rp,
             (void *)fb,
             info->is_quad,
             info->patched_vs,
             info->patched_fs,
-            (void *)commandBuffer);
+            (void *)commandBuffer,
+            indexCount,
+            instanceCount,
+            firstIndex,
+            vertexOffset,
+            firstInstance);
     }
     else
     {
         STEREO_LOG(
-            "DRAW_INDEXED pipe=%p UNKNOWN",
-            (void *)pipe);
+            "DRAW_INDEXED pipe=%p UNKNOWN cb=%p "
+            "indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
+            (void *)pipe,
+            (void *)commandBuffer,
+            indexCount,
+            instanceCount,
+            firstIndex,
+            vertexOffset,
+            firstInstance);
     }
     sd->real.CmdDrawIndexed(
         commandBuffer,
