@@ -103,6 +103,11 @@ static VkResult create_mv_rp(StereoDevice *sd,
     if (pa) mod.pAttachments = pa;
     mv.pNext = NULL;
     mod.pNext = &mv;
+    STEREO_LOG(
+        "MV_RP_CREATE subpasses=%u viewMask0=0x%x correlationMask0=0x%x",
+        sc,
+        sc ? vm[0] : 0,
+        sc ? cm[0] : 0);
     VkResult res = sd->real.CreateRenderPass(sd->real_device, &mod, pA, pRP);
     free(pa); free(vm); free(cm); free(vo);
     return res;
