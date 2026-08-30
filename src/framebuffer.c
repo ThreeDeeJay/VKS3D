@@ -98,30 +98,43 @@ stereo_CreateFramebuffer(
             pCreateInfo->attachmentCount,
             sd->upgraded_view_count,
             (void*)pCreateInfo->renderPass);
-        if (all) {
-            StereoRenderPassInfo *rpi = stereo_rp_lookup(sd, pCreateInfo->renderPass);
+        /*
+         * Resolve MV render pass independently of attachment scan.
+         * Attachment upgrade status is diagnostic only; it should not
+         * prevent using the MV render pass when a valid clone exists.
+         */
+        StereoRenderPassInfo *rpi =
+            stereo_rp_lookup(sd, pCreateInfo->renderPass);
         STEREO_LOG(
-            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u",
+            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u",
             (void*)pCreateInfo->renderPass,
             (void*)rpi,
             rpi ? (void*)rpi->handle : NULL,
             rpi ? (void*)rpi->mv_handle : NULL,
-            rpi ? (unsigned)rpi->has_multiview : 0);
+            rpi ? (unsigned)rpi->has_multiview : 0,
+            (unsigned)all);
         if (rpi &&
-            rpi->mv_handle && (rpi->handle == pCreateInfo->renderPass))
-            {
-                fci.renderPass = rpi->mv_handle;
-                STEREO_LOG(
-                    "FB_SET renderPass=%p",
-                    fci.renderPass);
-                use_mv         = rpi->mv_handle;
-                STEREO_LOG("CreateFramebuffer: all %u att upgraded → mv_rp=%p",
-                           pCreateInfo->attachmentCount, (void*)use_mv);
-            }
-        } else {
+            rpi->mv_handle &&
+            (rpi->handle == pCreateInfo->renderPass))
+        {
+            fci.renderPass = rpi->mv_handle;
+            use_mv = rpi->mv_handle;
+            STEREO_LOG(
+                "FB_SET renderPass=%p all=%u attachments=%u",
+                fci.renderPass,
+                (unsigned)all,
+                pCreateInfo->attachmentCount);
+        }
+        else
+        {
+            STEREO_LOG(
+                "FB_MV_NOT_SELECTED all=%u rpi=%p",
+                (unsigned)all,
+                (void*)rpi);
+        }
+        if (!all) {
             for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
                 bool found = false;
-        
                 for (uint32_t k = 0;
                      k < sd->upgraded_view_count;
                      k++)
@@ -136,9 +149,9 @@ stereo_CreateFramebuffer(
                 if (!found)
                 {
                     STEREO_LOG("[FB NON-UPGRADED] att=%u view=%p tracked=%u",
-                               i,
-                               pCreateInfo->pAttachments[i],
-                               sd->upgraded_view_count);
+                        i,
+                        pCreateInfo->pAttachments[i],
+                        sd->upgraded_view_count);
                 }
             }
         }
