@@ -5574,9 +5574,6 @@ fs_scan_instruction(
      * This is where depth/normal attachment analysis
      * will eventually feed projection correction.
      */
-    case SpvOpImageSampleImplicitLod:
-    case SpvOpImageSampleExplicitLod:
-    case SpvOpImageSampleDrefImplicitLod:
     case SpvOpImageSampleDrefExplicitLod:
     case SpvOpImageFetch:
     case SpvOpImageRead:
