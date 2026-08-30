@@ -1543,8 +1543,8 @@ static bool emit_mesh_position_adjust(
                 m->ft,
                 sel,
                 isl,
-                cr,
-                cl
+                cl,
+                cr
             };
             sb_push_n(out, w, 6);
         }
