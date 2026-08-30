@@ -93,6 +93,11 @@ static VkResult create_mv_rp(StereoDevice *sd,
         free(pa); free(vm); free(cm); free(vo); return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     for (uint32_t i = 0; i < sc; i++) { vm[i] = 0x00000003; cm[i] = STEREO_CORRELATION_MASK; }
+    STEREO_LOG(
+        "MV_RP_CREATE subpasses=%u viewMask0=0x%x correlationMask0=0x%x",
+        sc,
+        sc ? vm[0] : 0,
+        sc ? cm[0] : 0);
     VkRenderPassMultiviewCreateInfo mv = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
         .pNext = NULL, .subpassCount = sc, .pViewMasks = vm,

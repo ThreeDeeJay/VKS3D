@@ -69,6 +69,20 @@ stereo_CreateFramebuffer(
     VkFramebufferCreateInfo fci = *pCreateInfo;
     VkRenderPass debug_original = pCreateInfo->renderPass;
     
+    STEREO_LOG(
+        "FB_CREATE_INFO fb=%p rp=%p width=%u height=%u layers=%u attachments=%u",
+        (void*)pFramebuffer,
+        (void*)pCreateInfo->renderPass,
+        pCreateInfo->width,
+        pCreateInfo->height,
+        pCreateInfo->layers,
+        pCreateInfo->attachmentCount);
+    for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+        STEREO_LOG(
+            "FB_CREATE_ATTACHMENT i=%u view=%p",
+            i,
+            (void*)pCreateInfo->pAttachments[i]);
+    }
     if (debug_original == VK_NULL_HANDLE) {
         STEREO_LOG("[FATAL] upstream pCreateInfo->renderPass already NULL!");
     }
@@ -117,6 +131,13 @@ stereo_CreateFramebuffer(
             rpi->mv_handle &&
             (rpi->handle == pCreateInfo->renderPass))
         {
+            STEREO_LOG(
+                "FB_MV_DECISION rp=%p mv=%p all=%u layers=%u attachments=%u",
+                (void*)rpi->handle,
+                (void*)rpi->mv_handle,
+                (unsigned)all,
+                pCreateInfo->layers,
+                pCreateInfo->attachmentCount);
             fci.renderPass = rpi->mv_handle;
             use_mv = rpi->mv_handle;
             STEREO_LOG(
@@ -127,6 +148,15 @@ stereo_CreateFramebuffer(
         }
         else
         {
+            STEREO_LOG(
+                "FB_MV_DECISION_REJECT rp=%p rpi=%p mv=%p has_mv=%u all=%u layers=%u attachments=%u",
+                (void*)pCreateInfo->renderPass,
+                (void*)rpi,
+                rpi ? (void*)rpi->mv_handle : NULL,
+                rpi ? (unsigned)rpi->has_multiview : 0,
+                (unsigned)all,
+                pCreateInfo->layers,
+                pCreateInfo->attachmentCount);
             STEREO_LOG(
                 "FB_MV_NOT_SELECTED all=%u rpi=%p",
                 (unsigned)all,
