@@ -3183,6 +3183,11 @@ bool spirv_patch_stereo_vertex(
                     ob.w[j + 3],
                     m.view_var,
                     m.it);
+                STEREO_LOG(
+                    "VIEW_LOAD_FINAL_IDS result=%u type=%u ptr=%u",
+                    ob.w[j + 2],
+                    ob.w[j + 1],
+                    ob.w[j + 3]);
             }
         }
         if (!wc || j + wc > ob.n)
