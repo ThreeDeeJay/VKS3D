@@ -5580,6 +5580,7 @@ fs_scan_instruction(
     case SpvOpImageFetch:
     case SpvOpImageRead:
     case SpvOpImageWrite:
+    case SpvOpImageTexelPointer:
     case SpvOpImageQuerySizeLod:
         fs_scan_image_operation(
             s,
