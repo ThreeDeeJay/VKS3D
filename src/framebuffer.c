@@ -935,6 +935,15 @@ stereo_CmdDrawIndexed(
     uint32_t firstInstance)
 {
     STEREO_LOG("CALLED stereo_CmdDrawIndexed");
+    STEREO_LOG(
+        "DRAW_INDEXED_ARGS cb=%p indexCount=%u instanceCount=%u "
+        "firstIndex=%u vertexOffset=%d firstInstance=%u",
+        (void*)commandBuffer,
+        indexCount,
+        instanceCount,
+        firstIndex,
+        vertexOffset,
+        firstInstance);
     StereoDevice *sd = find_any_device();
     if (!sd)
         return;
@@ -949,13 +958,14 @@ stereo_CmdDrawIndexed(
     if (info)
     {
         STEREO_LOG(
-            "DRAW_INDEXED pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u",
+            "DRAW_INDEXED pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u cb=%p",
             (void *)pipe,
             (void *)rp,
             (void *)fb,
             info->is_quad,
             info->patched_vs,
-            info->patched_fs);
+            info->patched_fs,
+            (void *)commandBuffer);
     }
     else
     {
