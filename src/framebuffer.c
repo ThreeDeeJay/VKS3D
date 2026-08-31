@@ -723,20 +723,44 @@ stereo_CmdBeginRenderPass(
             commandBuffer,
             sd,
             sd->real_device);
+        bool cb_found = false;
         for (uint32_t i = 0; i < sd->cb_track_count; i++)
         {
             if (sd->cb_track[i].cb == commandBuffer)
             {
                 sd->cb_track[i].render_pass = modified.renderPass;
                 sd->cb_track[i].framebuffer = modified.framebuffer;
+                cb_found = true;
+                STEREO_LOG(
+                    "CB_TRACK_UPDATE cb=%p rp=%p fb=%p",
+                    (void*)commandBuffer,
+                    (void*)modified.renderPass,
+                    (void*)modified.framebuffer);
                 break;
             }
         }
+        if (!cb_found && sd->cb_track_count < MAX_CB_TRACK)
+        {
+            uint32_t idx = sd->cb_track_count++;
+            sd->cb_track[idx].cb = commandBuffer;
+            sd->cb_track[idx].render_pass = modified.renderPass;
+            sd->cb_track[idx].framebuffer = modified.framebuffer;
+            STEREO_LOG(
+                "CB_TRACK_CREATE cb=%p idx=%u rp=%p fb=%p",
+                (void*)commandBuffer,
+                idx,
+                (void*)modified.renderPass,
+                (void*)modified.framebuffer);
+        }
+        else if (!cb_found)
+        {
+            STEREO_LOG(
+                "CB_TRACK_OVERFLOW cb=%p count=%u max=%u",
+                (void*)commandBuffer,
+                sd->cb_track_count,
+                MAX_CB_TRACK);
+        }
         sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
-        STEREO_LOG(
-            "[RP BEGIN MONO] fb=%p rp=%p",
-            pRenderPassBegin->framebuffer,
-            pRenderPassBegin->renderPass);
     } else {
         STEREO_LOG(
             "RP_BEGIN_DRIVER rp=%p fb=%p",
@@ -764,6 +788,10 @@ stereo_CmdBeginRenderPass(
             "BEGIN_PASS_DRIVER original=%p framebuffer=%p",
             (void*)pRenderPassBegin->renderPass,
             (void*)pRenderPassBegin->framebuffer);
+        STEREO_LOG(
+            "[RP BEGIN MONO] fb=%p rp=%p",
+            pRenderPassBegin->framebuffer,
+            pRenderPassBegin->renderPass);
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
 }
