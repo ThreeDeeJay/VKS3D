@@ -10147,9 +10147,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             rpi ? (unsigned)rpi->has_multiview : 0,
             rpi ? rpi->view_mask : 0,
             rpi ? (void*)rpi->mv_handle : NULL);
-        if (rpi && rpi->has_multiview) {
+        bool pipeline_patched =
+            tst[p] != NULL;
+        STEREO_LOG(
+            "PIPE_RP_STEREO p=%u patched=%u tmp=%p",
+            p,
+            (unsigned)pipeline_patched,
+            (void*)tmp_mod[p]);
+        if (rpi && rpi->has_multiview && pipeline_patched) {
             STEREO_LOG("Pipe %u: binding MV render pass %p", p, (void*)rpi->mv_handle);
             infos[p].renderPass = rpi->mv_handle;
+        }
+        else if (rpi && rpi->has_multiview) {
+            STEREO_LOG(
+                "Pipe %u: NOT binding MV render pass because pipeline was not patched",
+                p);
         }
     }
     for (uint32_t p = 0; p < N; p++) {
