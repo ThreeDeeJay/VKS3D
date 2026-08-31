@@ -206,13 +206,22 @@ stereo_CreateRenderPass(
                 (void*)s->pDepthStencilAttachment);
             for (uint32_t j = 0; j < s->colorAttachmentCount; j++) {
                 STEREO_LOG(
-                    "RP_COLOR subpass=%u i=%u attachment=%u resolve=%u",
+                    "RP_COLOR_DETAIL subpass=%u i=%u attachment=%u format=%u samples=%u initial=%u final=%u",
                     i,
                     j,
                     s->pColorAttachments[j].attachment,
-                    s->pResolveAttachments ?
-                    s->pResolveAttachments[j].attachment :
-                    VK_ATTACHMENT_UNUSED);
+                    s->pColorAttachments[j].attachment != VK_ATTACHMENT_UNUSED &&
+                    s->pColorAttachments[j].attachment < pCreateInfo->attachmentCount ?
+                    pCreateInfo->pAttachments[s->pColorAttachments[j].attachment].format : 0,
+                    s->pColorAttachments[j].attachment != VK_ATTACHMENT_UNUSED &&
+                    s->pColorAttachments[j].attachment < pCreateInfo->attachmentCount ?
+                    pCreateInfo->pAttachments[s->pColorAttachments[j].attachment].samples : 0,
+                    s->pColorAttachments[j].attachment != VK_ATTACHMENT_UNUSED &&
+                    s->pColorAttachments[j].attachment < pCreateInfo->attachmentCount ?
+                    pCreateInfo->pAttachments[s->pColorAttachments[j].attachment].initialLayout : 0,
+                    s->pColorAttachments[j].attachment != VK_ATTACHMENT_UNUSED &&
+                    s->pColorAttachments[j].attachment < pCreateInfo->attachmentCount ?
+                    pCreateInfo->pAttachments[s->pColorAttachments[j].attachment].finalLayout : 0);
             }
             if (s->pDepthStencilAttachment) {
                 STEREO_LOG(
