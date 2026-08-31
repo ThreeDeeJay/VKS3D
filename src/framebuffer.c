@@ -98,18 +98,21 @@ stereo_CreateFramebuffer(
     }
 
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
-        /* MV is valid when all attachments are upgraded, or the only non-upgraded
-         * attachment is explicitly the render pass's fragment shading-rate attachment. */
         bool all = true;
         for (uint32_t i = 0; i < pCreateInfo->attachmentCount && all; i++) {
             bool found = false;
             for (uint32_t k = 0; k < sd->upgraded_view_count && !found; k++)
-                if (sd->upgraded_views[k] == pCreateInfo->pAttachments[i]) found = true;
-            if (!found) all = false;
+            {
+                if (sd->upgraded_views[k] == pCreateInfo->pAttachments[i])
+                    found = true;
+            }
+            if (!found)
+                all = false;
         }
         StereoRenderPassInfo *rpi =
             stereo_rp_lookup(sd, pCreateInfo->renderPass);
         if (rpi &&
+            all &&
             rpi->has_multiview &&
             rpi->mv_handle != VK_NULL_HANDLE &&
             rpi->handle == pCreateInfo->renderPass)
@@ -117,18 +120,20 @@ stereo_CreateFramebuffer(
             fci.renderPass = rpi->mv_handle;
             use_mv = rpi->mv_handle;
             STEREO_LOG(
-                "FB_SET renderPass=%p attachments=%u",
+                "FB_SET renderPass=%p attachments=%u all_upgraded=%u",
                 fci.renderPass,
-                pCreateInfo->attachmentCount);
+                pCreateInfo->attachmentCount,
+                (unsigned)all);
         }
         else
         {
             STEREO_LOG(
-                "FB_MV_NOT_SELECTED rp=%p rpi=%p has_mv=%u mv=%p",
+                "FB_MV_NOT_SELECTED rp=%p rpi=%p has_mv=%u mv=%p all_upgraded=%u",
                 (void*)pCreateInfo->renderPass,
                 (void*)rpi,
                 rpi ? (unsigned)rpi->has_multiview : 0,
-                rpi ? (void*)rpi->mv_handle : NULL);
+                rpi ? (void*)rpi->mv_handle : NULL,
+                (unsigned)all);
         }
         if (!all) {
             for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
