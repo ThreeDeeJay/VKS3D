@@ -2007,22 +2007,6 @@ bool spirv_patch_stereo_mesh(
         memcpy(&w[3], &conv, sizeof(conv));
         sb_push_n(&te, w, 4);
     }
-    STEREO_LOG(
-        "MS_OFFSETS "
-        "hash=%016llx "
-        "lo=%+.9f "
-        "ro=%+.9f "
-        "conv=%+.9f "
-        "cl=%u "
-        "cr=%u "
-        "cc=%u",
-        (unsigned long long)spv_hash,
-        lo,
-        ro,
-        conv,
-        id_cl,
-        id_cr,
-        id_cc);
     if (will_inj_vi)
     {
         uint32_t d[] = {
