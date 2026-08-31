@@ -128,35 +128,6 @@ static bool find_shading_rate_attachment2(
     return false;
 }
 
-static bool find_shading_rate_attachment2(
-    const VkRenderPassCreateInfo2 *pCI,
-    uint32_t *attachment)
-{
-    if (!pCI || !attachment)
-        return false;
-    *attachment = VK_ATTACHMENT_UNUSED;
-#ifdef VK_KHR_fragment_shading_rate
-    for (uint32_t i = 0; i < pCI->subpassCount; i++) {
-        const VkBaseInStructure *pNext =
-            (const VkBaseInStructure *)pCI->pSubpasses[i].pNext;
-        while (pNext) {
-            if (pNext->sType ==
-                VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR) {
-                const VkFragmentShadingRateAttachmentInfoKHR *fsr =
-                    (const VkFragmentShadingRateAttachmentInfoKHR *)pNext;
-                if (fsr->pFragmentShadingRateAttachment) {
-                    *attachment =
-                        fsr->pFragmentShadingRateAttachment->attachment;
-                    return *attachment != VK_ATTACHMENT_UNUSED;
-                }
-            }
-            pNext = pNext->pNext;
-        }
-    }
-#endif
-    return false;
-}
-
 /* ── Helper: create multiview version (PRESENT_SRC_KHR patched + viewMask) */
 static VkResult create_mv_rp(StereoDevice *sd,
     const VkRenderPassCreateInfo *pCI, const VkAllocationCallbacks *pA,
