@@ -9252,12 +9252,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         if (in_mv_rp) {
             if (rpi && rpi->mv_handle) {
                 STEREO_LOG(
-                    "Pipe %u: MV RP detected (stageCount=%u) - using MV render pass %p",
+                    "Pipe %u: MV RP candidate (stageCount=%u) render pass %p",
                     p,
                     ci->stageCount,
                     (void*)rpi->mv_handle);
-                /* render-pass pipeline path only */
-                infos[p].renderPass = rpi->mv_handle;
             } else {
                 STEREO_LOG(
                     "Pipe %u: dynamic rendering multiview detected (stageCount=%u) - no renderPass swap",
@@ -9280,17 +9278,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              * BUT still allow FS quad / UI heuristics to run later
              */
             goto PIPE_DECISION_CONTINUE;
-        }
-        /* Substitute multiview render pass for pipeline compilation.
-         * Pipelines must be compiled against the MV render pass so the driver
-         * enables multiview optimisation and gl_ViewIndex receives the real
-         * per-view index (0 or 1).  Render-pass compatibility rules allow these
-         * pipelines to be used with both MV and non-MV framebuffers since
-         * viewMask is not part of the compatibility criteria. */
-        if (rpi && rpi->mv_handle && rpi->has_multiview && in_mv_rp)
-        {
-            /* Render-pass path only; dynamic rendering has no renderPass to swap. */
-            infos[p].renderPass = rpi->mv_handle;
         }
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
