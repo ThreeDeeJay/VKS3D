@@ -168,6 +168,61 @@ stereo_CreateRenderPass(
     STEREO_LOG("stereo_CreateRenderPass: attachments=%u",
                pCreateInfo ? pCreateInfo->attachmentCount : 0);
 
+    if (pCreateInfo) {
+        STEREO_LOG(
+            "RP_DETAIL subpasses=%u attachments=%u dependencies=%u flags=%x",
+            pCreateInfo->subpassCount,
+            pCreateInfo->attachmentCount,
+            pCreateInfo->dependencyCount,
+            pCreateInfo->flags);
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            const VkAttachmentDescription *a = &pCreateInfo->pAttachments[i];
+            STEREO_LOG(
+                "RP_ATT i=%u format=%u samples=%u load=%u store=%u "
+                "stencilLoad=%u stencilStore=%u initial=%u final=%u flags=%x",
+                i,
+                a->format,
+                a->samples,
+                a->loadOp,
+                a->storeOp,
+                a->stencilLoadOp,
+                a->stencilStoreOp,
+                a->initialLayout,
+                a->finalLayout,
+                a->flags);
+        }
+        for (uint32_t i = 0; i < pCreateInfo->subpassCount; i++) {
+            const VkSubpassDescription *s = &pCreateInfo->pSubpasses[i];
+            STEREO_LOG(
+                "RP_SUBPASS i=%u flags=%x bindPoint=%u inputs=%u colors=%u resolves=%u "
+                "preserve=%u depth=%p",
+                i,
+                s->flags,
+                s->pipelineBindPoint,
+                s->inputAttachmentCount,
+                s->colorAttachmentCount,
+                s->pResolveAttachments ? s->colorAttachmentCount : 0,
+                s->preserveAttachmentCount,
+                (void*)s->pDepthStencilAttachment);
+            for (uint32_t j = 0; j < s->colorAttachmentCount; j++) {
+                STEREO_LOG(
+                    "RP_COLOR subpass=%u i=%u attachment=%u resolve=%u",
+                    i,
+                    j,
+                    s->pColorAttachments[j].attachment,
+                    s->pResolveAttachments ?
+                    s->pResolveAttachments[j].attachment :
+                    VK_ATTACHMENT_UNUSED);
+            }
+            if (s->pDepthStencilAttachment) {
+                STEREO_LOG(
+                    "RP_DEPTH subpass=%u attachment=%u",
+                    i,
+                    s->pDepthStencilAttachment->attachment);
+            }
+        }
+    }
+
     /* Step 1: create ORIGINAL render pass */
     VkResult res = create_patched_rp(sd, pCreateInfo, pAllocator, pRenderPass);
     if (res != VK_SUCCESS)
