@@ -111,9 +111,8 @@ stereo_CreateFramebuffer(
             stereo_rp_lookup(sd, pCreateInfo->renderPass);
         if (rpi &&
             rpi->has_multiview &&
-            rpi->mv_handle &&
-            (rpi->handle == pCreateInfo->renderPass) &&
-            use_mv_allowed)
+            rpi->mv_handle != VK_NULL_HANDLE &&
+            rpi->handle == pCreateInfo->renderPass)
         {
             fci.renderPass = rpi->mv_handle;
             use_mv = rpi->mv_handle;
