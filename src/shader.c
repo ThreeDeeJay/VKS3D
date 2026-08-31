@@ -2558,7 +2558,9 @@ bool spirv_patch_stereo_vertex(
         if (!m.pos_var)
         {
             STEREO_LOG(
-                "PATCH_SKIP no gl_Position");
+                "PATCH_SKIP no gl_Position hash=%016llx exec=%u",
+                (unsigned long long)spv_hash,
+                (unsigned)m.exec_model);
             free_spv_provenance(&m);
             return false;
         }
@@ -2583,6 +2585,14 @@ bool spirv_patch_stereo_vertex(
     }
     if (!m.is_patchable)
     {
+        STEREO_LOG(
+            "PATCH_SKIP not_patchable hash=%016llx exec=%u pos=%u matrix=%d direct=%d v2pos=%d",
+            (unsigned long long)spv_hash,
+            (unsigned)m.exec_model,
+            m.pos_var,
+            m.has_matrix_ops,
+            m.has_direct_position_write,
+            m.has_v2_position_input);
         free_spv_provenance(&m);
         return false;
     }
