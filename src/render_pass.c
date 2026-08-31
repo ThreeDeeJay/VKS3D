@@ -70,6 +70,93 @@ static bool is_depth_only_renderpass(
     }
 }
 
+static bool find_shading_rate_attachment(
+    const VkRenderPassCreateInfo *pCI,
+    uint32_t *attachment)
+{
+    if (!pCI || !attachment)
+        return false;
+    *attachment = VK_ATTACHMENT_UNUSED;
+#ifdef VK_KHR_fragment_shading_rate
+    for (uint32_t i = 0; i < pCI->subpassCount; i++) {
+        const VkBaseInStructure *pNext =
+            (const VkBaseInStructure *)pCI->pSubpasses[i].pNext;
+        while (pNext) {
+            if (pNext->sType ==
+                VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR) {
+                const VkFragmentShadingRateAttachmentInfoKHR *fsr =
+                    (const VkFragmentShadingRateAttachmentInfoKHR *)pNext;
+                if (fsr->pFragmentShadingRateAttachment) {
+                    *attachment =
+                        fsr->pFragmentShadingRateAttachment->attachment;
+                    return *attachment != VK_ATTACHMENT_UNUSED;
+                }
+            }
+            pNext = pNext->pNext;
+        }
+    }
+#endif
+    return false;
+}
+
+static bool find_shading_rate_attachment2(
+    const VkRenderPassCreateInfo2 *pCI,
+    uint32_t *attachment)
+{
+    if (!pCI || !attachment)
+        return false;
+    *attachment = VK_ATTACHMENT_UNUSED;
+#ifdef VK_KHR_fragment_shading_rate
+    for (uint32_t i = 0; i < pCI->subpassCount; i++) {
+        const VkBaseInStructure *pNext =
+            (const VkBaseInStructure *)pCI->pSubpasses[i].pNext;
+        while (pNext) {
+            if (pNext->sType ==
+                VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR) {
+                const VkFragmentShadingRateAttachmentInfoKHR *fsr =
+                    (const VkFragmentShadingRateAttachmentInfoKHR *)pNext;
+                if (fsr->pFragmentShadingRateAttachment) {
+                    *attachment =
+                        fsr->pFragmentShadingRateAttachment->attachment;
+                    return *attachment != VK_ATTACHMENT_UNUSED;
+                }
+            }
+            pNext = pNext->pNext;
+        }
+    }
+#endif
+    return false;
+}
+
+static bool find_shading_rate_attachment2(
+    const VkRenderPassCreateInfo2 *pCI,
+    uint32_t *attachment)
+{
+    if (!pCI || !attachment)
+        return false;
+    *attachment = VK_ATTACHMENT_UNUSED;
+#ifdef VK_KHR_fragment_shading_rate
+    for (uint32_t i = 0; i < pCI->subpassCount; i++) {
+        const VkBaseInStructure *pNext =
+            (const VkBaseInStructure *)pCI->pSubpasses[i].pNext;
+        while (pNext) {
+            if (pNext->sType ==
+                VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR) {
+                const VkFragmentShadingRateAttachmentInfoKHR *fsr =
+                    (const VkFragmentShadingRateAttachmentInfoKHR *)pNext;
+                if (fsr->pFragmentShadingRateAttachment) {
+                    *attachment =
+                        fsr->pFragmentShadingRateAttachment->attachment;
+                    return *attachment != VK_ATTACHMENT_UNUSED;
+                }
+            }
+            pNext = pNext->pNext;
+        }
+    }
+#endif
+    return false;
+}
+
 /* ── Helper: create multiview version (PRESENT_SRC_KHR patched + viewMask) */
 static VkResult create_mv_rp(StereoDevice *sd,
     const VkRenderPassCreateInfo *pCI, const VkAllocationCallbacks *pA,
@@ -157,6 +244,16 @@ stereo_CreateRenderPass(
     rpi->view_mask     = 0;
     rpi->subpass_count = pCreateInfo->subpassCount;
 
+    rpi->shading_rate_attachment = VK_ATTACHMENT_UNUSED;
+    rpi->has_shading_rate_attachment =
+        find_shading_rate_attachment(
+            pCreateInfo,
+            &rpi->shading_rate_attachment);
+    STEREO_LOG(
+        "RP_FSR attachment=%u has=%u",
+        rpi->shading_rate_attachment,
+        (unsigned)rpi->has_shading_rate_attachment);
+
     /* Step 2: classify */
     bool depth_only = is_depth_only_renderpass(pCreateInfo);
 
@@ -192,11 +289,12 @@ stereo_CreateRenderPass(
                 rpi->mv_handle     = ex->mv_handle;
                 rpi->has_multiview = true;
                 rpi->view_mask     = STEREO_VIEW_MASK;
-
+                rpi->shading_rate_attachment = ex->shading_rate_attachment;
+                rpi->has_shading_rate_attachment =
+                    ex->has_shading_rate_attachment;
                 STEREO_LOG("RenderPass %p: reused existing mv=%p",
                            (void*)*pRenderPass,
                            (void*)ex->mv_handle);
-
                 return VK_SUCCESS;
             }
         }
@@ -275,9 +373,22 @@ stereo_CreateRenderPass2KHR(
 
     if (sd->render_pass_count >= MAX_RENDER_PASSES) return VK_SUCCESS;
     CHECK_ARRAY_COUNT(sd->render_pass_count, MAX_RENDER_PASSES, "render_pass_count");
+
     StereoRenderPassInfo *rpi = &sd->render_passes[sd->render_pass_count++];
-    rpi->handle = *pRenderPass; rpi->mv_handle = VK_NULL_HANDLE;
-    rpi->has_multiview = false; rpi->view_mask = 0; rpi->subpass_count = sc;
+    rpi->handle = *pRenderPass;
+    rpi->mv_handle = VK_NULL_HANDLE;
+    rpi->has_multiview = false;
+    rpi->view_mask = 0;
+    rpi->subpass_count = sc;
+    rpi->shading_rate_attachment = VK_ATTACHMENT_UNUSED;
+    rpi->has_shading_rate_attachment =
+        find_shading_rate_attachment2(
+            pCreateInfo,
+            &rpi->shading_rate_attachment);
+    STEREO_LOG(
+        "RP2_FSR attachment=%u has=%u",
+        rpi->shading_rate_attachment,
+        (unsigned)rpi->has_shading_rate_attachment);
 
     if (sd->stereo.enabled && sd->stereo.multiview) {
         /* Build multiview subpasses */

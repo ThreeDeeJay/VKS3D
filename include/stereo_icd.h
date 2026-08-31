@@ -522,7 +522,9 @@ typedef struct StereoRenderPassInfo {
     uint32_t      view_mask;
     uint32_t      subpass_count;
     VkRenderPass  mv_handle;     /* multiview version — VK_NULL_HANDLE until framebuffer confirms */
-    uint8_t       _pad[7];
+    uint32_t      shading_rate_attachment;
+    bool          has_shading_rate_attachment;
+    uint8_t       _pad[2];
 } StereoRenderPassInfo;
 
 typedef struct StereoFramebufferTrack {
