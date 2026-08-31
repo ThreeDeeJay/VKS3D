@@ -1385,14 +1385,71 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     }
     else
     {
-        uint32_t w[] = {
-            op_(SpvOpFAdd, 5),
-            m->ft,
-            nx,
+        uint32_t pw = (*nid)++;
+        uint32_t convmag = (*nid)++;
+        uint32_t tmp = (*nid)++;
+        STEREO_LOG(
+            "PROJ_PIVOT_IDS "
+            "pw=%u "
+            "convmag=%u "
+            "tmp=%u "
+            "px=%u "
+            "nx=%u",
+            pw,
+            convmag,
+            tmp,
             px,
-            sel
-        };
-        sb_push_n(out, w, 5);
+            nx);
+        {
+            uint32_t w[] = {
+                op_(SpvOpCompositeExtract, 5),
+                m->ft,
+                pw,
+                lp,
+                3u
+            };
+            sb_push_n(out, w, 5);
+        }
+        {
+            uint32_t w[] = {
+                op_(SpvOpFMul, 5),
+                m->ft,
+                convmag,
+                pw,
+                c->cc
+            };
+            sb_push_n(out, w, 5);
+        }
+        {
+            uint32_t w[] = {
+                op_(SpvOpFMul, 5),
+                m->ft,
+                tmp,
+                sel,
+                convmag
+            };
+            sb_push_n(out, w, 5);
+        }
+        {
+            uint32_t w[] = {
+                op_(SpvOpFAdd, 5),
+                m->ft,
+                nx,
+                px,
+                sel
+            };
+            sb_push_n(out, w, 5);
+        }
+        {
+            uint32_t w[] = {
+                op_(SpvOpFSub, 5),
+                m->ft,
+                nx2,
+                nx,
+                tmp
+            };
+            sb_push_n(out, w, 5);
+        }
     }
     {
         uint32_t w[] = {
