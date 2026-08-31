@@ -153,6 +153,7 @@ stereo_CreateFramebuffer(
             (unsigned)all,
             (unsigned)use_mv_allowed);
         if (rpi &&
+            rpi->has_multiview &&
             rpi->mv_handle &&
             (rpi->handle == pCreateInfo->renderPass) &&
             use_mv_allowed)
