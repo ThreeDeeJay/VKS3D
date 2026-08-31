@@ -195,21 +195,35 @@ stereo_CreateRenderPass(
 
     /* Step 2: classify */
     bool depth_only = is_depth_only_renderpass(pCreateInfo);
-
+    bool present_pass = false;
+    for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+        if (pCreateInfo->pAttachments[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        {
+            present_pass = true;
+            break;
+        }
+    }
+    bool mv_eligible =
+    sd->stereo.enabled &&
+    sd->stereo.multiview &&
+    present_pass &&
+    !depth_only;
     STEREO_LOG(
-        "RenderPass classify: depth_only=%d attachments=%u fmt0=%u",
+        "RenderPass classify: depth_only=%d present_pass=%d attachments=%u fmt0=%u",
         depth_only,
+        present_pass,
         pCreateInfo->attachmentCount,
         pCreateInfo->attachmentCount ?
-            pCreateInfo->pAttachments[0].format :
-            0);
-
-    bool mv_eligible =
-        sd->stereo.enabled &&
-        sd->stereo.multiview &&
-        !depth_only;
+        pCreateInfo->pAttachments[0].format :
+        0);
     if (!mv_eligible)
     {
+        STEREO_LOG(
+            "RenderPass MV disabled: depth_only=%d present_pass=%d multiview=%d enabled=%d",
+            depth_only,
+            present_pass,
+            sd->stereo.multiview,
+            sd->stereo.enabled);
         return VK_SUCCESS;
     }
 
