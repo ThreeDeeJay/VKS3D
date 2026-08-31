@@ -2008,7 +2008,7 @@ bool spirv_patch_stereo_mesh(
         sb_push_n(&te, w, 4);
     }
     STEREO_LOG(
-        "VS_OFFSETS "
+        "MS_OFFSETS "
         "hash=%016llx "
         "lo=%+.9f "
         "ro=%+.9f "
