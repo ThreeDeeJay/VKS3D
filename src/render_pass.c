@@ -270,7 +270,7 @@ stereo_CreateRenderPass(
     bool mv_eligible =
     sd->stereo.enabled &&
     sd->stereo.multiview &&
-    present_pass &&
+    pCreateInfo->attachmentCount > 0 &&
     !depth_only;
     STEREO_LOG(
         "RenderPass classify: depth_only=%d present_pass=%d attachments=%u fmt0=%u",
