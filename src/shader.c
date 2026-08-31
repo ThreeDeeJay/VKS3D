@@ -10106,6 +10106,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
+            if (rpi && rpi->has_multiview && rpi->mv_handle)
+            {
+                infos[p].renderPass = rpi->mv_handle;
+                STEREO_LOG(
+                    "Pipe %u: Path B — binding MV render pass %p",
+                    p,
+                    (void*)rpi->mv_handle);
+            }
             STEREO_LOG(
                 "PATCHED_STAGE PathB p=%u stage=%u orig=%p patched=%p",
                 p,
