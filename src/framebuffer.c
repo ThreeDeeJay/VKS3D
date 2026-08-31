@@ -98,7 +98,8 @@ stereo_CreateFramebuffer(
     }
 
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
-        /* All attachments must be in sd->upgraded_views[] (2-layer 2D_ARRAY) */
+        /* MV is valid when all attachments are upgraded, or the only non-upgraded
+         * attachment is explicitly the render pass's fragment shading-rate attachment. */
         bool all = true;
         for (uint32_t i = 0; i < pCreateInfo->attachmentCount && all; i++) {
             bool found = false;
@@ -106,60 +107,89 @@ stereo_CreateFramebuffer(
                 if (sd->upgraded_views[k] == pCreateInfo->pAttachments[i]) found = true;
             if (!found) all = false;
         }
+        StereoRenderPassInfo *rpi =
+            stereo_rp_lookup(sd, pCreateInfo->renderPass);
+        bool use_mv_allowed = all;
+        if (!all && rpi && rpi->has_shading_rate_attachment) {
+            bool only_non_upgraded_are_shading_rate = true;
+            for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+                bool found = false;
+                for (uint32_t k = 0;
+                     k < sd->upgraded_view_count && !found;
+                     k++) {
+                    if (sd->upgraded_views[k] ==
+                        pCreateInfo->pAttachments[i]) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found &&
+                    i != rpi->shading_rate_attachment) {
+                    only_non_upgraded_are_shading_rate = false;
+                    break;
+                }
+            }
+            use_mv_allowed = only_non_upgraded_are_shading_rate;
+        }
         STEREO_LOG(
             "FB_ATTACH_SCAN result all=%u attachmentCount=%u upgraded_views=%u rp=%p",
             (unsigned)all,
             pCreateInfo->attachmentCount,
             sd->upgraded_view_count,
             (void*)pCreateInfo->renderPass);
-        /*
-         * Resolve MV render pass independently of attachment scan.
-         * Attachment upgrade status is diagnostic only; it should not
-         * prevent using the MV render pass when a valid clone exists.
-         */
-        StereoRenderPassInfo *rpi =
-            stereo_rp_lookup(sd, pCreateInfo->renderPass);
         STEREO_LOG(
-            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u",
+            "FB_MV_ELIGIBILITY all=%u fsr=%u fsr_att=%u allowed=%u",
+            (unsigned)all,
+            rpi ? (unsigned)rpi->has_shading_rate_attachment : 0,
+            rpi ? rpi->shading_rate_attachment : VK_ATTACHMENT_UNUSED,
+            (unsigned)use_mv_allowed);
+        STEREO_LOG(
+            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u allowed=%u",
             (void*)pCreateInfo->renderPass,
             (void*)rpi,
             rpi ? (void*)rpi->handle : NULL,
             rpi ? (void*)rpi->mv_handle : NULL,
             rpi ? (unsigned)rpi->has_multiview : 0,
-            (unsigned)all);
+            (unsigned)all,
+            (unsigned)use_mv_allowed);
         if (rpi &&
             rpi->mv_handle &&
-            (rpi->handle == pCreateInfo->renderPass))
+            (rpi->handle == pCreateInfo->renderPass) &&
+            use_mv_allowed)
         {
             STEREO_LOG(
-                "FB_MV_DECISION rp=%p mv=%p all=%u layers=%u attachments=%u",
+                "FB_MV_DECISION rp=%p mv=%p all=%u allowed=%u layers=%u attachments=%u",
                 (void*)rpi->handle,
                 (void*)rpi->mv_handle,
                 (unsigned)all,
+                (unsigned)use_mv_allowed,
                 pCreateInfo->layers,
                 pCreateInfo->attachmentCount);
             fci.renderPass = rpi->mv_handle;
             use_mv = rpi->mv_handle;
             STEREO_LOG(
-                "FB_SET renderPass=%p all=%u attachments=%u",
+                "FB_SET renderPass=%p all=%u allowed=%u attachments=%u",
                 fci.renderPass,
                 (unsigned)all,
+                (unsigned)use_mv_allowed,
                 pCreateInfo->attachmentCount);
         }
         else
         {
             STEREO_LOG(
-                "FB_MV_DECISION_REJECT rp=%p rpi=%p mv=%p has_mv=%u all=%u layers=%u attachments=%u",
+                "FB_MV_DECISION_REJECT rp=%p rpi=%p mv=%p has_mv=%u all=%u allowed=%u layers=%u attachments=%u",
                 (void*)pCreateInfo->renderPass,
                 (void*)rpi,
                 rpi ? (void*)rpi->mv_handle : NULL,
                 rpi ? (unsigned)rpi->has_multiview : 0,
                 (unsigned)all,
+                (unsigned)use_mv_allowed,
                 pCreateInfo->layers,
                 pCreateInfo->attachmentCount);
             STEREO_LOG(
-                "FB_MV_NOT_SELECTED all=%u rpi=%p",
+                "FB_MV_NOT_SELECTED all=%u allowed=%u rpi=%p",
                 (unsigned)all,
+                (unsigned)use_mv_allowed,
                 (void*)rpi);
         }
         if (!all) {
@@ -241,17 +271,16 @@ stereo_CreateFramebuffer(
             (void*)original_rp,
             (void*)fci.renderPass,
             (void*)use_mv);
-
-         /* Reserve a unique tracking slot immediately.
-          * This avoids two concurrent CreateFramebuffer calls both
-          * writing the same entry before fb_track_count is advanced.
-          */
+        /* Reserve a unique tracking slot immediately.
+         * This avoids two concurrent CreateFramebuffer calls both
+         * writing the same entry before fb_track_count is advanced.
+         */
         CHECK_ARRAY_COUNT(sd->fb_track_count, MAX_FB_TRACK, "fb_track_count");
-         uint32_t idx = sd->fb_track_count++;
-         STEREO_LOG(
-             "FB_COUNT_RESERVE idx=%u next=%u",
-             idx,
-             sd->fb_track_count);
+        uint32_t idx = sd->fb_track_count++;
+        STEREO_LOG(
+            "FB_COUNT_RESERVE idx=%u next=%u",
+            idx,
+            sd->fb_track_count);
         if (idx >= MAX_FB_TRACK)
         {
             STEREO_LOG(
