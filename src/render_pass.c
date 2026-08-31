@@ -70,35 +70,6 @@ static bool is_depth_only_renderpass(
     }
 }
 
-static bool find_shading_rate_attachment(
-    const VkRenderPassCreateInfo *pCI,
-    uint32_t *attachment)
-{
-    if (!pCI || !attachment)
-        return false;
-    *attachment = VK_ATTACHMENT_UNUSED;
-#ifdef VK_KHR_fragment_shading_rate
-    for (uint32_t i = 0; i < pCI->subpassCount; i++) {
-        const VkBaseInStructure *pNext =
-            (const VkBaseInStructure *)pCI->pSubpasses[i].pNext;
-        while (pNext) {
-            if (pNext->sType ==
-                VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR) {
-                const VkFragmentShadingRateAttachmentInfoKHR *fsr =
-                    (const VkFragmentShadingRateAttachmentInfoKHR *)pNext;
-                if (fsr->pFragmentShadingRateAttachment) {
-                    *attachment =
-                        fsr->pFragmentShadingRateAttachment->attachment;
-                    return *attachment != VK_ATTACHMENT_UNUSED;
-                }
-            }
-            pNext = pNext->pNext;
-        }
-    }
-#endif
-    return false;
-}
-
 static bool find_shading_rate_attachment2(
     const VkRenderPassCreateInfo2 *pCI,
     uint32_t *attachment)
@@ -216,10 +187,7 @@ stereo_CreateRenderPass(
     rpi->subpass_count = pCreateInfo->subpassCount;
 
     rpi->shading_rate_attachment = VK_ATTACHMENT_UNUSED;
-    rpi->has_shading_rate_attachment =
-        find_shading_rate_attachment(
-            pCreateInfo,
-            &rpi->shading_rate_attachment);
+    rpi->has_shading_rate_attachment = false;
     STEREO_LOG(
         "RP_FSR attachment=%u has=%u",
         rpi->shading_rate_attachment,
