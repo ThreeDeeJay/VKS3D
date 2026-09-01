@@ -99,49 +99,58 @@ stereo_CreateFramebuffer(
 
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
         bool all = true;
-        for (uint32_t i = 0; i < pCreateInfo->attachmentCount && all; i++) {
+        bool any = false;
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
             bool found = false;
-            for (uint32_t k = 0; k < sd->upgraded_view_count && !found; k++)
-            {
-                if (sd->upgraded_views[k] == pCreateInfo->pAttachments[i])
+            for (uint32_t k = 0; k < sd->upgraded_view_count; k++) {
+                if (sd->upgraded_views[k] == pCreateInfo->pAttachments[i]) {
                     found = true;
+                    break;
+                }
             }
-            if (!found)
+            if (found)
+                any = true;
+            else
                 all = false;
         }
         StereoRenderPassInfo *rpi =
             stereo_rp_lookup(sd, pCreateInfo->renderPass);
         STEREO_LOG(
-            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u",
+            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u any=%u",
             (void*)pCreateInfo->renderPass,
             (void*)rpi,
             rpi ? (void*)rpi->handle : NULL,
             rpi ? (void*)rpi->mv_handle : NULL,
             rpi ? (unsigned)rpi->has_multiview : 0,
-            (unsigned)all);
+            (unsigned)all,
+            (unsigned)any);
         if (rpi &&
-            all &&
+            any &&
             rpi->mv_handle &&
-            (rpi->handle == pCreateInfo->renderPass))
+            rpi->has_multiview &&
+            rpi->handle == pCreateInfo->renderPass)
         {
             fci.renderPass = rpi->mv_handle;
             use_mv = rpi->mv_handle;
             STEREO_LOG(
-                "FB_SET renderPass=%p all=%u attachments=%u",
+                "FB_SET renderPass=%p all=%u any=%u attachments=%u",
                 fci.renderPass,
                 (unsigned)all,
+                (unsigned)any,
                 pCreateInfo->attachmentCount);
         }
         else
         {
             STEREO_LOG(
-                "FB_MV_NOT_SELECTED rp=%p rpi=%p has_mv=%u mv=%p all_upgraded=%u",
+                "FB_MV_NOT_SELECTED rp=%p rpi=%p has_mv=%u mv=%p all_upgraded=%u any_upgraded=%u",
                 (void*)pCreateInfo->renderPass,
                 (void*)rpi,
                 rpi ? (unsigned)rpi->has_multiview : 0,
                 rpi ? (void*)rpi->mv_handle : NULL,
-                (unsigned)all);
+                (unsigned)all,
+                (unsigned)any);
         }
+    }
         if (!all) {
             for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
                 bool found = false;
