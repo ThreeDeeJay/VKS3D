@@ -545,7 +545,7 @@ stereo_CmdBeginRenderPass(
                     "MV_USE_RP_LOOKUP_FOR_TRACKED_MV_FB fb=%p original_rp=%p tracked_mv=%p lookup_mv=%p",
                     (void*)pRenderPassBegin->framebuffer,
                     (void*)pRenderPassBegin->renderPass,
-                    (void*)dev->fb_tracks[fb_track_index].mv_rp,
+                    (void*)sd->fb_tracks[fb_track_index].mv_rp,
                     (void*)lookup->mv_handle);
             }
             else
@@ -554,7 +554,7 @@ stereo_CmdBeginRenderPass(
                     "MV_USE_TRACKED_FB_FALLBACK fb=%p original_rp=%p tracked_mv=%p lookup=%p",
                     (void*)pRenderPassBegin->framebuffer,
                     (void*)pRenderPassBegin->renderPass,
-                    (void*)dev->fb_tracks[fb_track_index].mv_rp,
+                    (void*)sd->fb_tracks[fb_track_index].mv_rp,
                     (void*)lookup);
             }
         }
@@ -567,6 +567,17 @@ stereo_CmdBeginRenderPass(
                 (void*)pRenderPassBegin->renderPass,
                 lookup ? (void*)lookup->mv_handle : NULL);
         }
+    }
+    else if (lookup &&
+        lookup->has_multiview &&
+        lookup->mv_handle != VK_NULL_HANDLE)
+    {
+        mv_rp = lookup->mv_handle;
+        STEREO_LOG(
+            "MV_RP_FALLBACK_FROM_RP cb=%p original=%p mv=%p",
+            (void *)commandBuffer,
+            (void *)pRenderPassBegin->renderPass,
+            (void *)mv_rp);
     }
     else if (lookup &&
         lookup->has_multiview &&
