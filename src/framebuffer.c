@@ -317,15 +317,24 @@ stereo_DestroyFramebuffer(
     STEREO_LOG("CALLED stereo_DestroyFramebuffer");
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return;
-    for (uint32_t i = 0; i < sd->fb_track_count; i++) {
-        if (sd->fb_tracks[i].fb == framebuffer) {
+    stereo_mutex_lock(&sd->lock);
+    for (uint32_t i = 0; i < sd->fb_track_count; i++)
+    {
+        if (sd->fb_tracks[i].fb == framebuffer)
+        {
             uint32_t last = --sd->fb_track_count;
             if (i != last)
                 sd->fb_tracks[i] = sd->fb_tracks[last];
             memset(&sd->fb_tracks[last], 0, sizeof(sd->fb_tracks[last]));
+            STEREO_LOG(
+                "FB_TRACK_DESTROY fb=%p idx=%u new_count=%u",
+                (void*)framebuffer,
+                i,
+                sd->fb_track_count);
             break;
         }
     }
+    stereo_mutex_unlock(&sd->lock);
     sd->real.DestroyFramebuffer(
         sd->real_device,
         framebuffer,
