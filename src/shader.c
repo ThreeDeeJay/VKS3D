@@ -9200,43 +9200,34 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (st==VK_SHADER_STAGE_MESH_BIT_EXT)
             { has_ms=true; ms_stage=s; }
         }
+        /* ── Determine if this pipeline's render pass has multiview ──────
+         * gl_ViewIndex is 0 in non-multiview passes.  Patching VS/TES there
+         * bakes in left_eye_offset for ALL draws → deferred G-buffer / shadow
+         * passes render from left-eye-only perspective → monoscopic output.
+         * Leave non-multiview pass shaders unpatched so G-buffer, shadow maps,
+         * and post-fx all render from the CENTER perspective; the multiview
+         * final (swapchain) pass applies per-eye shift → image-space stereo
+         * for deferred content with shadows/lights/bloom properly aligned.   */
         StereoRenderPassInfo *rpi = NULL;
         bool in_mv_rp = false;
-        VkRenderPass pipeline_rp = ci->renderPass;
         if (ci->renderPass != VK_NULL_HANDLE) {
             rpi = stereo_rp_lookup(sd, ci->renderPass);
+            /* Render-pass pipelines are multiview only if the render pass itself
+             * was created with multiview support. Shadow passes must stay mono. */
             in_mv_rp =
                 (rpi && rpi->has_multiview) ||
                 ((view_mask & 0x3) != 0);
         }
         else if (sd->stereo.multiview && (view_mask & 0x3) != 0) {
-            in_mv_rp = true;
-        }
-        if (in_mv_rp &&
-            rpi &&
-            rpi->has_multiview &&
-            rpi->mv_handle != VK_NULL_HANDLE)
-        {
-            pipeline_rp = rpi->mv_handle;
-            STEREO_LOG(
-                "PIPE_MV_RP_SELECT p=%u original=%p mv=%p",
-                p,
-                (void*)ci->renderPass,
-                (void*)pipeline_rp);
-        }
-        else if (in_mv_rp)
-        {
-            STEREO_LOG(
-                "PIPE_MV_RP_SELECT p=%u original=%p mv=NONE dynamic=%u",
-                p,
-                (void*)ci->renderPass,
-                ci->renderPass == VK_NULL_HANDLE);
+        /* VK 1.3 dynamic rendering: no renderPass handle, but we already
+         * upgraded VkPipelineRenderingCreateInfo.viewMask above. Treat it
+         * as multiview so VS/TES patching still runs. */
+        in_mv_rp = true;
         }
         STEREO_LOG(
-            "PIPE_DECISION p=%u rp=%p pipeline_rp=%p rpi=%p in_mv=%u view_mask=0x%x stages=%u vs=%u tcs=%u tes=%u gs=%u ms=%u quad=%u",
+            "PIPE_DECISION p=%u rp=%p rpi=%p in_mv=%u view_mask=0x%x stages=%u vs=%u tcs=%u tes=%u gs=%u ms=%u quad=%u",
             p,
             (void*)ci->renderPass,
-            (void*)pipeline_rp)
             (void*)rpi,
             (unsigned)in_mv_rp,
             view_mask,
