@@ -519,13 +519,12 @@ typedef struct StereoSwapchain {
 typedef struct StereoRenderPassInfo {
     VkRenderPass  handle;
     bool          has_multiview;
-    bool          has_fragment_shading_rate_attachment;
     uint32_t      view_mask;
     uint32_t      subpass_count;
     VkRenderPass  mv_handle;     /* multiview version — VK_NULL_HANDLE until framebuffer confirms */
     uint32_t      shading_rate_attachment;
     bool          has_shading_rate_attachment;
-    uint8_t       _pad[6];
+    uint8_t       _pad[2];
 } StereoRenderPassInfo;
 
 typedef struct StereoFramebufferTrack {

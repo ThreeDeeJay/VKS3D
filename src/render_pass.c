@@ -244,28 +244,6 @@ stereo_CreateRenderPass(
     StereoRenderPassInfo *rpi =
         &sd->render_passes[sd->render_pass_count++];
 
-    bool has_fragment_shading_rate_attachment = false;
-    for (uint32_t i = 0; i < pCreateInfo->subpassCount; i++)
-    {
-        const VkSubpassDescription *subpass = &pCreateInfo->pSubpasses[i];
-        const VkBaseInStructure *ext =
-        (const VkBaseInStructure *)subpass->pNext;
-        while (ext)
-        {
-            if (ext->sType ==
-                VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR)
-            {
-                has_fragment_shading_rate_attachment = true;
-                break;
-            }
-            ext = ext->pNext;
-        }
-        if (has_fragment_shading_rate_attachment)
-            break;
-    }
-    STEREO_LOG(
-        "RenderPass classify: fragment_shading_rate=%u",
-        (unsigned)has_fragment_shading_rate_attachment);
     rpi->handle        = *pRenderPass;
     rpi->mv_handle     = VK_NULL_HANDLE;
     rpi->has_multiview = false;
@@ -274,7 +252,6 @@ stereo_CreateRenderPass(
 
     rpi->shading_rate_attachment = VK_ATTACHMENT_UNUSED;
     rpi->has_shading_rate_attachment = false;
-    rpi->has_fragment_shading_rate_attachment = has_fragment_shading_rate_attachment;
     STEREO_LOG(
         "RP_FSR attachment=%u has=%u",
         rpi->shading_rate_attachment,
