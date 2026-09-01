@@ -389,6 +389,8 @@ stereo_CmdBeginRenderPass(
     extern uint32_t     g_device_count;
     StereoDevice *sd   = NULL;
     VkRenderPass mv_rp = VK_NULL_HANDLE;
+    bool fb_found = false;
+    bool fb_has_mv = false;
     STEREO_LOG(
         "CB_BEGIN cb=%p rp=%p fb=%p",
         commandBuffer,
@@ -436,18 +438,25 @@ stereo_CmdBeginRenderPass(
                 (void*)dev->fb_tracks[i].mv_rp,
                 (unsigned)dev->fb_tracks[i].has_mv,
                 (unsigned)fb_match);
-            bool rp_match =
+            if (fb_match)
+            {
+                bool rp_match =
                 (
                     dev->fb_tracks[i].rp &&
                     pRenderPassBegin->renderPass &&
                     dev->fb_tracks[i].rp == pRenderPassBegin->renderPass
-                )
+                    )
                 ||
                 (
                     dev->fb_tracks[i].mv_rp &&
+                    pRenderPassBegin->renderPass &&
                     dev->fb_tracks[i].mv_rp == pRenderPassBegin->renderPass
-                );
-            if (fb_match) {
+                    );
+                fb_found = true;
+                sd = dev;
+                fb_has_mv =
+                dev->fb_tracks[i].has_mv &&
+                dev->fb_tracks[i].mv_rp != VK_NULL_HANDLE;
                 STEREO_LOG(
                     "FB_MATCH_CANDIDATE d=%u i=%u fb=%08x rp_begin=%08x tracked_rp=%08x mv_rp=%08x has_mv=%u rp_match=%u",
                     d,
@@ -458,9 +467,6 @@ stereo_CmdBeginRenderPass(
                     (unsigned)(uintptr_t)dev->fb_tracks[i].mv_rp,
                     (unsigned)dev->fb_tracks[i].has_mv,
                     (unsigned)rp_match);
-            }
-            if (dev->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
-            {
                 STEREO_LOG(
                     "FB_TRACK_MATCH fb=%p tracked_rp=%p tracked_used=%p tracked_mv=%p has_mv=%u",
                     (void*)dev->fb_tracks[i].fb,
@@ -470,43 +476,49 @@ stereo_CmdBeginRenderPass(
                     (unsigned)dev->fb_tracks[i].has_mv);
                 STEREO_LOG(
                     "FB_MATCH requested=%p fb_original=%p fb_used=%p fb_mv=%p",
-                    pRenderPassBegin->renderPass,
-                    dev->fb_tracks[i].rp,
-                    dev->fb_tracks[i].rp_used_at_create,
-                    dev->fb_tracks[i].mv_rp);
-                if (dev->fb_tracks[i].has_mv &&
-                    dev->fb_tracks[i].mv_rp != VK_NULL_HANDLE)
+                    (void*)pRenderPassBegin->renderPass,
+                    (void*)dev->fb_tracks[i].rp,
+                    (void*)dev->fb_tracks[i].rp_used_at_create,
+                    (void*)dev->fb_tracks[i].mv_rp);
+                if (fb_has_mv)
                 {
                     mv_rp = dev->fb_tracks[i].mv_rp;
-                    sd = dev;
                     STEREO_LOG(
                         "MV_SELECT_FROM_FB fb=%p original_rp=%p used_rp=%p mv_rp=%p",
                         (void*)pRenderPassBegin->framebuffer,
                         (void*)dev->fb_tracks[i].rp,
                         (void*)dev->fb_tracks[i].rp_used_at_create,
                         (void*)dev->fb_tracks[i].mv_rp);
-                    break;
                 }
-                STEREO_LOG(
-                    "FB_MATCH_RESOLVE fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
-                    pRenderPassBegin->framebuffer,
-                    pRenderPassBegin->renderPass,
-                    dev->fb_tracks[i].rp,
-                    dev->fb_tracks[i].mv_rp,
-                    dev->fb_tracks[i].has_mv,
-                    rp_match);
+                else
+                {
+                    STEREO_LOG(
+                        "MV_NOT_SELECTED_FROM_FB fb=%p original_rp=%p used_rp=%p mv_rp=%p has_mv=%u",
+                        (void*)pRenderPassBegin->framebuffer,
+                        (void*)dev->fb_tracks[i].rp,
+                        (void*)dev->fb_tracks[i].rp_used_at_create,
+                        (void*)dev->fb_tracks[i].mv_rp,
+                        (unsigned)dev->fb_tracks[i].has_mv);
+                }
                 break;
             }
         }
     }
     STEREO_LOG(
-        "MV_AFTER_SCAN sd=%p mv_rp=%p",
+        "MV_AFTER_SCAN sd=%p fb_found=%u fb_has_mv=%u mv_rp=%p",
         sd,
-        mv_rp);
-    if (!sd) {
-        /* Framebuffer not in our tracking → find any live device. */
-        for (uint32_t d = 0; d < g_device_count; d++) {
-            if (g_devices[d].real_device) { sd = &g_devices[d]; break; }
+        (unsigned)fb_found,
+        (unsigned)fb_has_mv,
+        (void*)mv_rp);
+    if (!sd)
+    {
+        for (uint32_t d = 0; d < g_device_count; d++)
+        {
+            if (g_devices[d].real_device)
+            {
+                sd = &g_devices[d];
+                break;
+            }
         }
     }
     if (!sd) return;
@@ -517,9 +529,33 @@ stereo_CmdBeginRenderPass(
         (void *)commandBuffer,
         (void *)(mv_rp ? mv_rp : pRenderPassBegin->renderPass),
         lookup ? lookup->has_multiview : 0,
-        lookup ? (void *)lookup->mv_handle : NULL);
-    if (mv_rp == VK_NULL_HANDLE &&
-        lookup &&
+        lookup ? (void*)lookup->mv_handle : NULL);
+    /*
+    * IMPORTANT:
+    * If the framebuffer was tracked, its classification is authoritative.
+    * Do NOT promote a tracked non-MV framebuffer to an MV render pass merely
+    * because the original render pass has an MV variant.
+    */
+    if (fb_found)
+    {
+        if (fb_has_mv)
+        {
+            STEREO_LOG(
+                "MV_USE_TRACKED_FB fb=%p mv_rp=%p",
+                (void*)pRenderPassBegin->framebuffer,
+                (void*)mv_rp);
+        }
+        else
+        {
+            mv_rp = VK_NULL_HANDLE;
+            STEREO_LOG(
+                "MV_BLOCKED_TRACKED_FB fb=%p original_rp=%p lookup_mv=%p",
+                (void*)pRenderPassBegin->framebuffer,
+                (void*)pRenderPassBegin->renderPass,
+                lookup ? (void*)lookup->mv_handle : NULL);
+        }
+    }
+    else if (lookup &&
         lookup->has_multiview &&
         lookup->mv_handle != VK_NULL_HANDLE)
     {
@@ -534,17 +570,19 @@ stereo_CmdBeginRenderPass(
     if (mv_rp == VK_NULL_HANDLE)
     {
         STEREO_LOG(
-            "MV RP LOST BEFORE DRAW CALL fb=%p rp=%p (this frame will be mono/black if expected stereo)",
-            pRenderPassBegin->framebuffer,
-            pRenderPassBegin->renderPass);
+            "MV RP NOT SELECTED fb=%p rp=%p fb_found=%u fb_has_mv=%u",
+            (void*)pRenderPassBegin->framebuffer,
+            (void*)pRenderPassBegin->renderPass,
+            (unsigned)fb_found,
+            (unsigned)fb_has_mv);
     }
-
     STEREO_LOG(
         "RP_BEGIN fb=%p mv_rp=%p active=%d",
-        pRenderPassBegin->framebuffer,
-        mv_rp,
+        (void*)pRenderPassBegin->framebuffer,
+        (void*)mv_rp,
         mv_rp != VK_NULL_HANDLE);
-    if (mv_rp) {
+    if (mv_rp)
+    {
         VkRenderPassBeginInfo modified = *pRenderPassBegin;
         modified.renderPass = mv_rp;
         STEREO_LOG(
@@ -567,9 +605,9 @@ stereo_CmdBeginRenderPass(
             (void*)modified.framebuffer);
         STEREO_LOG(
             "[RP BEGIN MV] fb=%p rp=%p mv_rp=%p",
-            pRenderPassBegin->framebuffer,
-            pRenderPassBegin->renderPass,
-            mv_rp);
+            (void*)pRenderPassBegin->framebuffer,
+            (void*)pRenderPassBegin->renderPass,
+            (void*)mv_rp);
         STEREO_LOG(
             "RP_BEGIN_CORRELATE cb=%p original_rp=%p driver_rp=%p fb=%p lookup=%p "
             "lookup_orig=%p lookup_mv=%p lookup_has_mv=%u",
@@ -593,7 +631,7 @@ stereo_CmdBeginRenderPass(
                     (void*)sd->fb_tracks[i].rp,
                     (void*)sd->fb_tracks[i].rp_used_at_create,
                     (void*)sd->fb_tracks[i].mv_rp,
-                    sd->fb_tracks[i].has_mv,
+                    (unsigned)sd->fb_tracks[i].has_mv,
                     (void*)pRenderPassBegin->renderPass,
                     (void*)modified.renderPass);
                 break;
@@ -601,9 +639,9 @@ stereo_CmdBeginRenderPass(
         }
         STEREO_LOG(
             "CB_DISPATCH cb=%p sd=%p real_dev=%p",
-            commandBuffer,
-            sd,
-            sd->real_device);
+            (void*)commandBuffer,
+            (void*)sd,
+            (void*)sd->real_device);
         bool cb_found = false;
         for (uint32_t i = 0; i < sd->cb_track_count; i++)
         {
@@ -615,7 +653,7 @@ stereo_CmdBeginRenderPass(
                 STEREO_LOG(
                     "CB_TRACK_UPDATE cb=%p rp=%p fb=%p",
                     (void*)commandBuffer,
-                    (void*)modified.renderPass,
+                    (unsigned)modified.renderPass,
                     (void*)modified.framebuffer);
                 break;
             }
@@ -653,9 +691,9 @@ stereo_CmdBeginRenderPass(
             (void*)pRenderPassBegin->framebuffer);
         STEREO_LOG(
             "CB_DISPATCH cb=%p sd=%p real_dev=%p",
-            commandBuffer,
-            sd,
-            sd->real_device);
+            (void*)commandBuffer,
+            (void*)sd,
+            (void*)sd->real_device);
         for (uint32_t i = 0; i < sd->cb_track_count; i++)
         {
             if (sd->cb_track[i].cb == commandBuffer)
@@ -671,8 +709,8 @@ stereo_CmdBeginRenderPass(
             (void*)pRenderPassBegin->framebuffer);
         STEREO_LOG(
             "[RP BEGIN MONO] fb=%p rp=%p",
-            pRenderPassBegin->framebuffer,
-            pRenderPassBegin->renderPass);
+            (void*)pRenderPassBegin->framebuffer,
+            (void*)pRenderPassBegin->renderPass);
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
 }
