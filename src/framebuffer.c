@@ -44,6 +44,20 @@ static void stereo_overwrite_projection_binding(
     VkDescriptorSet ds,
     uint32_t binding);
 
+static bool
+stereo_rp_has_fragment_shading_rate_attachment(
+    StereoDevice *sd,
+    VkRenderPass rp)
+{
+    StereoRenderPassInfo *rpi;
+    if (!sd || rp == VK_NULL_HANDLE)
+        return false;
+    rpi = stereo_rp_lookup(sd, rp);
+    if (!rpi)
+        return false;
+    return rpi->has_fragment_shading_rate_attachment;
+}
+
 /* ── vkCreateFramebuffer ────────────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateFramebuffer(
@@ -100,26 +114,49 @@ stereo_CreateFramebuffer(
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
         bool all = true;
         bool any = false;
+        bool all_stereo_render_attachments = true;
+        bool has_fsr = stereo_rp_has_fragment_shading_rate_attachment(
+            sd,
+            pCreateInfo->renderPass);
         STEREO_LOG(
-            "FB_ATTACHMENT_CLASSIFY_BEGIN rp=%p attachments=%u upgraded_views=%u",
+            "FB_ATTACHMENT_CLASSIFY_BEGIN rp=%p attachments=%u upgraded_views=%u fsr=%u",
             (void*)pCreateInfo->renderPass,
             pCreateInfo->attachmentCount,
-            sd->upgraded_view_count);
-        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            sd->upgraded_view_count,
+            (unsigned)has_fsr);
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++)
+        {
             VkImageView view = pCreateInfo->pAttachments[i];
             bool found = false;
             uint32_t found_index = UINT32_MAX;
-            for (uint32_t k = 0; k < sd->upgraded_view_count; k++) {
-                if (sd->upgraded_views[k] == view) {
+            for (uint32_t k = 0; k < sd->upgraded_view_count; k++)
+            {
+                if (sd->upgraded_views[k] == view)
+                {
                     found = true;
                     found_index = k;
                     break;
                 }
             }
             if (found)
+            {
                 any = true;
+            }
             else
+            {
                 all = false;
+                if (has_fsr)
+                {
+                    STEREO_LOG(
+                        "FB_ATTACHMENT_CLASSIFY_NONUPGRADED att=%u view=%p role=FSR_OR_UNKNOWN",
+                        i,
+                        (void*)view);
+                }
+                else
+                {
+                    all_stereo_render_attachments = false;
+                }
+            }
             STEREO_LOG(
                 "FB_ATTACHMENT_CLASSIFY att=%u view=%p class=%s upgraded_index=%u",
                 i,
@@ -128,47 +165,48 @@ stereo_CreateFramebuffer(
                 found ? found_index : UINT32_MAX);
         }
         StereoRenderPassInfo *rpi =
-            stereo_rp_lookup(sd, pCreateInfo->renderPass);
+        stereo_rp_lookup(sd, pCreateInfo->renderPass);
+        bool mv_eligible =
+        rpi &&
+        rpi->has_multiview &&
+        rpi->mv_handle != VK_NULL_HANDLE &&
+        rpi->handle == pCreateInfo->renderPass &&
+        (all || (has_fsr && any));
         STEREO_LOG(
-            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u any=%u",
+            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u any=%u fsr=%u mv_eligible=%u",
             (void*)pCreateInfo->renderPass,
             (void*)rpi,
             rpi ? (void*)rpi->handle : NULL,
             rpi ? (void*)rpi->mv_handle : NULL,
             rpi ? (unsigned)rpi->has_multiview : 0,
             (unsigned)all,
-            (unsigned)any);
-        /*
-        * CRITICAL:
-        * A framebuffer may use the multiview render pass only when every
-        * framebuffer attachment belongs to the upgraded attachment set.
-        * "any" is diagnostic only and must never select the MV render pass.
-        */
-        if (rpi &&
-            all &&
-            rpi->mv_handle &&
-            rpi->has_multiview &&
-            rpi->handle == pCreateInfo->renderPass)
+            (unsigned)any,
+            (unsigned)has_fsr,
+            (unsigned)mv_eligible);
+        if (mv_eligible)
         {
             fci.renderPass = rpi->mv_handle;
             use_mv = rpi->mv_handle;
             STEREO_LOG(
-                "FB_SET renderPass=%p all=%u any=%u attachments=%u",
-                fci.renderPass,
+                "FB_SET renderPass=%p all=%u any=%u fsr=%u attachments=%u",
+                (void*)fci.renderPass,
                 (unsigned)all,
                 (unsigned)any,
+                (unsigned)has_fsr,
                 pCreateInfo->attachmentCount);
         }
         else
         {
             STEREO_LOG(
-                "FB_MV_NOT_SELECTED rp=%p rpi=%p has_mv=%u mv=%p all_upgraded=%u any_upgraded=%u",
+                "FB_MV_NOT_SELECTED rp=%p rpi=%p has_mv=%u mv=%p all_upgraded=%u any_upgraded=%u fsr=%u render_attachments_ok=%u",
                 (void*)pCreateInfo->renderPass,
                 (void*)rpi,
                 rpi ? (unsigned)rpi->has_multiview : 0,
                 rpi ? (void*)rpi->mv_handle : NULL,
                 (unsigned)all,
-                (unsigned)any);
+                (unsigned)any,
+                (unsigned)has_fsr,
+                (unsigned)all_stereo_render_attachments);
         }
         if (!all) 
         {
@@ -187,10 +225,11 @@ stereo_CreateFramebuffer(
                 if (!found)
                 {
                     STEREO_LOG(
-                        "[FB NON-UPGRADED] att=%u view=%p tracked=%u",
+                        "[FB NON-UPGRADED] att=%u view=%p tracked=%u fsr=%u",
                         i,
                         (void*)pCreateInfo->pAttachments[i],
-                        sd->upgraded_view_count);
+                        sd->upgraded_view_count,
+                        (unsigned)has_fsr);
                 }
             }
         }
