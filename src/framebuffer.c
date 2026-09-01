@@ -150,7 +150,6 @@ stereo_CreateFramebuffer(
                 (unsigned)all,
                 (unsigned)any);
         }
-    }
         if (!all) {
             for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
                 bool found = false;
