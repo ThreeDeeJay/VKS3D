@@ -9265,6 +9265,24 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
             }
         }
+        /* ── PATCH 3: Pipeline multiview FIXED (NO pipeline struct exists) ─────────────── */
+        /* Multiview is render-pass driven ONLY.
+         * Pipeline pNext must NOT contain VkPipelineMultiviewCreateInfo (invalid Vulkan API). */
+        if (in_mv_rp) {
+            if (rpi && rpi->mv_handle) {
+                STEREO_LOG(
+                    "Pipe %u: MV RP candidate (stageCount=%u) render pass %p",
+                    p,
+                    ci->stageCount,
+                    (void*)rpi->mv_handle);
+            } else {
+                STEREO_LOG(
+                    "Pipe %u: dynamic rendering multiview detected (stageCount=%u) - no renderPass swap",
+                    p,
+                    ci->stageCount);
+                /* VK 1.3 dynamic rendering: keep infos[p].renderPass as-is */
+            }
+        }
         if (!in_mv_rp)
         {
             STEREO_LOG(
