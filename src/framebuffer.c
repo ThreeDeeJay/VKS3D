@@ -213,35 +213,30 @@ stereo_CreateFramebuffer(
     {
         STEREO_LOG("[FB_TRACK_FATAL] pCreateInfo->renderPass == NULL fb=%p", *pFramebuffer);
     }
-    if (res == VK_SUCCESS && sd->fb_track_count < MAX_FB_TRACK)
+    if (res == VK_SUCCESS)
     {
-        STEREO_LOG(
-            "FB_CREATE_TRACK fb=%p original=%p used=%p mv=%p",
-            (void*)*pFramebuffer,
-            (void*)original_rp,
-            (void*)fci.renderPass,
-            (void*)use_mv);
-        /* Reserve a unique tracking slot immediately.
-         * This avoids two concurrent CreateFramebuffer calls both
-         * writing the same entry before fb_track_count is advanced.
-         */
+        StereoFramebufferTrack *t;
+        uint32_t idx;
+        stereo_mutex_lock(&sd->lock);
+        if (sd->fb_track_count >= MAX_FB_TRACK)
+        {
+            uint32_t count = sd->fb_track_count;
+            stereo_mutex_unlock(&sd->lock);
+            STEREO_LOG(
+                "[FB TRACK FULL] fb=%p count=%u max=%u",
+                (void*)*pFramebuffer,
+                count,
+                MAX_FB_TRACK);
+            return res;
+        }
         CHECK_ARRAY_COUNT(sd->fb_track_count, MAX_FB_TRACK, "fb_track_count");
-        uint32_t idx = sd->fb_track_count++;
+        idx = sd->fb_track_count++;
         STEREO_LOG(
             "FB_COUNT_RESERVE idx=%u next=%u",
             idx,
             sd->fb_track_count);
-        if (idx >= MAX_FB_TRACK)
-        {
-            STEREO_LOG(
-                "[FB OVERFLOW] idx=%u max=%u",
-                idx,
-                MAX_FB_TRACK);
-            return VK_ERROR_TOO_MANY_OBJECTS;
-        }
-        StereoFramebufferTrack *t = &sd->fb_tracks[idx];
+        t = &sd->fb_tracks[idx];
         memset(t, 0, sizeof(*t));
-
         STEREO_LOG(
             "FB_LAYOUT t=%p &fb=%p &rp=%p &rp_used=%p &mv_rp=%p &has_mv=%p sizeof=%u",
             t,
@@ -251,160 +246,63 @@ stereo_CreateFramebuffer(
             &t->mv_rp,
             &t->has_mv,
             (unsigned)sizeof(*t));
-
         t->fb = *pFramebuffer;
-        
-        /*
-         * Never propagate a NULL render pass into framebuffer tracking.
-         * Preserve the application's RP if present, otherwise fall back to
-         * whatever CreateFramebuffer actually received.
-         */
-        VkRenderPass tmp_rp =
-            (original_rp != VK_NULL_HANDLE) ? original_rp : fci.renderPass;
-        VkRenderPass tmp_used = fci.renderPass;
-        VkRenderPass tmp_mv   = use_mv;
-
-        t->rp = tmp_rp;
-        t->rp_used_at_create = tmp_used;
-        t->mv_rp = tmp_mv;
-
+        t->rp = original_rp;
+        if (t->rp == VK_NULL_HANDLE)
+            t->rp = fci.renderPass;
+        t->rp_used_at_create = fci.renderPass;
+        t->mv_rp = use_mv;
+        t->has_mv = (use_mv != VK_NULL_HANDLE) &&
+        sd->stereo.multiview;
         STEREO_LOG(
-            "FB_FIELDS rp=%p rp_used=%p mv_rp=%p",
+            "FB_FIELDS rp=%p rp_used=%p mv_rp=%p has_mv=%u",
             t->rp,
             t->rp_used_at_create,
-            t->mv_rp);
-        VkRenderPass log_rp      = t->rp;
-        VkRenderPass log_used    = t->rp_used_at_create;
-        VkRenderPass log_mv      = t->mv_rp;
-        VkFramebuffer log_fb     = t->fb;
-        STEREO_LOG(
-            "FB_LOCALS A=%p B=%p C=%p D=%p",
-            (void*)log_rp,
-            (void*)log_used,
-            (void*)log_mv,
-            (void*)log_fb);
-        STEREO_LOG(
-            "FB_ASSIGN A=%p B=%p C=%p D=%p",
-            (void*)log_rp,
-            (void*)log_used,
-            (void*)log_mv,
-            (void*)log_fb);
-
+            t->mv_rp,
+            (unsigned)t->has_mv);
+        if (sd->stereo.enabled && sd->stereo.multiview && use_mv == VK_NULL_HANDLE)
         {
-            const unsigned char *b = (const unsigned char *)t;
             STEREO_LOG(
-                "FB_BYTES "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x",
-                b[0],  b[1],  b[2],  b[3],
-                b[4],  b[5],  b[6],  b[7],
-                b[8],  b[9],  b[10], b[11],
-                b[12], b[13], b[14], b[15],
-                b[16], b[17], b[18], b[19],
-                b[20], b[21], b[22], b[23],
-                b[24], b[25], b[26], b[27],
-                b[28], b[29], b[30], b[31]);
+                "[FB INFO] multiview enabled but use_mv == NULL fb=%p rp=%p",
+                t->fb,
+                t->rp);
         }
-
-        /* HARD ASSERT: final framebuffer consistency */
-        if (sd->stereo.enabled && sd->stereo.multiview) {
-            if (use_mv == VK_NULL_HANDLE) {
-                STEREO_LOG("[HARD ASSERT] multiview enabled but NO mv_rp resolved fb=%p rp=%p",
-                           t->fb, t->rp);
-            }
-        
-            if (use_mv != VK_NULL_HANDLE && fci.renderPass == VK_NULL_HANDLE) {
-                STEREO_LOG("[HARD ASSERT] mv_rp exists but fci.renderPass lost fb=%p",
-                           t->fb);
-            }
+        if (use_mv != VK_NULL_HANDLE && fci.renderPass == VK_NULL_HANDLE)
+        {
+            STEREO_LOG(
+                "[HARD ASSERT] mv_rp valid but fci.renderPass NULL fb=%p",
+                t->fb);
         }
-
-        /* ================= HARD ASSERT SECTION ================= */
-        if (sd->stereo.enabled && sd->stereo.multiview && use_mv == VK_NULL_HANDLE) {
-            STEREO_LOG("[FB INFO] multiview enabled but use_mv == NULL fb=%p rp=%p",
-                       t->fb, t->rp);
-        }
-        
-        if (use_mv != VK_NULL_HANDLE && fci.renderPass == VK_NULL_HANDLE) {
-            STEREO_LOG("[HARD ASSERT] mv_rp valid but fci.renderPass NULL fb=%p",
-                       t->fb);
-        }
-        
-        if (use_mv != VK_NULL_HANDLE && !sd->stereo.multiview) {
-            STEREO_LOG("[HARD ASSERT] mv_rp exists but stereo.multiview OFF fb=%p",
-                       t->fb);
-        }
-        /* ======================================================= */
-
-        STEREO_LOG(
-            "MV_BOOL_CHECK multiview=%d",
-            (int)sd->stereo.multiview);
-        STEREO_LOG(
-            "FB_ADDR_CHECK sd=%p stereo=%p fb_tracks=%p track=%p",
-            sd,
-            &sd->stereo,
-            sd->fb_tracks,
-            t);
-        STEREO_LOG(
-            "FB_BOOL_CHECK multiview=%d use_mv=%p",
-            (int)sd->stereo.multiview,
-            use_mv);
-        STEREO_LOG(
-            "FB_RAW_VALUES fb=%08x rp=%08x mv=%08x",
-            (unsigned)(uintptr_t)t->fb,
-            (unsigned)(uintptr_t)t->rp,
-            (unsigned)(uintptr_t)t->mv_rp);
-        t->has_mv = (use_mv != VK_NULL_HANDLE) &&
-                    sd->stereo.multiview;
-        /* ===== FINAL CONSISTENCY CHECK ===== */
-        if (t->has_mv && use_mv == VK_NULL_HANDLE) {
-            STEREO_LOG("[HARD ASSERT] has_mv=1 but use_mv NULL fb=%p", t->fb);
-        }
-        
-        if (!t->has_mv && use_mv != VK_NULL_HANDLE && sd->stereo.multiview) {
-            STEREO_LOG("[HARD ASSERT] mv exists but has_mv=0 fb=%p", t->fb);
+        if (use_mv != VK_NULL_HANDLE && !sd->stereo.multiview)
+        {
+            STEREO_LOG(
+                "[HARD ASSERT] mv_rp exists but stereo.multiview OFF fb=%p",
+                t->fb);
         }
         STEREO_LOG(
-            "FB_TRACK_CREATE idx=%u fb=%08x rp=%08x mv_rp=%08x has_mv=%u mv_enabled=%u",
+            "FB_TRACK_CREATE idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u mv_enabled=%u",
             idx,
-            (unsigned)(uintptr_t)t->fb,
-            (unsigned)(uintptr_t)t->rp,
-            (unsigned)(uintptr_t)t->mv_rp,
+            (void*)t->fb,
+            (void*)t->rp,
+            (void*)t->mv_rp,
             (unsigned)t->has_mv,
             (unsigned)sd->stereo.multiview);
         if (use_mv == VK_NULL_HANDLE)
         {
             STEREO_LOG(
                 "[FB_TRACK_WARN] MV NOT STORED fb=%p rp=%p reason=use_mv_null",
-                *pFramebuffer,
-                pCreateInfo->renderPass);
+                (void*)*pFramebuffer,
+                (void*)pCreateInfo->renderPass);
         }
-        StereoFramebufferTrack *verify =
-            &sd->fb_tracks[idx];
-        for (uint32_t j = 0; j < idx; j++)
-        {
-            if (sd->fb_tracks[j].fb == verify->fb)
-            {
-                STEREO_LOG(
-                    "[FB DUPLICATE] idx=%u previous=%u fb=%p",
-                    idx,
-                    j,
-                    verify->fb);
-            }
-        }
+        StereoFramebufferTrack *verify = &sd->fb_tracks[idx];
         STEREO_LOG(
-            "FB_TRACK_VERIFY idx=%u fb=%08x rp=%08x mv_rp=%08x has_mv=%u",
+            "FB_TRACK_VERIFY idx=%u fb=%p rp=%p mv_rp=%p has_mv=%u",
             idx,
-            (unsigned)(uintptr_t)verify->fb,
-            (unsigned)(uintptr_t)verify->rp,
-            (unsigned)(uintptr_t)verify->mv_rp,
+            (void*)verify->fb,
+            (void*)verify->rp,
+            (void*)verify->mv_rp,
             (unsigned)verify->has_mv);
+        stereo_mutex_unlock(&sd->lock);
     }
     return res;
 }
