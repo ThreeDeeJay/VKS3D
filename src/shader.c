@@ -10133,6 +10133,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     /* ── PATCH 5: RenderPass-based multiview binding ─────────────── */
     for (uint32_t p = 0; p < N; p++) {
         StereoRenderPassInfo *rpi = NULL;
+        VkRenderPass pipeline_rp = pCI[p].renderPass;
         if (pCI[p].renderPass != VK_NULL_HANDLE)
             rpi = stereo_rp_lookup(sd, pCI[p].renderPass);
         STEREO_LOG(
@@ -10143,22 +10144,29 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             rpi ? (unsigned)rpi->has_multiview : 0,
             rpi ? rpi->view_mask : 0,
             rpi ? (void*)rpi->mv_handle : NULL);
+        if (rpi &&
+            rpi->has_multiview &&
+            rpi->mv_handle != VK_NULL_HANDLE)
+        {
+            pipeline_rp = rpi->mv_handle;
+            STEREO_LOG(
+                "PIPE_MV_RP_FINAL p=%u original=%p pipeline_rp=%p",
+                p,
+                (void*)pCI[p].renderPass,
+                (void*)pipeline_rp);
+        }
         bool pipeline_patched =
             tst[p] != NULL;
         STEREO_LOG(
-            "PIPE_RP_STEREO p=%u patched=%u tmp=%p",
+            "PIPE_RP_STEREO p=%u patched=%u tmp=%p pipeline_rp=%p",
             p,
             (unsigned)pipeline_patched,
-            (void*)tmp_mod[p]);
-        if (rpi && rpi->has_multiview && pipeline_patched) {
-            STEREO_LOG("Pipe %u: binding MV render pass %p", p, (void*)rpi->mv_handle);
-            infos[p].renderPass = rpi->mv_handle;
-        }
-        else if (rpi && rpi->has_multiview) {
-            STEREO_LOG(
-                "Pipe %u: NOT binding MV render pass because pipeline was not patched",
-                p);
-        }
+            (void*)tmp_mod[p],
+            (void*)pipeline_rp);
+        if (pipeline_rp != pCI[p].renderPass)
+            infos[p].renderPass = pipeline_rp;
+        else
+            infos[p].renderPass = pCI[p].renderPass;
     }
     for (uint32_t p = 0; p < N; p++) {
         STEREO_LOG(
@@ -10228,16 +10236,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 dbg_st->stage,
                 (void *)dbg_st->module);
         }
-    }
-    if (infos[p].renderPass == ci->renderPass &&
-        pipeline_rp != ci->renderPass)
-    {
-        infos[p].renderPass = pipeline_rp;
-        STEREO_LOG(
-            "PIPE_MV_RP_FINAL p=%u original=%p pipeline_rp=%p",
-            p,
-            (void*)ci->renderPass,
-            (void*)pipeline_rp);
     }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG(
