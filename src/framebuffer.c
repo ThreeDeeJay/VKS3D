@@ -531,60 +531,19 @@ stereo_CmdBeginRenderPass(
                     dev->fb_tracks[i].rp,
                     dev->fb_tracks[i].rp_used_at_create,
                     dev->fb_tracks[i].mv_rp);
-                if (dev->fb_tracks[i].has_mv)
+                if (dev->fb_tracks[i].has_mv &&
+                    dev->fb_tracks[i].mv_rp != VK_NULL_HANDLE)
                 {
-                    VkRenderPass candidate = VK_NULL_HANDLE;
-                    StereoRenderPassInfo *rpi =
-                        stereo_rp_lookup(dev,
-                                         pRenderPassBegin->renderPass);
-                    if (rpi && rpi->mv_handle)
-                    {
-                        STEREO_LOG(
-                            "RP_LOOKUP request=%p result=%p",
-                            (void*)pRenderPassBegin->renderPass,
-                            (void*)rpi);
-                        candidate = rpi->mv_handle;
-                        STEREO_LOG(
-                            "RP_LOOKUP_SELECTED requested=%p original=%p mv=%p",
-                            (void*)pRenderPassBegin->renderPass,
-                            (void*)rpi->handle,
-                            (void*)rpi->mv_handle);
-                    }
-                    else
-                    {
-                        STEREO_LOG(
-                            "RP_LOOKUP_FAILED requested=%p fb=%p tracked_original=%p tracked_used=%p tracked_mv=%p",
-                            (void*)pRenderPassBegin->renderPass,
-                            (void*)pRenderPassBegin->framebuffer,
-                            (void*)dev->fb_tracks[i].rp,
-                            (void*)dev->fb_tracks[i].rp_used_at_create,
-                            (void*)dev->fb_tracks[i].mv_rp);
-                    }
-                    if (candidate != VK_NULL_HANDLE)
-                    {
+                    mv_rp = dev->fb_tracks[i].mv_rp;
+                    sd = dev;
                     STEREO_LOG(
-                        "FB_SELECT fb=%p requested=%p tracked=%p tracked_used=%p tracked_mv=%p has_mv=%u",
+                        "MV_SELECT_FROM_FB fb=%p original_rp=%p used_rp=%p mv_rp=%p",
                         (void*)pRenderPassBegin->framebuffer,
-                        (void*)pRenderPassBegin->renderPass,
                         (void*)dev->fb_tracks[i].rp,
                         (void*)dev->fb_tracks[i].rp_used_at_create,
-                        (void*)dev->fb_tracks[i].mv_rp,
-                        (unsigned)dev->fb_tracks[i].has_mv);
-                    STEREO_LOG(
-                        "MV_SELECT fb=%p candidate=%p",
-                        pRenderPassBegin->framebuffer,
-                        candidate);
-                    mv_rp = candidate;
-                    STEREO_LOG(
-                        "MV_SELECTED mv_rp=%p",
-                        mv_rp);
-                    sd = dev;
+                        (void*)dev->fb_tracks[i].mv_rp);
                     break;
-                    }
-                /* lookup failed, keep searching */
-                continue;
                 }
-
                 STEREO_LOG(
                     "FB_MATCH_RESOLVE fb=%p rp_begin=%p tracked_rp=%p mv_rp=%p has_mv=%u rp_match=%u",
                     pRenderPassBegin->framebuffer,
