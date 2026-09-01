@@ -391,6 +391,7 @@ stereo_CmdBeginRenderPass(
     VkRenderPass mv_rp = VK_NULL_HANDLE;
     bool fb_found = false;
     bool fb_has_mv = false;
+    uint32_t fb_track_index = UINT32_MAX;
     STEREO_LOG(
         "CB_BEGIN cb=%p rp=%p fb=%p",
         commandBuffer,
@@ -454,6 +455,7 @@ stereo_CmdBeginRenderPass(
                     );
                 fb_found = true;
                 sd = dev;
+                fb_track_index = i;
                 fb_has_mv =
                 dev->fb_tracks[i].has_mv &&
                 dev->fb_tracks[i].mv_rp != VK_NULL_HANDLE;
@@ -530,20 +532,31 @@ stereo_CmdBeginRenderPass(
         (void *)(mv_rp ? mv_rp : pRenderPassBegin->renderPass),
         lookup ? lookup->has_multiview : 0,
         lookup ? (void*)lookup->mv_handle : NULL);
-    /*
-    * IMPORTANT:
-    * If the framebuffer was tracked, its classification is authoritative.
-    * Do NOT promote a tracked non-MV framebuffer to an MV render pass merely
-    * because the original render pass has an MV variant.
-    */
     if (fb_found)
     {
         if (fb_has_mv)
         {
-            STEREO_LOG(
-                "MV_USE_TRACKED_FB fb=%p mv_rp=%p",
-                (void*)pRenderPassBegin->framebuffer,
-                (void*)mv_rp);
+            if (lookup &&
+                lookup->has_multiview &&
+                lookup->mv_handle != VK_NULL_HANDLE)
+            {
+                mv_rp = lookup->mv_handle;
+                STEREO_LOG(
+                    "MV_USE_RP_LOOKUP_FOR_TRACKED_MV_FB fb=%p original_rp=%p tracked_mv=%p lookup_mv=%p",
+                    (void*)pRenderPassBegin->framebuffer,
+                    (void*)pRenderPassBegin->renderPass,
+                    (void*)dev->fb_tracks[fb_track_index].mv_rp,
+                    (void*)lookup->mv_handle);
+            }
+            else
+            {
+                STEREO_LOG(
+                    "MV_USE_TRACKED_FB_FALLBACK fb=%p original_rp=%p tracked_mv=%p lookup=%p",
+                    (void*)pRenderPassBegin->framebuffer,
+                    (void*)pRenderPassBegin->renderPass,
+                    (void*)dev->fb_tracks[fb_track_index].mv_rp,
+                    (void*)lookup);
+            }
         }
         else
         {
