@@ -100,12 +100,23 @@ stereo_CreateFramebuffer(
     if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
         bool all = true;
         bool any = false;
+        bool only_shading_rate_non_upgraded = true;
+        StereoRenderPassInfo *rpi =
+        stereo_rp_lookup(sd, pCreateInfo->renderPass);
+        uint32_t shading_rate_attachment =
+        rpi ? rpi->shading_rate_attachment : VK_ATTACHMENT_UNUSED;
+        bool has_shading_rate_attachment =
+        rpi ? rpi->has_shading_rate_attachment : false;
         STEREO_LOG(
-            "FB_ATTACHMENT_CLASSIFY_BEGIN rp=%p attachments=%u upgraded_views=%u",
+            "FB_ATTACHMENT_CLASSIFY_BEGIN rp=%p attachments=%u upgraded_views=%u "
+            "shading_rate_attachment=%u has_shading_rate=%u",
             (void*)pCreateInfo->renderPass,
             pCreateInfo->attachmentCount,
-            sd->upgraded_view_count);
-        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+            sd->upgraded_view_count,
+            shading_rate_attachment,
+            (unsigned)has_shading_rate_attachment);
+        for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) 
+        {
             VkImageView view = pCreateInfo->pAttachments[i];
             bool found = false;
             uint32_t found_index = UINT32_MAX;
@@ -116,36 +127,63 @@ stereo_CreateFramebuffer(
                     break;
                 }
             }
-            if (found)
+            if (found) {
                 any = true;
-            else
+            } else {
                 all = false;
+                if (!(has_shading_rate_attachment &&
+                    shading_rate_attachment == i))
+                {
+                    only_shading_rate_non_upgraded = false;
+                }
+            }
             STEREO_LOG(
-                "FB_ATTACHMENT_CLASSIFY att=%u view=%p class=%s upgraded_index=%u",
+                "FB_ATTACHMENT_CLASSIFY att=%u view=%p class=%s upgraded_index=%u "
+                "shading_rate=%u",
                 i,
                 (void*)view,
                 found ? "UPGRADED" : "NORMAL",
-                found ? found_index : UINT32_MAX);
+                found ? found_index : UINT32_MAX,
+                (has_shading_rate_attachment &&
+                    shading_rate_attachment == i) ? 1u : 0u);
         }
-        StereoRenderPassInfo *rpi =
-            stereo_rp_lookup(sd, pCreateInfo->renderPass);
         STEREO_LOG(
-            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u any=%u",
+            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u "
+            "all=%u any=%u shading_rate_attachment=%u has_shading_rate=%u "
+            "only_shading_rate_non_upgraded=%u",
             (void*)pCreateInfo->renderPass,
             (void*)rpi,
             rpi ? (void*)rpi->handle : NULL,
             rpi ? (void*)rpi->mv_handle : NULL,
             rpi ? (unsigned)rpi->has_multiview : 0,
             (unsigned)all,
-            (unsigned)any);
+            (unsigned)any,
+            shading_rate_attachment,
+            (unsigned)has_shading_rate_attachment,
+            (unsigned)only_shading_rate_non_upgraded);
         /*
         * CRITICAL:
-        * A framebuffer may use the multiview render pass only when every
-        * framebuffer attachment belongs to the upgraded attachment set.
-        * "any" is diagnostic only and must never select the MV render pass.
+        * A framebuffer may use the multiview render pass when:
+        *
+        * 1. Every framebuffer attachment is upgraded, OR
+        *
+        * 2. Every non-upgraded framebuffer attachment is exactly the
+        *    fragment shading-rate attachment recorded by the render pass.
+        *
+        * The second case is required for VRS because the shading-rate
+        * attachment itself is not an ordinary stereo color/depth view.
+        *
+        * "any" alone must never select the MV render pass.
         */
+        bool mv_attachment_eligible =
+        all ||
+        (
+            has_shading_rate_attachment &&
+            any &&
+            only_shading_rate_non_upgraded
+            );
         if (rpi &&
-            all &&
+            mv_attachment_eligible &&
             rpi->mv_handle &&
             rpi->has_multiview &&
             rpi->handle == pCreateInfo->renderPass)
@@ -153,22 +191,32 @@ stereo_CreateFramebuffer(
             fci.renderPass = rpi->mv_handle;
             use_mv = rpi->mv_handle;
             STEREO_LOG(
-                "FB_SET renderPass=%p all=%u any=%u attachments=%u",
-                fci.renderPass,
+                "FB_SET renderPass=%p all=%u any=%u shading_rate=%u "
+                "only_shading_rate_non_upgraded=%u attachments=%u",
+                (void*)fci.renderPass,
                 (unsigned)all,
                 (unsigned)any,
+                (unsigned)has_shading_rate_attachment,
+                (unsigned)only_shading_rate_non_upgraded,
                 pCreateInfo->attachmentCount);
         }
         else
         {
             STEREO_LOG(
-                "FB_MV_NOT_SELECTED rp=%p rpi=%p has_mv=%u mv=%p all_upgraded=%u any_upgraded=%u",
+                "FB_MV_NOT_SELECTED rp=%p rpi=%p has_mv=%u mv=%p "
+                "all_upgraded=%u any_upgraded=%u shading_rate_attachment=%u "
+                "has_shading_rate=%u only_shading_rate_non_upgraded=%u "
+                "mv_attachment_eligible=%u",
                 (void*)pCreateInfo->renderPass,
                 (void*)rpi,
                 rpi ? (unsigned)rpi->has_multiview : 0,
                 rpi ? (void*)rpi->mv_handle : NULL,
                 (unsigned)all,
-                (unsigned)any);
+                (unsigned)any,
+                shading_rate_attachment,
+                (unsigned)has_shading_rate_attachment,
+                (unsigned)only_shading_rate_non_upgraded,
+                (unsigned)mv_attachment_eligible);
         }
         if (!all) 
         {
@@ -187,10 +235,13 @@ stereo_CreateFramebuffer(
                 if (!found)
                 {
                     STEREO_LOG(
-                        "[FB NON-UPGRADED] att=%u view=%p tracked=%u",
+                        "[FB NON-UPGRADED] att=%u view=%p tracked=%u "
+                        "shading_rate=%u",
                         i,
                         (void*)pCreateInfo->pAttachments[i],
-                        sd->upgraded_view_count);
+                        sd->upgraded_view_count,
+                        (has_shading_rate_attachment &&
+                            shading_rate_attachment == i) ? 1u : 0u);
                 }
             }
         }
