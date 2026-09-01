@@ -10229,6 +10229,16 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (void *)dbg_st->module);
         }
     }
+    if (infos[p].renderPass == ci->renderPass &&
+        pipeline_rp != ci->renderPass)
+    {
+        infos[p].renderPass = pipeline_rp;
+        STEREO_LOG(
+            "PIPE_MV_RP_FINAL p=%u original=%p pipeline_rp=%p",
+            p,
+            (void*)ci->renderPass,
+            (void*)pipeline_rp);
+    }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG(
         "[PIPE AFTER DRIVER] res=%d",
