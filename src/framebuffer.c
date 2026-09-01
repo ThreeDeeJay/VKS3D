@@ -653,7 +653,7 @@ stereo_CmdBeginRenderPass(
                 STEREO_LOG(
                     "CB_TRACK_UPDATE cb=%p rp=%p fb=%p",
                     (void*)commandBuffer,
-                    (unsigned)modified.renderPass,
+                    (void*)modified.renderPass,
                     (void*)modified.framebuffer);
                 break;
             }
