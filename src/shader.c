@@ -9748,7 +9748,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
-            infos[p].renderPass = ci->renderPass;
+            infos[p].renderPass = pipeline_rp;
             continue;
         }
         if (has_gs && gs_stage != ~0u) {
@@ -9849,7 +9849,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 infos[p].pStages = st;
                 tmp_mod[p] = tmp;
                 tst[p] = st;
-                infos[p].renderPass = ci->renderPass;
+                infos[p].renderPass = pipeline_rp;
                 continue;
             }
         /* ── Path A: patch existing TES ──────────────────────────────── */
@@ -9962,13 +9962,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
-            infos[p].renderPass = ci->renderPass;
+            infos[p].renderPass = pipeline_rp;
             STEREO_LOG(
-                "PATCHED_STAGE PathA p=%u stage=%u orig=%p patched=%p",
+                "PATCHED_STAGE PathA p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
                 p,
                 tes_stage,
                 (void *)ci->pStages[tes_stage].module,
-                (void *)tmp);
+                (void *)tmp,
+                (void *)pipeline_rp);
             STEREO_LOG(
                 "Pipe %u: Path A — TES patched (gl_ViewIndex)",
                 p);
@@ -10112,13 +10113,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
-            infos[p].renderPass = ci->renderPass;
+            infos[p].renderPass = pipeline_rp;
             STEREO_LOG(
-                "PATCHED_STAGE PathB p=%u stage=%u orig=%p patched=%p",
+                "PATCHED_STAGE PathB p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
                 p,
                 vs_stage,
                 (void *)ci->pStages[vs_stage].module,
-                (void *)tmp);
+                (void *)tmp,
+                (void *)pipeline_rp);
             STEREO_LOG(
                 "Pipe %u: Path B — VS gl_ViewIndex patch",
                 p);
