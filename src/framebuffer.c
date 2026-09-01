@@ -532,30 +532,60 @@ stereo_CmdBeginRenderPass(
         (void *)(mv_rp ? mv_rp : pRenderPassBegin->renderPass),
         lookup ? lookup->has_multiview : 0,
         lookup ? (void*)lookup->mv_handle : NULL);
+    /*
+    * IMPORTANT:
+    * A tracked framebuffer with an explicit MV render pass association
+    * remains authoritative. A tracked framebuffer without one may still
+    * use the MV variant of the render pass it is actually being begun.
+    * This preserves non-MV framebuffer behavior while allowing render-pass
+    * based MV selection for applications such as VariableRateShading.
+    */
     if (fb_found)
     {
         if (fb_has_mv)
         {
-            if (lookup &&
-                lookup->has_multiview &&
-                lookup->mv_handle != VK_NULL_HANDLE)
+            STEREO_LOG(
+                "MV_USE_TRACKED_FB fb=%p mv_rp=%p",
+                (void*)pRenderPassBegin->framebuffer,
+                (void*)mv_rp);
+        }
+        else if (lookup &&
+            lookup->has_multiview &&
+            lookup->mv_handle != VK_NULL_HANDLE)
+        {
+            bool tracked_rp_match = false;
+            for (uint32_t i = 0; i < sd->fb_track_count; i++)
+            {
+                if (sd->fb_tracks[i].fb == pRenderPassBegin->framebuffer)
+                {
+                    tracked_rp_match =
+                    sd->fb_tracks[i].rp == pRenderPassBegin->renderPass;
+                    STEREO_LOG(
+                        "MV_TRACKED_FB_RP_CHECK fb=%p begin_rp=%p tracked_rp=%p match=%u",
+                        (void*)pRenderPassBegin->framebuffer,
+                        (void*)pRenderPassBegin->renderPass,
+                        (void*)sd->fb_tracks[i].rp,
+                        (unsigned)tracked_rp_match);
+                    break;
+                }
+            }
+            if (tracked_rp_match)
             {
                 mv_rp = lookup->mv_handle;
                 STEREO_LOG(
-                    "MV_USE_RP_LOOKUP_FOR_TRACKED_MV_FB fb=%p original_rp=%p tracked_mv=%p lookup_mv=%p",
+                    "MV_USE_RP_LOOKUP_FOR_TRACKED_FB fb=%p original_rp=%p lookup_mv=%p",
                     (void*)pRenderPassBegin->framebuffer,
                     (void*)pRenderPassBegin->renderPass,
-                    (void*)sd->fb_tracks[fb_track_index].mv_rp,
                     (void*)lookup->mv_handle);
             }
             else
             {
+                mv_rp = VK_NULL_HANDLE;
                 STEREO_LOG(
-                    "MV_USE_TRACKED_FB_FALLBACK fb=%p original_rp=%p tracked_mv=%p lookup=%p",
+                    "MV_BLOCKED_TRACKED_FB_RP_MISMATCH fb=%p original_rp=%p lookup_mv=%p",
                     (void*)pRenderPassBegin->framebuffer,
                     (void*)pRenderPassBegin->renderPass,
-                    (void*)sd->fb_tracks[fb_track_index].mv_rp,
-                    (void*)lookup);
+                    (void*)lookup->mv_handle);
             }
         }
         else
@@ -567,17 +597,6 @@ stereo_CmdBeginRenderPass(
                 (void*)pRenderPassBegin->renderPass,
                 lookup ? (void*)lookup->mv_handle : NULL);
         }
-    }
-    else if (lookup &&
-        lookup->has_multiview &&
-        lookup->mv_handle != VK_NULL_HANDLE)
-    {
-        mv_rp = lookup->mv_handle;
-        STEREO_LOG(
-            "MV_RP_FALLBACK_FROM_RP cb=%p original=%p mv=%p",
-            (void *)commandBuffer,
-            (void *)pRenderPassBegin->renderPass,
-            (void *)mv_rp);
     }
     else if (lookup &&
         lookup->has_multiview &&
