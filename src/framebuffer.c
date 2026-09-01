@@ -154,7 +154,7 @@ stereo_CreateFramebuffer(
             use_mv = rpi->mv_handle;
             STEREO_LOG(
                 "FB_SET renderPass=%p all=%u any=%u attachments=%u",
-                (void*)fci.renderPass,
+                fci.renderPass,
                 (unsigned)all,
                 (unsigned)any,
                 pCreateInfo->attachmentCount);
