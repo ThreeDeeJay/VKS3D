@@ -111,26 +111,26 @@ stereo_CreateFramebuffer(
         }
         StereoRenderPassInfo *rpi =
             stereo_rp_lookup(sd, pCreateInfo->renderPass);
-        if (all && rpi && !rpi->has_multiview) {
-            STEREO_LOG(
-                "FB_MV_CANDIDATE_NO_RP rp=%p attachments=%u all_upgraded=%u",
-                (void*)pCreateInfo->renderPass,
-                pCreateInfo->attachmentCount,
-                (unsigned)all);
-        }
+        STEREO_LOG(
+            "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u all=%u",
+            (void*)pCreateInfo->renderPass,
+            (void*)rpi,
+            rpi ? (void*)rpi->handle : NULL,
+            rpi ? (void*)rpi->mv_handle : NULL,
+            rpi ? (unsigned)rpi->has_multiview : 0,
+            (unsigned)all);
         if (rpi &&
             all &&
-            rpi->has_multiview &&
-            rpi->mv_handle != VK_NULL_HANDLE &&
-            rpi->handle == pCreateInfo->renderPass)
+            rpi->mv_handle &&
+            (rpi->handle == pCreateInfo->renderPass))
         {
             fci.renderPass = rpi->mv_handle;
             use_mv = rpi->mv_handle;
             STEREO_LOG(
-                "FB_SET renderPass=%p attachments=%u all_upgraded=%u",
+                "FB_SET renderPass=%p all=%u attachments=%u",
                 fci.renderPass,
-                pCreateInfo->attachmentCount,
-                (unsigned)all);
+                (unsigned)all,
+                pCreateInfo->attachmentCount);
         }
         else
         {
