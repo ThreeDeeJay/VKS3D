@@ -111,6 +111,13 @@ stereo_CreateFramebuffer(
         }
         StereoRenderPassInfo *rpi =
             stereo_rp_lookup(sd, pCreateInfo->renderPass);
+        if (all && rpi && !rpi->has_multiview) {
+            STEREO_LOG(
+                "FB_MV_CANDIDATE_NO_RP rp=%p attachments=%u all_upgraded=%u",
+                (void*)pCreateInfo->renderPass,
+                pCreateInfo->attachmentCount,
+                (unsigned)all);
+        }
         if (rpi &&
             all &&
             rpi->has_multiview &&
