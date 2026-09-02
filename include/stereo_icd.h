@@ -547,6 +547,8 @@ typedef struct StereoPipelineInfo
     VkShaderModule fs_module;
     VkShaderModule gs_module;
     VkShaderModule ms_module;
+    VkBool32 rt_raygen;
+    VkBool32 patched_rt_raygen;
     VkBool32 patched_vs;
     VkBool32 patched_fs;
     VkBool32 patched_ms;
@@ -857,6 +859,11 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     StereoDebugCtx *dbg);
+bool spirv_patch_stereo_raygen(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t **out,
+    size_t *out_c);
 void spirv_patched_free(uint32_t *w);
 
 StereoPipelineInfo *

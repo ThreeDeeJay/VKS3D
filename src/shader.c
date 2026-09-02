@@ -459,7 +459,13 @@ static void do_scan(SpvMod *m, bool p2)
                         m->is_patchable=true;
                         m->exec_model=(int)e;
                         m->entry_function = w[i+2];
-                    }}
+                    }
+                    else if (e == SpvExecRayGenerationKHR)
+                    {
+                        m->exec_model = (int)e;
+                        m->entry_function = w[i + 2];
+                    }
+                }
                 break;
             case SpvOpTypeFloat:
                 if(wc==3&&w[i+2]==32) m->ft=w[i+1];
@@ -8897,6 +8903,23 @@ static bool is_patchable_spv(const uint32_t *w, size_t c)
     return false;
 }
 
+static bool is_rt_raygen_spv(const uint32_t *w, size_t c)
+{
+    if (c < 5 || w[0] != SPIRV_MAGIC)
+        return false;
+    for (size_t i = 5; i < c;)
+    {
+        uint32_t op = w[i] & 0xffffu;
+        uint32_t wc = w[i] >> 16;
+        if (!wc || i + wc > c)
+            break;
+        if (op == SpvOpEntryPoint && wc >= 2)
+            return w[i + 1] == SpvExecutionModelRayGenerationKHR;
+        i += wc;
+    }
+    return false;
+}
+
 static StereoShaderCache *
 cache_find(StereoDevice *sd, VkShaderModule mod)
 {
@@ -9043,13 +9066,16 @@ stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
     create_exec_model == SpvExecMeshEXT;
     bool create_is_patchable =
     is_patchable_spv(spv,wc);
+    bool create_is_rt_raygen =
+    is_rt_raygen_spv(spv,wc);
     STEREO_LOG(
-        "CREATE_SHADER_CLASS module=%p exec_model=%d patchable=%u mesh=%u",
+        "CREATE_SHADER_CLASS module=%p exec_model=%d patchable=%u mesh=%u rt_raygen=%u",
         (void*)*pSM,
         create_exec_model,
         (unsigned)create_is_patchable,
-        (unsigned)create_is_mesh);
-    if (create_is_patchable || create_is_mesh)
+        (unsigned)create_is_mesh,
+        (unsigned)create_is_rt_raygen);
+    if (create_is_patchable || create_is_mesh || create_is_rt_raygen)
     {
         cache_add(sd,*pSM,spv,wc);
     }
