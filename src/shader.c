@@ -1286,8 +1286,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
                 m->ft,
                 sel,
                 isl,
-                c->cl,
-                c->cr
+                c->cr,
+                c->cl
             };
             sb_push_n(out, w, 6);
         }
@@ -1543,8 +1543,8 @@ static bool emit_mesh_position_adjust(
                 m->ft,
                 sel,
                 isl,
-                cl,
-                cr
+                cr,
+                cl
             };
             sb_push_n(out, w, 6);
         }
