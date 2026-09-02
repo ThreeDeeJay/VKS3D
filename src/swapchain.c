@@ -1288,14 +1288,8 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         && pCreateInfo->extent.width  > 1
         && pCreateInfo->extent.height > 1
         && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    bool intercept_rt_storage = base
-        && pCreateInfo->mipLevels == 1
-        && pCreateInfo->extent.width > 1
-        && pCreateInfo->extent.height > 1
-        && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT)
-        && !(pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
     STEREO_LOG(
-        "IMAGE_CREATE imageType=%d fmt=%d samples=%d usage=0x%x layers=%u extent=%ux%u flags=0x%x cube=%d array=%d upgrade=%d depth=%d color=%d rt_storage=%d",
+        "IMAGE_CREATE imageType=%d fmt=%d samples=%d usage=0x%x layers=%u extent=%ux%u flags=0x%x cube=%d array=%d upgrade=%d",
         pCreateInfo->imageType,
         pCreateInfo->format,
         pCreateInfo->samples,
@@ -1306,10 +1300,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         pCreateInfo->flags,
         !!(pCreateInfo->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT),
         pCreateInfo->arrayLayers > 1,
-        intercept_depth || intercept_color || intercept_rt_storage,
-        intercept_depth,
-        intercept_color,
-        intercept_rt_storage);
+        intercept_depth || intercept_color);
     if (base &&
         (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) &&
         !(pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
@@ -1323,7 +1314,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
             intercept_depth,
             intercept_color);
     }
-    if (!intercept_depth && !intercept_color && !intercept_rt_storage)
+    if (!intercept_depth && !intercept_color)
     {
         STEREO_LOG("CALL real CreateImage");
         VkResult r =
@@ -1340,14 +1331,13 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         return r;
     }
     STEREO_LOG(
-        "IMAGE_UPGRADE usage=0x%08X fmt=%u extent=%ux%u depth=%u color=%u rt_storage=%u layers %u->2",
+        "IMAGE_UPGRADE usage=0x%08X fmt=%u extent=%ux%u depth=%u color=%u layers %u->2",
         pCreateInfo->usage,
         pCreateInfo->format,
         pCreateInfo->extent.width,
         pCreateInfo->extent.height,
         intercept_depth,
         intercept_color,
-        intercept_rt_storage,
         pCreateInfo->arrayLayers);
     VkImageCreateInfo modified = *pCreateInfo;
     modified.arrayLayers = 2;
