@@ -273,13 +273,27 @@ stereo_CreateRenderPass(
     pCreateInfo->attachmentCount > 0 &&
     !depth_only;
     STEREO_LOG(
-        "RenderPass classify: depth_only=%d present_pass=%d attachments=%u fmt0=%u",
+        "RenderPass classify: rp=%p depth_only=%d present_pass=%d mv_eligible=%d attachments=%u subpasses=%u fmt0=%u",
+        (void*)*pRenderPass,
         depth_only,
         present_pass,
+        mv_eligible,
         pCreateInfo->attachmentCount,
+        pCreateInfo->subpassCount,
         pCreateInfo->attachmentCount ?
         pCreateInfo->pAttachments[0].format :
         0);
+    for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+        STEREO_LOG(
+            "RP_ATTACHMENT rp=%p i=%u format=%u load=%u store=%u initial=%u final=%u",
+            (void*)*pRenderPass,
+            i,
+            pCreateInfo->pAttachments[i].format,
+            pCreateInfo->pAttachments[i].loadOp,
+            pCreateInfo->pAttachments[i].storeOp,
+            pCreateInfo->pAttachments[i].initialLayout,
+            pCreateInfo->pAttachments[i].finalLayout);
+    }
     if (!mv_eligible)
     {
         STEREO_LOG(
