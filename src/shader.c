@@ -9301,6 +9301,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             !has_gs &&
             !has_tes &&
             !has_tcs &&
+            in_mv_rp &&
             ci->stageCount > 0)
         {
             /* Find FS stage */
