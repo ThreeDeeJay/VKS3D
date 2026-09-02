@@ -460,7 +460,7 @@ static void do_scan(SpvMod *m, bool p2)
                         m->exec_model=(int)e;
                         m->entry_function = w[i+2];
                     }
-                    else if (e == SpvExecRayGenerationKHR)
+                    else if (e == SpvExecutionModelRayGenerationKHR)
                     {
                         m->exec_model = (int)e;
                         m->entry_function = w[i + 2];
