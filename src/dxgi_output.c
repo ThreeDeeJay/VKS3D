@@ -406,7 +406,11 @@ VkResult dxgi_copy_and_present(StereoDevice *sd, StereoSwapchain *sc)
     ((void(WINAPI*)(void*, void*, UINT, void*, const void*, UINT, UINT))
      (*(void***)pCtx)[48])
     (pCtx, pBB, 1 /*subresource 1 = slice 1*/,
-     NULL /*full rect*/, (const char *)sc->cpu_map + sc->cpu_eye_bytes, stride, 0);
+     NULL /*full rect*/,
+     sd->stereo.shader_objects_mono
+         ? sc->cpu_map
+         : (const char *)sc->cpu_map + sc->cpu_eye_bytes,
+     stride, 0);
 
     /* Flush: vtable[111] — ensures driver sees the uploaded data */
     ((void(WINAPI*)(void*))(*(void***)pCtx)[111])(pCtx);

@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <intrin.h>
 #include "stereo_icd.h"
 
 /* Extensions we transparently add to every instance */
@@ -185,6 +186,7 @@ stereo_CreateInstance(
     VkInstance                    *pInstance)
 {
     STEREO_LOG("CALLED stereo_CreateInstance");
+    STEREO_LOG("CREATE_CALLER return=%p", _ReturnAddress());
     STEREO_LOG("stereo_CreateInstance: called pCreateInfo=%p", (void*)pCreateInfo);
     if (!stereo_load_real_icd()) {
         STEREO_ERR("stereo_CreateInstance: no real ICD");
@@ -321,17 +323,22 @@ stereo_EnumeratePhysicalDevices(
     VkPhysicalDevice  *pPhysicalDevices)
 {
     STEREO_LOG("CALLED stereo_EnumeratePhysicalDevices");
+    STEREO_LOG("ENUM_CALLER return=%p", _ReturnAddress());
     STEREO_LOG("stereo_EnumeratePhysicalDevices: called instance=%p", (void*)instance);
     StereoInstance *si = stereo_instance_from_handle(instance);
     if (!si) {
         STEREO_ERR("stereo_EnumeratePhysicalDevices: unknown instance handle %p", (void*)instance);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    STEREO_LOG("stereo_EnumeratePhysicalDevices: real_instance=%p", (void*)si->real_instance);
+    STEREO_LOG("stereo_EnumeratePhysicalDevices: real_instance=%p si=%p", (void*)si->real_instance, (void*)si);
     VkResult res = si->real.EnumeratePhysicalDevices(
         si->real_instance, pPhysicalDeviceCount, pPhysicalDevices);
 
+    STEREO_LOG("ENUM_PHYSDEV si=%p real_instance=%p res=%d count=%u", (void*)si, (void*)si->real_instance,
+               res, pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0);
     if (res == VK_SUCCESS && pPhysicalDevices) {
+        STEREO_LOG("stereo_EnumeratePhysicalDevices: wrapping %u real physical devices",
+                   *pPhysicalDeviceCount);
         /* Wrap each real physdev in a StereoPhysdev and return the wrapper.
          *
          * WHY: The Vulkan loader dispatches vkCreateDevice (and all physdev-

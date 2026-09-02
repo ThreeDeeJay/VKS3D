@@ -1644,6 +1644,49 @@ static bool emit_mesh_position_adjust(
     *new_pos = np;
     return true;
 }
+
+static bool stereo_skip_shader_patch(uint64_t spv_hash)
+{
+    static bool skip_list_init;
+    static bool skip_all;
+    static char skip_list[1024];
+    if (!skip_list_init)
+    {
+        const char *env =
+        stereo_getenv("VKS3D_SKIP_SHADER_PATCHES");
+        if (env)
+        {
+            strncpy(skip_list, env, sizeof(skip_list) - 1);
+            skip_list[sizeof(skip_list) - 1] = '\0';
+            skip_all = strchr(skip_list, '*') != NULL;
+        }
+        skip_list_init = true;
+    }
+    if (!skip_list[0])
+        return false;
+    if (skip_all)
+    {
+        STEREO_LOG(
+            "SKIP_SHADER_PATCH hash=%016llx reason=wildcard",
+            (unsigned long long)spv_hash);
+        return true;
+    }
+    char hashstr[17];
+    snprintf(
+        hashstr,
+        sizeof(hashstr),
+        "%016llx",
+        (unsigned long long)spv_hash);
+    if (strstr(skip_list, hashstr))
+    {
+        STEREO_LOG(
+            "SKIP_SHADER_PATCH hash=%s reason=hash",
+            hashstr);
+        return true;
+    }
+    return false;
+}
+
 bool spirv_patch_stereo_mesh(
     const StereoConfig *cfg,
     const uint32_t *in,
@@ -2387,11 +2430,13 @@ bool spirv_patch_stereo_vertex(
                 sizeof(hashstr),
                 "%016llx",
                 (unsigned long long)spv_hash);
-            if (strstr(skip_list, hashstr))
+            if (strchr(skip_list, '*') ||
+                strstr(skip_list, hashstr))
             {
                 STEREO_LOG(
-                    "SKIP_SHADER_PATCH hash=%s",
-                    hashstr);
+                    "SKIP_SHADER_PATCH hash=%s reason=%s",
+                    hashstr,
+                    strchr(skip_list, '*') ? "wildcard" : "hash");
                 free_spv_provenance(&m);
                 return false;
             }
@@ -2513,7 +2558,9 @@ bool spirv_patch_stereo_vertex(
         if (!m.pos_var)
         {
             STEREO_LOG(
-                "PATCH_SKIP no gl_Position");
+                "PATCH_SKIP no gl_Position hash=%016llx exec=%u",
+                (unsigned long long)spv_hash,
+                (unsigned)m.exec_model);
             free_spv_provenance(&m);
             return false;
         }
@@ -2538,6 +2585,14 @@ bool spirv_patch_stereo_vertex(
     }
     if (!m.is_patchable)
     {
+        STEREO_LOG(
+            "PATCH_SKIP not_patchable hash=%016llx exec=%u pos=%u matrix=%d direct=%d v2pos=%d",
+            (unsigned long long)spv_hash,
+            (unsigned)m.exec_model,
+            m.pos_var,
+            m.has_matrix_ops,
+            m.has_direct_position_write,
+            m.has_v2_position_input);
         free_spv_provenance(&m);
         return false;
     }
@@ -2744,6 +2799,22 @@ bool spirv_patch_stereo_vertex(
         memcpy(&w[3], &conv, sizeof(conv));
         sb_push_n(&te, w, 4);
     }
+    STEREO_LOG(
+        "VS_OFFSETS "
+        "hash=%016llx "
+        "lo=%+.9f "
+        "ro=%+.9f "
+        "conv=%+.9f "
+        "cl=%u "
+        "cr=%u "
+        "cc=%u",
+        (unsigned long long)spv_hash,
+        lo,
+        ro,
+        conv,
+        id_cl,
+        id_cr,
+        id_cc);
     if (will_inj_vi)
     {
         uint32_t d[] =
@@ -3090,18 +3161,6 @@ bool spirv_patch_stereo_vertex(
                 ob.w[j + 2],
                 ob.w[j + 3]);
         }
-        if (ob.w[j + 1] == ob.w[j + 1]) /* keep compiler happy */
-        {
-            if (ob.w[j + 1] == 16 ||
-                ob.w[j + 1] == id_ptr_int)
-            {
-                STEREO_LOG(
-                    "VS_VIEW_POINTER ptr=%u storage=%u pointee=%u",
-                    ob.w[j + 1],
-                    ob.w[j + 2],
-                    ob.w[j + 3]);
-            }
-        }
         if (opj == SpvOpVariable &&
             wcj >= 4 &&
             ob.w[j + 2] == id_inj_view)
@@ -3138,6 +3197,11 @@ bool spirv_patch_stereo_vertex(
                     ob.w[j + 3],
                     m.view_var,
                     m.it);
+                STEREO_LOG(
+                    "VIEW_LOAD_FINAL_IDS result=%u type=%u ptr=%u",
+                    ob.w[j + 2],
+                    ob.w[j + 1],
+                    ob.w[j + 3]);
             }
         }
         if (!wc || j + wc > ob.n)
@@ -5105,6 +5169,7 @@ fs_scan_image_operation(
     case SpvOpImageFetch:
     case SpvOpImageRead:
     case SpvOpImageWrite:
+    case SpvOpImageTexelPointer:
         STEREO_LOG(
             "FS_IMAGE_WRITE image=%u value=%u",
             ins[3],
@@ -5528,13 +5593,11 @@ fs_scan_instruction(
      * This is where depth/normal attachment analysis
      * will eventually feed projection correction.
      */
-    case SpvOpImageSampleImplicitLod:
-    case SpvOpImageSampleExplicitLod:
-    case SpvOpImageSampleDrefImplicitLod:
     case SpvOpImageSampleDrefExplicitLod:
     case SpvOpImageFetch:
     case SpvOpImageRead:
     case SpvOpImageWrite:
+    case SpvOpImageTexelPointer:
     case SpvOpImageQuerySizeLod:
         fs_scan_image_operation(
             s,
@@ -9137,34 +9200,43 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (st==VK_SHADER_STAGE_MESH_BIT_EXT)
             { has_ms=true; ms_stage=s; }
         }
-        /* ── Determine if this pipeline's render pass has multiview ──────
-         * gl_ViewIndex is 0 in non-multiview passes.  Patching VS/TES there
-         * bakes in left_eye_offset for ALL draws → deferred G-buffer / shadow
-         * passes render from left-eye-only perspective → monoscopic output.
-         * Leave non-multiview pass shaders unpatched so G-buffer, shadow maps,
-         * and post-fx all render from the CENTER perspective; the multiview
-         * final (swapchain) pass applies per-eye shift → image-space stereo
-         * for deferred content with shadows/lights/bloom properly aligned.   */
         StereoRenderPassInfo *rpi = NULL;
         bool in_mv_rp = false;
+        VkRenderPass pipeline_rp = ci->renderPass;
         if (ci->renderPass != VK_NULL_HANDLE) {
             rpi = stereo_rp_lookup(sd, ci->renderPass);
-            /* Render-pass pipelines are multiview only if the render pass itself
-             * was created with multiview support. Shadow passes must stay mono. */
             in_mv_rp =
                 (rpi && rpi->has_multiview) ||
                 ((view_mask & 0x3) != 0);
         }
         else if (sd->stereo.multiview && (view_mask & 0x3) != 0) {
-        /* VK 1.3 dynamic rendering: no renderPass handle, but we already
-         * upgraded VkPipelineRenderingCreateInfo.viewMask above. Treat it
-         * as multiview so VS/TES patching still runs. */
-        in_mv_rp = true;
+            in_mv_rp = true;
+        }
+        if (in_mv_rp &&
+            rpi &&
+            rpi->has_multiview &&
+            rpi->mv_handle != VK_NULL_HANDLE)
+        {
+            pipeline_rp = rpi->mv_handle;
+            STEREO_LOG(
+                "PIPE_MV_RP_SELECT p=%u original=%p mv=%p",
+                p,
+                (void*)ci->renderPass,
+                (void*)pipeline_rp);
+        }
+        else if (in_mv_rp)
+        {
+            STEREO_LOG(
+                "PIPE_MV_RP_SELECT p=%u original=%p mv=NONE dynamic=%u",
+                p,
+                (void*)ci->renderPass,
+                ci->renderPass == VK_NULL_HANDLE);
         }
         STEREO_LOG(
-            "PIPE_DECISION p=%u rp=%p rpi=%p in_mv=%u view_mask=0x%x stages=%u vs=%u tcs=%u tes=%u gs=%u ms=%u quad=%u",
+            "PIPE_DECISION p=%u rp=%p pipeline_rp=%p rpi=%p in_mv=%u view_mask=0x%x stages=%u vs=%u tcs=%u tes=%u gs=%u ms=%u quad=%u",
             p,
             (void*)ci->renderPass,
+            (void*)pipeline_rp,
             (void*)rpi,
             (unsigned)in_mv_rp,
             view_mask,
@@ -9193,26 +9265,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
             }
         }
-        /* ── PATCH 3: Pipeline multiview FIXED (NO pipeline struct exists) ─────────────── */
-        /* Multiview is render-pass driven ONLY.
-         * Pipeline pNext must NOT contain VkPipelineMultiviewCreateInfo (invalid Vulkan API). */
-        if (in_mv_rp) {
-            if (rpi && rpi->mv_handle) {
-                STEREO_LOG(
-                    "Pipe %u: MV RP detected (stageCount=%u) - using MV render pass %p",
-                    p,
-                    ci->stageCount,
-                    (void*)rpi->mv_handle);
-                /* render-pass pipeline path only */
-                infos[p].renderPass = rpi->mv_handle;
-            } else {
-                STEREO_LOG(
-                    "Pipe %u: dynamic rendering multiview detected (stageCount=%u) - no renderPass swap",
-                    p,
-                    ci->stageCount);
-                /* VK 1.3 dynamic rendering: keep infos[p].renderPass as-is */
-            }
-        }
         if (!in_mv_rp)
         {
             STEREO_LOG(
@@ -9227,17 +9279,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              * BUT still allow FS quad / UI heuristics to run later
              */
             goto PIPE_DECISION_CONTINUE;
-        }
-        /* Substitute multiview render pass for pipeline compilation.
-         * Pipelines must be compiled against the MV render pass so the driver
-         * enables multiview optimisation and gl_ViewIndex receives the real
-         * per-view index (0 or 1).  Render-pass compatibility rules allow these
-         * pipelines to be used with both MV and non-MV framebuffers since
-         * viewMask is not part of the compatibility criteria. */
-        if (rpi && rpi->mv_handle && rpi->has_multiview && in_mv_rp)
-        {
-            /* Render-pass path only; dynamic rendering has no renderPass to swap. */
-            infos[p].renderPass = rpi->mv_handle;
         }
         /* ── Full-screen quad detection ──────────────────────────────────
          * Pipelines with no vertex input bindings are full-screen quads used
@@ -9260,6 +9301,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             !has_gs &&
             !has_tes &&
             !has_tcs &&
+            in_mv_rp &&
             ci->stageCount > 0)
         {
             /* Find FS stage */
@@ -9433,6 +9475,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
                 free_spv_provenance(&fm);
             }
+            if (stereo_skip_shader_patch(spv_hash))
+            {
+                STEREO_LOG(
+                    "MESH_PATCH_SKIPPED p=%u hash=%016llx reason=skip_list",
+                    p,
+                    (unsigned long long)spv_hash);
+                continue;
+            }
             STEREO_LOG(
                 "FS_PATCH_BEGIN hash=%016llx pipe=%u",
                 (unsigned long long)spv_hash,
@@ -9498,12 +9548,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
+            infos[p].renderPass = pipeline_rp;
             STEREO_LOG(
-                "PATCHED_STAGE PathFS p=%u stage=%u orig=%p patched=%p",
+                "PATCHED_STAGE PathFS p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
                 p,
                 fs_s,
                 (void *)ci->pStages[fs_s].module,
-                (void *)tmp);
+                (void *)tmp,
+                (void*)pipeline_rp);
             STEREO_LOG(
                 "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
                 p,
@@ -9605,6 +9657,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
+            if (stereo_skip_shader_patch(spv_hash))
+            {
+                STEREO_LOG(
+                    "MESH_PATCH_SKIPPED p=%u hash=%016llx reason=skip_list",
+                    p,
+                    (unsigned long long)spv_hash);
+                continue;
+            }
             if (!spirv_patch_stereo_mesh(
                 &sd->stereo,
                 e->spv,
@@ -9689,6 +9749,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
+            infos[p].renderPass = pipeline_rp;
             continue;
         }
         if (has_gs && gs_stage != ~0u) {
@@ -9789,6 +9850,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 infos[p].pStages = st;
                 tmp_mod[p] = tmp;
                 tst[p] = st;
+                infos[p].renderPass = pipeline_rp;
                 continue;
             }
         /* ── Path A: patch existing TES ──────────────────────────────── */
@@ -9901,12 +9963,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
+            infos[p].renderPass = pipeline_rp;
             STEREO_LOG(
-                "PATCHED_STAGE PathA p=%u stage=%u orig=%p patched=%p",
+                "PATCHED_STAGE PathA p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
                 p,
                 tes_stage,
                 (void *)ci->pStages[tes_stage].module,
-                (void *)tmp);
+                (void *)tmp,
+                (void *)pipeline_rp);
             STEREO_LOG(
                 "Pipe %u: Path A — TES patched (gl_ViewIndex)",
                 p);
@@ -10010,7 +10074,16 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo, ro, conv,
                     /*inj_vi=*/true,
                     dbgB)) {
-                STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
+                STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
+                continue;
+            }
+            STEREO_LOG(
+                "PATHB_RESULT p=%u orig_hash=%016llx orig_words=%zu patched_hash=%016llx patched_words=%zu",
+                p,
+                (unsigned long long)hash_spv(e->spv, e->words),
+                e->words,
+                (unsigned long long)hash_spv(patched, pc2),
+                pc2);
             if (dump) {
                 uint64_t spv_hash = hash_spv(e->spv, e->words);
                 char dp[512];
@@ -10041,12 +10114,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
+            infos[p].renderPass = pipeline_rp;
             STEREO_LOG(
-                "PATCHED_STAGE PathB p=%u stage=%u orig=%p patched=%p",
+                "PATCHED_STAGE PathB p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
                 p,
                 vs_stage,
                 (void *)ci->pStages[vs_stage].module,
-                (void *)tmp);
+                (void *)tmp,
+                (void *)pipeline_rp);
             STEREO_LOG(
                 "Pipe %u: Path B — VS gl_ViewIndex patch",
                 p);
@@ -10059,6 +10134,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     /* ── PATCH 5: RenderPass-based multiview binding ─────────────── */
     for (uint32_t p = 0; p < N; p++) {
         StereoRenderPassInfo *rpi = NULL;
+        VkRenderPass pipeline_rp = pCI[p].renderPass;
         if (pCI[p].renderPass != VK_NULL_HANDLE)
             rpi = stereo_rp_lookup(sd, pCI[p].renderPass);
         STEREO_LOG(
@@ -10069,10 +10145,29 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             rpi ? (unsigned)rpi->has_multiview : 0,
             rpi ? rpi->view_mask : 0,
             rpi ? (void*)rpi->mv_handle : NULL);
-        if (rpi && rpi->has_multiview) {
-            STEREO_LOG("Pipe %u: binding MV render pass %p", p, (void*)rpi->mv_handle);
-            infos[p].renderPass = rpi->mv_handle;
+        if (rpi &&
+            rpi->has_multiview &&
+            rpi->mv_handle != VK_NULL_HANDLE)
+        {
+            pipeline_rp = rpi->mv_handle;
+            STEREO_LOG(
+                "PIPE_MV_RP_FINAL p=%u original=%p pipeline_rp=%p",
+                p,
+                (void*)pCI[p].renderPass,
+                (void*)pipeline_rp);
         }
+        bool pipeline_patched =
+            tst[p] != NULL;
+        STEREO_LOG(
+            "PIPE_RP_STEREO p=%u patched=%u tmp=%p pipeline_rp=%p",
+            p,
+            (unsigned)pipeline_patched,
+            (void*)tmp_mod[p],
+            (void*)pipeline_rp);
+        if (pipeline_rp != pCI[p].renderPass)
+            infos[p].renderPass = pipeline_rp;
+        else
+            infos[p].renderPass = pCI[p].renderPass;
     }
     for (uint32_t p = 0; p < N; p++) {
         STEREO_LOG(
@@ -10270,4 +10365,329 @@ stereo_DestroyShaderModule(VkDevice device, VkShaderModule sm,
     if (!sd) return;
     cache_remove(sd,sm);
     sd->real.DestroyShaderModule(sd->real_device,sm,pAlloc);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateShadersEXT(
+    VkDevice device,
+    uint32_t createInfoCount,
+    const VkShaderCreateInfoEXT *pCreateInfos,
+    const VkAllocationCallbacks *pAllocator,
+    VkShaderEXT *pShaders)
+{
+    STEREO_LOG("CALLED stereo_CreateShadersEXT count=%u", createInfoCount);
+    StereoDevice *sd=stereo_device_from_handle(device);
+    if (!sd || !sd->real.CreateShadersEXT)
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (!sd->stereo.enabled)
+        return sd->real.CreateShadersEXT(
+            sd->real_device,
+            createInfoCount,
+            pCreateInfos,
+            pAllocator,
+            pShaders);
+    VkShaderCreateInfoEXT *patched_infos = NULL;
+    bool *patched_owned = NULL;
+    if (createInfoCount) {
+        patched_infos = calloc(createInfoCount, sizeof(*patched_infos));
+        patched_owned = calloc(createInfoCount, sizeof(*patched_owned));
+        if (!patched_infos || !patched_owned) {
+            free(patched_infos);
+            free(patched_owned);
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        memcpy(patched_infos, pCreateInfos,
+            (size_t)createInfoCount * sizeof(*patched_infos));
+    }
+    for (uint32_t i=0; i<createInfoCount; i++) {
+        const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
+        STEREO_LOG(
+            "SHADER_OBJECT_CREATE i=%u stage=0x%x nextStage=0x%x flags=0x%x "
+            "codeType=%u codeSize=%zu setLayouts=%u pSetLayouts=%p "
+            "pushRanges=%u pPushConstantRanges=%p pNext=%p pName=%s pCode=%p",
+            i,
+            ci->stage,
+            ci->nextStage,
+            ci->flags,
+            ci->codeType,
+            ci->codeSize,
+            ci->setLayoutCount,
+            ci->pSetLayouts,
+            ci->pushConstantRangeCount,
+            ci->pPushConstantRanges,
+            ci->pNext,
+            ci->pName ? ci->pName : "<NULL>",
+            ci->pCode);
+        STEREO_LOG(
+            "SHADER_OBJECT_FLAGS i=%u flags=0x%x LINK_STAGE=%u "
+            "ALLOW_VARYING_SUBGROUP_SIZE=%u",
+            i,
+            ci->flags,
+            (ci->flags & VK_SHADER_CREATE_LINK_STAGE_BIT_EXT) ? 1u : 0u,
+            (ci->flags & VK_SHADER_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) ? 1u : 0u);
+    }
+    for (uint32_t i=0; i<createInfoCount; i++) {
+        const VkShaderCreateInfoEXT *ci=&pCreateInfos[i];
+        if (ci->codeType == VK_SHADER_CODE_TYPE_BINARY_EXT) {
+            STEREO_LOG(
+                "SHADER_OBJECT_BINARY_REJECT i=%u stage=0x%x "
+                "returning VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT",
+                i,
+                ci->stage);
+            return VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT;
+        }
+        STEREO_LOG(
+            "SHADER_OBJECT_CHECK i=%u stage=0x%x codeType=%u expectedSpirv=%u "
+            "pCode=%p codeSize=%zu stereo=%u",
+            i,
+            ci->stage,
+            ci->codeType,
+            VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            ci->pCode,
+            ci->codeSize,
+            sd->stereo.enabled ? 1u : 0u);
+        if (!ci->pCode || ci->codeSize < 20) {
+            STEREO_LOG(
+                "SHADER_OBJECT_SKIP i=%u reason=no_code",
+                i);
+            continue;
+        }
+        if (ci->codeType != VK_SHADER_CODE_TYPE_SPIRV_EXT) {
+            const uint32_t *probe = (const uint32_t *)ci->pCode;
+            STEREO_LOG(
+                "SHADER_OBJECT_NON_SPIRV_TYPE i=%u codeType=%u "
+                "words=%zu pCode=%p",
+                i,
+                ci->codeType,
+                ci->codeSize / sizeof(uint32_t),
+                ci->pCode);
+            STEREO_LOG(
+                "SHADER_OBJECT_CODE i=%u "
+                "w0=%08x w1=%08x w2=%08x w3=%08x "
+                "w4=%08x w5=%08x w6=%08x w7=%08x",
+                i,
+                probe[0],
+                probe[1],
+                probe[2],
+                probe[3],
+                probe[4],
+                probe[5],
+                probe[6],
+                probe[7]);
+            STEREO_LOG(
+                "SHADER_OBJECT_BYTES i=%u "
+                "b0=%02x b1=%02x b2=%02x b3=%02x "
+                "b4=%02x b5=%02x b6=%02x b7=%02x "
+                "b8=%02x b9=%02x b10=%02x b11=%02x "
+                "b12=%02x b13=%02x b14=%02x b15=%02x",
+                i,
+                ((const uint8_t *)ci->pCode)[0],
+                ((const uint8_t *)ci->pCode)[1],
+                ((const uint8_t *)ci->pCode)[2],
+                ((const uint8_t *)ci->pCode)[3],
+                ((const uint8_t *)ci->pCode)[4],
+                ((const uint8_t *)ci->pCode)[5],
+                ((const uint8_t *)ci->pCode)[6],
+                ((const uint8_t *)ci->pCode)[7],
+                ((const uint8_t *)ci->pCode)[8],
+                ((const uint8_t *)ci->pCode)[9],
+                ((const uint8_t *)ci->pCode)[10],
+                ((const uint8_t *)ci->pCode)[11],
+                ((const uint8_t *)ci->pCode)[12],
+                ((const uint8_t *)ci->pCode)[13],
+                ((const uint8_t *)ci->pCode)[14],
+                ((const uint8_t *)ci->pCode)[15]);
+            continue;
+        }
+        const uint32_t *in = (const uint32_t *)ci->pCode;
+        size_t in_words = ci->codeSize / sizeof(uint32_t);
+        uint32_t *patched = NULL;
+        size_t out_words = 0;
+        bool ok = false;
+        STEREO_LOG(
+            "SHADER_OBJECT_STAGE i=%u stage=0x%x VS=%u FS=%u",
+            i,
+            ci->stage,
+            ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? 1u : 0u,
+            ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? 1u : 0u);
+        uint64_t spv_hash = hash_spv(in, in_words);
+        if (stereo_skip_shader_patch(spv_hash))
+        {
+            STEREO_LOG(
+                "SHADER_OBJECT_PATCH_SKIPPED i=%u stage=0x%x hash=%016llx",
+                i,
+                ci->stage,
+                (unsigned long long)spv_hash);
+            ok = false;
+            patched = NULL;
+            out_words = 0;
+        }
+        else if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT) {
+            ok = spirv_patch_stereo_vertex(
+                &sd->stereo,
+                in,
+                in_words,
+                &patched,
+                &out_words,
+                sd->stereo.left_eye_offset,
+                sd->stereo.right_eye_offset,
+                sd->stereo.convergence,
+                true,
+                NULL);
+        } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+            ok = spirv_patch_stereo_fs(
+                in,
+                in_words,
+                &patched,
+                &out_words);
+        }
+        STEREO_LOG(
+            "SHADER_OBJECT_PATCH_RESULT i=%u stage=0x%x ok=%u patched=%p outWords=%zu",
+            i,
+            ci->stage,
+            ok ? 1u : 0u,
+            (void*)patched,
+            out_words);
+        const char *dump = getenv("VKS3D_DUMP_SPIRV");
+        if (dump &&
+            (ci->stage == VK_SHADER_STAGE_VERTEX_BIT ||
+               ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT)) {
+            uint64_t spv_hash = hash_spv(in, in_words);
+            char path[512];
+            const char *stage_suffix =
+            ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "-vso.spv" : "-fso.spv";
+            _snprintf_s(
+                path,
+                sizeof(path),
+                _TRUNCATE,
+                "%s\\%016llx%s",
+                dump,
+                (unsigned long long)spv_hash,
+                stage_suffix);
+            FILE *fp = fopen(path, "rb");
+            if (!fp) {
+                fp = fopen(path, "wb");
+                if (fp) {
+                    fwrite(in, sizeof(uint32_t), in_words, fp);
+                    fclose(fp);
+                    STEREO_LOG(
+                        "SHADER_OBJECT_DUMP_ORIGINAL i=%u stage=0x%x path=%s words=%zu hash=%016llx",
+                        i,
+                        ci->stage,
+                        path,
+                        in_words,
+                        (unsigned long long)spv_hash);
+                }
+            } else {
+                fclose(fp);
+            }
+        }
+        if (ok && patched && out_words) {
+            patched_infos[i].pCode = patched;
+            patched_infos[i].codeSize =
+            out_words * sizeof(uint32_t);
+            patched_owned[i] = true;
+            STEREO_LOG(
+                "SHADER_OBJECT_PATCHED i=%u stage=0x%x "
+                "oldWords=%zu newWords=%zu",
+                i,
+                ci->stage,
+                in_words,
+                out_words);
+            if (dump) {
+                uint64_t spv_hash = hash_spv(patched, out_words);
+                char path[512];
+                const char *stage_suffix =
+                ci->stage == VK_SHADER_STAGE_VERTEX_BIT ? "+vso.spv" :
+                ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT ? "+fso.spv" : "+so.spv";
+                _snprintf_s(
+                    path,
+                    sizeof(path),
+                    _TRUNCATE,
+                    "%s\\%016llx%s",
+                    dump,
+                    (unsigned long long)spv_hash,
+                    stage_suffix);
+                FILE *fp = fopen(path, "rb");
+                if (!fp) {
+                    fp = fopen(path, "wb");
+                    if (fp) {
+                        fwrite(patched, sizeof(uint32_t), out_words, fp);
+                        fclose(fp);
+                        STEREO_LOG(
+                            "SHADER_OBJECT_DUMP i=%u stage=0x%x path=%s words=%zu hash=%016llx",
+                            i,
+                            ci->stage,
+                            path,
+                            out_words,
+                            (unsigned long long)spv_hash);
+                    }
+                } else {
+                    fclose(fp);
+                }
+            }
+        } else if (ci->stage == VK_SHADER_STAGE_VERTEX_BIT ||
+            ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+            STEREO_LOG(
+                "SHADER_OBJECT_PATCH_SKIP i=%u stage=0x%x "
+                "codeType=%u words=%zu patched=%u",
+                i,
+                ci->stage,
+                ci->codeType,
+                in_words,
+                ok ? 1u : 0u);
+        }
+    }
+    for (uint32_t i=0; i<createInfoCount; i++) {
+        STEREO_LOG(
+            "SHADER_OBJECT_SUBMIT i=%u stage=0x%x nextStage=0x%x flags=0x%x "
+            "codeType=%u codeSize=%zu pCode=%p patched=%u",
+            i,
+            patched_infos[i].stage,
+            patched_infos[i].nextStage,
+            patched_infos[i].flags,
+            patched_infos[i].codeType,
+            patched_infos[i].codeSize,
+            patched_infos[i].pCode,
+            patched_owned[i] ? 1u : 0u);
+    }
+    VkResult res=sd->real.CreateShadersEXT(
+        sd->real_device,
+        createInfoCount,
+        patched_infos ? patched_infos : pCreateInfos,
+        pAllocator,
+        pShaders);
+    for (uint32_t i=0; i<createInfoCount; i++) {
+        if (patched_owned[i])
+            free((void *)patched_infos[i].pCode);
+    }
+    free(patched_owned);
+    free(patched_infos);
+    STEREO_LOG("SHADER_OBJECT_CREATE_RESULT res=%d count=%u", res, createInfoCount);
+    if (res == VK_SUCCESS && pShaders) {
+        for (uint32_t i=0; i<createInfoCount; i++) {
+            STEREO_LOG(
+                "SHADER_OBJECT_HANDLE i=%u shader=%p stage=0x%x",
+                i,
+                (void *)(uintptr_t)pShaders[i],
+                pCreateInfos[i].stage);
+        }
+    }
+    return res;
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyShaderEXT(
+    VkDevice device,
+    VkShaderEXT shader,
+    const VkAllocationCallbacks *pAllocator)
+{
+    STEREO_LOG("CALLED stereo_DestroyShaderEXT shader=%p",
+        (void *)(uintptr_t)shader);
+    StereoDevice *sd=stereo_device_from_handle(device);
+    if (!sd || !sd->real.DestroyShaderEXT)
+        return;
+    sd->real.DestroyShaderEXT(
+        sd->real_device,
+        shader,
+        pAllocator);
 }

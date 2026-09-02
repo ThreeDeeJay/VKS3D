@@ -171,22 +171,22 @@ void stereo_config_init(StereoConfig *cfg)
     /* Sanity: separation must be positive.  Convergence must be in [0, sep).
      * If sep <= 0 or conv >= sep, the net eye offset is zero or reversed,
      * which produces no visible stereo or inverted depth.  Warn and clamp. */
-    if (cfg->separation < 0.0f) {
-        STEREO_ERR("INI: separation=%.4f is negative — clamping to 0", cfg->separation);
-        cfg->separation = 0.0f;
-    }
-    if (cfg->convergence < 0.0f) {
-        STEREO_ERR("INI: convergence=%.4f is negative — clamping to 0", cfg->convergence);
-        cfg->convergence = 0.0f;
-    }
-    if (cfg->convergence >= cfg->separation) {
-        STEREO_ERR("INI: convergence=%.4f >= separation=%.4f — "
-                   "this cancels the stereo offset to zero or less! "
-                   "Clamping convergence to 0.0. "
-                   "Set convergence < separation (e.g. sep=0.065 conv=0.030).",
-                   cfg->convergence, cfg->separation);
-        cfg->convergence = 0.0f;
-    }
+    //if (cfg->separation < 0.0f) {
+    //    STEREO_ERR("INI: separation=%.4f is negative — clamping to 0", cfg->separation);
+    //    cfg->separation = 0.0f;
+    //}
+    //if (cfg->convergence < 0.0f) {
+    //    STEREO_ERR("INI: convergence=%.4f is negative — clamping to 0", cfg->convergence);
+    //    cfg->convergence = 0.0f;
+    //}
+    //if (cfg->convergence >= cfg->separation) {
+    //    STEREO_ERR("INI: convergence=%.4f >= separation=%.4f — "
+    //               "this cancels the stereo offset to zero or less! "
+    //               "Clamping convergence to 0.0. "
+    //               "Set convergence < separation (e.g. sep=0.065 conv=0.030).",
+    //               cfg->convergence, cfg->separation);
+    //    cfg->convergence = 0.0f;
+    //}
     cfg->flip_eyes   = cfg_bool ("flip_eyes",   false);
 
     /* ── presentation mode ── */
@@ -207,6 +207,12 @@ void stereo_config_init(StereoConfig *cfg)
      * which cause VK_ERROR_DEVICE_LOST when multiview tries to write layer 1.
      * Set multiview=1 in vks3d.ini [global] only for apps that support it. */
     cfg->multiview = cfg_bool("multiview", false);
+    {
+        const char *shader_objects_mono =
+            stereo_getenv("VKS3D_SHADER_OBJECTS_MONO");
+        cfg->shader_objects_mono =
+            shader_objects_mono && atoi(shader_objects_mono) != 0;
+    }
 
     /* Flatten detected screen-space UI by skipping stereo patching. */
     cfg->mono_ui = cfg_bool("mono_ui", true);
@@ -799,6 +805,27 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(CreateImage); L(DestroyImage); L(GetImageSubresourceLayout);
     L(CreateImageView); L(DestroyImageView);
     L(CreateShaderModule); L(DestroyShaderModule);
+    L(CreateShadersEXT); L(DestroyShaderEXT); L(CmdBindShadersEXT);
+    STEREO_LOG(
+        "ShaderObject dispatch Create=%p Destroy=%p Bind=%p",
+        (void*)sd->real.CreateShadersEXT,
+        (void*)sd->real.DestroyShaderEXT,
+        (void*)sd->real.CmdBindShadersEXT);
+    L(CmdSetViewportWithCountEXT);
+    L(CmdSetScissorWithCountEXT);
+    L(CmdSetDepthTestEnableEXT);
+    L(CmdSetDepthWriteEnableEXT);
+    L(CmdSetDepthCompareOpEXT);
+    L(CmdSetRasterizerDiscardEnableEXT);
+    L(CmdSetPolygonModeEXT);
+    L(CmdSetRasterizationSamplesEXT);
+    L(CmdSetAlphaToCoverageEnableEXT);
+    L(CmdSetDepthBiasEnableEXT);
+    L(CmdSetStencilTestEnableEXT);
+    L(CmdSetPrimitiveRestartEnableEXT);
+    L(CmdSetSampleMaskEXT);
+    L(CmdSetColorBlendEnableEXT);
+    L(CmdSetColorWriteMaskEXT);
     L(CreatePipelineCache); L(DestroyPipelineCache);
     L(GetPipelineCacheData); L(MergePipelineCaches);
     L(CreateGraphicsPipelines); L(CreateComputePipelines); L(DestroyPipeline);
@@ -814,6 +841,9 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(AllocateCommandBuffers); L(FreeCommandBuffers);
     L(BeginCommandBuffer); L(EndCommandBuffer); L(ResetCommandBuffer);
     L(CmdBindPipeline); L(CmdSetViewport); L(CmdSetScissor);
+    L(CmdSetCullMode); L(CmdSetFrontFace); L(CmdSetPrimitiveTopology);
+    L(CmdSetCullModeEXT); L(CmdSetFrontFaceEXT); L(CmdSetPrimitiveTopologyEXT);
+    L(CmdSetVertexInputEXT);
     L(CmdSetLineWidth); L(CmdSetDepthBias); L(CmdSetBlendConstants);
     L(CmdSetDepthBounds); L(CmdSetStencilCompareMask);
     L(CmdSetStencilWriteMask); L(CmdSetStencilReference);

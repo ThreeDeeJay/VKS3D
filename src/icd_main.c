@@ -213,6 +213,12 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_CreateShaderModule;
     if (!strcmp(name, "vkDestroyShaderModule"))
         return (PFN_vkVoidFunction)stereo_DestroyShaderModule;
+    if (!strcmp(name, "vkCreateShadersEXT"))
+        return (PFN_vkVoidFunction)stereo_CreateShadersEXT;
+    if (!strcmp(name, "vkDestroyShaderEXT"))
+        return (PFN_vkVoidFunction)stereo_DestroyShaderEXT;
+    if (!strcmp(name, "vkCmdBindShadersEXT"))
+        return (PFN_vkVoidFunction)stereo_CmdBindShadersEXT;
     if (!strcmp(name, "vkCreateSwapchainKHR"))
         return (PFN_vkVoidFunction)stereo_CreateSwapchainKHR;
     if (!strcmp(name, "vkDestroySwapchainKHR"))
@@ -331,6 +337,60 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CreateShaderModule);
     GDPA_WRAP("vkDestroyShaderModule",
               stereo_DestroyShaderModule);
+    GDPA_WRAP("vkCreateShadersEXT",
+              stereo_CreateShadersEXT);
+    GDPA_WRAP("vkDestroyShaderEXT",
+              stereo_DestroyShaderEXT);
+    GDPA_WRAP("vkCmdBindShadersEXT",
+              stereo_CmdBindShadersEXT);
+    //GDPA_WRAP("vkCmdSetViewport",
+    //          stereo_CmdSetViewport);
+    //GDPA_WRAP("vkCmdSetScissor",
+    //          stereo_CmdSetScissor);
+    //GDPA_WRAP("vkCmdSetCullMode",
+    //          stereo_CmdSetCullMode);
+    //GDPA_WRAP("vkCmdSetCullModeEXT",
+    //          stereo_CmdSetCullMode);
+    //GDPA_WRAP("vkCmdSetFrontFace",
+    //          stereo_CmdSetFrontFace);
+    //GDPA_WRAP("vkCmdSetFrontFaceEXT",
+    //          stereo_CmdSetFrontFace);
+    //GDPA_WRAP("vkCmdSetPrimitiveTopology",
+    //          stereo_CmdSetPrimitiveTopology);
+    //GDPA_WRAP("vkCmdSetPrimitiveTopologyEXT",
+    //          stereo_CmdSetPrimitiveTopology);
+    //GDPA_WRAP("vkCmdSetViewportWithCountEXT",
+    //          stereo_CmdSetViewportWithCountEXT);
+    //GDPA_WRAP("vkCmdSetScissorWithCountEXT",
+    //          stereo_CmdSetScissorWithCountEXT);
+    //GDPA_WRAP("vkCmdSetDepthTestEnableEXT",
+    //          stereo_CmdSetDepthTestEnableEXT);
+    //GDPA_WRAP("vkCmdSetDepthWriteEnableEXT",
+    //          stereo_CmdSetDepthWriteEnableEXT);
+    //GDPA_WRAP("vkCmdSetDepthCompareOpEXT",
+    //          stereo_CmdSetDepthCompareOpEXT);
+    //GDPA_WRAP("vkCmdSetRasterizerDiscardEnableEXT",
+    //          stereo_CmdSetRasterizerDiscardEnableEXT);
+    //GDPA_WRAP("vkCmdSetPolygonModeEXT",
+    //          stereo_CmdSetPolygonModeEXT);
+    //GDPA_WRAP("vkCmdSetRasterizationSamplesEXT",
+    //          stereo_CmdSetRasterizationSamplesEXT);
+    //GDPA_WRAP("vkCmdSetAlphaToCoverageEnableEXT",
+    //          stereo_CmdSetAlphaToCoverageEnableEXT);
+    //GDPA_WRAP("vkCmdSetDepthBiasEnableEXT",
+    //          stereo_CmdSetDepthBiasEnableEXT);
+    //GDPA_WRAP("vkCmdSetStencilTestEnableEXT",
+    //          stereo_CmdSetStencilTestEnableEXT);
+    //GDPA_WRAP("vkCmdSetPrimitiveRestartEnableEXT",
+    //          stereo_CmdSetPrimitiveRestartEnableEXT);
+    //GDPA_WRAP("vkCmdSetSampleMaskEXT",
+    //          stereo_CmdSetSampleMaskEXT);
+    //GDPA_WRAP("vkCmdSetColorBlendEnableEXT",
+    //          stereo_CmdSetColorBlendEnableEXT);
+    //GDPA_WRAP("vkCmdSetColorWriteMaskEXT",
+    //          stereo_CmdSetColorWriteMaskEXT);
+    //GDPA_WRAP("vkCmdSetVertexInputEXT",
+    //          stereo_CmdSetVertexInputEXT);
     if (!strcmp(pName, "vkCreateGraphicsPipelines")) {
         STEREO_LOG(
             "GDPA wrapper addr=%p stereo_CreateGraphicsPipelines=%p",
