@@ -1047,6 +1047,89 @@ stereo_CmdBindPipeline(
         pipeline);
 }
 
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdTraceRaysKHR(
+    VkCommandBuffer commandBuffer,
+    const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
+    const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
+    uint32_t width,
+    uint32_t height,
+    uint32_t depth)
+{
+    STEREO_LOG(
+        "RT_TRACE_BEGIN cb=%p width=%u height=%u depth=%u",
+        (void*)commandBuffer,
+        width,
+        height,
+        depth);
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+    StereoDevice *sd = NULL;
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real_device)
+        {
+            sd = &g_devices[i];
+            break;
+        }
+    }
+    if (!sd || !sd->real.CmdTraceRaysKHR)
+    {
+        STEREO_ERR(
+            "RT_TRACE missing dispatch sd=%p real=%p",
+            (void*)sd,
+            sd ? (void*)sd->real.CmdTraceRaysKHR : NULL);
+        return;
+    }
+    if (pRaygenShaderBindingTable)
+    {
+        STEREO_LOG(
+            "RT_SBT raygen addr=0x%llx size=%llu stride=%llu",
+            (unsigned long long)pRaygenShaderBindingTable->deviceAddress,
+            (unsigned long long)pRaygenShaderBindingTable->size,
+            (unsigned long long)pRaygenShaderBindingTable->stride);
+    }
+    if (pMissShaderBindingTable)
+    {
+        STEREO_LOG(
+            "RT_SBT miss addr=0x%llx size=%llu stride=%llu",
+            (unsigned long long)pMissShaderBindingTable->deviceAddress,
+            (unsigned long long)pMissShaderBindingTable->size,
+            (unsigned long long)pMissShaderBindingTable->stride);
+    }
+    if (pHitShaderBindingTable)
+    {
+        STEREO_LOG(
+            "RT_SBT hit addr=0x%llx size=%llu stride=%llu",
+            (unsigned long long)pHitShaderBindingTable->deviceAddress,
+            (unsigned long long)pHitShaderBindingTable->size,
+            (unsigned long long)pHitShaderBindingTable->stride);
+    }
+    if (pCallableShaderBindingTable)
+    {
+        STEREO_LOG(
+            "RT_SBT callable addr=0x%llx size=%llu stride=%llu",
+            (unsigned long long)pCallableShaderBindingTable->deviceAddress,
+            (unsigned long long)pCallableShaderBindingTable->size,
+            (unsigned long long)pCallableShaderBindingTable->stride);
+    }
+    STEREO_LOG(
+        "RT_TRACE_FORWARD real=%p",
+        (void*)sd->real.CmdTraceRaysKHR);
+    sd->real.CmdTraceRaysKHR(
+        commandBuffer,
+        pRaygenShaderBindingTable,
+        pMissShaderBindingTable,
+        pHitShaderBindingTable,
+        pCallableShaderBindingTable,
+        width,
+        height,
+        depth);
+    STEREO_LOG("RT_TRACE_END");
+}
+
 static StereoDevice *
 find_any_device(void)
 {

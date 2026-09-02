@@ -822,6 +822,8 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainK
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRayTracingPipelinesKHR( VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkRayTracingPipelineCreateInfoKHR *pCreateInfos, const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdTraceRaysKHR( VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDraw(VkCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);

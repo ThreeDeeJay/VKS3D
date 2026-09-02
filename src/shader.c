@@ -10355,6 +10355,81 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     return res;
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateRayTracingPipelinesKHR(
+    VkDevice device,
+    VkDeferredOperationKHR deferredOperation,
+    VkPipelineCache pipelineCache,
+    uint32_t createInfoCount,
+    const VkRayTracingPipelineCreateInfoKHR *pCreateInfos,
+    const VkAllocationCallbacks *pAllocator,
+    VkPipeline *pPipelines)
+{
+    STEREO_LOG(
+        "RT_PIPE_CREATE_BEGIN count=%u infos=%p",
+        createInfoCount,
+        (void*)pCreateInfos);
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd)
+        return VK_ERROR_DEVICE_LOST;
+    if (!sd->real.CreateRayTracingPipelinesKHR)
+    {
+        STEREO_ERR("RT_PIPE_CREATE missing real dispatch");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    for (uint32_t p = 0; p < createInfoCount; p++)
+    {
+        const VkRayTracingPipelineCreateInfoKHR *ci = &pCreateInfos[p];
+        STEREO_LOG(
+            "RT_PIPE p=%u stages=%u groups=%u recursion=%u layout=%p base=%p",
+            p,
+            ci->stageCount,
+            ci->groupCount,
+            ci->maxPipelineRayRecursionDepth,
+            (void*)ci->layout,
+            (void*)ci->basePipelineHandle);
+        for (uint32_t s = 0; s < ci->stageCount; s++)
+        {
+            const VkPipelineShaderStageCreateInfo *st = &ci->pStages[s];
+            STEREO_LOG(
+                "RT_STAGE p=%u stage=%u vkstage=0x%x module=%p entry=%s",
+                p,
+                s,
+                st->stage,
+                (void*)st->module,
+                st->pName ? st->pName : "(null)");
+        }
+        for (uint32_t g = 0; g < ci->groupCount; g++)
+        {
+            const VkRayTracingShaderGroupCreateInfoKHR *grp =
+            &ci->pGroups[g];
+            STEREO_LOG(
+                "RT_GROUP p=%u group=%u type=0x%x general=%u closest=%u anyhit=%u intersection=%u",
+                p,
+                g,
+                grp->type,
+                grp->generalShader,
+                grp->closestHitShader,
+                grp->anyHitShader,
+                grp->intersectionShader);
+        }
+    }
+    VkResult res = sd->real.CreateRayTracingPipelinesKHR(
+        sd->real_device,
+        deferredOperation,
+        pipelineCache,
+        createInfoCount,
+        pCreateInfos,
+        pAllocator,
+        pPipelines);
+    STEREO_LOG(
+        "RT_PIPE_CREATE_END result=%d first_pipeline=%p",
+        res,
+        (res == VK_SUCCESS && createInfoCount > 0) ?
+        (void*)pPipelines[0] : NULL);
+    return res;
+}
+
 /* ── vkDestroyShaderModule ───────────────────────────────────────────────── */
 VKAPI_ATTR void VKAPI_CALL
 stereo_DestroyShaderModule(VkDevice device, VkShaderModule sm,
