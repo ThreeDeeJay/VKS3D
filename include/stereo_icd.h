@@ -362,6 +362,8 @@ typedef struct RealDeviceDispatch {
     PFN_vkCreateGraphicsPipelines    CreateGraphicsPipelines;
     PFN_vkCreateComputePipelines     CreateComputePipelines;
     PFN_vkDestroyPipeline            DestroyPipeline;
+    PFN_vkCreateRayTracingPipelinesKHR CreateRayTracingPipelinesKHR;
+    PFN_vkCmdTraceRaysKHR            CmdTraceRaysKHR;
     PFN_vkCreatePipelineLayout       CreatePipelineLayout;
     PFN_vkDestroyPipelineLayout      DestroyPipelineLayout;
     PFN_vkCreateSampler              CreateSampler;
