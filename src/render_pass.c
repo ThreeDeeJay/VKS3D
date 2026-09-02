@@ -70,6 +70,29 @@ static bool is_depth_only_renderpass(
     }
 }
 
+static bool is_shadow_renderpass(
+    const VkRenderPassCreateInfo *pCI)
+{
+    if (!pCI || pCI->attachmentCount != 2)
+        return false;
+    const VkAttachmentDescription *color = &pCI->pAttachments[0];
+    const VkAttachmentDescription *depth = &pCI->pAttachments[1];
+    if (color->format != VK_FORMAT_R32_SFLOAT)
+        return false;
+    switch (depth->format) {
+    case VK_FORMAT_D16_UNORM:
+    case VK_FORMAT_X8_D24_UNORM_PACK32:
+    case VK_FORMAT_D32_SFLOAT:
+    case VK_FORMAT_S8_UINT:
+    case VK_FORMAT_D16_UNORM_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static bool find_shading_rate_attachment2(
     const VkRenderPassCreateInfo2 *pCI,
     uint32_t *attachment)
@@ -259,6 +282,7 @@ stereo_CreateRenderPass(
 
     /* Step 2: classify */
     bool depth_only = is_depth_only_renderpass(pCreateInfo);
+    bool shadow_pass = is_shadow_renderpass(pCreateInfo);
     bool present_pass = false;
     for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
         if (pCreateInfo->pAttachments[i].finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
@@ -271,11 +295,13 @@ stereo_CreateRenderPass(
     sd->stereo.enabled &&
     sd->stereo.multiview &&
     pCreateInfo->attachmentCount > 0 &&
-    !depth_only;
+    !depth_only &&
+    !shadow_pass;
     STEREO_LOG(
-        "RenderPass classify: rp=%p depth_only=%d present_pass=%d mv_eligible=%d attachments=%u subpasses=%u fmt0=%u",
+        "RenderPass classify: rp=%p depth_only=%d shadow_pass=%d present_pass=%d mv_eligible=%d attachments=%u subpasses=%u fmt0=%u",
         (void*)*pRenderPass,
         depth_only,
+        shadow_pass,
         present_pass,
         mv_eligible,
         pCreateInfo->attachmentCount,
