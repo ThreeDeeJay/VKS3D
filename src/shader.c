@@ -8903,6 +8903,69 @@ static bool is_patchable_spv(const uint32_t *w, size_t c)
     return false;
 }
 
+static void log_rt_raygen_spv(const uint32_t *w, size_t c)
+{
+    if (!w || c < 5 || w[0] != SPIRV_MAGIC)
+        return;
+    for (size_t i = 5; i < c;)
+    {
+        uint32_t op = w[i] & 0xffffu;
+        uint32_t wc = w[i] >> 16;
+        if (!wc || i + wc > c)
+            break;
+        if (op == SpvOpEntryPoint && wc >= 3)
+        {
+            STEREO_LOG(
+                "RT_SPV_ENTRYPOINT model=%u function=%u words=%u",
+                w[i + 1],
+                w[i + 2],
+                wc);
+        }
+        else if (op == SpvOpTypeImage && wc >= 9)
+        {
+            STEREO_LOG(
+                "RT_SPV_TYPE_IMAGE id=%u sampled_type=%u dim=%u depth=%u arrayed=%u ms=%u sampled=%u format=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3],
+                w[i + 4],
+                w[i + 5],
+                w[i + 6],
+                w[i + 7],
+                w[i + 8]);
+        }
+        else if (op == SpvOpVariable && wc >= 4)
+        {
+            STEREO_LOG(
+                "RT_SPV_VARIABLE result_type=%u id=%u storage=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3]);
+        }
+        else if (op == SpvOpImageWrite && wc >= 5)
+        {
+            STEREO_LOG(
+                "RT_SPV_IMAGE_WRITE image=%u coord=%u value=%u",
+                w[i + 3],
+                w[i + 4],
+                w[i + 5]);
+        }
+        else if (op == SpvOpLoad && wc >= 4)
+        {
+            STEREO_LOG(
+                "RT_SPV_LOAD result_type=%u result=%u pointer=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3]);
+        }
+        i += wc;
+    }
+}
+static bool is_rt_raygen_spv(const uint32_t *w, size_t c)
+{
+    ...
+}
+
 static bool is_rt_raygen_spv(const uint32_t *w, size_t c)
 {
     if (c < 5 || w[0] != SPIRV_MAGIC)
@@ -9075,6 +9138,8 @@ stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
         (unsigned)create_is_patchable,
         (unsigned)create_is_mesh,
         (unsigned)create_is_rt_raygen);
+    if (create_is_rt_raygen)
+        log_rt_raygen_spv(spv, wc);
     if (create_is_patchable || create_is_mesh || create_is_rt_raygen)
     {
         cache_add(sd,*pSM,spv,wc);
