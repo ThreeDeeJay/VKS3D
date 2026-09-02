@@ -8961,10 +8961,6 @@ static void log_rt_raygen_spv(const uint32_t *w, size_t c)
         i += wc;
     }
 }
-static bool is_rt_raygen_spv(const uint32_t *w, size_t c)
-{
-    ...
-}
 
 static bool is_rt_raygen_spv(const uint32_t *w, size_t c)
 {
