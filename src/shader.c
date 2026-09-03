@@ -8888,6 +8888,208 @@ bool spirv_patch_stereo_fs(
     return true;
 }
 
+static bool
+spirv_patch_stereo_raygen(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t **out,
+    size_t *out_c)
+{
+    if (!in || in_c < 5 || in[0] != SPIRV_MAGIC || !out || !out_c)
+        return false;
+    *out = NULL;
+    *out_c = 0;
+    uint32_t bound = in[3];
+    uint32_t launch_id_var = 0;
+    uint32_t launch_id_load = 0;
+    uint32_t image_type = 0;
+    uint32_t image_write_coord = 0;
+    uint32_t int_type = 0;
+    uint32_t uint_type = 0;
+    uint32_t v2int_type = 0;
+    uint32_t first_function = 0;
+    for (size_t i = 5; i < in_c;)
+    {
+        uint32_t op = in[i] & 0xffffu;
+        uint32_t wc = in[i] >> 16;
+        if (!wc || i + wc > in_c)
+            return false;
+        if (op == SpvOpEntryPoint &&
+            wc >= 3 &&
+            in[i + 1] == SpvExecRayGenerationKHR)
+        {
+        }
+        else if (op == SpvOpDecorate &&
+            wc >= 4 &&
+            in[i + 2] == SpvDecorationBuiltIn &&
+            in[i + 3] == SpvBuiltInLaunchIdKHR)
+        {
+            launch_id_var = in[i + 1];
+        }
+        else if (op == SpvOpTypeInt && wc >= 4)
+        {
+            if (in[i + 2] == 32 && in[i + 3] == 0)
+                uint_type = in[i + 1];
+            else if (in[i + 2] == 32 && in[i + 3] == 1)
+                int_type = in[i + 1];
+        }
+        else if (op == SpvOpTypeVector && wc >= 4)
+        {
+            if (in[i + 2] == int_type && in[i + 3] == 2)
+                v2int_type = in[i + 1];
+        }
+        else if (op == SpvOpTypeImage &&
+            wc >= 9 &&
+            in[i + 3] == SpvDim2D &&
+            in[i + 4] == 0 &&
+            in[i + 5] == 0 &&
+            in[i + 6] == 0 &&
+            in[i + 7] == 2)
+        {
+            image_type = in[i + 1];
+        }
+        else if (op == SpvOpLoad &&
+            wc >= 4 &&
+            launch_id_var &&
+            in[i + 3] == launch_id_var)
+        {
+            launch_id_load = in[i + 2];
+        }
+        else if (op == SpvOpImageWrite && wc >= 4)
+        {
+            if (!image_write_coord)
+                image_write_coord = in[i + 2];
+        }
+        else if (op == SpvOpFunction && !first_function)
+        {
+            first_function = (uint32_t)i;
+        }
+        i += wc;
+    }
+    if (!launch_id_var ||
+        !launch_id_load ||
+        !image_type ||
+        !image_write_coord ||
+        !first_function ||
+        !int_type ||
+        !uint_type ||
+        !v2int_type)
+    {
+        STEREO_LOG(
+            "RT_PATCH_REJECT launch=%u launch_load=%u image_type=%u coord=%u function=%u int=%u uint=%u v2int=%u",
+            launch_id_var,
+            launch_id_load,
+            image_type,
+            image_write_coord,
+            first_function,
+            int_type,
+            uint_type,
+            v2int_type);
+        return false;
+    }
+    uint32_t v3int_type = bound++;
+    uint32_t coord_x = bound++;
+    uint32_t coord_y = bound++;
+    uint32_t coord_z_u = bound++;
+    uint32_t coord_z = bound++;
+    uint32_t new_coord = bound++;
+    SpvBuf ob;
+    sb_init(&ob, in_c + 32);
+    for (size_t i = 0; i < in_c;)
+    {
+        uint32_t op = in[i] & 0xffffu;
+        uint32_t wc = in[i] >> 16;
+        if (!wc || i + wc > in_c)
+        {
+            sb_free(&ob);
+            return false;
+        }
+        if (op == SpvOpTypeImage &&
+            wc >= 9 &&
+            in[i + 1] == image_type &&
+            in[i + 5] == 0)
+        {
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[ob.n - wc + 5] = 1;
+            i += wc;
+            continue;
+        }
+        if (i == first_function)
+        {
+            uint32_t w[] = {
+                (4u << 16) | SpvOpTypeVector,
+                v3int_type,
+                int_type,
+                3
+            };
+            sb_push_n(&ob, w, 4);
+        }
+        if (op == SpvOpImageWrite &&
+            wc >= 4 &&
+            in[i + 2] == image_write_coord)
+        {
+            uint32_t x[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                int_type,
+                coord_x,
+                image_write_coord,
+                0
+            };
+            uint32_t y[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                int_type,
+                coord_y,
+                image_write_coord,
+                1
+            };
+            uint32_t z[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                uint_type,
+                coord_z_u,
+                launch_id_load,
+                2
+            };
+            uint32_t z_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_z,
+                coord_z_u
+            };
+            uint32_t coord[] = {
+                (6u << 16) | SpvOpCompositeConstruct,
+                v3int_type,
+                new_coord,
+                coord_x,
+                coord_y,
+                coord_z
+            };
+            sb_push_n(&ob, x, 5);
+            sb_push_n(&ob, y, 5);
+            sb_push_n(&ob, z, 5);
+            sb_push_n(&ob, z_cast, 4);
+            sb_push_n(&ob, coord, 6);
+            uint32_t write[4];
+            memcpy(write, &in[i], sizeof(write));
+            write[2] = new_coord;
+            sb_push_n(&ob, write, 4);
+            i += wc;
+            continue;
+        }
+        sb_push_n(&ob, &in[i], wc);
+        i += wc;
+    }
+    ob.w[3] = bound;
+    *out = ob.w;
+    *out_c = ob.n;
+    STEREO_LOG(
+        "RT_PATCH_SUCCESS image_type=%u old_coord=%u new_coord=%u launch=%u layer=LaunchId.z",
+        image_type,
+        image_write_coord,
+        new_coord,
+        launch_id_load);
+    return true;
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 static bool is_patchable_spv(const uint32_t *w, size_t c)
 {
