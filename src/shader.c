@@ -8913,7 +8913,10 @@ spirv_patch_stereo_raygen(
         uint32_t op = in[i] & 0xffffu;
         uint32_t wc = in[i] >> 16;
         if (!wc || i + wc > in_c)
+        {
+            STEREO_LOG("RT_PATCH_SCAN_BAD i=%zu op=%u wc=%u words=%zu", i, op, wc, in_c);
             return false;
+        }
         if (op == SpvOpEntryPoint &&
             wc >= 3 &&
             in[i + 1] == SpvExecutionModelRayGenerationKHR)
@@ -9001,6 +9004,7 @@ spirv_patch_stereo_raygen(
         uint32_t wc = in[i] >> 16;
         if (!wc || i + wc > in_c)
         {
+            STEREO_LOG("RT_PATCH_EMIT_BAD i=%zu op=%u wc=%u words=%zu", i, op, wc, in_c);
             sb_free(&ob);
             return false;
         }
@@ -10713,6 +10717,7 @@ stereo_CreateRayTracingPipelinesKHR(
                 (void *)st->module,
                 cache->words,
                 cache->exec_model);
+            log_rt_raygen_spv(*patched_spv, patched_words);
             uint32_t *patched_spv = NULL;
             size_t patched_words = 0;
             if (!spirv_patch_stereo_raygen(
