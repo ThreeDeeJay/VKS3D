@@ -8998,7 +8998,8 @@ spirv_patch_stereo_raygen(
     uint32_t new_coord = bound++;
     SpvBuf ob;
     sb_init(&ob, in_c + 32);
-    for (size_t i = 0; i < in_c;)
+    sb_push_n(&ob, in, 5);
+    for (size_t i = 5; i < in_c;)
     {
         uint32_t op = in[i] & 0xffffu;
         uint32_t wc = in[i] >> 16;
