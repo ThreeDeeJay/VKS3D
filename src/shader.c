@@ -10719,7 +10719,7 @@ stereo_CreateRayTracingPipelinesKHR(
                 cache->exec_model);
             uint32_t *patched_spv = NULL;
             size_t patched_words = 0;
-            log_rt_raygen_spv(cache->data, cache->words);
+            log_rt_raygen_spv(cache->spv, cache->words);
             if (!spirv_patch_stereo_raygen(
                 cache->spv,
                 cache->words,
@@ -10733,6 +10733,7 @@ stereo_CreateRayTracingPipelinesKHR(
                     (void *)st->module);
                 continue;
             }
+            log_rt_raygen_spv(patched_spv, patched_words);
             VkShaderModuleCreateInfo smci = {
                 .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 .codeSize = patched_words * sizeof(uint32_t),
