@@ -10718,6 +10718,31 @@ stereo_CreateRayTracingPipelinesKHR(
                 (void *)st->module,
                 cache->words,
                 cache->exec_model);
+            if (dump)
+            {
+                uint64_t spv_hash = hash_spv(cache->spv, cache->words);
+                char dp[512];
+                _snprintf(
+                    dp,
+                    sizeof(dp) - 1,
+                    "%s\\%016llx-rs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f = fopen(dp, "rb");
+                if (!f)
+                {
+                    f = fopen(dp, "wb");
+                    if (f)
+                    {
+                        fwrite(cache->spv, 4, cache->words, f);
+                        fclose(f);
+                    }
+                }
+                else
+                {
+                    fclose(f);
+                }
+            }
             uint32_t *patched_spv = NULL;
             size_t patched_words = 0;
             log_rt_raygen_spv(cache->spv, cache->words);
@@ -10735,6 +10760,31 @@ stereo_CreateRayTracingPipelinesKHR(
                 continue;
             }
             log_rt_raygen_spv(patched_spv, patched_words);
+            if (dump)
+            {
+                uint64_t spv_hash = hash_spv(cache->spv, cache->words);
+                char dp[512];
+                _snprintf(
+                    dp,
+                    sizeof(dp) - 1,
+                    "%s\\%016llx+rs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f = fopen(dp, "rb");
+                if (!f)
+                {
+                    f = fopen(dp, "wb");
+                    if (f)
+                    {
+                        fwrite(patched_spv, 4, patched_words, f);
+                        fclose(f);
+                    }
+                }
+                else
+                {
+                    fclose(f);
+                }
+            }
             VkShaderModuleCreateInfo smci = {
                 .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 .codeSize = patched_words * sizeof(uint32_t),
