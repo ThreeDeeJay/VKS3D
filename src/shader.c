@@ -9087,10 +9087,11 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u old_coord=%u new_coord=%u launch=%u layer=LaunchId.z",
+        "RT_PATCH_SUCCESS image_type=%u old_coord=%u new_coord0=%u new_coord1=%u launch=%u layer=0,1",
         image_type,
         image_write_coord,
-        new_coord,
+        new_coord_0,
+        new_coord_1,
         launch_id_load);
     return true;
 }
