@@ -10674,20 +10674,125 @@ stereo_CreateRayTracingPipelinesKHR(
         STEREO_ERR("RT_PIPE_CREATE missing real dispatch");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    VkRayTracingPipelineCreateInfoKHR *patched_ci =
+    calloc(createInfoCount, sizeof(*patched_ci));
+    VkPipelineShaderStageCreateInfo **patched_stages =
+    calloc(createInfoCount, sizeof(*patched_stages));
+    VkShaderModule *tmp_raygen_modules =
+    calloc(createInfoCount, sizeof(*tmp_raygen_modules));
+    if (!patched_ci || !patched_stages || !tmp_raygen_modules)
+    {
+        free(patched_ci);
+        free(patched_stages);
+        free(tmp_raygen_modules);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     for (uint32_t p = 0; p < createInfoCount; p++)
     {
         const VkRayTracingPipelineCreateInfoKHR *ci = &pCreateInfos[p];
+        patched_ci[p] = *ci;
+        for (uint32_t s = 0; s < ci->stageCount; s++)
+        {
+            const VkPipelineShaderStageCreateInfo *st = &ci->pStages[s];
+            if (st->stage != VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+                continue;
+            StereoShaderCache *cache = cache_find(sd, st->module);
+            if (!cache)
+            {
+                STEREO_LOG(
+                    "RT_PATCH_CACHE_MISS p=%u stage=%u module=%p",
+                    p,
+                    s,
+                    (void *)st->module);
+                continue;
+            }
+            STEREO_LOG(
+                "RT_PATCH_ATTEMPT p=%u stage=%u module=%p words=%zu exec_model=%d",
+                p,
+                s,
+                (void *)st->module,
+                cache->words,
+                cache->exec_model);
+            uint32_t *patched_spv = NULL;
+            size_t patched_words = 0;
+            if (!spirv_patch_stereo_raygen(
+                cache->spv,
+                cache->words,
+                &patched_spv,
+                &patched_words))
+            {
+                STEREO_LOG(
+                    "RT_PATCH_FAILED p=%u stage=%u module=%p",
+                    p,
+                    s,
+                    (void *)st->module);
+                continue;
+            }
+            VkShaderModuleCreateInfo smci = {
+                .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .codeSize = patched_words * sizeof(uint32_t),
+                .pCode = patched_spv
+            };
+            VkShaderModule tmp_module = VK_NULL_HANDLE;
+            VkResult patch_res = sd->real.CreateShaderModule(
+                sd->real_device,
+                &smci,
+                NULL,
+                &tmp_module);
+            spirv_patched_free(patched_spv);
+            if (patch_res != VK_SUCCESS)
+            {
+                STEREO_LOG(
+                    "RT_PATCH_MODULE_CREATE_FAILED p=%u stage=%u result=%d",
+                    p,
+                    s,
+                    patch_res);
+                continue;
+            }
+            patched_stages[p] =
+            calloc(ci->stageCount, sizeof(*patched_stages[p]));
+            if (!patched_stages[p])
+            {
+                sd->real.DestroyShaderModule(
+                    sd->real_device,
+                    tmp_module,
+                    NULL);
+                free(patched_ci);
+                free(patched_stages);
+                free(tmp_raygen_modules);
+                return VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            memcpy(
+                patched_stages[p],
+                ci->pStages,
+                ci->stageCount * sizeof(*patched_stages[p]));
+            patched_stages[p][s].module = tmp_module;
+            patched_ci[p].pStages = patched_stages[p];
+            tmp_raygen_modules[p] = tmp_module;
+            STEREO_LOG(
+                "RT_PATCH_SUCCESS p=%u stage=%u original=%p patched=%p words=%zu",
+                p,
+                s,
+                (void *)st->module,
+                (void *)tmp_module,
+                patched_words);
+            break;
+        }
         STEREO_LOG(
-            "RT_PIPE p=%u stages=%u groups=%u recursion=%u layout=%p base=%p",
+            "RT_PIPE p=%u stages=%u groups=%u recursion=%u layout=%p base=%p patched_raygen=%u",
             p,
             ci->stageCount,
             ci->groupCount,
             ci->maxPipelineRayRecursionDepth,
-            (void*)ci->layout,
-            (void*)ci->basePipelineHandle);
+            (void *)ci->layout,
+            (void *)ci->basePipelineHandle,
+            tmp_raygen_modules[p] != VK_NULL_HANDLE);
         for (uint32_t s = 0; s < ci->stageCount; s++)
         {
-            const VkPipelineShaderStageCreateInfo *st = &ci->pStages[s];
+            const VkPipelineShaderStageCreateInfo *st =
+            patched_stages[p] ?
+            &patched_stages[p][s] :
+            &ci->pStages[s];
             STEREO_LOG(
                 "RT_STAGE p=%u stage=%u vkstage=0x%x module=%p entry=%s",
                 p,
@@ -10716,7 +10821,7 @@ stereo_CreateRayTracingPipelinesKHR(
         deferredOperation,
         pipelineCache,
         createInfoCount,
-        pCreateInfos,
+        patched_ci,
         pAllocator,
         pPipelines);
     STEREO_LOG(
@@ -10724,6 +10829,28 @@ stereo_CreateRayTracingPipelinesKHR(
         res,
         (res == VK_SUCCESS && createInfoCount > 0) ?
         (void*)pPipelines[0] : NULL);
+    for (uint32_t p = 0; p < createInfoCount; p++)
+    {
+        if (tmp_raygen_modules[p] != VK_NULL_HANDLE)
+        {
+            if (sd->tmp_module_count < MAX_TMP_MODULES)
+            {
+                sd->tmp_modules[sd->tmp_module_count++] =
+                tmp_raygen_modules[p];
+            }
+            else
+            {
+                sd->real.DestroyShaderModule(
+                    sd->real_device,
+                    tmp_raygen_modules[p],
+                    NULL);
+            }
+        }
+        free(patched_stages[p]);
+    }
+    free(tmp_raygen_modules);
+    free(patched_stages);
+    free(patched_ci);
     return res;
 }
 
