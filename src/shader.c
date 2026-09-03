@@ -9022,7 +9022,6 @@ spirv_patch_stereo_raygen(
     uint32_t new_coord_1 = bound++;
     uint32_t layer_0 = bound++;
     uint32_t layer_1 = bound++;
-    uint32_t zero_texel = bound++;
     SpvBuf ob;
     sb_init(&ob, in_c + 64);
     sb_push_n(&ob, in, 5);
@@ -9056,15 +9055,9 @@ spirv_patch_stereo_raygen(
                 layer_1,
                 1
             };
-            uint32_t cz[] = {
-                (3u << 16) | SpvOpConstantNull,
-                image_texel_type,
-                zero_texel
-            };
             sb_push_n(&ob, w, 4);
             sb_push_n(&ob, c0, 4);
             sb_push_n(&ob, c1, 4);
-            sb_push_n(&ob, cz, 3);
         }
         if (op == SpvOpTypeImage &&
             wc >= 9 &&
@@ -9121,8 +9114,7 @@ spirv_patch_stereo_raygen(
             size_t write1_start = ob.n;
             sb_push_n(&ob, &in[i], wc);
             ob.w[write1_start + 2] = new_coord_1;
-            ob.w[write1_start + 3] = zero_texel;
-            STEREO_LOG("RT_PATCH_LAYER1_BLACK coord=%u texel=%u", new_coord_1, zero_texel);
+            STEREO_LOG("RT_PATCH_LAYER1_COPY coord=%u", new_coord_1);
             i += wc;
             continue;
         }
@@ -9133,13 +9125,12 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u texel_type=%u old_coord=%u layer0_coord=%u layer1_coord=%u zero_texel=%u trace=%u trace_wc=%u mode=two_trace_layer1_black",
+        "RT_PATCH_SUCCESS image_type=%u texel_type=%u old_coord=%u layer0_coord=%u layer1_coord=%u trace=%u trace_wc=%u mode=two_trace_copy",
         image_type,
         image_texel_type,
         image_write_coord,
         new_coord_0,
         new_coord_1,
-        zero_texel,
         trace_ray_offset,
         trace_ray_wc);
     return true;
