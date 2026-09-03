@@ -8991,6 +8991,14 @@ spirv_patch_stereo_raygen(
         else if (op == SpvOpMatrixTimesVector && wc >= 5)
         {
             matrix_times_vector_count++;
+            STEREO_LOG(
+                "RT_PATCH_MTV index=%u i=%zu result=%u type=%u mat=%u vec=%u",
+                matrix_times_vector_count,
+                i,
+                in[i + 2],
+                in[i + 1],
+                in[i + 3],
+                in[i + 4]);
             if (matrix_times_vector_count == 1)
             {
                 origin_mtv = (uint32_t)i;
@@ -9029,19 +9037,40 @@ spirv_patch_stereo_raygen(
         !ray_ndc_vec)
     {
         STEREO_LOG(
-            "RT_PATCH_REJECT launch=%u launch_load=%u image_type=%u texel_type=%u coord=%u function=%u int=%u uint=%u float=%u v2int=%u v3uint=%u v4float=%u origin_vec=%u origin_mtv=%u ray_ndc_vec=%u ray_ndc_mtv=%u mtv_count=%u",
+            "RT_PATCH_REJECT_FLAGS launch=%u launch_load=%u image_type=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u bool=%u v2int=%u v3uint=%u v4float=%u texel=%u origin_vec=%u origin_mtv=%u ray_ndc_vec=%u ray_ndc_mtv=%u mtv_count=%u",
+            !launch_id_var,
+            !launch_id_load,
+            !image_type,
+            !image_write_coord,
+            !first_function,
+            !int_type,
+            !uint_type,
+            !float_type,
+            !bool_type,
+            !v2int_type,
+            !v3uint_type,
+            !v4float_type,
+            !image_texel_type,
+            !origin_vec,
+            !origin_mtv,
+            !ray_ndc_vec,
+            !ray_ndc_mtv,
+            matrix_times_vector_count);
+        STEREO_LOG(
+            "RT_PATCH_REJECT_VALUES launch=%u launch_load=%u image_type=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u bool=%u v2int=%u v3uint=%u v4float=%u texel=%u origin_vec=%u origin_mtv=%u ray_ndc_vec=%u ray_ndc_mtv=%u mtv_count=%u",
             launch_id_var,
             launch_id_load,
             image_type,
-            image_texel_type,
             image_write_coord,
             first_function,
             int_type,
             uint_type,
             float_type,
+            bool_type,
             v2int_type,
             v3uint_type,
             v4float_type,
+            image_texel_type,
             origin_vec,
             origin_mtv,
             ray_ndc_vec,
@@ -9457,6 +9486,16 @@ static void log_rt_raygen_spv(const uint32_t *w, size_t c)
                 w[i + 1],
                 w[i + 2],
                 w[i + 3]);
+            if (!image_write_coord)
+            {
+                image_write_coord = in[i + 2];
+                STEREO_LOG(
+                    "RT_PATCH_IMAGE_WRITE i=%zu image=%u coord=%u value=%u",
+                    i,
+                    in[i + 1],
+                    in[i + 2],
+                    in[i + 3]);
+            }
         }
         else if (op == SpvOpLoad && wc >= 4)
         {
