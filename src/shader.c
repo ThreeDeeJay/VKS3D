@@ -10718,6 +10718,7 @@ stereo_CreateRayTracingPipelinesKHR(
                 (void *)st->module,
                 cache->words,
                 cache->exec_model);
+            const char *dump = stereo_getenv("VKS3D_DUMP_SPIRV");
             if (dump)
             {
                 uint64_t spv_hash = hash_spv(cache->spv, cache->words);
