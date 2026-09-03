@@ -1446,12 +1446,6 @@ stereo_UpdateDescriptorSets(
         for (uint32_t j = 0; j < w->descriptorCount; j++)
         {
             VkImageView view = w->pImageInfo[j].imageView;
-            STEREO_LOG(
-                "DESC_WRITE binding=%u view=%p layout=%u type=%u",
-                w->dstBinding,
-                (void *)(uintptr_t)view,
-                w->pImageInfo[j].imageLayout,
-                w->descriptorType);
             bool upgraded = false;
             for (uint32_t k = 0;
                  k < sd->upgraded_view_count;
@@ -1464,10 +1458,25 @@ stereo_UpdateDescriptorSets(
                 }
             }
             STEREO_LOG(
+                "DESC_WRITE binding=%u view=%p layout=%u type=%u",
+                w->dstBinding,
+                (void *)(uintptr_t)view,
+                w->pImageInfo[j].imageLayout,
+                w->descriptorType);
+            STEREO_LOG(
                 "DESC_IMAGE_WRITE binding=%u view=%p upgraded=%d",
                 w->dstBinding,
                 (void *)(uintptr_t)view,
                 upgraded);
+            if (upgraded)
+            {
+                STEREO_LOG(
+                    "DESC_IMAGE_UPGRADED binding=%u view=%p descriptorType=%u layout=%u",
+                    w->dstBinding,
+                    (void *)(uintptr_t)view,
+                    w->descriptorType,
+                    w->pImageInfo[j].imageLayout);
+            }
         }
     }
     sd->real.UpdateDescriptorSets(
