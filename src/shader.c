@@ -9046,7 +9046,7 @@ spirv_patch_stereo_raygen(
                 1
             };
             uint32_t cz[] = {
-                (4u << 16) | SpvOpConstantNull,
+                (3u << 16) | SpvOpConstantNull,
                 image_texel_type,
                 zero_texel
             };
