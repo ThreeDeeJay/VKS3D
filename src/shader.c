@@ -9097,7 +9097,6 @@ spirv_patch_stereo_raygen(
             memcpy(write0, &in[i], sizeof(write0));
             write0[2] = new_coord_0;
             sb_push_n(&ob, write0, 4);
-            sb_push_n(&ob, &in[trace_ray_offset], trace_ray_wc);
             uint32_t write1[4];
             memcpy(write1, &in[i], sizeof(write1));
             write1[2] = new_coord_1;
@@ -9112,13 +9111,11 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u old_coord=%u new_coord0=%u new_coord1=%u trace=%u trace_wc=%u mode=two_trace_clone",
+        "RT_PATCH_SUCCESS image_type=%u old_coord=%u new_coord0=%u new_coord1=%u mode=single_trace_two_layers",
         image_type,
         image_write_coord,
         new_coord_0,
-        new_coord_1,
-        trace_ray_offset,
-        trace_ray_wc);
+        new_coord_1);
     return true;
 }
 
