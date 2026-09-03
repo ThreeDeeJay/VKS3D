@@ -9125,15 +9125,6 @@ spirv_patch_stereo_raygen(
                 coord_y,
                 layer_1
             };
-            uint32_t magenta[] = {
-                (7u << 16) | SpvOpCompositeConstruct,
-                v4float_type,
-                magenta_texel,
-                float_one,
-                float_zero,
-                float_one,
-                float_one
-            };
             sb_push_n(&ob, x, 5);
             sb_push_n(&ob, y, 5);
             sb_push_n(&ob, coord0, 6);
