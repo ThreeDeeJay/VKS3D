@@ -8906,7 +8906,11 @@ spirv_patch_stereo_raygen(
     uint32_t image_write_coord = 0;
     uint32_t int_type = 0;
     uint32_t uint_type = 0;
+    uint32_t float_type = 0;
+    uint32_t float_zero = 0;
+    uint32_t float_one = 0;
     uint32_t v2int_type = 0;
+    uint32_t v4float_type = 0;
     uint32_t first_function = 0;
     uint32_t image_texel_type = 0;
     uint32_t trace_ray_offset = 0;
@@ -8939,10 +8943,17 @@ spirv_patch_stereo_raygen(
             else if (in[i + 2] == 32 && in[i + 3] == 1)
                 int_type = in[i + 1];
         }
+        else if (op == SpvOpTypeFloat && wc >= 3)
+        {
+            if (in[i + 2] == 32)
+                float_type = in[i + 1];
+        }
         else if (op == SpvOpTypeVector && wc >= 4)
         {
             if (in[i + 2] == int_type && in[i + 3] == 2)
                 v2int_type = in[i + 1];
+            else if (in[i + 2] == in[6] && in[i + 3] == 4)
+                v4float_type = in[i + 1];
         }
         else if (op == SpvOpTypeImage &&
             wc >= 9 &&
@@ -8954,6 +8965,13 @@ spirv_patch_stereo_raygen(
         {
             image_type = in[i + 1];
             image_texel_type = in[i + 2];
+        }
+        else if (op == SpvOpConstant && wc >= 4 && in[i + 2] == float_type)
+        {
+            if (in[i + 3] == 0)
+                float_zero = in[i + 1];
+            else if (in[i + 3] == 0x3f800000u)
+                float_one = in[i + 1];
         }
         else if (op == SpvOpLoad &&
             wc >= 4 &&
@@ -9022,7 +9040,6 @@ spirv_patch_stereo_raygen(
     uint32_t new_coord_1 = bound++;
     uint32_t layer_0 = bound++;
     uint32_t layer_1 = bound++;
-    uint32_t v4float_type = bound++;
     uint32_t magenta_texel = bound++;
     uint32_t magenta_x = bound++;
     uint32_t magenta_y = bound++;
@@ -9151,22 +9168,23 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, &in[i], wc);
             ob.w[write0_start + 2] = new_coord_0;
             sb_push_n(&ob, &in[trace_ray_offset], trace_ray_wc);
+            uint32_t magenta_texel_id = bound++;
             uint32_t magenta[] = {
                 (7u << 16) | SpvOpCompositeConstruct,
                 v4float_type,
-                magenta_texel,
-                magenta_x,
-                magenta_y,
-                magenta_z,
-                magenta_w
+                magenta_texel_id,
+                float_one,
+                float_zero,
+                float_one,
+                float_one
             };
             sb_push_n(&ob, coord1, 6);
             sb_push_n(&ob, magenta, 7);
             size_t write1_start = ob.n;
             sb_push_n(&ob, &in[i], wc);
             ob.w[write1_start + 2] = new_coord_1;
-            ob.w[write1_start + 3] = magenta_texel;
-            STEREO_LOG("RT_PATCH_LAYER1_MAGENTA coord=%u texel=%u", new_coord_1, magenta_texel);
+            ob.w[write1_start + 3] = magenta_texel_id;
+            STEREO_LOG("RT_PATCH_LAYER1_MAGENTA coord=%u texel=%u", new_coord_1, magenta_texel_id);
             i += wc;
             continue;
         }
