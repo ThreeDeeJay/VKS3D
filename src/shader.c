@@ -8942,13 +8942,13 @@ static void log_rt_raygen_spv(const uint32_t *w, size_t c)
                 w[i + 2],
                 w[i + 3]);
         }
-        else if (op == SpvOpImageWrite && wc >= 5)
+        else if (op == SpvOpImageWrite && wc >= 4)
         {
             STEREO_LOG(
                 "RT_SPV_IMAGE_WRITE image=%u coord=%u value=%u",
-                w[i + 3],
-                w[i + 4],
-                w[i + 5]);
+                w[i + 1],
+                w[i + 2],
+                w[i + 3]);
         }
         else if (op == SpvOpLoad && wc >= 4)
         {
