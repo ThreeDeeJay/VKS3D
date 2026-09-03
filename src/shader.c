@@ -8933,6 +8933,10 @@ spirv_patch_stereo_raygen(
             STEREO_LOG("RT_PATCH_SCAN_BAD i=%zu op=%u wc=%u words=%zu", i, op, wc, in_c);
             return false;
         }
+        if (op == 20)
+        {
+            STEREO_LOG("RT_PATCH_RAW_BOOL_OPCODE i=%zu wc=%u id=%u", i, wc, wc >= 2 ? in[i + 1] : 0);
+        }
         if (op == SpvOpDecorate &&
             wc >= 4 &&
             in[i + 2] == SpvDecorationBuiltIn &&
