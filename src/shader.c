@@ -8921,6 +8921,14 @@ static void log_rt_raygen_spv(const uint32_t *w, size_t c)
                 w[i + 2],
                 wc);
         }
+        else if (op == SpvOpDecorate && wc >= 4)
+        {
+            STEREO_LOG(
+                "RT_SPV_DECORATE target=%u decoration=%u value=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3]);
+        }
         else if (op == SpvOpTypeImage && wc >= 9)
         {
             STEREO_LOG(
