@@ -8904,6 +8904,7 @@ spirv_patch_stereo_raygen(
     *out = NULL;
     *out_c = 0;
     uint32_t bound = in[3];
+    uint32_t max_id = 0;
     uint32_t launch_id_var = 0;
     uint32_t launch_id_load = 0;
     uint32_t image_type = 0;
@@ -8933,6 +8934,11 @@ spirv_patch_stereo_raygen(
         {
             STEREO_LOG("RT_PATCH_SCAN_BAD i=%zu op=%u wc=%u words=%zu", i, op, wc, in_c);
             return false;
+        }
+        for (uint32_t j = 1; j < wc; j++)
+        {
+            if (in[i + j] > max_id)
+                max_id = in[i + j];
         }
         if (op == SpvOpDecorate &&
             wc >= 4 &&
@@ -9019,6 +9025,9 @@ spirv_patch_stereo_raygen(
         }
         i += wc;
     }
+    if (max_id + 1 > bound)
+        bound = max_id + 1;
+    STEREO_LOG("RT_PATCH_ID_BOUND header=%u max_id=%u new_bound=%u", in[3], max_id, bound);
     if (!launch_id_var ||
         !launch_id_load ||
         !image_type ||
@@ -9104,6 +9113,7 @@ spirv_patch_stereo_raygen(
             STEREO_LOG("RT_PATCH_INSTR i=%zu op=%u wc=%u", d, dop, dwc);
         d += dwc;
     }
+    uint32_t generated_id_base = bound;
     uint32_t v3int_type = bound++;
     uint32_t coord_x = bound++;
     uint32_t coord_y = bound++;
@@ -9127,6 +9137,7 @@ spirv_patch_stereo_raygen(
     uint32_t ndc_w = bound++;
     uint32_t shifted_ndc_x = bound++;
     uint32_t new_ndc = bound++;
+    STEREO_LOG("RT_PATCH_ID_RANGE base=%u end=%u", generated_id_base, bound - 1);
     uint32_t new_bool_type = bound++;
     uint32_t type_bool[] = {
         (2u << 16) | SpvOpTypeBool,
