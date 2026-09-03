@@ -1464,13 +1464,10 @@ stereo_UpdateDescriptorSets(
                 }
             }
             STEREO_LOG(
-                "DESC_IMAGE_WRITE binding=%u view=%p image=%p upgraded=%d view_type=%u view_layers=%u",
-                binding,
-                (void *)image_info->imageView,
-                (void *)view_image,
-                upgraded,
-                view_type,
-                view_layers);
+                "DESC_IMAGE_WRITE binding=%u view=%p upgraded=%d",
+                w->dstBinding,
+                (void *)(uintptr_t)view,
+                upgraded);
         }
     }
     sd->real.UpdateDescriptorSets(
