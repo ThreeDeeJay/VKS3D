@@ -9095,6 +9095,58 @@ spirv_patch_stereo_raygen(
     uint32_t ndc_w = bound++;
     uint32_t shifted_ndc_x = bound++;
     uint32_t new_ndc = bound++;
+    uint32_t type_vec3[] = {
+    (4u << 16) | SpvOpTypeVector,
+    v3int_type,
+    int_type,
+    3
+    };
+    uint32_t c_left[] = {
+    (4u << 16) | SpvOpConstant,
+    float_type,
+    left_const,
+    0
+    };
+    uint32_t c_right[] = {
+    (4u << 16) | SpvOpConstant,
+    float_type,
+    right_const,
+    0
+    };
+    uint32_t c_conv[] = {
+    (4u << 16) | SpvOpConstant,
+    float_type,
+    conv_const,
+    0
+    };
+    uint32_t launch_z[] = {
+    (5u << 16) | SpvOpCompositeExtract,
+    uint_type,
+    coord_z_u,
+    launch_id_load,
+    2
+    };
+    uint32_t left_test[] = {
+    (5u << 16) | SpvOpIEqual,
+    bool_type,
+    eye_is_left,
+    coord_z_u,
+    0
+    };
+    uint32_t select[] = {
+    (6u << 16) | SpvOpSelect,
+    float_type,
+    selected_offset,
+    eye_is_left,
+    left_const,
+    right_const
+    };
+    float f_left = lo;
+    float f_right = ro;
+    float f_conv = conv;
+    memcpy(&c_left[3], &f_left, sizeof(f_left));
+    memcpy(&c_right[3], &f_right, sizeof(f_right));
+    memcpy(&c_conv[3], &f_conv, sizeof(f_conv));
     SpvBuf ob;
     sb_init(&ob, in_c + 256);
     sb_push_n(&ob, in, 5);
@@ -9110,65 +9162,13 @@ spirv_patch_stereo_raygen(
         }
         if (i == first_function)
         {
-            uint32_t type_vec3[] = {
-                (4u << 16) | SpvOpTypeVector,
-                v3int_type,
-                int_type,
-                3
-            };
-            uint32_t c_left[] = {
-                (4u << 16) | SpvOpConstant,
-                float_type,
-                left_const,
-                0
-            };
-            uint32_t c_right[] = {
-                (4u << 16) | SpvOpConstant,
-                float_type,
-                right_const,
-                0
-            };
-            uint32_t c_conv[] = {
-                (4u << 16) | SpvOpConstant,
-                float_type,
-                conv_const,
-                0
-            };
-            uint32_t launch_z[] = {
-                (5u << 16) | SpvOpCompositeExtract,
-                uint_type,
-                coord_z_u,
-                launch_id_load,
-                2
-            };
-            uint32_t left_test[] = {
-                (5u << 16) | SpvOpIEqual,
-                bool_type,
-                eye_is_left,
-                coord_z_u,
-                0
-            };
-            uint32_t select[] = {
-                (6u << 16) | SpvOpSelect,
-                float_type,
-                selected_offset,
-                eye_is_left,
-                left_const,
-                right_const
-            };
-            sb_push_n(&ob, select, 6);
-            sb_push_n(&ob, launch_z, 5);
-            sb_push_n(&ob, left_test, 5);
-            float f_left = lo;
-            float f_right = ro;
-            float f_conv = conv;
-            memcpy(&c_left[3], &f_left, sizeof(f_left));
-            memcpy(&c_right[3], &f_right, sizeof(f_right));
-            memcpy(&c_conv[3], &f_conv, sizeof(f_conv));
-            sb_push_n(&ob, type_vec3, 4);
-            sb_push_n(&ob, c_left, 4);
-            sb_push_n(&ob, c_right, 4);
-            sb_push_n(&ob, c_conv, 4);
+        sb_push_n(&ob, type_vec3, 4);
+        sb_push_n(&ob, c_left, 4);
+        sb_push_n(&ob, c_right, 4);
+        sb_push_n(&ob, c_conv, 4);
+        sb_push_n(&ob, launch_z, 5);
+        sb_push_n(&ob, left_test, 5);
+        sb_push_n(&ob, select, 6);
         }
         if (op == SpvOpTypeImage &&
             wc >= 9 &&
