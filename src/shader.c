@@ -9015,33 +9015,6 @@ spirv_patch_stereo_raygen(
     SpvBuf ob;
     sb_init(&ob, in_c + 64);
     sb_push_n(&ob, in, 5);
-    uint32_t w[] = {
-        (4u << 16) | SpvOpTypeVector,
-        v3int_type,
-        int_type,
-        3
-    };
-    uint32_t c0[] = {
-        (4u << 16) | SpvOpConstant,
-        int_type,
-        layer_0,
-        0
-    };
-    uint32_t c1[] = {
-        (4u << 16) | SpvOpConstant,
-        int_type,
-        layer_1,
-        1
-    };
-    uint32_t cz[] = {
-        (4u << 16) | SpvOpConstantNull,
-        image_texel_type,
-        zero_texel
-    };
-    sb_push_n(&ob, w, 4);
-    sb_push_n(&ob, c0, 4);
-    sb_push_n(&ob, c1, 4);
-    sb_push_n(&ob, cz, 3);
     for (size_t i = 5; i < in_c;)
     {
         uint32_t op = in[i] & 0xffffu;
@@ -9051,6 +9024,36 @@ spirv_patch_stereo_raygen(
             STEREO_LOG("RT_PATCH_EMIT_BAD i=%zu op=%u wc=%u words=%zu", i, op, wc, in_c);
             sb_free(&ob);
             return false;
+        }
+        if (i == first_function)
+        {
+            uint32_t w[] = {
+                (4u << 16) | SpvOpTypeVector,
+                v3int_type,
+                int_type,
+                3
+            };
+            uint32_t c0[] = {
+                (4u << 16) | SpvOpConstant,
+                int_type,
+                layer_0,
+                0
+            };
+            uint32_t c1[] = {
+                (4u << 16) | SpvOpConstant,
+                int_type,
+                layer_1,
+                1
+            };
+            uint32_t cz[] = {
+                (4u << 16) | SpvOpConstantNull,
+                image_texel_type,
+                zero_texel
+            };
+            sb_push_n(&ob, w, 4);
+            sb_push_n(&ob, c0, 4);
+            sb_push_n(&ob, c1, 4);
+            sb_push_n(&ob, cz, 3);
         }
         if (op == SpvOpTypeImage &&
             wc >= 9 &&
