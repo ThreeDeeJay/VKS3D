@@ -9004,6 +9004,17 @@ spirv_patch_stereo_raygen(
             trace_ray_wc);
         return false;
     }
+    STEREO_LOG("RT_PATCH_LAYOUT trace=%u trace_wc=%u image_write_coord=%u", trace_ray_offset, trace_ray_wc, image_write_coord);
+    for (size_t d = 5; d < in_c;)
+    {
+        uint32_t dop = in[d] & 0xffffu;
+        uint32_t dwc = in[d] >> 16;
+        if (!dwc || d + dwc > in_c)
+            break;
+        if (dop == SpvOpTraceRayKHR || dop == SpvOpImageWrite)
+            STEREO_LOG("RT_PATCH_INSTR i=%zu op=%u wc=%u", d, dop, dwc);
+        d += dwc;
+    }
     uint32_t v3int_type = bound++;
     uint32_t coord_x = bound++;
     uint32_t coord_y = bound++;
