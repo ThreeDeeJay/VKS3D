@@ -8984,7 +8984,6 @@ spirv_patch_stereo_raygen(
         !int_type ||
         !uint_type ||
         !v2int_type ||
-        !trace_ray_offset ||
         !trace_ray_wc)
     {
         STEREO_LOG(
