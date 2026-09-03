@@ -10711,15 +10711,15 @@ stereo_CreateRayTracingPipelinesKHR(
                 continue;
             }
             STEREO_LOG(
-                "RT_PATCH_ATTEMPT p=%u stage=%u module=%p words=%zu exec_model=%d",
+                "RT_PATCH_ATTEMPT p=%u stage=%u module=%p words=%zu exec_model=%u",
                 p,
                 s,
                 (void *)st->module,
                 cache->words,
                 cache->exec_model);
-            log_rt_raygen_spv(*patched_spv, patched_words);
             uint32_t *patched_spv = NULL;
             size_t patched_words = 0;
+            log_rt_raygen_spv(cache->data, cache->words);
             if (!spirv_patch_stereo_raygen(
                 cache->spv,
                 cache->words,
