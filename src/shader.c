@@ -8960,7 +8960,7 @@ spirv_patch_stereo_raygen(
         {
             launch_id_load = in[i + 2];
         }
-        else if (op == SpvOpTraceRayKHR && wc >= 12 && !trace_ray_offset)
+        else if (op == SpvOpTraceRayKHR && !trace_ray_wc)
         {
             trace_ray_offset = (uint32_t)i;
             trace_ray_wc = wc;
@@ -9006,8 +9006,8 @@ spirv_patch_stereo_raygen(
     uint32_t coord_y = bound++;
     uint32_t new_coord_0 = bound++;
     uint32_t new_coord_1 = bound++;
-    uint32_t const_0 = bound++;
-    uint32_t const_1 = bound++;
+    uint32_t layer_0 = bound++;
+    uint32_t layer_1 = bound++;
     SpvBuf ob;
     sb_init(&ob, in_c + 64);
     sb_push_n(&ob, in, 5);
@@ -9043,13 +9043,13 @@ spirv_patch_stereo_raygen(
             uint32_t c0[] = {
                 (4u << 16) | SpvOpConstant,
                 int_type,
-                const_0,
+                layer_0,
                 0
             };
             uint32_t c1[] = {
                 (4u << 16) | SpvOpConstant,
                 int_type,
-                const_1,
+                layer_1,
                 1
             };
             sb_push_n(&ob, c0, 4);
@@ -9079,7 +9079,7 @@ spirv_patch_stereo_raygen(
                 new_coord_0,
                 coord_x,
                 coord_y,
-                const_0
+                layer_0
             };
             uint32_t coord1[] = {
                 (6u << 16) | SpvOpCompositeConstruct,
@@ -9087,20 +9087,19 @@ spirv_patch_stereo_raygen(
                 new_coord_1,
                 coord_x,
                 coord_y,
-                const_1
+                layer_1
             };
             sb_push_n(&ob, x, 5);
             sb_push_n(&ob, y, 5);
             sb_push_n(&ob, coord0, 6);
+            size_t write0_start = ob.n;
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[write0_start + 2] = new_coord_0;
+            sb_push_n(&ob, &in[trace_ray_offset], trace_ray_wc);
             sb_push_n(&ob, coord1, 6);
-            uint32_t write0[4];
-            memcpy(write0, &in[i], sizeof(write0));
-            write0[2] = new_coord_0;
-            sb_push_n(&ob, write0, 4);
-            uint32_t write1[4];
-            memcpy(write1, &in[i], sizeof(write1));
-            write1[2] = new_coord_1;
-            sb_push_n(&ob, write1, 4);
+            size_t write1_start = ob.n;
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[write1_start + 2] = new_coord_1;
             i += wc;
             continue;
         }
@@ -9111,11 +9110,13 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u old_coord=%u new_coord0=%u new_coord1=%u mode=single_trace_two_layers",
+        "RT_PATCH_SUCCESS image_type=%u old_coord=%u layer0_coord=%u layer1_coord=%u trace=%u trace_wc=%u mode=two_trace_clone",
         image_type,
         image_write_coord,
         new_coord_0,
-        new_coord_1);
+        new_coord_1,
+        trace_ray_offset,
+        trace_ray_wc);
     return true;
 }
 
