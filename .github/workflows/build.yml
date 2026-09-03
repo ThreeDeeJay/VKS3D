@@ -37,10 +37,13 @@ jobs:
 
     steps:
 
-    - name: Download repository
-      run: |
-        curl --verbose --ssl-revoke-best-effort --create-dirs -L "https://github.com/${{github.repository}}/archive/refs/heads/${{env.Branch}}.zip" -o "VKS3D.zip"
-        unzip -j "VKS3D.zip" "VKS3D-${{env.Branch}}/*" -d .
+    - name: Clone repository
+      run: >
+        git
+        clone https://${{github.repository_owner}}:${{github.token}}@github.com/${{github.repository}}.git
+        "${{github.workspace}}"
+        --revision ${env:GITHUB_SHA}
+        --filter=blob:none
 
     - name: Get current commit hash and counts
       run: |
