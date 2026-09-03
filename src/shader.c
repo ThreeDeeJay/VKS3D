@@ -8952,7 +8952,7 @@ spirv_patch_stereo_raygen(
         {
             if (in[i + 2] == int_type && in[i + 3] == 2)
                 v2int_type = in[i + 1];
-            else if (in[i + 2] == in[6] && in[i + 3] == 4)
+            else if (in[i + 2] == float_type && in[i + 3] == 4)
                 v4float_type = in[i + 1];
         }
         else if (op == SpvOpTypeImage &&
@@ -9003,12 +9003,16 @@ spirv_patch_stereo_raygen(
         !first_function ||
         !int_type ||
         !uint_type ||
+        !float_type ||
+        !float_zero ||
+        !float_one ||
         !v2int_type ||
+        !v4float_type ||
         !image_texel_type ||
         !trace_ray_wc)
     {
         STEREO_LOG(
-            "RT_PATCH_REJECT launch=%u launch_load=%u image_type=%u texel_type=%u coord=%u function=%u int=%u uint=%u v2int=%u trace=%u trace_wc=%u",
+            "RT_PATCH_REJECT launch=%u launch_load=%u image_type=%u texel_type=%u coord=%u function=%u int=%u uint=%u float=%u float_zero=%u float_one=%u v2int=%u v4float=%u trace=%u trace_wc=%u",
             launch_id_var,
             launch_id_load,
             image_type,
@@ -9017,12 +9021,24 @@ spirv_patch_stereo_raygen(
             first_function,
             int_type,
             uint_type,
+            float_type,
+            float_zero,
+            float_one,
             v2int_type,
+            v4float_type,
             trace_ray_offset,
             trace_ray_wc);
         return false;
     }
-    STEREO_LOG("RT_PATCH_LAYOUT trace=%u trace_wc=%u image_write_coord=%u", trace_ray_offset, trace_ray_wc, image_write_coord);
+    STEREO_LOG(
+        "RT_PATCH_LAYOUT trace=%u trace_wc=%u image_write_coord=%u float=%u float_zero=%u float_one=%u v4float=%u",
+        trace_ray_offset,
+        trace_ray_wc,
+        image_write_coord,
+        float_type,
+        float_zero,
+        float_one,
+        v4float_type);
     for (size_t d = 5; d < in_c;)
     {
         uint32_t dop = in[d] & 0xffffu;
@@ -9041,10 +9057,6 @@ spirv_patch_stereo_raygen(
     uint32_t layer_0 = bound++;
     uint32_t layer_1 = bound++;
     uint32_t magenta_texel = bound++;
-    uint32_t magenta_x = bound++;
-    uint32_t magenta_y = bound++;
-    uint32_t magenta_z = bound++;
-    uint32_t magenta_w = bound++;
     SpvBuf ob;
     sb_init(&ob, in_c + 64);
     sb_push_n(&ob, in, 5);
@@ -9066,12 +9078,6 @@ spirv_patch_stereo_raygen(
                 int_type,
                 3
             };
-            uint32_t fw[] = {
-                (4u << 16) | SpvOpTypeVector,
-                v4float_type,
-                image_texel_type,
-                4
-            };
             uint32_t c0[] = {
                 (4u << 16) | SpvOpConstant,
                 int_type,
@@ -9084,38 +9090,9 @@ spirv_patch_stereo_raygen(
                 layer_1,
                 1
             };
-            uint32_t cx[] = {
-                (4u << 16) | SpvOpConstant,
-                image_texel_type,
-                magenta_x,
-                0x3f800000u
-            };
-            uint32_t cy[] = {
-                (4u << 16) | SpvOpConstant,
-                image_texel_type,
-                magenta_y,
-                0
-            };
-            uint32_t cz[] = {
-                (4u << 16) | SpvOpConstant,
-                image_texel_type,
-                magenta_z,
-                0x3f800000u
-            };
-            uint32_t cw[] = {
-                (4u << 16) | SpvOpConstant,
-                image_texel_type,
-                magenta_w,
-                0x3f800000u
-            };
             sb_push_n(&ob, w, 4);
-            sb_push_n(&ob, fw, 4);
             sb_push_n(&ob, c0, 4);
             sb_push_n(&ob, c1, 4);
-            sb_push_n(&ob, cx, 4);
-            sb_push_n(&ob, cy, 4);
-            sb_push_n(&ob, cz, 4);
-            sb_push_n(&ob, cw, 4);
         }
         if (op == SpvOpTypeImage &&
             wc >= 9 &&
@@ -9161,6 +9138,15 @@ spirv_patch_stereo_raygen(
                 coord_y,
                 layer_1
             };
+            uint32_t magenta[] = {
+                (7u << 16) | SpvOpCompositeConstruct,
+                v4float_type,
+                magenta_texel,
+                float_one,
+                float_zero,
+                float_one,
+                float_one
+            };
             sb_push_n(&ob, x, 5);
             sb_push_n(&ob, y, 5);
             sb_push_n(&ob, coord0, 6);
@@ -9168,23 +9154,13 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, &in[i], wc);
             ob.w[write0_start + 2] = new_coord_0;
             sb_push_n(&ob, &in[trace_ray_offset], trace_ray_wc);
-            uint32_t magenta_texel_id = bound++;
-            uint32_t magenta[] = {
-                (7u << 16) | SpvOpCompositeConstruct,
-                v4float_type,
-                magenta_texel_id,
-                float_one,
-                float_zero,
-                float_one,
-                float_one
-            };
             sb_push_n(&ob, coord1, 6);
             sb_push_n(&ob, magenta, 7);
             size_t write1_start = ob.n;
             sb_push_n(&ob, &in[i], wc);
             ob.w[write1_start + 2] = new_coord_1;
-            ob.w[write1_start + 3] = magenta_texel_id;
-            STEREO_LOG("RT_PATCH_LAYER1_MAGENTA coord=%u texel=%u", new_coord_1, magenta_texel_id);
+            ob.w[write1_start + 3] = magenta_texel;
+            STEREO_LOG("RT_PATCH_LAYER1_MAGENTA coord=%u texel=%u", new_coord_1, magenta_texel);
             i += wc;
             continue;
         }
@@ -9195,7 +9171,7 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u texel_type=%u old_coord=%u layer0_coord=%u layer1_coord=%u trace=%u trace_wc=%u mode=two_trace_copy",
+        "RT_PATCH_SUCCESS image_type=%u texel_type=%u old_coord=%u layer0_coord=%u layer1_coord=%u trace=%u trace_wc=%u mode=two_trace_magenta",
         image_type,
         image_texel_type,
         image_write_coord,
