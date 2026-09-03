@@ -8916,7 +8916,7 @@ spirv_patch_stereo_raygen(
             return false;
         if (op == SpvOpEntryPoint &&
             wc >= 3 &&
-            in[i + 1] == SpvExecRayGenerationKHR)
+            in[i + 1] == SpvExecutionModelRayGenerationKHR)
         {
         }
         else if (op == SpvOpDecorate &&
