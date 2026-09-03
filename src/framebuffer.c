@@ -1115,6 +1115,16 @@ stereo_CmdTraceRaysKHR(
             (unsigned long long)pCallableShaderBindingTable->size,
             (unsigned long long)pCallableShaderBindingTable->stride);
     }
+    uint32_t rt_depth = depth;
+    if (sd->stereo.enabled && depth == 1)
+        rt_depth = 2;
+    STEREO_LOG(
+        "RT_TRACE_DISPATCH width=%u height=%u depth_in=%u depth_out=%u stereo=%u",
+        width,
+        height,
+        depth,
+        rt_depth,
+        sd->stereo.enabled ? 1u : 0u);
     STEREO_LOG(
         "RT_TRACE_FORWARD real=%p",
         (void*)sd->real.CmdTraceRaysKHR);
@@ -1126,7 +1136,7 @@ stereo_CmdTraceRaysKHR(
         pCallableShaderBindingTable,
         width,
         height,
-        depth);
+        rt_depth);
     STEREO_LOG("RT_TRACE_END");
 }
 

@@ -865,7 +865,11 @@ bool spirv_patch_stereo_raygen(
     const uint32_t *in,
     size_t in_c,
     uint32_t **out,
-    size_t *out_c);
+    size_t *out_c,
+    float lo,
+    float ro,
+    float conv,
+    int projection_mode);
 void spirv_patched_free(uint32_t *w);
 
 StereoPipelineInfo *
