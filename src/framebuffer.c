@@ -1475,6 +1475,22 @@ stereo_CmdBindDescriptorSets(
     const uint32_t *pDynamicOffsets)
 {
     STEREO_LOG("CALLED stereo_CmdBindDescriptorSets");
+    STEREO_LOG(
+        "RT_DESC_BIND cb=%p bind_point=%u layout=%p first_set=%u count=%u dynamic_count=%u",
+        (void*)commandBuffer,
+        (unsigned)pipelineBindPoint,
+        (void*)layout,
+        firstSet,
+        descriptorSetCount,
+        dynamicOffsetCount);
+    for (uint32_t i = 0; i < descriptorSetCount; i++)
+    {
+        STEREO_LOG(
+            "RT_DESC_SET cb=%p set_index=%u set=%p",
+            (void*)commandBuffer,
+            firstSet + i,
+            (void*)(uintptr_t)pDescriptorSets[i]);
+    }
     StereoDevice *sd = find_any_device();
     if (!sd)
         return;
