@@ -9115,6 +9115,7 @@ spirv_patch_stereo_raygen(
     uint32_t left_const = bound++;
     uint32_t right_const = bound++;
     uint32_t conv_const = bound++;
+    uint32_t uint_zero_const = bound++;
     uint32_t origin_x = bound++;
     uint32_t origin_y = bound++;
     uint32_t origin_z = bound++;
@@ -9150,10 +9151,16 @@ spirv_patch_stereo_raygen(
     0
     };
     uint32_t c_conv[] = {
-    (4u << 16) | SpvOpConstant,
-    float_type,
-    conv_const,
-    0
+        (4u << 16) | SpvOpConstant,
+        float_type,
+        conv_const,
+        0
+    };
+    uint32_t c_uint_zero[] = {
+        (4u << 16) | SpvOpConstant,
+        uint_type,
+        uint_zero_const,
+        0
     };
     uint32_t launch_z[] = {
     (5u << 16) | SpvOpCompositeExtract,
@@ -9167,7 +9174,7 @@ spirv_patch_stereo_raygen(
         new_bool_type,
         eye_is_left,
         coord_z_u,
-        0
+        uint_zero_const
     };
     uint32_t select[] = {
     (6u << 16) | SpvOpSelect,
@@ -9196,7 +9203,9 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, c_left, 4);
             sb_push_n(&ob, c_right, 4);
             sb_push_n(&ob, c_conv, 4);
+            sb_push_n(&ob, c_uint_zero, 4);
         }
+        uint32_t op = in[i] & 0xffffu;
         uint32_t op = in[i] & 0xffffu;
         uint32_t wc = in[i] >> 16;
         if (!wc || i + wc > in_c)
@@ -9406,9 +9415,6 @@ spirv_patch_stereo_raygen(
                 in[i + 3]);
             i += wc;
             continue;
-        }
-        if (i == origin_mtv)
-        {
         }
         sb_push_n(&ob, &in[i], wc);
         i += wc;
