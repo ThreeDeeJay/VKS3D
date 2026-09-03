@@ -9043,7 +9043,6 @@ spirv_patch_stereo_raygen(
     sb_push_n(&ob, c1, 4);
     sb_push_n(&ob, cz, 3);
     for (size_t i = 5; i < in_c;)
-    for (size_t i = 5; i < in_c;)
     {
         uint32_t op = in[i] & 0xffffu;
         uint32_t wc = in[i] >> 16;
