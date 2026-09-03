@@ -1419,6 +1419,24 @@ stereo_UpdateDescriptorSets(
     for (uint32_t i = 0; i < descriptorWriteCount; i++)
     {
         const VkWriteDescriptorSet *w = &pDescriptorWrites[i];
+        if (w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+            w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
+        {
+            if (!w->pBufferInfo)
+                continue;
+            for (uint32_t j = 0; j < w->descriptorCount; j++)
+            {
+                STEREO_LOG(
+                    "RT_CAM_WRITE binding=%u dstSet=%p buffer=%p offset=%llu range=%llu type=%u",
+                    w->dstBinding,
+                    (void *)(uintptr_t)w->dstSet,
+                    (void *)(uintptr_t)w->pBufferInfo[j].buffer,
+                    (unsigned long long)w->pBufferInfo[j].offset,
+                    (unsigned long long)w->pBufferInfo[j].range,
+                    w->descriptorType);
+            }
+            continue;
+        }
         if (!w->pImageInfo)
             continue;
         if (w->descriptorType != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
