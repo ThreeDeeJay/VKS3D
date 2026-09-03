@@ -586,6 +586,8 @@ typedef struct StereoDevice {
 #define MAX_COLOR_IMAGES        2048
     VkImage                intercepted_color[MAX_COLOR_IMAGES];
     uint32_t               intercepted_color_count;
+    VkImage                intercepted_storage[MAX_COLOR_IMAGES];
+    uint32_t               intercepted_storage_count;
     uint32_t               stereo_w, stereo_h;
     /* Upgraded image-view tracking for per-framebuffer multiview decision */
 #define MAX_UPGRADED_VIEWS     4096
