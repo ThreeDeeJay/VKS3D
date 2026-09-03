@@ -8954,7 +8954,16 @@ spirv_patch_stereo_raygen(
         }
         else if (op == SpvOpTypeBool && wc >= 2)
         {
-        bool_type = in[i + 1];
+            bool_type = in[i + 1];
+            STEREO_LOG("RT_PATCH_TYPE_BOOL i=%zu id=%u", i, bool_type);
+        }
+        else if (op == SpvOpIEqual && wc >= 4)
+        {
+            if (!bool_type)
+            {
+                bool_type = in[i + 1];
+                STEREO_LOG("RT_PATCH_BOOL_FROM_IEQUAL i=%zu id=%u", i, bool_type);
+            }
         }
         else if (op == SpvOpTypeVector && wc >= 4)
         {
