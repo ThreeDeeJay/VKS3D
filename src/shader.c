@@ -9307,7 +9307,7 @@ spirv_patch_stereo_raygen(
     uint32_t coord_x_int = generated_id++;
     uint32_t coord_y_int = generated_id++;
     bound = generated_id;
-    STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", original_bound);
+    STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
     STEREO_LOG("RT_PATCH_ID_RANGE base=%u end=%u", generated_id_base, bound - 1);
     uint32_t type_bool[] = {
         (2u << 16) | SpvOpTypeBool,
