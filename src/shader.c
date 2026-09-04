@@ -9449,7 +9449,7 @@ spirv_patch_stereo_raygen(
                 3
             };
             uint32_t origin[] = {
-                (6u << 16) | SpvOpCompositeConstruct,
+                (7u << 16) | SpvOpCompositeConstruct,
                 v4float_type,
                 new_origin,
                 selected_offset,
@@ -9461,7 +9461,7 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, z1, 5);
             sb_push_n(&ob, z2, 5);
             sb_push_n(&ob, z3, 5);
-            sb_push_n(&ob, origin, 6);
+            sb_push_n(&ob, origin, 7);
             uint32_t mtv[5];
             memcpy(mtv, &in[i], sizeof(mtv));
             mtv[4] = new_origin;
@@ -9517,7 +9517,7 @@ spirv_patch_stereo_raygen(
                 selected_offset
             };
             uint32_t construct[] = {
-                (6u << 16) | SpvOpCompositeConstruct,
+                (7u << 16) | SpvOpCompositeConstruct,
                 v4float_type,
                 new_ndc,
                 shifted_ndc_x,
@@ -9530,7 +9530,7 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, z, 5);
             sb_push_n(&ob, w, 5);
             sb_push_n(&ob, add, 5);
-            sb_push_n(&ob, construct, 6);
+            sb_push_n(&ob, construct, 7);
             uint32_t mtv[5];
             memcpy(mtv, &in[i], sizeof(mtv));
             mtv[4] = new_ndc;
