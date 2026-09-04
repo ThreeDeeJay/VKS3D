@@ -9279,6 +9279,7 @@ spirv_patch_stereo_raygen(
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
     uint32_t generated_id_base = 1000;
     uint32_t generated_id = generated_id_base;
+    uint32_t stereo_launch_load = generated_id++;
     uint32_t v3int_type = generated_id++;
     uint32_t coord_x = generated_id++;
     uint32_t coord_y = generated_id++;
@@ -9343,7 +9344,7 @@ spirv_patch_stereo_raygen(
     (5u << 16) | SpvOpCompositeExtract,
     uint_type,
     coord_z_u,
-    launch_id_load,
+    stereo_launch_load,
     2
     };
     uint32_t left_test[] = {
@@ -9360,6 +9361,12 @@ spirv_patch_stereo_raygen(
     eye_is_left,
     left_const,
     right_const
+    };
+    uint32_t stereo_launch[] = {
+        (4u << 16) | SpvOpLoad,
+        v3uint_type,
+        stereo_launch_load,
+        launch_id_var
     };
     float f_left = lo;
     float f_right = ro;
@@ -9393,6 +9400,7 @@ spirv_patch_stereo_raygen(
         if (i == first_label)
         {
             sb_push_n(&ob, &in[i], wc);
+            sb_push_n(&ob, stereo_launch, 4);
             sb_push_n(&ob, launch_z, 5);
             sb_push_n(&ob, left_test, 5);
             sb_push_n(&ob, select, 6);
@@ -9544,14 +9552,14 @@ spirv_patch_stereo_raygen(
                 (5u << 16) | SpvOpCompositeExtract,
                 uint_type,
                 coord_x,
-                launch_id_load,
+                stereo_launch_load,
                 0
             };
             uint32_t y[] = {
                 (5u << 16) | SpvOpCompositeExtract,
                 uint_type,
                 coord_y,
-                launch_id_load,
+                stereo_launch_load,
                 1
             };
             uint32_t z_cast[] = {
