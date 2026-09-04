@@ -9110,25 +9110,100 @@ spirv_patch_stereo_raygen(
         d += dwc;
     }
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
-    uint32_t max_seen_id = bound ? bound - 1 : 0;
+    uint32_t max_defined_id = bound ? bound - 1 : 0;
     for (size_t s = 5; s < in_c;)
     {
         uint32_t sop = in[s] & 0xffffu;
         uint32_t swc = in[s] >> 16;
         if (!swc || s + swc > in_c)
             break;
-        if (swc >= 3)
+        uint32_t result_id = 0;
+        if (sop == SpvOpLabel)
         {
-            uint32_t candidate = in[s + 2];
-            if (candidate > max_seen_id && candidate < 0x80000000u)
-                max_seen_id = candidate;
+            if (swc >= 2)
+                result_id = in[s + 1];
+        }
+        else if (sop == SpvOpTypeVoid ||
+            sop == SpvOpTypeBool ||
+            sop == SpvOpTypeInt ||
+            sop == SpvOpTypeFloat ||
+            sop == SpvOpTypeVector ||
+            sop == SpvOpTypeMatrix ||
+            sop == SpvOpTypeImage ||
+            sop == SpvOpTypeSampler ||
+            sop == SpvOpTypeSampledImage ||
+            sop == SpvOpTypeArray ||
+            sop == SpvOpTypeRuntimeArray ||
+            sop == SpvOpTypeStruct ||
+            sop == SpvOpTypePointer ||
+            sop == SpvOpTypeFunction)
+        {
+            if (swc >= 2)
+                result_id = in[s + 1];
+        }
+        else if (sop == SpvOpConstantTrue ||
+            sop == SpvOpConstantFalse ||
+            sop == SpvOpConstant ||
+            sop == SpvOpConstantComposite ||
+            sop == SpvOpConstantNull ||
+            sop == SpvOpVariable ||
+            sop == SpvOpLoad ||
+            sop == SpvOpAccessChain ||
+            sop == SpvOpInBoundsAccessChain ||
+            sop == SpvOpCompositeConstruct ||
+            sop == SpvOpCompositeExtract ||
+            sop == SpvOpCompositeInsert ||
+            sop == SpvOpCopyObject ||
+            sop == SpvOpMatrixTimesVector ||
+            sop == SpvOpVectorTimesMatrix ||
+            sop == SpvOpMatrixTimesMatrix ||
+            sop == SpvOpMatrixTimesScalar ||
+            sop == SpvOpIEqual ||
+            sop == SpvOpINotEqual ||
+            sop == SpvOpUGreaterThan ||
+            sop == SpvOpUGreaterThanEqual ||
+            sop == SpvOpULessThan ||
+            sop == SpvOpULessThanEqual ||
+            sop == SpvOpSGreaterThan ||
+            sop == SpvOpSGreaterThanEqual ||
+            sop == SpvOpSLessThan ||
+            sop == SpvOpSLessThanEqual ||
+            sop == SpvOpFOrdEqual ||
+            sop == SpvOpFOrdNotEqual ||
+            sop == SpvOpFOrdLessThan ||
+            sop == SpvOpFOrdGreaterThan ||
+            sop == SpvOpFOrdLessThanEqual ||
+            sop == SpvOpFOrdGreaterThanEqual ||
+            sop == SpvOpIAdd ||
+            sop == SpvOpISub ||
+            sop == SpvOpIMul ||
+            sop == SpvOpFAdd ||
+            sop == SpvOpFSub ||
+            sop == SpvOpFMul ||
+            sop == SpvOpFDiv ||
+            sop == SpvOpBitcast ||
+            sop == SpvOpSelect ||
+            sop == SpvOpPhi ||
+            sop == SpvOpFunctionCall ||
+            sop == SpvOpFunction ||
+            sop == SpvOpFunctionParameter ||
+            sop == SpvOpExtInst ||
+            sop == SpvOpImageRead)
+        {
+            if (swc >= 3)
+                result_id = in[s + 2];
+        }
+        if (result_id > max_defined_id)
+        {
+            max_defined_id = result_id;
+            STEREO_LOG("RT_PATCH_DEFINED_ID i=%zu op=%u id=%u", s, sop, result_id);
         }
         s += swc;
     }
-    if (max_seen_id >= bound)
+    if (max_defined_id >= bound)
     {
-        STEREO_LOG("RT_PATCH_ID_BOUND_FIX header=%u max_seen=%u new_base=%u", bound, max_seen_id, max_seen_id + 1);
-        bound = max_seen_id + 1;
+        STEREO_LOG("RT_PATCH_ID_BOUND_FIX header=%u max_defined=%u new_base=%u", bound, max_defined_id, max_defined_id + 1);
+        bound = max_defined_id + 1;
     }
     uint32_t generated_id_base = bound;
     uint32_t v3int_type = bound++;
@@ -9154,8 +9229,8 @@ spirv_patch_stereo_raygen(
     uint32_t ndc_w = bound++;
     uint32_t shifted_ndc_x = bound++;
     uint32_t new_ndc = bound++;
-    STEREO_LOG("RT_PATCH_ID_RANGE base=%u end=%u", generated_id_base, bound - 1);
     uint32_t new_bool_type = bound++;
+    STEREO_LOG("RT_PATCH_ID_RANGE base=%u end=%u", generated_id_base, bound - 1);
     uint32_t type_bool[] = {
         (2u << 16) | SpvOpTypeBool,
         new_bool_type
