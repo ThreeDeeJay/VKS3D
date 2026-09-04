@@ -9351,12 +9351,6 @@ spirv_patch_stereo_raygen(
         int_type,
         3
     };
-    uint32_t type_vec3[] = {
-    (4u << 16) | SpvOpTypeVector,
-    v3int_type,
-    int_type,
-    3
-    };
     uint32_t c_left[] = {
     (4u << 16) | SpvOpConstant,
     float_type,
