@@ -9304,7 +9304,10 @@ spirv_patch_stereo_raygen(
     uint32_t shifted_ndc_x = generated_id++;
     uint32_t new_ndc = generated_id++;
     uint32_t new_bool_type = generated_id++;
+    uint32_t coord_x_int = generated_id++;
+    uint32_t coord_y_int = generated_id++;
     bound = generated_id;
+    STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", original_bound);
     STEREO_LOG("RT_PATCH_ID_RANGE base=%u end=%u", generated_id_base, bound - 1);
     uint32_t type_bool[] = {
         (2u << 16) | SpvOpTypeBool,
@@ -9568,16 +9571,30 @@ spirv_patch_stereo_raygen(
                 coord_z,
                 coord_z_u
             };
+            uint32_t x_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_x_int,
+                coord_x
+            };
+            uint32_t y_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_y_int,
+                coord_y
+            };
             uint32_t coord[] = {
                 (6u << 16) | SpvOpCompositeConstruct,
                 v3int_type,
                 new_coord,
-                coord_x,
-                coord_y,
+                coord_x_int,
+                coord_y_int,
                 coord_z
             };
             sb_push_n(&ob, x, 5);
             sb_push_n(&ob, y, 5);
+            sb_push_n(&ob, x_cast, 4);
+            sb_push_n(&ob, y_cast, 4);
             sb_push_n(&ob, z_cast, 4);
             sb_push_n(&ob, coord, 6);
             sb_push_n(&ob, &in[i], wc);
