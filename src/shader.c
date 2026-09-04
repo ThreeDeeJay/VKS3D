@@ -9281,7 +9281,7 @@ spirv_patch_stereo_raygen(
         d += dwc;
     }
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
-    uint32_t generated_id_base = bound;
+    uint32_t generated_id_base = 1000;
     uint32_t generated_id = generated_id_base;
     uint32_t stereo_launch_load = generated_id++;
     uint32_t v3int_type = generated_id++;
@@ -9296,13 +9296,20 @@ spirv_patch_stereo_raygen(
     uint32_t right_const = generated_id++;
     uint32_t conv_const = generated_id++;
     uint32_t uint_zero_const = generated_id++;
-    uint32_t ray_x = generated_id++;
-    uint32_t ray_y = generated_id++;
-    uint32_t ray_z = generated_id++;
-    uint32_t ray_w = generated_id++;
-    uint32_t ray_shift = generated_id++;
-    uint32_t ray_conv = generated_id++;
-    uint32_t ray_new_x = generated_id++;
+    uint32_t origin_x = generated_id++;
+    uint32_t origin_y = generated_id++;
+    uint32_t origin_z = generated_id++;
+    uint32_t origin_w = generated_id++;
+    uint32_t new_origin = generated_id++;
+    uint32_t ndc_x = generated_id++;
+    uint32_t ndc_y = generated_id++;
+    uint32_t ndc_z = generated_id++;
+    uint32_t ndc_w = generated_id++;
+    uint32_t ndc_conv = generated_id++;
+    uint32_t ndc_tmp = generated_id++;
+    uint32_t shifted_ndc_x = generated_id++;
+    uint32_t new_ndc = generated_id++;
+    uint32_t ray_ndc_raw = generated_id++;
     uint32_t new_bool_type = generated_id++;
     uint32_t coord_x_int = generated_id++;
     uint32_t coord_y_int = generated_id++;
@@ -9447,71 +9454,178 @@ spirv_patch_stereo_raygen(
             i += wc;
             continue;
         }
-        if (op == SpvOpCompositeConstruct &&
-            wc >= 7 &&
-            in[i + 2] == ray_ndc_vec &&
-            in[i + 1] == v4float_type)
+        if (op == SpvOpMatrixTimesVector &&
+            i == origin_mtv)
         {
-            uint32_t original_x = in[i + 3];
-            uint32_t original_y = in[i + 4];
-            uint32_t original_z = in[i + 5];
-            uint32_t original_w = in[i + 6];
-            uint32_t x_shift[] = {
+            uint32_t z0[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                origin_x,
+                origin_vec,
+                0
+            };
+            uint32_t z1[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                origin_y,
+                origin_vec,
+                1
+            };
+            uint32_t z2[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                origin_z,
+                origin_vec,
+                2
+            };
+            uint32_t z3[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                origin_w,
+                origin_vec,
+                3
+            };
+            uint32_t origin[] = {
+                (7u << 16) | SpvOpCompositeConstruct,
+                v4float_type,
+                new_origin,
+                selected_offset,
+                origin_y,
+                origin_z,
+                origin_w
+            };
+            sb_push_n(&ob, z0, 5);
+            sb_push_n(&ob, z1, 5);
+            sb_push_n(&ob, z2, 5);
+            sb_push_n(&ob, z3, 5);
+            sb_push_n(&ob, origin, 7);
+            uint32_t mtv[5];
+            memcpy(mtv, &in[i], sizeof(mtv));
+            mtv[4] = new_origin;
+            sb_push_n(&ob, mtv, 5);
+            STEREO_LOG(
+                "RT_PATCH_ORIGIN vec=%u new=%u mat=%u selected_offset=%u left=%u right=%u",
+                origin_vec,
+                new_origin,
+                origin_mat,
+                selected_offset,
+                left_const,
+                right_const);
+            i += wc;
+            continue;
+        }
+        if (op == SpvOpMatrixTimesVector &&
+            i == ray_ndc_mtv)
+        {
+            uint32_t result_id = in[i + 2];
+            uint32_t raw_mtv[5];
+            memcpy(raw_mtv, &in[i], sizeof(raw_mtv));
+            raw_mtv[2] = ray_ndc_raw;
+            sb_push_n(&ob, raw_mtv, 5);
+            uint32_t x[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ndc_x,
+                ray_ndc_raw,
+                0
+            };
+            uint32_t y[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ndc_y,
+                ray_ndc_raw,
+                1
+            };
+            uint32_t z[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ndc_z,
+                ray_ndc_raw,
+                2
+            };
+            uint32_t w[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ndc_w,
+                ray_ndc_raw,
+                3
+            };
+            uint32_t add[] = {
                 (5u << 16) | SpvOpFAdd,
                 float_type,
-                ray_shift,
-                original_x,
+                shifted_ndc_x,
+                ndc_x,
                 selected_offset
             };
-            sb_push_n(&ob, x_shift, 5);
             if (projection_mode == STEREO_PROJECTION_OFF_AXIS)
             {
-                uint32_t x_conv[] = {
+                uint32_t mul_conv[] = {
                     (5u << 16) | SpvOpFMul,
                     float_type,
-                    ray_conv,
-                    selected_offset,
+                    ndc_conv,
+                    ndc_w,
                     conv_const
                 };
-                uint32_t x_sub[] = {
+                uint32_t mul_eye[] = {
+                    (5u << 16) | SpvOpFMul,
+                    float_type,
+                    ndc_tmp,
+                    selected_offset,
+                    ndc_conv
+                };
+                uint32_t sub[] = {
                     (5u << 16) | SpvOpFSub,
                     float_type,
-                    ray_new_x,
-                    ray_shift,
-                    ray_conv
+                    new_ndc,
+                    shifted_ndc_x,
+                    ndc_tmp
                 };
-                sb_push_n(&ob, x_conv, 5);
-                sb_push_n(&ob, x_sub, 5);
+                sb_push_n(&ob, x, 5);
+                sb_push_n(&ob, y, 5);
+                sb_push_n(&ob, z, 5);
+                sb_push_n(&ob, w, 5);
+                sb_push_n(&ob, add, 5);
+                sb_push_n(&ob, mul_conv, 5);
+                sb_push_n(&ob, mul_eye, 5);
+                sb_push_n(&ob, sub, 5);
             }
             else
             {
-                uint32_t x_copy[] = {
+                uint32_t copy[] = {
                     (5u << 16) | SpvOpFAdd,
                     float_type,
-                    ray_new_x,
-                    original_x,
+                    new_ndc,
+                    ndc_x,
                     selected_offset
                 };
-                sb_push_n(&ob, x_copy, 5);
+                sb_push_n(&ob, x, 5);
+                sb_push_n(&ob, y, 5);
+                sb_push_n(&ob, z, 5);
+                sb_push_n(&ob, w, 5);
+                sb_push_n(&ob, copy, 5);
             }
-            uint32_t ray_construct[] = {
+            uint32_t construct[] = {
                 (7u << 16) | SpvOpCompositeConstruct,
                 v4float_type,
-                ray_ndc_vec,
-                ray_new_x,
-                original_y,
-                original_z,
-                original_w
+                result_id,
+                new_ndc,
+                ndc_y,
+                ndc_z,
+                ndc_w
             };
-            sb_push_n(&ob, ray_construct, 7);
+            sb_push_n(&ob, construct, 7);
             STEREO_LOG(
-                "RT_PATCH_NDC_INPUT vec=%u x=%u new_x=%u selected_offset=%u conv=%u mode=%d",
+                "RT_PATCH_OFF_AXIS result=%u raw=%u vec=%u x=%u w=%u conv=%u convmag=%u tmp=%u shifted_x=%u selected_offset=%u",
+                result_id,
+                ray_ndc_raw,
                 ray_ndc_vec,
-                original_x,
-                ray_new_x,
-                selected_offset,
+                ndc_x,
+                ndc_w,
                 conv_const,
-                projection_mode);
+                ndc_conv,
+                ndc_tmp,
+                shifted_ndc_x,
+                selected_offset);
             i += wc;
             continue;
         }
@@ -9577,7 +9691,7 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u texel_type=%u old_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=ndc_input_shift",
+        "RT_PATCH_SUCCESS image_type=%u texel_type=%u old_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d conv=%+.9f mode=launch_z_eye_camera",
         image_type,
         image_texel_type,
         image_write_coord,
@@ -9586,8 +9700,6 @@ spirv_patch_stereo_raygen(
         origin_vec,
         ray_ndc_vec,
         projection_mode,
-        lo,
-        ro,
         conv);
     return true;
 }
