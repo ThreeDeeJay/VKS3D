@@ -9542,24 +9542,17 @@ spirv_patch_stereo_raygen(
         {
             uint32_t x[] = {
                 (5u << 16) | SpvOpCompositeExtract,
-                int_type,
+                uint_type,
                 coord_x,
-                image_write_coord,
+                launch_id_load,
                 0
             };
             uint32_t y[] = {
                 (5u << 16) | SpvOpCompositeExtract,
-                int_type,
-                coord_y,
-                image_write_coord,
-                1
-            };
-            uint32_t z[] = {
-                (5u << 16) | SpvOpCompositeExtract,
                 uint_type,
-                coord_z_u,
+                coord_y,
                 launch_id_load,
-                2
+                1
             };
             uint32_t z_cast[] = {
                 (4u << 16) | SpvOpBitcast,
@@ -9577,19 +9570,11 @@ spirv_patch_stereo_raygen(
             };
             sb_push_n(&ob, x, 5);
             sb_push_n(&ob, y, 5);
-            sb_push_n(&ob, z, 5);
             sb_push_n(&ob, z_cast, 4);
             sb_push_n(&ob, coord, 6);
-            size_t write_start = ob.n;
             sb_push_n(&ob, &in[i], wc);
-            ob.w[write_start + 2] = new_coord;
-            STEREO_LOG(
-                "RT_PATCH_LAUNCH_Z layer=%u eye_is_left=%u coord=%u texel=%u",
-                coord_z_u,
-                eye_is_left,
-                new_coord,
-                in[i + 3]);
-            i += wc;
+            ob.w[ob.n - wc + 3] = new_coord;
+            patched_image_write = true;
             continue;
         }
         sb_push_n(&ob, &in[i], wc);
