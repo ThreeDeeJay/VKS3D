@@ -9043,7 +9043,6 @@ spirv_get_result_id(uint32_t op, const uint32_t *ins, uint32_t wc)
         op == SpvOpImageQueryLod ||
         op == SpvOpImageQueryLevels ||
         op == SpvOpImageQuerySamples ||
-        op == SpvOpConvertToSampledImage ||
         op == SpvOpSampledImage ||
         op == SpvOpFunction ||
         op == SpvOpFunctionParameter ||
