@@ -9074,6 +9074,7 @@ spirv_patch_stereo_raygen(
     uint32_t launch_id_var = 0;
     uint32_t launch_id_load = 0;
     uint32_t image_type = 0;
+    uint32_t image_read_coord = 0;
     uint32_t image_write_coord = 0;
     uint32_t float_zero = 0;
     uint32_t int_type = 0;
@@ -9169,6 +9170,11 @@ spirv_patch_stereo_raygen(
         {
             launch_id_load = in[i + 2];
         }
+        else if (op == SpvOpImageRead && wc >= 5)
+        {
+            if (!image_read_coord)
+                image_read_coord = in[i + 4];
+        }
         else if (op == SpvOpImageWrite && wc >= 4)
         {
             if (!image_write_coord)
@@ -9226,7 +9232,7 @@ spirv_patch_stereo_raygen(
         if (!launch_id_var ||
         !launch_id_load ||
         !image_type ||
-        !image_write_coord ||
+        (!image_read_coord && !image_write_coord) ||
         !first_function ||
         !first_label ||
         !int_type ||
@@ -9641,6 +9647,61 @@ spirv_patch_stereo_raygen(
                 selected_offset,
                 conv_const,
                 projection_mode);
+            i += wc;
+            continue;
+        }
+        if (op == SpvOpImageRead &&
+            wc >= 5 &&
+            in[i + 4] == image_read_coord)
+        {
+            uint32_t x[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                uint_type,
+                coord_x,
+                stereo_launch_load,
+                0
+            };
+            uint32_t y[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                uint_type,
+                coord_y,
+                stereo_launch_load,
+                1
+            };
+            uint32_t z_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_z,
+                coord_z_u
+            };
+            uint32_t x_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_x_int,
+                coord_x
+            };
+            uint32_t y_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_y_int,
+                coord_y
+            };
+            uint32_t coord[] = {
+                (6u << 16) | SpvOpCompositeConstruct,
+                v3int_type,
+                new_coord,
+                coord_x_int,
+                coord_y_int,
+                coord_z
+            };
+            sb_push_n(&ob, x, 5);
+            sb_push_n(&ob, y, 5);
+            sb_push_n(&ob, x_cast, 4);
+            sb_push_n(&ob, y_cast, 4);
+            sb_push_n(&ob, z_cast, 4);
+            sb_push_n(&ob, coord, 6);
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[ob.n - wc + 4] = new_coord;
             i += wc;
             continue;
         }
