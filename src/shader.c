@@ -9499,10 +9499,11 @@ spirv_patch_stereo_raygen(
             raw_mtv[2] = ray_ndc_raw;
             sb_push_n(&ob, raw_mtv, 5);
             uint32_t p00_inv[] = {
-                (5u << 16) | SpvOpCompositeExtract,
+                (6u << 16) | SpvOpCompositeExtract,
                 float_type,
                 inv_p00,
                 ray_ndc_mat,
+                0,
                 0
             };
             uint32_t eye_mul[] = {
@@ -9538,7 +9539,7 @@ spirv_patch_stereo_raygen(
                 origin_var,
                 new_origin
             };
-            sb_push_n(&ob, p00_inv, 5);
+            sb_push_n(&ob, p00_inv, 6);
             sb_push_n(&ob, eye_mul, 5);
             sb_push_n(&ob, eye_neg, 4);
             sb_push_n(&ob, eye_vec, 6);
