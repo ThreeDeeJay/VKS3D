@@ -1019,6 +1019,11 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
 
     VkCommandBuffer cmd = sc->barrier_cmds[0];
     VkImage src = sc->stereo_images[0];
+    STEREO_LOG(
+        "COMPOSE_SRC sc=%p src=%p img_idx=%u",
+        (void *)sc,
+        (void *)(uintptr_t)src,
+        img_idx);
     VkImage dst = sc->comp_sc_images[img_idx];
     int32_t w   = (int32_t)sc->app_width;
     int32_t h   = (int32_t)sc->app_height;
