@@ -9520,112 +9520,100 @@ spirv_patch_stereo_raygen(
             uint32_t result_id = in[i + 2];
             uint32_t raw_mtv[5];
             memcpy(raw_mtv, &in[i], sizeof(raw_mtv));
-            raw_mtv[2] = ray_ndc_raw;
-            sb_push_n(&ob, raw_mtv, 5);
-            uint32_t x[] = {
+            uint32_t x_input = ray_ndc_vec;
+            uint32_t ndc_input_x = generated_id++;
+            uint32_t ndc_convergence = generated_id++;
+            uint32_t ndc_shift = generated_id++;
+            uint32_t shifted_input = generated_id++;
+            uint32_t input_x[] = {
                 (5u << 16) | SpvOpCompositeExtract,
                 float_type,
                 ndc_x,
-                ray_ndc_raw,
+                x_input,
                 0
             };
-            uint32_t y[] = {
-                (5u << 16) | SpvOpCompositeExtract,
-                float_type,
-                ndc_y,
-                ray_ndc_raw,
-                1
-            };
-            uint32_t z[] = {
-                (5u << 16) | SpvOpCompositeExtract,
-                float_type,
-                ndc_z,
-                ray_ndc_raw,
-                2
-            };
-            uint32_t w[] = {
-                (5u << 16) | SpvOpCompositeExtract,
-                float_type,
-                ndc_w,
-                ray_ndc_raw,
-                3
-            };
-            uint32_t add[] = {
+            uint32_t add_eye[] = {
                 (5u << 16) | SpvOpFAdd,
                 float_type,
-                shifted_ndc_x,
+                ndc_input_x,
                 ndc_x,
                 selected_offset
             };
-            if (projection_mode == STEREO_PROJECTION_OFF_AXIS)
-            {
-                uint32_t mul_conv[] = {
-                    (5u << 16) | SpvOpFMul,
-                    float_type,
-                    ndc_conv,
-                    ndc_w,
-                    conv_const
-                };
-                uint32_t mul_eye[] = {
-                    (5u << 16) | SpvOpFMul,
-                    float_type,
-                    ndc_tmp,
-                    selected_offset,
-                    ndc_conv
-                };
-                uint32_t sub[] = {
-                    (5u << 16) | SpvOpFSub,
-                    float_type,
-                    new_ndc,
-                    shifted_ndc_x,
-                    ndc_tmp
-                };
-                sb_push_n(&ob, x, 5);
-                sb_push_n(&ob, y, 5);
-                sb_push_n(&ob, z, 5);
-                sb_push_n(&ob, w, 5);
-                sb_push_n(&ob, add, 5);
-                sb_push_n(&ob, mul_conv, 5);
-                sb_push_n(&ob, mul_eye, 5);
-                sb_push_n(&ob, sub, 5);
-            }
-            else
-            {
-                uint32_t copy[] = {
-                    (5u << 16) | SpvOpFAdd,
-                    float_type,
-                    new_ndc,
-                    ndc_x,
-                    selected_offset
-                };
-                sb_push_n(&ob, x, 5);
-                sb_push_n(&ob, y, 5);
-                sb_push_n(&ob, z, 5);
-                sb_push_n(&ob, w, 5);
-                sb_push_n(&ob, copy, 5);
-            }
-            uint32_t construct[] = {
+            uint32_t mul_conv[] = {
+                (5u << 16) | SpvOpFMul,
+                float_type,
+                ndc_convergence,
+                selected_offset,
+                conv_const
+            };
+            uint32_t sub_conv[] = {
+                (5u << 16) | SpvOpFSub,
+                float_type,
+                ndc_shift,
+                ndc_input_x,
+                ndc_convergence
+            };
+            uint32_t y_input[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ndc_y,
+                x_input,
+                1
+            };
+            uint32_t z_input[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ndc_z,
+                x_input,
+                2
+            };
+            uint32_t w_input[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ndc_w,
+                x_input,
+                3
+            };
+            uint32_t construct_input[] = {
                 (7u << 16) | SpvOpCompositeConstruct,
                 v4float_type,
-                result_id,
-                new_ndc,
+                shifted_input,
+                ndc_shift,
                 ndc_y,
                 ndc_z,
                 ndc_w
             };
-            sb_push_n(&ob, construct, 7);
+            if (projection_mode == STEREO_PROJECTION_OFF_AXIS)
+            {
+                sb_push_n(&ob, input_x, 5);
+                sb_push_n(&ob, add_eye, 5);
+                sb_push_n(&ob, mul_conv, 5);
+                sb_push_n(&ob, sub_conv, 5);
+                sb_push_n(&ob, y_input, 5);
+                sb_push_n(&ob, z_input, 5);
+                sb_push_n(&ob, w_input, 5);
+                sb_push_n(&ob, construct_input, 7);
+                raw_mtv[4] = shifted_input;
+                STEREO_LOG(
+                    "RT_PATCH_OFF_AXIS_INPUT vec=%u shifted_vec=%u x=%u eye=%u conv=%u conv_shift=%u",
+                    ray_ndc_vec,
+                    shifted_input,
+                    ndc_x,
+                    selected_offset,
+                    conv_const,
+                    ndc_convergence);
+            }
+            else
+            {
+                raw_mtv[4] = ray_ndc_vec;
+            }
+            sb_push_n(&ob, raw_mtv, 5);
             STEREO_LOG(
-                "RT_PATCH_OFF_AXIS result=%u raw=%u vec=%u x=%u w=%u conv=%u convmag=%u tmp=%u shifted_x=%u selected_offset=%u",
+                "RT_PATCH_RAY_NDC result=%u input=%u transformed_input=%u projection_mode=%d",
                 result_id,
-                ray_ndc_raw,
                 ray_ndc_vec,
-                ndc_x,
-                ndc_w,
-                conv_const,
-                ndc_conv,
-                ndc_tmp,
-                shifted_ndc_x,
-                selected_offset);
+                raw_mtv[4],
+                projection_mode);
             i += wc;
             continue;
         }
