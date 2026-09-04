@@ -9586,15 +9586,15 @@ spirv_patch_stereo_raygen(
                     selected_offset,
                     conv_const
                 };
-                uint32_t x_sub[] = {
-                    (5u << 16) | SpvOpFSub,
+                uint32_t x_add[] = {
+                    (5u << 16) | SpvOpFAdd,
                     float_type,
                     ray_new_x,
                     ray_x,
                     ray_conv
                 };
                 sb_push_n(&ob, x_conv, 5);
-                sb_push_n(&ob, x_sub, 5);
+                sb_push_n(&ob, x_add, 5);
             }
             else
             {
