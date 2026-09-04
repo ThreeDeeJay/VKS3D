@@ -8934,6 +8934,10 @@ spirv_patch_stereo_raygen(
         STEREO_LOG("RT_PATCH_SCAN_BAD i=%zu op=%u wc=%u words=%zu", i, op, wc, in_c);
         return false;
         }
+        if (in[i + 1] >= bound && in[i + 1] <= bound + 32)
+        STEREO_LOG("RT_PATCH_HIGH_OPERAND i=%zu op=%u word1=%u wc=%u", i, op, in[i + 1], wc);
+        if (wc >= 3 && in[i + 2] >= bound && in[i + 2] <= bound + 32)
+        STEREO_LOG("RT_PATCH_HIGH_OPERAND2 i=%zu op=%u word2=%u wc=%u", i, op, in[i + 2], wc);
         if (op == SpvOpDecorate &&
             wc >= 4 &&
             in[i + 2] == SpvDecorationBuiltIn &&
