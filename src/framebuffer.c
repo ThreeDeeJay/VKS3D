@@ -1119,15 +1119,19 @@ stereo_CmdTraceRaysKHR(
     if (sd->stereo.enabled && depth == 1)
         rt_depth = 2;
     STEREO_LOG(
-        "RT_TRACE_DISPATCH width=%u height=%u depth_in=%u depth_out=%u stereo=%u",
+        "RT_TRACE_STEREO width=%u height=%u depth_in=%u depth_out=%u enabled=%u launch_layers=%u",
         width,
         height,
         depth,
         rt_depth,
-        sd->stereo.enabled ? 1u : 0u);
+        sd->stereo.enabled ? 1u : 0u,
+        rt_depth);
     STEREO_LOG(
-        "RT_TRACE_FORWARD real=%p",
-        (void*)sd->real.CmdTraceRaysKHR);
+        "RT_TRACE_FORWARD real=%p width=%u height=%u depth=%u",
+        (void*)sd->real.CmdTraceRaysKHR,
+        width,
+        height,
+        rt_depth);
     sd->real.CmdTraceRaysKHR(
         commandBuffer,
         pRaygenShaderBindingTable,
