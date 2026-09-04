@@ -9083,6 +9083,7 @@ spirv_patch_stereo_raygen(
     uint32_t v2int_type = 0;
     uint32_t v3uint_type = 0;
     uint32_t v4float_type = 0;
+    uint32_t v3int_type = 0;
     uint32_t first_function = 0;
     uint32_t image_texel_type = 0;
     uint32_t origin_vec = 0;
@@ -9135,6 +9136,8 @@ spirv_patch_stereo_raygen(
         {
             if (in[i + 2] == int_type && in[i + 3] == 2)
                 v2int_type = in[i + 1];
+            if (in[i + 2] == int_type && in[i + 3] == 3 && !v3int_type)
+                v3int_type = in[i + 1];
             if (in[i + 2] == uint_type && in[i + 3] == 3)
                 v3uint_type = in[i + 1];
             if (in[i + 2] == float_type && in[i + 3] == 4)
@@ -9241,7 +9244,7 @@ spirv_patch_stereo_raygen(
         !ray_ndc_vec)
     {
         STEREO_LOG(
-            "RT_PATCH_REJECT_FLAGS launch=%u launch_load=%u image_type=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u bool=%u v2int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mtv=%u mtv_count=%u",
+            "RT_PATCH_REJECT_FLAGS launch=%u launch_load=%u image_type=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u bool=%u v2int=%u v3int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mtv=%u mtv_count=%u",
             !launch_id_var,
             !launch_id_load,
             !image_type,
@@ -9252,6 +9255,7 @@ spirv_patch_stereo_raygen(
             !float_type,
             !bool_type,
             !v2int_type,
+            !v3int_type,
             !v3uint_type,
             !v4float_type,
             !image_texel_type,
@@ -9315,7 +9319,8 @@ spirv_patch_stereo_raygen(
     uint32_t generated_id_base = bound;
     uint32_t generated_id = generated_id_base;
     uint32_t stereo_launch_load = generated_id++;
-    uint32_t v3int_type = generated_id++;
+    if (!v3int_type)
+        v3int_type = generated_id++;
     uint32_t coord_x = generated_id++;
     uint32_t coord_y = generated_id++;
     uint32_t coord_z_u = generated_id++;
@@ -9343,7 +9348,7 @@ spirv_patch_stereo_raygen(
     uint32_t coord_x_int = generated_id++;
     uint32_t coord_y_int = generated_id++;
     bound = generated_id;
-    STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
+    STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u v3int=%u reused=%u", bound, v3int_type, v3int_type < generated_id_base);
     STEREO_LOG("RT_PATCH_ID_RANGE base=%u end=%u", generated_id_base, bound - 1);
     uint32_t type_vec3[] = {
         (4u << 16) | SpvOpTypeVector,
@@ -9447,7 +9452,8 @@ spirv_patch_stereo_raygen(
     {
         if (i == first_function_pos)
         {
-            sb_push_n(&ob, type_vec3, 4);
+            if (v3int_type >= generated_id_base)
+                sb_push_n(&ob, type_vec3, 4);
             sb_push_n(&ob, c_left, 4);
             sb_push_n(&ob, c_right, 4);
             sb_push_n(&ob, c_conv, 4);
