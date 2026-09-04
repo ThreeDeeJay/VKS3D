@@ -9398,8 +9398,8 @@ spirv_patch_stereo_raygen(
     float_type,
     selected_offset,
     eye_is_left,
-    left_const,
-    right_const
+    right_const,
+    left_const
     };
     uint32_t stereo_launch[] = {
         (4u << 16) | SpvOpLoad,
