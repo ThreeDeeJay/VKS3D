@@ -9598,7 +9598,7 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, z_cast, 4);
             sb_push_n(&ob, coord, 6);
             sb_push_n(&ob, &in[i], wc);
-            ob.w[ob.n - wc + 3] = new_coord;
+            ob.w[ob.n - wc + 2] = new_coord;
             i += wc;
             continue;
         }
