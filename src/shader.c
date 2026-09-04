@@ -9124,6 +9124,10 @@ spirv_patch_stereo_raygen(
             if (in[i + 2] == 32)
                 float_type = in[i + 1];
         }
+        else if (op == SpvOpTypeBool && wc >= 2)
+        {
+            bool_type = in[i + 1];
+        }
         else if (op == SpvOpTypeVector && wc >= 4)
         {
             if (in[i + 2] == int_type && in[i + 3] == 2)
@@ -9381,6 +9385,36 @@ spirv_patch_stereo_raygen(
     sb_init(&ob, in_c + 256);
     sb_push_n(&ob, in, 5);
     size_t first_function_pos = first_function;
+    size_t stereo_insert_pos = 0;
+    for (size_t s = first_label; s < in_c;)
+    {
+        uint32_t sop = in[s] & 0xffffu;
+        uint32_t swc = in[s] >> 16;
+        if (!swc || s + swc > in_c)
+        {
+            STEREO_LOG("RT_PATCH_VAR_SCAN_BAD i=%zu op=%u wc=%u words=%zu", s, sop, swc, in_c);
+            sb_free(&ob);
+            return false;
+        }
+        if (s == first_label)
+        {
+            s += swc;
+            continue;
+        }
+        if (sop != SpvOpVariable)
+        {
+            stereo_insert_pos = s;
+            break;
+        }
+        s += swc;
+    }
+    if (!stereo_insert_pos)
+    {
+        STEREO_LOG("RT_PATCH_VAR_SCAN_FAIL first_label=%u", first_label);
+        sb_free(&ob);
+        return false;
+    }
+    STEREO_LOG("RT_PATCH_VAR_INSERT label=%u insert=%zu", first_label, stereo_insert_pos);
     for (size_t i = 5; i < in_c;)
     {
         if (i == first_function_pos)
@@ -9400,15 +9434,12 @@ spirv_patch_stereo_raygen(
             sb_free(&ob);
             return false;
         }
-        if (i == first_label)
+        if (i == stereo_insert_pos)
         {
-            sb_push_n(&ob, &in[i], wc);
             sb_push_n(&ob, stereo_launch, 4);
             sb_push_n(&ob, launch_z, 5);
             sb_push_n(&ob, left_test, 5);
             sb_push_n(&ob, select, 6);
-            i += wc;
-            continue;
         }
         if (op == SpvOpTypeImage &&
             wc >= 9 &&
