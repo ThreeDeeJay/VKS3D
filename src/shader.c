@@ -8935,9 +8935,9 @@ spirv_patch_stereo_raygen(
         return false;
         }
         if (in[i + 1] >= bound && in[i + 1] <= bound + 32)
-        STEREO_LOG("RT_PATCH_HIGH_OPERAND i=%zu op=%u word1=%u wc=%u", i, op, in[i + 1], wc);
+            STEREO_LOG("RT_PATCH_HIGH_OPERAND i=%zu op=%u word1=%u wc=%u", i, op, in[i + 1], wc);
         if (wc >= 3 && in[i + 2] >= bound && in[i + 2] <= bound + 32)
-        STEREO_LOG("RT_PATCH_HIGH_OPERAND2 i=%zu op=%u word2=%u wc=%u", i, op, in[i + 2], wc);
+            STEREO_LOG("RT_PATCH_HIGH_OPERAND2 i=%zu op=%u word2=%u wc=%u", i, op, in[i + 2], wc);
         if (op == SpvOpDecorate &&
             wc >= 4 &&
             in[i + 2] == SpvDecorationBuiltIn &&
@@ -9110,6 +9110,26 @@ spirv_patch_stereo_raygen(
         d += dwc;
     }
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
+    uint32_t max_seen_id = bound ? bound - 1 : 0;
+    for (size_t s = 5; s < in_c;)
+    {
+        uint32_t sop = in[s] & 0xffffu;
+        uint32_t swc = in[s] >> 16;
+        if (!swc || s + swc > in_c)
+            break;
+        if (swc >= 3)
+        {
+            uint32_t candidate = in[s + 2];
+            if (candidate > max_seen_id && candidate < 0x80000000u)
+                max_seen_id = candidate;
+        }
+        s += swc;
+    }
+    if (max_seen_id >= bound)
+    {
+        STEREO_LOG("RT_PATCH_ID_BOUND_FIX header=%u max_seen=%u new_base=%u", bound, max_seen_id, max_seen_id + 1);
+        bound = max_seen_id + 1;
+    }
     uint32_t generated_id_base = bound;
     uint32_t v3int_type = bound++;
     uint32_t coord_x = bound++;
