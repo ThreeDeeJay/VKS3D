@@ -915,31 +915,35 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     uint32_t target = w[i + 1];
                     bool is_position_store = target == m->pos_var;
-                    if (!is_position_store && m->pos_is_block)
+                    if (!is_position_store && m->pos_is_block &&
+                        target < m->value_capacity)
                     {
-                        for (size_t j = 5; j < i;)
+                        uint32_t target_ptr = PTR(target);
+                        if (target_ptr)
                         {
-                            uint32_t op2 = w[j] & 0xffff;
-                            uint32_t wc2 = w[j] >> 16;
-                            if (!wc2 || j + wc2 > i)
-                                break;
-                            if ((op2 == SpvOpAccessChain ||
-                                op2 == SpvOpInBoundsAccessChain ||
-                                op2 == SpvOpPtrAccessChain) &&
-                                wc2 >= 5 &&
-                                w[j + 2] == target &&
-                                w[j + 3] == m->pos_var)
+                            for (size_t j = 5; j < i;)
                             {
-                                uint32_t member_id = w[j + 4];
-                                uint32_t member_value = member_id;
-                                (void)spv_resolve_u32_constant(m, member_id, &member_value);
-                                if (member_value == m->pos_member_idx)
-                                {
-                                    is_position_store = true;
+                                uint32_t op2 = w[j] & 0xffff;
+                                uint32_t wc2 = w[j] >> 16;
+                                if (!wc2 || j + wc2 > i)
                                     break;
+                                if ((op2 == SpvOpAccessChain ||
+                                    op2 == SpvOpInBoundsAccessChain ||
+                                    op2 == SpvOpPtrAccessChain) &&
+                                    wc2 >= 5 &&
+                                    w[j + 2] == target)
+                                {
+                                    uint32_t member_id = w[j + 4];
+                                    uint32_t member_value = member_id;
+                                    (void)spv_resolve_u32_constant(m, member_id, &member_value);
+                                    if (member_value == m->pos_member_idx)
+                                    {
+                                        is_position_store = true;
+                                        break;
+                                    }
                                 }
+                                j += wc2;
                             }
-                            j += wc2;
                         }
                     }
                     if (is_position_store)
