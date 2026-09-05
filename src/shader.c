@@ -951,6 +951,7 @@ static void do_scan(SpvMod *m, bool p2)
                             m->has_direct_position_write = true;
                     }
                     break;
+                }
             }
         } else {
             if(op==SpvOpTypePointer && wc>=4 &&
