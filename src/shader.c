@@ -9172,13 +9172,17 @@ spirv_patch_stereo_raygen(
         }
         else if (op == SpvOpImageRead && wc >= 5)
         {
-            if (!image_read_coord)
-                image_read_coord = in[i + 4];
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[ob.n - wc + 4] = new_coord;
+            i += wc;
+            continue;
         }
         else if (op == SpvOpImageWrite && wc >= 4)
         {
-            if (!image_write_coord)
-                image_write_coord = in[i + 2];
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[ob.n - wc + 2] = new_coord;
+            i += wc;
+            continue;
         }
         else if (op == SpvOpMatrixTimesVector && wc >= 5)
         {
@@ -9722,9 +9726,10 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u texel_type=%u old_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z_eye_camera",
+        "RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z_eye_camera",
         image_type,
         image_texel_type,
+        image_read_coord,
         image_write_coord,
         new_coord,
         launch_id_load,
