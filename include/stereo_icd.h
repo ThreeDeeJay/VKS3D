@@ -362,6 +362,8 @@ typedef struct RealDeviceDispatch {
     PFN_vkCreateGraphicsPipelines    CreateGraphicsPipelines;
     PFN_vkCreateComputePipelines     CreateComputePipelines;
     PFN_vkDestroyPipeline            DestroyPipeline;
+    PFN_vkCreateRayTracingPipelinesKHR CreateRayTracingPipelinesKHR;
+    PFN_vkCmdTraceRaysKHR            CmdTraceRaysKHR;
     PFN_vkCreatePipelineLayout       CreatePipelineLayout;
     PFN_vkDestroyPipelineLayout      DestroyPipelineLayout;
     PFN_vkCreateSampler              CreateSampler;
@@ -545,6 +547,8 @@ typedef struct StereoPipelineInfo
     VkShaderModule fs_module;
     VkShaderModule gs_module;
     VkShaderModule ms_module;
+    VkBool32 rt_raygen;
+    VkBool32 patched_rt_raygen;
     VkBool32 patched_vs;
     VkBool32 patched_fs;
     VkBool32 patched_ms;
@@ -582,6 +586,8 @@ typedef struct StereoDevice {
 #define MAX_COLOR_IMAGES        2048
     VkImage                intercepted_color[MAX_COLOR_IMAGES];
     uint32_t               intercepted_color_count;
+    VkImage                intercepted_storage[MAX_COLOR_IMAGES];
+    uint32_t               intercepted_storage_count;
     uint32_t               stereo_w, stereo_h;
     /* Upgraded image-view tracking for per-framebuffer multiview decision */
 #define MAX_UPGRADED_VIEWS     4096
@@ -820,6 +826,8 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireNextImageKHR(VkDevice, VkSwapchainK
 VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentInfoKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRayTracingPipelinesKHR( VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkRayTracingPipelineCreateInfoKHR *pCreateInfos, const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdTraceRaysKHR( VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDraw(VkCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
@@ -853,6 +861,15 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     StereoDebugCtx *dbg);
+bool spirv_patch_stereo_raygen(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t **out,
+    size_t *out_c,
+    float lo,
+    float ro,
+    float conv,
+    int projection_mode);
 void spirv_patched_free(uint32_t *w);
 
 StereoPipelineInfo *

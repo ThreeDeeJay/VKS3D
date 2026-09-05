@@ -1288,6 +1288,11 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         && pCreateInfo->extent.width  > 1
         && pCreateInfo->extent.height > 1
         && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    bool intercept_storage = base
+        && pCreateInfo->mipLevels == 1
+        && pCreateInfo->extent.width  > 1
+        && pCreateInfo->extent.height > 1
+        && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT);
     STEREO_LOG(
         "IMAGE_CREATE imageType=%d fmt=%d samples=%d usage=0x%x layers=%u extent=%ux%u flags=0x%x cube=%d array=%d upgrade=%d",
         pCreateInfo->imageType,
@@ -1300,7 +1305,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         pCreateInfo->flags,
         !!(pCreateInfo->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT),
         pCreateInfo->arrayLayers > 1,
-        intercept_depth || intercept_color);
+        intercept_depth || intercept_color || intercept_storage);
     if (base &&
         (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) &&
         !(pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
@@ -1314,7 +1319,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
             intercept_depth,
             intercept_color);
     }
-    if (!intercept_depth && !intercept_color)
+    if (!intercept_depth && !intercept_color && !intercept_storage)
     {
         STEREO_LOG("CALL real CreateImage");
         VkResult r =
@@ -1331,13 +1336,14 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         return r;
     }
     STEREO_LOG(
-        "IMAGE_UPGRADE usage=0x%08X fmt=%u extent=%ux%u depth=%u color=%u layers %u->2",
+        "IMAGE_UPGRADE usage=0x%08X fmt=%u extent=%ux%u depth=%u color=%u storage=%u layers %u->2",
         pCreateInfo->usage,
         pCreateInfo->format,
         pCreateInfo->extent.width,
         pCreateInfo->extent.height,
         intercept_depth,
         intercept_color,
+        intercept_storage,
         pCreateInfo->arrayLayers);
     VkImageCreateInfo modified = *pCreateInfo;
     modified.arrayLayers = 2;
@@ -1442,6 +1448,31 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         else if (intercept_color)
         {
         }
+        if (intercept_storage &&
+            sd->intercepted_storage_count < MAX_COLOR_IMAGES)
+        {
+            bool already_tracked = false;
+            for (uint32_t i = 0;
+                i < sd->intercepted_storage_count;
+                i++)
+            {
+                if (sd->intercepted_storage[i] == *pImage)
+                {
+                    already_tracked = true;
+                    break;
+                }
+            }
+            if (!already_tracked)
+            {
+                sd->intercepted_storage[
+                    sd->intercepted_storage_count++] = *pImage;
+                STEREO_LOG(
+                    "STORAGE_TRACK count=%u image=%p usage=0x%08X",
+                    sd->intercepted_storage_count,
+                    (void *)(uintptr_t)*pImage,
+                    pCreateInfo->usage);
+            }
+        }
     }
     return res;
 }
@@ -1483,6 +1514,7 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     bool swapchain_match = false;
     bool depth_match = false;
     bool color_match = false;
+    bool storage_match = false;
     for (uint32_t si = 0; si < sd->swapchain_count; si++) {
         StereoSwapchain *scc = &sd->swapchains[si];
         if (!scc->stereo_active || !scc->stereo_images) continue;
@@ -1511,6 +1543,14 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
             color_matches++;
             needs_upgrade = true;
             swapchain_match = true;
+        }
+    }
+    for (uint32_t i = 0; i < sd->intercepted_storage_count; i++)
+    {
+        if (sd->intercepted_storage[i] == pCreateInfo->image)
+        {
+            storage_match = true;
+            needs_upgrade = true;
         }
     }
     for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
@@ -1553,11 +1593,12 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         return r;
        }
     STEREO_LOG(
-        "UPGRADE_REASON image=%p swapchain=%u depth=%u color=%u",
+        "UPGRADE_REASON image=%p swapchain=%u depth=%u color=%u storage=%u",
         (void *)(uintptr_t)pCreateInfo->image,
         swapchain_match,
         depth_match,
-        color_match);
+        color_match,
+        storage_match);
     VkImageViewCreateInfo upgraded = *pCreateInfo;
     if (upgraded.viewType == VK_IMAGE_VIEW_TYPE_2D)
         upgraded.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;

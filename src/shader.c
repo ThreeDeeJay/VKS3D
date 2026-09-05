@@ -459,7 +459,13 @@ static void do_scan(SpvMod *m, bool p2)
                         m->is_patchable=true;
                         m->exec_model=(int)e;
                         m->entry_function = w[i+2];
-                    }}
+                    }
+                    else if (e == SpvExecutionModelRayGenerationKHR)
+                    {
+                        m->exec_model = (int)e;
+                        m->entry_function = w[i + 2];
+                    }
+                }
                 break;
             case SpvOpTypeFloat:
                 if(wc==3&&w[i+2]==32) m->ft=w[i+1];
@@ -8882,6 +8888,854 @@ bool spirv_patch_stereo_fs(
     return true;
 }
 
+static uint32_t
+spirv_get_result_id(uint32_t op, const uint32_t *ins, uint32_t wc)
+{
+    if (!ins)
+        return 0;
+    if (op == SpvOpLabel ||
+        op == SpvOpTypeVoid ||
+        op == SpvOpTypeBool ||
+        op == SpvOpTypeInt ||
+        op == SpvOpTypeFloat ||
+        op == SpvOpTypeVector ||
+        op == SpvOpTypeMatrix ||
+        op == SpvOpTypeImage ||
+        op == SpvOpTypeSampler ||
+        op == SpvOpTypeSampledImage ||
+        op == SpvOpTypeArray ||
+        op == SpvOpTypeRuntimeArray ||
+        op == SpvOpTypeStruct ||
+        op == SpvOpTypeOpaque ||
+        op == SpvOpTypePointer ||
+        op == SpvOpTypeFunction)
+    {
+        return wc >= 2 ? ins[1] : 0;
+    }
+    if (op == SpvOpConstantTrue ||
+        op == SpvOpConstantFalse ||
+        op == SpvOpConstant ||
+        op == SpvOpConstantComposite ||
+        op == SpvOpConstantNull ||
+        op == SpvOpSpecConstantTrue ||
+        op == SpvOpSpecConstantFalse ||
+        op == SpvOpSpecConstant ||
+        op == SpvOpSpecConstantComposite ||
+        op == SpvOpVariable ||
+        op == SpvOpLoad ||
+        op == SpvOpAccessChain ||
+        op == SpvOpInBoundsAccessChain ||
+        op == SpvOpPtrAccessChain ||
+        op == SpvOpCompositeConstruct ||
+        op == SpvOpCompositeExtract ||
+        op == SpvOpCompositeInsert ||
+        op == SpvOpCopyObject ||
+        op == SpvOpTranspose ||
+        op == SpvOpVectorExtractDynamic ||
+        op == SpvOpVectorInsertDynamic ||
+        op == SpvOpVectorShuffle ||
+        op == SpvOpMatrixTimesScalar ||
+        op == SpvOpVectorTimesScalar ||
+        op == SpvOpMatrixTimesVector ||
+        op == SpvOpVectorTimesMatrix ||
+        op == SpvOpMatrixTimesMatrix ||
+        op == SpvOpIAddCarry ||
+        op == SpvOpISubBorrow ||
+        op == SpvOpUMulExtended ||
+        op == SpvOpSMulExtended ||
+        op == SpvOpSNegate ||
+        op == SpvOpFNegate ||
+        op == SpvOpIAdd ||
+        op == SpvOpFAdd ||
+        op == SpvOpISub ||
+        op == SpvOpFSub ||
+        op == SpvOpIMul ||
+        op == SpvOpFMul ||
+        op == SpvOpUDiv ||
+        op == SpvOpSDiv ||
+        op == SpvOpFDiv ||
+        op == SpvOpUMod ||
+        op == SpvOpSRem ||
+        op == SpvOpSMod ||
+        op == SpvOpFRem ||
+        op == SpvOpFMod ||
+        op == SpvOpVectorTimesScalar ||
+        op == SpvOpShiftRightLogical ||
+        op == SpvOpShiftRightArithmetic ||
+        op == SpvOpShiftLeftLogical ||
+        op == SpvOpBitwiseOr ||
+        op == SpvOpBitwiseXor ||
+        op == SpvOpBitwiseAnd ||
+        op == SpvOpNot ||
+        op == SpvOpBitFieldInsert ||
+        op == SpvOpBitFieldSExtract ||
+        op == SpvOpBitFieldUExtract ||
+        op == SpvOpBitReverse ||
+        op == SpvOpBitCount ||
+        op == SpvOpAny ||
+        op == SpvOpAll ||
+        op == SpvOpIsNan ||
+        op == SpvOpIsInf ||
+        op == SpvOpIsFinite ||
+        op == SpvOpIsNormal ||
+        op == SpvOpSignBitSet ||
+        op == SpvOpLessOrGreater ||
+        op == SpvOpOrdered ||
+        op == SpvOpUnordered ||
+        op == SpvOpLogicalEqual ||
+        op == SpvOpLogicalNotEqual ||
+        op == SpvOpLogicalOr ||
+        op == SpvOpLogicalAnd ||
+        op == SpvOpLogicalNot ||
+        op == SpvOpSelect ||
+        op == SpvOpIEqual ||
+        op == SpvOpINotEqual ||
+        op == SpvOpUGreaterThan ||
+        op == SpvOpSGreaterThan ||
+        op == SpvOpUGreaterThanEqual ||
+        op == SpvOpSGreaterThanEqual ||
+        op == SpvOpULessThan ||
+        op == SpvOpSLessThan ||
+        op == SpvOpULessThanEqual ||
+        op == SpvOpSLessThanEqual ||
+        op == SpvOpFOrdEqual ||
+        op == SpvOpFUnordEqual ||
+        op == SpvOpFOrdNotEqual ||
+        op == SpvOpFUnordNotEqual ||
+        op == SpvOpFOrdLessThan ||
+        op == SpvOpFUnordLessThan ||
+        op == SpvOpFOrdGreaterThan ||
+        op == SpvOpFUnordGreaterThan ||
+        op == SpvOpFOrdLessThanEqual ||
+        op == SpvOpFUnordLessThanEqual ||
+        op == SpvOpFOrdGreaterThanEqual ||
+        op == SpvOpFUnordGreaterThanEqual ||
+        op == SpvOpConvertSToF ||
+        op == SpvOpConvertUToF ||
+        op == SpvOpFConvert ||
+        op == SpvOpQuantizeToF16 ||
+        op == SpvOpConvertFToS ||
+        op == SpvOpConvertFToU ||
+        op == SpvOpSatConvertSToU ||
+        op == SpvOpSatConvertUToS ||
+        op == SpvOpConvertPtrToU ||
+        op == SpvOpConvertUToPtr ||
+        op == SpvOpBitcast ||
+        op == SpvOpSConvert ||
+        op == SpvOpUConvert ||
+        op == SpvOpImageSampleImplicitLod ||
+        op == SpvOpImageSampleExplicitLod ||
+        op == SpvOpImageSampleDrefImplicitLod ||
+        op == SpvOpImageSampleDrefExplicitLod ||
+        op == SpvOpImageSampleProjImplicitLod ||
+        op == SpvOpImageSampleProjExplicitLod ||
+        op == SpvOpImageSampleProjDrefImplicitLod ||
+        op == SpvOpImageSampleProjDrefExplicitLod ||
+        op == SpvOpImageFetch ||
+        op == SpvOpImageGather ||
+        op == SpvOpImageDrefGather ||
+        op == SpvOpImageRead ||
+        op == SpvOpImage ||
+        op == SpvOpImageQueryFormat ||
+        op == SpvOpImageQueryOrder ||
+        op == SpvOpImageQuerySizeLod ||
+        op == SpvOpImageQuerySize ||
+        op == SpvOpImageQueryLod ||
+        op == SpvOpImageQueryLevels ||
+        op == SpvOpImageQuerySamples ||
+        op == SpvOpSampledImage ||
+        op == SpvOpFunction ||
+        op == SpvOpFunctionParameter ||
+        op == SpvOpFunctionCall ||
+        op == SpvOpExtInst ||
+        op == SpvOpPhi)
+{
+    return wc >= 3 ? ins[2] : 0;
+}
+return 0;
+}
+
+static bool
+spirv_patch_stereo_raygen(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t **out,
+    size_t *out_c,
+    float lo,
+    float ro,
+    float conv,
+    int projection_mode)
+{
+    if (!in || in_c < 5 || in[0] != SPIRV_MAGIC || !out || !out_c)
+        return false;
+    *out = NULL;
+    *out_c = 0;
+    uint32_t bound = in[3];
+    uint32_t launch_id_var = 0;
+    uint32_t launch_id_load = 0;
+    uint32_t image_type = 0;
+    uint32_t image_read_coord = 0;
+    uint32_t image_write_coord = 0;
+    uint32_t float_zero = 0;
+    uint32_t int_type = 0;
+    uint32_t uint_type = 0;
+    uint32_t float_type = 0;
+    uint32_t bool_type = 0;
+    uint32_t v2int_type = 0;
+    uint32_t v3uint_type = 0;
+    uint32_t v4float_type = 0;
+    uint32_t v3int_type = 0;
+    uint32_t first_function = 0;
+    uint32_t image_texel_type = 0;
+    uint32_t origin_vec = 0;
+    uint32_t origin_mat = 0;
+    uint32_t origin_mtv = 0;
+    uint32_t origin_result = 0;
+    uint32_t origin_var = 0;
+    uint32_t ray_ndc_vec = 0;
+    uint32_t ray_ndc_mat = 0;
+    uint32_t ray_ndc_mtv = 0;
+    uint32_t matrix_times_vector_count = 0;
+    uint32_t first_label = 0;
+    for (size_t i = 5; i < in_c;)
+    {
+        uint32_t op = in[i] & 0xffffu;
+        uint32_t wc = in[i] >> 16;
+        if (!wc || i + wc > in_c)
+        {
+        STEREO_LOG("RT_PATCH_SCAN_BAD i=%zu op=%u wc=%u words=%zu", i, op, wc, in_c);
+        return false;
+        }
+        if (in[i + 1] >= bound && in[i + 1] <= bound + 32)
+            STEREO_LOG("RT_PATCH_HIGH_OPERAND i=%zu op=%u word1=%u wc=%u", i, op, in[i + 1], wc);
+        if (wc >= 3 && in[i + 2] >= bound && in[i + 2] <= bound + 32)
+            STEREO_LOG("RT_PATCH_HIGH_OPERAND2 i=%zu op=%u word2=%u wc=%u", i, op, in[i + 2], wc);
+        if (op == SpvOpDecorate &&
+            wc >= 4 &&
+            in[i + 2] == SpvDecorationBuiltIn &&
+            in[i + 3] == SpvBuiltInLaunchIdKHR)
+        {
+            launch_id_var = in[i + 1];
+        }
+        else if (op == SpvOpTypeInt && wc >= 4)
+        {
+            if (in[i + 2] == 32 && in[i + 3] == 0)
+                uint_type = in[i + 1];
+            else if (in[i + 2] == 32 && in[i + 3] == 1)
+                int_type = in[i + 1];
+        }
+        else if (op == SpvOpTypeFloat && wc >= 3)
+        {
+            if (in[i + 2] == 32)
+                float_type = in[i + 1];
+        }
+        else if (op == SpvOpTypeBool && wc >= 2)
+        {
+            bool_type = in[i + 1];
+        }
+        else if (op == SpvOpTypeVector && wc >= 4)
+        {
+            if (in[i + 2] == int_type && in[i + 3] == 2)
+                v2int_type = in[i + 1];
+            if (in[i + 2] == int_type && in[i + 3] == 3 && !v3int_type)
+                v3int_type = in[i + 1];
+            if (in[i + 2] == uint_type && in[i + 3] == 3)
+                v3uint_type = in[i + 1];
+            if (in[i + 2] == float_type && in[i + 3] == 4)
+                v4float_type = in[i + 1];
+        }
+        else if (op == SpvOpTypeImage &&
+            wc >= 9 &&
+            in[i + 3] == SpvDim2D &&
+            in[i + 4] == 0 &&
+            in[i + 5] == 0 &&
+            in[i + 6] == 0 &&
+            in[i + 7] == 2)
+        {
+            image_type = in[i + 1];
+            image_texel_type = in[i + 2];
+        }
+        else if (op == SpvOpConstant &&
+            wc >= 4 &&
+            in[i + 1] == float_type &&
+            in[i + 3] == 0 &&
+            !float_zero)
+        {
+            float_zero = in[i + 2];
+        }
+        else if (op == SpvOpLoad &&
+            wc >= 4 &&
+            launch_id_var &&
+            in[i + 3] == launch_id_var)
+        {
+            launch_id_load = in[i + 2];
+        }
+        else if (op == SpvOpImageRead && wc >= 5)
+        {
+            if (!image_read_coord)
+                image_read_coord = in[i + 4];
+        }
+        else if (op == SpvOpImageWrite && wc >= 4)
+        {
+            if (!image_write_coord)
+                image_write_coord = in[i + 2];
+        }
+        else if (op == SpvOpMatrixTimesVector && wc >= 5)
+        {
+            matrix_times_vector_count++;
+            STEREO_LOG(
+                "RT_PATCH_MTV index=%u i=%zu result=%u type=%u mat=%u vec=%u",
+                matrix_times_vector_count,
+                i,
+                in[i + 2],
+                in[i + 1],
+                in[i + 3],
+                in[i + 4]);
+            if (matrix_times_vector_count == 1)
+            {
+                origin_mtv = (uint32_t)i;
+                origin_mat = in[i + 3];
+                origin_vec = in[i + 4];
+                origin_result = in[i + 2];
+            }
+            else if (matrix_times_vector_count == 2)
+            {
+                ray_ndc_mtv = (uint32_t)i;
+                ray_ndc_mat = in[i + 3];
+                ray_ndc_vec = in[i + 4];
+            }
+        }
+        else if (op == SpvOpStore &&
+            wc >= 3 &&
+            origin_result &&
+            in[i + 2] == origin_result &&
+            !origin_var)
+        {
+            origin_var = in[i + 1];
+            STEREO_LOG(
+                "RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u",
+                i,
+                origin_var,
+                origin_result);
+        }
+        else if (op == SpvOpFunction && !first_function)
+        {
+            first_function = (uint32_t)i;
+        }
+        else if (op == SpvOpLabel && first_function && !first_label)
+        {
+            first_label = (uint32_t)i;
+        }
+        i += wc;
+        }
+        STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
+        if (!launch_id_var ||
+        !launch_id_load ||
+        !image_type ||
+        (!image_read_coord && !image_write_coord) ||
+        !first_function ||
+        !first_label ||
+        !int_type ||
+        !uint_type ||
+        !float_type ||
+        !v2int_type ||
+        !v3uint_type ||
+        !v4float_type ||
+        !image_texel_type ||
+        !float_zero ||
+        !origin_mtv ||
+        !origin_vec ||
+        !origin_var ||
+        !ray_ndc_mtv ||
+        !ray_ndc_vec)
+    {
+        STEREO_LOG(
+            "RT_PATCH_REJECT_FLAGS launch=%u launch_load=%u image_type=%u image_read_coord=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u bool=%u v2int=%u v3int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mtv=%u mtv_count=%u",
+            !launch_id_var,
+            !launch_id_load,
+            !image_type,
+            !image_read_coord,
+            !image_write_coord,
+            !first_function,
+            !int_type,
+            !uint_type,
+            !float_type,
+            !bool_type,
+            !v2int_type,
+            !v3int_type,
+            !v3uint_type,
+            !v4float_type,
+            !image_texel_type,
+            !float_zero,
+            !origin_vec,
+            !origin_mtv,
+            !origin_var,
+            !ray_ndc_vec,
+            !ray_ndc_mtv,
+            matrix_times_vector_count);
+        STEREO_LOG(
+            "RT_PATCH_REJECT_VALUES launch=%u launch_load=%u image_type=%u image_write_coord=%u first_function=%u first_label=%u int=%u uint=%u float=%u bool=%u v2int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mat=%u mtv_count=%u",
+            launch_id_var,
+            launch_id_load,
+            image_type,
+            image_write_coord,
+            first_function,
+            first_label,
+            int_type,
+            uint_type,
+            float_type,
+            bool_type,
+            v2int_type,
+            v3uint_type,
+            v4float_type,
+            image_texel_type,
+            float_zero,
+            origin_vec,
+            origin_mtv,
+            origin_var,
+            ray_ndc_vec,
+            ray_ndc_mat,
+            matrix_times_vector_count);
+        return false;
+    }
+    STEREO_LOG(
+        "RT_PATCH_LAYOUT trace=%u trace_wc=%u image_write_coord=%u launch_load=%u origin_vec=%u origin_mat=%u ray_ndc_vec=%u ray_ndc_mat=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f",
+        0u,
+        0u,
+        image_write_coord,
+        launch_id_load,
+        origin_vec,
+        origin_mat,
+        ray_ndc_vec,
+        ray_ndc_mat,
+        projection_mode,
+        lo,
+        ro,
+        conv);
+    for (size_t d = 5; d < in_c;)
+    {
+        uint32_t dop = in[d] & 0xffffu;
+        uint32_t dwc = in[d] >> 16;
+        if (!dwc || d + dwc > in_c)
+            break;
+        if (dop == SpvOpTraceRayKHR || dop == SpvOpImageWrite || dop == SpvOpMatrixTimesVector)
+            STEREO_LOG("RT_PATCH_INSTR i=%zu op=%u wc=%u", d, dop, dwc);
+        d += dwc;
+    }
+    STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
+    uint32_t generated_id_base = bound;
+    uint32_t generated_id = generated_id_base;
+    uint32_t stereo_launch_load = generated_id++;
+    if (!v3int_type)
+        v3int_type = generated_id++;
+    uint32_t new_bool_type = bool_type;
+    if (!new_bool_type)
+        new_bool_type = generated_id++;
+    uint32_t coord_x = generated_id++;
+    uint32_t coord_y = generated_id++;
+    uint32_t coord_z_u = generated_id++;
+    uint32_t coord_z = generated_id++;
+    uint32_t new_coord = generated_id++;
+    uint32_t eye_is_left = generated_id++;
+    uint32_t selected_offset = generated_id++;
+    uint32_t left_const = generated_id++;
+    uint32_t right_const = generated_id++;
+    uint32_t conv_const = generated_id++;
+    uint32_t uint_zero_const = generated_id++;
+    uint32_t ray_ndc_raw = generated_id++;
+    uint32_t inv_p00 = generated_id++;
+    uint32_t eye_product = generated_id++;
+    uint32_t eye_shift = generated_id++;
+    uint32_t eye_origin = generated_id++;
+    uint32_t new_origin = generated_id++;
+    uint32_t ray_x = generated_id++;
+    uint32_t ray_y = generated_id++;
+    uint32_t ray_z = generated_id++;
+    uint32_t ray_w = generated_id++;
+    uint32_t ray_conv = generated_id++;
+    uint32_t ray_new_x = generated_id++;
+    uint32_t coord_x_int = generated_id++;
+    uint32_t coord_y_int = generated_id++;
+    bound = generated_id;
+    STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u v3int=%u bool=%u reused_v3int=%u reused_bool=%u", bound, v3int_type, new_bool_type, v3int_type < generated_id_base, bool_type != 0);
+    STEREO_LOG("RT_PATCH_ID_RANGE base=%u end=%u", generated_id_base, bound - 1);
+    uint32_t type_vec3[] = {
+        (4u << 16) | SpvOpTypeVector,
+        v3int_type,
+        int_type,
+        3
+    };
+    uint32_t c_left[] = {
+    (4u << 16) | SpvOpConstant,
+    float_type,
+    left_const,
+    0
+    };
+    uint32_t c_right[] = {
+    (4u << 16) | SpvOpConstant,
+    float_type,
+    right_const,
+    0
+    };
+    uint32_t c_conv[] = {
+        (4u << 16) | SpvOpConstant,
+        float_type,
+        conv_const,
+        0
+    };
+    uint32_t c_uint_zero[] = {
+        (4u << 16) | SpvOpConstant,
+        uint_type,
+        uint_zero_const,
+        0
+    };
+    uint32_t launch_z[] = {
+    (5u << 16) | SpvOpCompositeExtract,
+    uint_type,
+    coord_z_u,
+    stereo_launch_load,
+    2
+    };
+    uint32_t left_test[] = {
+        (5u << 16) | SpvOpIEqual,
+        new_bool_type,
+        eye_is_left,
+        coord_z_u,
+        uint_zero_const
+    };
+    uint32_t select[] = {
+    (6u << 16) | SpvOpSelect,
+    float_type,
+    selected_offset,
+    eye_is_left,
+    right_const,
+    left_const
+    };
+    uint32_t stereo_launch[] = {
+        (4u << 16) | SpvOpLoad,
+        v3uint_type,
+        stereo_launch_load,
+        launch_id_var
+    };
+    float f_left = lo;
+    float f_right = ro;
+    float f_conv = conv;
+    memcpy(&c_left[3], &f_left, sizeof(f_left));
+    memcpy(&c_right[3], &f_right, sizeof(f_right));
+    memcpy(&c_conv[3], &f_conv, sizeof(f_conv));
+    SpvBuf ob;
+    sb_init(&ob, in_c + 256);
+    sb_push_n(&ob, in, 5);
+    size_t first_function_pos = first_function;
+    size_t stereo_insert_pos = 0;
+    for (size_t s = first_label; s < in_c;)
+    {
+        uint32_t sop = in[s] & 0xffffu;
+        uint32_t swc = in[s] >> 16;
+        if (!swc || s + swc > in_c)
+        {
+            STEREO_LOG("RT_PATCH_VAR_SCAN_BAD i=%zu op=%u wc=%u words=%zu", s, sop, swc, in_c);
+            sb_free(&ob);
+            return false;
+        }
+        if (s == first_label)
+        {
+            s += swc;
+            continue;
+        }
+        if (sop != SpvOpVariable)
+        {
+            stereo_insert_pos = s;
+            break;
+        }
+        s += swc;
+    }
+    if (!stereo_insert_pos)
+    {
+        STEREO_LOG("RT_PATCH_VAR_SCAN_FAIL first_label=%u", first_label);
+        sb_free(&ob);
+        return false;
+    }
+    STEREO_LOG("RT_PATCH_VAR_INSERT label=%u insert=%zu", first_label, stereo_insert_pos);
+    for (size_t i = 5; i < in_c;)
+    {
+        if (i == first_function_pos)
+        {
+            if (v3int_type >= generated_id_base)
+                sb_push_n(&ob, type_vec3, 4);
+            if (!bool_type)
+            {
+                uint32_t type_bool[] = {
+                    (2u << 16) | SpvOpTypeBool,
+                    new_bool_type
+                };
+                sb_push_n(&ob, type_bool, 2);
+            }
+            sb_push_n(&ob, c_left, 4);
+            sb_push_n(&ob, c_right, 4);
+            sb_push_n(&ob, c_conv, 4);
+            sb_push_n(&ob, c_uint_zero, 4);
+        }
+        uint32_t op = in[i] & 0xffffu;
+        uint32_t wc = in[i] >> 16;
+        if (!wc || i + wc > in_c)
+        {
+            STEREO_LOG("RT_PATCH_EMIT_BAD i=%zu op=%u wc=%u words=%zu", i, op, wc, in_c);
+            sb_free(&ob);
+            return false;
+        }
+        if (i == stereo_insert_pos)
+        {
+            sb_push_n(&ob, stereo_launch, 4);
+            sb_push_n(&ob, launch_z, 5);
+            sb_push_n(&ob, left_test, 5);
+            sb_push_n(&ob, select, 6);
+            uint32_t coord_x_inst[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                uint_type,
+                coord_x,
+                stereo_launch_load,
+                0
+            };
+            uint32_t coord_y_inst[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                uint_type,
+                coord_y,
+                stereo_launch_load,
+                1
+            };
+            uint32_t coord_z_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_z,
+                coord_z_u
+            };
+            uint32_t coord_x_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_x_int,
+                coord_x
+            };
+            uint32_t coord_y_cast[] = {
+                (4u << 16) | SpvOpBitcast,
+                int_type,
+                coord_y_int,
+                coord_y
+            };
+            uint32_t coord_construct[] = {
+                (6u << 16) | SpvOpCompositeConstruct,
+                v3int_type,
+                new_coord,
+                coord_x_int,
+                coord_y_int,
+                coord_z
+            };
+            sb_push_n(&ob, coord_x_inst, 5);
+            sb_push_n(&ob, coord_y_inst, 5);
+            sb_push_n(&ob, coord_x_cast, 4);
+            sb_push_n(&ob, coord_y_cast, 4);
+            sb_push_n(&ob, coord_z_cast, 4);
+            sb_push_n(&ob, coord_construct, 6);
+        }
+        if (op == SpvOpTypeImage &&
+            wc >= 9 &&
+            in[i + 1] == image_type &&
+            in[i + 5] == 0)
+        {
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[ob.n - wc + 5] = 1;
+            i += wc;
+            continue;
+        }
+        if (op == SpvOpMatrixTimesVector &&
+            i == origin_mtv)
+        {
+            sb_push_n(&ob, &in[i], wc);
+            i += wc;
+            continue;
+        }
+        if (op == SpvOpMatrixTimesVector &&
+            i == ray_ndc_mtv)
+        {
+            uint32_t result_id = in[i + 2];
+            uint32_t raw_mtv[5];
+            memcpy(raw_mtv, &in[i], sizeof(raw_mtv));
+            raw_mtv[2] = ray_ndc_raw;
+            sb_push_n(&ob, raw_mtv, 5);
+            uint32_t p00_inv[] = {
+                (6u << 16) | SpvOpCompositeExtract,
+                float_type,
+                inv_p00,
+                ray_ndc_mat,
+                0,
+                0
+            };
+            uint32_t eye_mul[] = {
+                (5u << 16) | SpvOpFMul,
+                float_type,
+                eye_product,
+                selected_offset,
+                inv_p00
+            };
+            uint32_t eye_neg[] = {
+                (4u << 16) | SpvOpFNegate,
+                float_type,
+                eye_shift,
+                eye_product
+            };
+            uint32_t eye_vec[] = {
+                (6u << 16) | SpvOpCompositeInsert,
+                v4float_type,
+                eye_origin,
+                eye_shift,
+                origin_vec,
+                0
+            };
+            uint32_t eye_mtv[] = {
+                (5u << 16) | SpvOpMatrixTimesVector,
+                v4float_type,
+                new_origin,
+                origin_mat,
+                eye_origin
+            };
+            uint32_t store_origin[] = {
+                (3u << 16) | SpvOpStore,
+                origin_var,
+                new_origin
+            };
+            sb_push_n(&ob, p00_inv, 6);
+            sb_push_n(&ob, eye_mul, 5);
+            sb_push_n(&ob, eye_neg, 4);
+            sb_push_n(&ob, eye_vec, 6);
+            sb_push_n(&ob, eye_mtv, 5);
+            sb_push_n(&ob, store_origin, 3);
+            uint32_t x[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ray_x,
+                ray_ndc_raw,
+                0
+            };
+            uint32_t y[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ray_y,
+                ray_ndc_raw,
+                1
+            };
+            uint32_t z[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ray_z,
+                ray_ndc_raw,
+                2
+            };
+            uint32_t w[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                ray_w,
+                ray_ndc_raw,
+                3
+            };
+            sb_push_n(&ob, x, 5);
+            sb_push_n(&ob, y, 5);
+            sb_push_n(&ob, z, 5);
+            sb_push_n(&ob, w, 5);
+            if (projection_mode == STEREO_PROJECTION_OFF_AXIS)
+            {
+                uint32_t x_conv[] = {
+                    (5u << 16) | SpvOpFMul,
+                    float_type,
+                    ray_conv,
+                    selected_offset,
+                    conv_const
+                };
+                uint32_t x_add[] = {
+                    (5u << 16) | SpvOpFAdd,
+                    float_type,
+                    ray_new_x,
+                    ray_x,
+                    ray_conv
+                };
+                sb_push_n(&ob, x_conv, 5);
+                sb_push_n(&ob, x_add, 5);
+            }
+            else
+            {
+                uint32_t x_copy[] = {
+                    (5u << 16) | SpvOpFAdd,
+                    float_type,
+                    ray_new_x,
+                    ray_x,
+                    float_zero
+                };
+                sb_push_n(&ob, x_copy, 5);
+            }
+            uint32_t construct[] = {
+                (7u << 16) | SpvOpCompositeConstruct,
+                v4float_type,
+                result_id,
+                ray_new_x,
+                ray_y,
+                ray_z,
+                ray_w
+            };
+            sb_push_n(&ob, construct, 7);
+            STEREO_LOG(
+                "RT_PATCH_STEREO result=%u raw=%u projInv=%u invP00=%u eyeProduct=%u eyeShift=%u eyeOrigin=%u newOrigin=%u selectedOffset=%u conv=%u mode=%d",
+                result_id,
+                ray_ndc_raw,
+                ray_ndc_mat,
+                inv_p00,
+                eye_product,
+                eye_shift,
+                eye_origin,
+                new_origin,
+                selected_offset,
+                conv_const,
+                projection_mode);
+            i += wc;
+            continue;
+        }
+        if (op == SpvOpImageRead &&
+            wc >= 5)
+        {
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[ob.n - wc + 4] = new_coord;
+            i += wc;
+            continue;
+        }
+        if (op == SpvOpImageWrite &&
+            wc >= 4)
+        {
+            sb_push_n(&ob, &in[i], wc);
+            ob.w[ob.n - wc + 2] = new_coord;
+            i += wc;
+            continue;
+        }
+        sb_push_n(&ob, &in[i], wc);
+        i += wc;
+    }
+    ob.w[3] = bound;
+    *out = ob.w;
+    *out_c = ob.n;
+    STEREO_LOG(
+        "RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z_eye_camera",
+        image_type,
+        image_texel_type,
+        image_read_coord,
+        image_write_coord,
+        new_coord,
+        launch_id_load,
+        origin_vec,
+        ray_ndc_vec,
+        projection_mode,
+        lo,
+        ro,
+        conv);
+    return true;
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 static bool is_patchable_spv(const uint32_t *w, size_t c)
 {
@@ -8893,6 +9747,90 @@ static bool is_patchable_spv(const uint32_t *w, size_t c)
             return e==SpvExecVertex||e==SpvExecGeometry||e==SpvExecTessEval||e==SpvExecFragment;
         }
         i+=wc;
+    }
+    return false;
+}
+
+static void log_rt_raygen_spv(const uint32_t *w, size_t c)
+{
+    if (!w || c < 5 || w[0] != SPIRV_MAGIC)
+        return;
+    for (size_t i = 5; i < c;)
+    {
+        uint32_t op = w[i] & 0xffffu;
+        uint32_t wc = w[i] >> 16;
+        if (!wc || i + wc > c)
+            break;
+        if (op == SpvOpEntryPoint && wc >= 3)
+        {
+            STEREO_LOG(
+                "RT_SPV_ENTRYPOINT model=%u function=%u words=%u",
+                w[i + 1],
+                w[i + 2],
+                wc);
+        }
+        else if (op == SpvOpDecorate && wc >= 4)
+        {
+            STEREO_LOG(
+                "RT_SPV_DECORATE target=%u decoration=%u value=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3]);
+        }
+        else if (op == SpvOpTypeImage && wc >= 9)
+        {
+            STEREO_LOG(
+                "RT_SPV_TYPE_IMAGE id=%u sampled_type=%u dim=%u depth=%u arrayed=%u ms=%u sampled=%u format=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3],
+                w[i + 4],
+                w[i + 5],
+                w[i + 6],
+                w[i + 7],
+                w[i + 8]);
+        }
+        else if (op == SpvOpVariable && wc >= 4)
+        {
+            STEREO_LOG(
+                "RT_SPV_VARIABLE result_type=%u id=%u storage=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3]);
+        }
+        else if (op == SpvOpImageWrite && wc >= 4)
+        {
+            STEREO_LOG(
+                "RT_SPV_IMAGE_WRITE image=%u coord=%u value=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3]);
+        }
+        else if (op == SpvOpLoad && wc >= 4)
+        {
+            STEREO_LOG(
+                "RT_SPV_LOAD result_type=%u result=%u pointer=%u",
+                w[i + 1],
+                w[i + 2],
+                w[i + 3]);
+        }
+        i += wc;
+    }
+}
+
+static bool is_rt_raygen_spv(const uint32_t *w, size_t c)
+{
+    if (c < 5 || w[0] != SPIRV_MAGIC)
+        return false;
+    for (size_t i = 5; i < c;)
+    {
+        uint32_t op = w[i] & 0xffffu;
+        uint32_t wc = w[i] >> 16;
+        if (!wc || i + wc > c)
+            break;
+        if (op == SpvOpEntryPoint && wc >= 2)
+            return w[i + 1] == SpvExecutionModelRayGenerationKHR;
+        i += wc;
     }
     return false;
 }
@@ -9043,13 +9981,18 @@ stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
     create_exec_model == SpvExecMeshEXT;
     bool create_is_patchable =
     is_patchable_spv(spv,wc);
+    bool create_is_rt_raygen =
+    is_rt_raygen_spv(spv,wc);
     STEREO_LOG(
-        "CREATE_SHADER_CLASS module=%p exec_model=%d patchable=%u mesh=%u",
+        "CREATE_SHADER_CLASS module=%p exec_model=%d patchable=%u mesh=%u rt_raygen=%u",
         (void*)*pSM,
         create_exec_model,
         (unsigned)create_is_patchable,
-        (unsigned)create_is_mesh);
-    if (create_is_patchable || create_is_mesh)
+        (unsigned)create_is_mesh,
+        (unsigned)create_is_rt_raygen);
+    if (create_is_rt_raygen)
+        log_rt_raygen_spv(spv, wc);
+    if (create_is_patchable || create_is_mesh || create_is_rt_raygen)
     {
         cache_add(sd,*pSM,spv,wc);
     }
@@ -10352,6 +11295,265 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         free(tst[p]);
     }
     free(tmp_mod); free(tst); free(infos);
+    return res;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateRayTracingPipelinesKHR(
+    VkDevice device,
+    VkDeferredOperationKHR deferredOperation,
+    VkPipelineCache pipelineCache,
+    uint32_t createInfoCount,
+    const VkRayTracingPipelineCreateInfoKHR *pCreateInfos,
+    const VkAllocationCallbacks *pAllocator,
+    VkPipeline *pPipelines)
+{
+    STEREO_LOG(
+        "RT_PIPE_CREATE_BEGIN count=%u infos=%p",
+        createInfoCount,
+        (void*)pCreateInfos);
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd)
+        return VK_ERROR_DEVICE_LOST;
+    if (!sd->real.CreateRayTracingPipelinesKHR)
+    {
+        STEREO_ERR("RT_PIPE_CREATE missing real dispatch");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    VkRayTracingPipelineCreateInfoKHR *patched_ci =
+    calloc(createInfoCount, sizeof(*patched_ci));
+    VkPipelineShaderStageCreateInfo **patched_stages =
+    calloc(createInfoCount, sizeof(*patched_stages));
+    VkShaderModule *tmp_raygen_modules =
+    calloc(createInfoCount, sizeof(*tmp_raygen_modules));
+    if (!patched_ci || !patched_stages || !tmp_raygen_modules)
+    {
+        free(patched_ci);
+        free(patched_stages);
+        free(tmp_raygen_modules);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    for (uint32_t p = 0; p < createInfoCount; p++)
+    {
+        const VkRayTracingPipelineCreateInfoKHR *ci = &pCreateInfos[p];
+        patched_ci[p] = *ci;
+        for (uint32_t s = 0; s < ci->stageCount; s++)
+        {
+            const VkPipelineShaderStageCreateInfo *st = &ci->pStages[s];
+            if (st->stage != VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+                continue;
+            StereoShaderCache *cache = cache_find(sd, st->module);
+            if (!cache)
+            {
+                STEREO_LOG(
+                    "RT_PATCH_CACHE_MISS p=%u stage=%u module=%p",
+                    p,
+                    s,
+                    (void *)st->module);
+                continue;
+            }
+            STEREO_LOG(
+                "RT_PATCH_ATTEMPT p=%u stage=%u module=%p words=%zu exec_model=%u",
+                p,
+                s,
+                (void *)st->module,
+                cache->words,
+                cache->exec_model);
+            const char *dump = stereo_getenv("VKS3D_DUMP_SPIRV");
+            if (dump)
+            {
+                uint64_t spv_hash = hash_spv(cache->spv, cache->words);
+                char dp[512];
+                _snprintf(
+                    dp,
+                    sizeof(dp) - 1,
+                    "%s\\%016llx-rs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f = fopen(dp, "rb");
+                if (!f)
+                {
+                    f = fopen(dp, "wb");
+                    if (f)
+                    {
+                        fwrite(cache->spv, 4, cache->words, f);
+                        fclose(f);
+                    }
+                }
+                else
+                {
+                    fclose(f);
+                }
+            }
+            uint32_t *patched_spv = NULL;
+            size_t patched_words = 0;
+            log_rt_raygen_spv(cache->spv, cache->words);
+            if (!spirv_patch_stereo_raygen(
+                cache->spv,
+                cache->words,
+                &patched_spv,
+                &patched_words,
+                sd->stereo.left_eye_offset,
+                sd->stereo.right_eye_offset,
+                sd->stereo.convergence,
+                sd->stereo.projection))
+            {
+                STEREO_LOG(
+                    "RT_PATCH_FAILED p=%u stage=%u module=%p",
+                    p,
+                    s,
+                    (void *)st->module);
+                continue;
+            }
+            log_rt_raygen_spv(patched_spv, patched_words);
+            if (dump)
+            {
+                uint64_t spv_hash = hash_spv(cache->spv, cache->words);
+                char dp[512];
+                _snprintf(
+                    dp,
+                    sizeof(dp) - 1,
+                    "%s\\%016llx+rs.spv",
+                    dump,
+                    (unsigned long long)spv_hash);
+                FILE *f = fopen(dp, "rb");
+                if (!f)
+                {
+                    f = fopen(dp, "wb");
+                    if (f)
+                    {
+                        fwrite(patched_spv, 4, patched_words, f);
+                        fclose(f);
+                    }
+                }
+                else
+                {
+                    fclose(f);
+                }
+            }
+            VkShaderModuleCreateInfo smci = {
+                .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .codeSize = patched_words * sizeof(uint32_t),
+                .pCode = patched_spv
+            };
+            VkShaderModule tmp_module = VK_NULL_HANDLE;
+            VkResult patch_res = sd->real.CreateShaderModule(
+                sd->real_device,
+                &smci,
+                NULL,
+                &tmp_module);
+            spirv_patched_free(patched_spv);
+            if (patch_res != VK_SUCCESS)
+            {
+                STEREO_LOG(
+                    "RT_PATCH_MODULE_CREATE_FAILED p=%u stage=%u result=%d",
+                    p,
+                    s,
+                    patch_res);
+                continue;
+            }
+            patched_stages[p] =
+            calloc(ci->stageCount, sizeof(*patched_stages[p]));
+            if (!patched_stages[p])
+            {
+                sd->real.DestroyShaderModule(
+                    sd->real_device,
+                    tmp_module,
+                    NULL);
+                free(patched_ci);
+                free(patched_stages);
+                free(tmp_raygen_modules);
+                return VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            memcpy(
+                patched_stages[p],
+                ci->pStages,
+                ci->stageCount * sizeof(*patched_stages[p]));
+            patched_stages[p][s].module = tmp_module;
+            patched_ci[p].pStages = patched_stages[p];
+            tmp_raygen_modules[p] = tmp_module;
+            STEREO_LOG(
+                "RT_PATCH_SUCCESS p=%u stage=%u original=%p patched=%p words=%zu",
+                p,
+                s,
+                (void *)st->module,
+                (void *)tmp_module,
+                patched_words);
+            break;
+        }
+        STEREO_LOG(
+            "RT_PIPE p=%u stages=%u groups=%u recursion=%u layout=%p base=%p patched_raygen=%u",
+            p,
+            ci->stageCount,
+            ci->groupCount,
+            ci->maxPipelineRayRecursionDepth,
+            (void *)ci->layout,
+            (void *)ci->basePipelineHandle,
+            tmp_raygen_modules[p] != VK_NULL_HANDLE);
+        for (uint32_t s = 0; s < ci->stageCount; s++)
+        {
+            const VkPipelineShaderStageCreateInfo *st =
+            patched_stages[p] ?
+            &patched_stages[p][s] :
+            &ci->pStages[s];
+            STEREO_LOG(
+                "RT_STAGE p=%u stage=%u vkstage=0x%x module=%p entry=%s",
+                p,
+                s,
+                st->stage,
+                (void*)st->module,
+                st->pName ? st->pName : "(null)");
+        }
+        for (uint32_t g = 0; g < ci->groupCount; g++)
+        {
+            const VkRayTracingShaderGroupCreateInfoKHR *grp =
+            &ci->pGroups[g];
+            STEREO_LOG(
+                "RT_GROUP p=%u group=%u type=0x%x general=%u closest=%u anyhit=%u intersection=%u",
+                p,
+                g,
+                grp->type,
+                grp->generalShader,
+                grp->closestHitShader,
+                grp->anyHitShader,
+                grp->intersectionShader);
+        }
+    }
+    VkResult res = sd->real.CreateRayTracingPipelinesKHR(
+        sd->real_device,
+        deferredOperation,
+        pipelineCache,
+        createInfoCount,
+        patched_ci,
+        pAllocator,
+        pPipelines);
+    STEREO_LOG(
+        "RT_PIPE_CREATE_END result=%d first_pipeline=%p",
+        res,
+        (res == VK_SUCCESS && createInfoCount > 0) ?
+        (void*)pPipelines[0] : NULL);
+    for (uint32_t p = 0; p < createInfoCount; p++)
+    {
+        if (tmp_raygen_modules[p] != VK_NULL_HANDLE)
+        {
+            if (sd->tmp_module_count < MAX_TMP_MODULES)
+            {
+                sd->tmp_modules[sd->tmp_module_count++] =
+                tmp_raygen_modules[p];
+            }
+            else
+            {
+                sd->real.DestroyShaderModule(
+                    sd->real_device,
+                    tmp_raygen_modules[p],
+                    NULL);
+            }
+        }
+        free(patched_stages[p]);
+    }
+    free(tmp_raygen_modules);
+    free(patched_stages);
+    free(patched_ci);
     return res;
 }
 
