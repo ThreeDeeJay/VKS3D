@@ -911,51 +911,22 @@ static void do_scan(SpvMod *m, bool p2)
                 m->has_emit_vertex = true;
                 break;
             case SpvOpStore:
-                if (wc >= 3)
+                if (wc >= 3 &&
+                    w[i + 1] == m->pos_var)
                 {
-                    uint32_t target = w[i + 1];
-                    bool is_position_store = target == m->pos_var;
-                    if (!is_position_store && m->pos_is_block &&
-                        target < m->value_capacity)
+                    if (current_function &&
+                        !m->position_function)
                     {
-                        uint32_t target_ptr = PTR(target);
-                        if (target_ptr)
-                        {
-                            for (size_t j = 5; j < i;)
-                            {
-                                uint32_t op2 = w[j] & 0xffff;
-                                uint32_t wc2 = w[j] >> 16;
-                                if (!wc2 || j + wc2 > i)
-                                    break;
-                                if ((op2 == SpvOpAccessChain ||
-                                    op2 == SpvOpInBoundsAccessChain ||
-                                    op2 == SpvOpPtrAccessChain) &&
-                                    wc2 >= 5 &&
-                                    w[j + 2] == target)
-                                {
-                                    uint32_t member_id = w[j + 4];
-                                    uint32_t member_value = member_id;
-                                    (void)spv_resolve_u32_constant(m, member_id, &member_value);
-                                    if (member_value == m->pos_member_idx)
-                                    {
-                                        is_position_store = true;
-                                        break;
-                                    }
-                                }
-                                j += wc2;
-                            }
-                        }
+                        m->position_function = current_function;
                     }
-                    if (is_position_store)
+                    uint32_t source = w[i + 2];
+                    if (source >= m->value_capacity ||
+                        !MAT(source))
                     {
-                        if (current_function && !m->position_function)
-                            m->position_function = current_function;
-                        uint32_t source = w[i + 2];
-                        if (source >= m->value_capacity || !MAT(source))
-                            m->has_direct_position_write = true;
+                        m->has_direct_position_write = true;
                     }
-                    break;
                 }
+                break;
             }
         } else {
             if(op==SpvOpTypePointer && wc>=4 &&
