@@ -10283,7 +10283,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 free_spv_provenance(&vm);
             }
         }
-        STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u has_vs=%u has_fs=%u stageCount=%u",p,is_quad,vs_fullscreen,has_vs,has_fs,ci->stageCount);
+        STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
+        STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
         if (vs_fullscreen &&
             !has_ms &&
             !has_gs &&
