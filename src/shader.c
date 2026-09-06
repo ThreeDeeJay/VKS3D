@@ -10194,11 +10194,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (!ci->pVertexInputState ||
                 ci->pVertexInputState->vertexBindingDescriptionCount == 0));
         STEREO_LOG(
-            "SHADER_TOPOLOGY p=%u rp=%p in_mv=%u quad=%u stages=%u has_vs=%u vs_stage=%u has_tcs=%u has_tes=%u tes_stage=%u has_gs=%u gs_stage=%u has_ms=%u ms_stage=%u has_fs=%u fs_stage=%u",
+            "SHADER_TOPOLOGY p=%u rp=%p in_mv=%u stages=%u has_vs=%u vs_stage=%u has_tcs=%u has_tes=%u tes_stage=%u has_gs=%u gs_stage=%u has_ms=%u ms_stage=%u has_fs=%u fs_stage=%u",
             p,
             (void*)ci->renderPass,
             (unsigned)in_mv_rp,
-            (unsigned)is_quad,
             ci->stageCount,
             (unsigned)has_vs,
             vs_stage,
