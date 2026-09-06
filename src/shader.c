@@ -10240,7 +10240,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             is_quad,
             ci->stageCount);
         if (is_quad &&
-            !has_vs &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
