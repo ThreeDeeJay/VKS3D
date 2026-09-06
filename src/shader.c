@@ -10285,7 +10285,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        STEREO_LOG("ROUTE_QUAD_DETAIL p=%u vs_stage=%u fs_stage=%u vs=%u fs=%u quad=%u vs_fullscreen=%u",p,vs_stage,fs_stage,has_vs,has_fs,is_quad,vs_fullscreen);
+        STEREO_LOG("ROUTE_QUAD_DETAIL p=%u vs_stage=%u fs_stage=%u vs=%u fs=%u quad=%u vs_fullscreen=%u vs_hash=%016llx fs_hash=%016llx",p,vs_stage,fs_stage,has_vs,has_fs,is_quad,vs_fullscreen,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0));
         if ((is_quad || vs_fullscreen) &&
             !has_ms &&
             !has_gs &&
