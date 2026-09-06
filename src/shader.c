@@ -10259,38 +10259,39 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              */
             goto PIPE_DECISION_CONTINUE;
         }
-        /* ── Full-screen quad detection ──────────────────────────────────
-         * Pipelines with no vertex input bindings are full-screen quads used
-         * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from
-         * G-buffer / render-target textures (all upgraded to 2D_ARRAY by
-         * stereo_CreateImage).  We patch the FS to use sampler2DArray +
-         * gl_ViewIndex so each eye reads its own G-buffer layer.
-         * The VS of a quad must NOT be patched — shifting the quad position
-         * would prevent it covering the full screen for one eye.
-         * Geometry pipelines (has vertex input) use Path A/B VS patching. */
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
-        STEREO_LOG(
-            "FS_GATE p=%u quad=%u in_mv=%u has_vs=%u has_tcs=%u has_tes=%u has_gs=%u has_ms=%u has_fs=%u fs_stage=%u stageCount=%u",
-            p,
-            (unsigned)is_quad,
-            (unsigned)in_mv_rp,
-            (unsigned)has_vs,
-            (unsigned)has_tcs,
-            (unsigned)has_tes,
-            (unsigned)has_gs,
-            (unsigned)has_ms,
-            (unsigned)has_fs,
-            fs_stage,
-            ci->stageCount);
-        if (is_quad &&
-            has_fs &&
+        bool vs_fullscreen = false;
+        if (has_vs && vs_stage != ~0u) {
+            StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
+            if (vs_cache) {
+                SpvMod vm = {0};
+                vm.words = vs_cache->spv;
+                vm.count = vs_cache->words;
+                vm.bound = vm.words[3];
+                vm.value_capacity = vm.bound + 64;
+                vm.value_from_matrix = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_matrix_type = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_matrix_ptr = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_proj_value = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
+                if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
+                    spv_scan(&vm);
+                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
+                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                }
+                free_spv_provenance(&vm);
+            }
+        }
+        STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u has_vs=%u has_fs=%u stageCount=%u",p,is_quad,vs_fullscreen,has_vs,has_fs,ci->stageCount);
+        if (vs_fullscreen &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
             !has_tcs &&
             in_mv_rp &&
-            ci->stageCount > 0)
+            ci->stageCount > 0 &&
+            fs_stage != ~0u)
         {
             /* Find FS stage */
             uint32_t fs_s = ~0u;
