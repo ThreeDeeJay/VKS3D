@@ -10128,12 +10128,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                        ci ? (void*)ci->renderPass : NULL);
             continue;
         }
-        bool has_vs=false, has_tcs=false, has_tes=false, has_gs=false, has_ms=false;
-        uint32_t vs_stage=~0u, tes_stage=~0u, gs_stage=~0u, ms_stage=~0u;
+        bool has_vs=false, has_tcs=false, has_tes=false, has_gs=false, has_ms=false, has_fs=false;
+        uint32_t vs_stage=~0u, tes_stage=~0u, gs_stage=~0u, ms_stage=~0u, fs_stage=~0u;
         for (uint32_t s=0;s<ci->stageCount;s++) {
             VkShaderStageFlagBits st=ci->pStages[s].stage;
             if (st==VK_SHADER_STAGE_VERTEX_BIT)
                 { has_vs=true; vs_stage=s; }
+            if (st==VK_SHADER_STAGE_FRAGMENT_BIT)
+                { has_fs=true; fs_stage=s; }
             if (st==VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)
                 has_tcs=true;
             if (st==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
@@ -10240,6 +10242,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             is_quad,
             ci->stageCount);
         if (is_quad &&
+            has_fs &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
@@ -10501,17 +10504,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (void *)ci->pStages[fs_s].module,
                 (void *)tmp,
                 (void*)pipeline_rp);
-            if (!has_vs)
-            {
-                STEREO_LOG(
-                    "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
-                    p,
-                    sc2);
-                continue;
-            }
             STEREO_LOG(
-                "Pipe %u: FS patched; falling through to VS Path B",
-                p);
+                "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
+                p,
+                sc2);
+            continue;
             }
         }
         if (in_mv_rp &&
