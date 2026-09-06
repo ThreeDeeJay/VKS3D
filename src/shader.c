@@ -10284,7 +10284,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u has_vs=%u has_fs=%u stageCount=%u",p,is_quad,vs_fullscreen,has_vs,has_fs,ci->stageCount);
-        if (vs_fullscreen &&
+        if ((is_quad || vs_fullscreen) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
