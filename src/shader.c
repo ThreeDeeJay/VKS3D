@@ -10262,6 +10262,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
         bool vs_fullscreen = false;
+        bool vs_quad_fs = false;
         if (has_vs && vs_stage != ~0u) {
             StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
             if (vs_cache) {
@@ -10277,16 +10278,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
                 if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
                     spv_scan(&vm);
+                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
-                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
                 free_spv_provenance(&vm);
             }
         }
-        STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
+        STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
         STEREO_LOG("ROUTE_QUAD_DETAIL p=%u vs_stage=%u fs_stage=%u vs=%u fs=%u quad=%u vs_fullscreen=%u vs_hash=%016llx fs_hash=%016llx",p,vs_stage,fs_stage,has_vs,has_fs,is_quad,vs_fullscreen,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0));
-        if ((is_quad || vs_fullscreen) &&
+        if ((vs_fullscreen || (is_quad && vs_quad_fs)) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
