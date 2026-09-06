@@ -10430,20 +10430,24 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 "FS_PATCH_BEGIN hash=%016llx pipe=%u",
                 (unsigned long long)spv_hash,
                 p);
-            if (!spirv_patch_stereo_fs(
-                    fs_cache->spv,
-                    fs_cache->words,
-                    &patched,
-                    &pc2))
+            uint32_t *patched = NULL; size_t pc2 = 0;
+            STEREO_LOG(
+                "FS_PATCH_BEGIN hash=%016llx pipe=%u",
+                (unsigned long long)spv_hash,
+                p);
+            bool fs_patched = spirv_patch_stereo_fs(
+                fs_cache->spv,
+                fs_cache->words,
+                &patched,
+                &pc2);
+            if (!fs_patched)
             {
                 STEREO_LOG(
-                    "Pipe %u: FS patch skipped (no 2D samplers — material-only?)",
+                    "Pipe %u: FS patch skipped — falling through to VS",
                     p);
-                continue;
             }
-            STEREO_LOG(
-                "FS_PATCH_DONE hash=%016llx",
-                (unsigned long long)spv_hash);
+            else
+            {
             STEREO_LOG(
                 "spirv_patch_stereo_fs returned=%u patchedWords=%zu",
                 patched ? 1 : 0,
@@ -10504,6 +10508,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 p,
                 sc2);
             continue;
+            }
         }
         if (in_mv_rp &&
             has_ms &&
