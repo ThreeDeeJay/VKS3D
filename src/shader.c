@@ -2337,6 +2337,8 @@ bool spirv_patch_stereo_vertex(
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
     if (!in || in_c < 5 || in[0] != SPIRV_MAGIC)
         return false;
     int projection_mode =
@@ -11084,8 +11086,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
-            STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-                (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
+            uint64_t spv_hash = hash_spv(e->spv, e->words);
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
                     e->spv, e->words,
@@ -11154,7 +11155,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                    p, ci->stageCount, has_vs, has_tes, has_tcs);
         STEREO_LOG(
             "SHADER_PATH_FINAL p=%u path=NONE has_vs=%u has_fs=%u quad=%u fs_result=%u vs_result=%u",
-            p,has_vs,has_fs,is_quad,fs_patched ? 1 : 0,vs_patched ? 1 : 0);
+            p,has_vs,has_fs,is_quad,has_fs ? 1 : 0,has_vs ? 1 : 0);
     }
     PIPE_DECISION_CONTINUE:
     /* ── PATCH 5: RenderPass-based multiview binding ─────────────── */
