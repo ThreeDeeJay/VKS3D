@@ -10501,11 +10501,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (void *)ci->pStages[fs_s].module,
                 (void *)tmp,
                 (void*)pipeline_rp);
+            if (!has_vs)
+            {
+                STEREO_LOG(
+                    "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
+                    p,
+                    sc2);
+                continue;
+            }
             STEREO_LOG(
-                "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
-                p,
-                sc2);
-            continue;
+                "Pipe %u: FS patched; falling through to VS Path B",
+                p);
             }
         }
         if (in_mv_rp &&
