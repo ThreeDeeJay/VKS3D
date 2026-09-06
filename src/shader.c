@@ -2337,8 +2337,6 @@ bool spirv_patch_stereo_vertex(
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
     if (!in || in_c < 5 || in[0] != SPIRV_MAGIC)
         return false;
     int projection_mode =
@@ -2358,6 +2356,9 @@ bool spirv_patch_stereo_vertex(
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_view_value =
         calloc(m.value_capacity, sizeof(uint8_t));
+    uint64_t spv_hash = hash_spv(e->spv, e->words);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
     if (!m.value_from_matrix ||
         !m.is_matrix_type ||
         !m.is_matrix_ptr ||
@@ -11086,7 +11087,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
-            uint64_t spv_hash = hash_spv(e->spv, e->words);
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
                     e->spv, e->words,
