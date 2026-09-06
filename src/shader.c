@@ -11013,7 +11013,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             ci->stageCount > 0 &&
             has_vs &&
             !has_tcs &&
-            vs_stage != ~0u) {
+            vs_stage != ~0u &&
+            !vs_fullscreen) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             STEREO_LOG(
