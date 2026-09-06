@@ -10477,6 +10477,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 fs_cache->words,
                 &patched,
                 &pc2);
+            STEREO_LOG("FS_PATCH_RESULT hash=%016llx result=%u words=%zu",
+                (unsigned long long)spv_hash,fs_patched ? 1 : 0,pc2);
             if (!fs_patched)
             {
                 STEREO_LOG(
@@ -11082,6 +11084,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
+            STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+                (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
                     e->spv, e->words,
@@ -11149,16 +11153,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         STEREO_LOG("Pipe %u: no patchable VS/TES stage (stageCount=%u has_vs=%d has_tes=%d has_tcs=%d) — not patched",
                    p, ci->stageCount, has_vs, has_tes, has_tcs);
         STEREO_LOG(
-            "SHADER_PATH_FINAL p=%u path=NONE in_mv=%u quad=%u has_vs=%u has_tcs=%u has_tes=%u has_gs=%u has_ms=%u has_fs=%u",
-            p,
-            (unsigned)in_mv_rp,
-            (unsigned)is_quad,
-            (unsigned)has_vs,
-            (unsigned)has_tcs,
-            (unsigned)has_tes,
-            (unsigned)has_gs,
-            (unsigned)has_ms,
-            (unsigned)has_fs);
+            "SHADER_PATH_FINAL p=%u path=NONE has_vs=%u has_fs=%u quad=%u fs_result=%u vs_result=%u",
+            p,has_vs,has_fs,is_quad,fs_patched ? 1 : 0,vs_patched ? 1 : 0);
     }
     PIPE_DECISION_CONTINUE:
     /* ── PATCH 5: RenderPass-based multiview binding ─────────────── */
