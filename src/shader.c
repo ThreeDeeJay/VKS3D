@@ -10259,32 +10259,23 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
             if (fs_s == ~0u)
             {
-                STEREO_LOG("Pipe %u: quad but no FS stage", p);
-                continue;
+                STEREO_LOG("Pipe %u: quad but no FS stage — falling through", p);
             }
+            else
+            {
             StereoShaderCache *fs_cache =
                 cache_find(sd, ci->pStages[fs_s].module);
             if (!fs_cache)
             {
                 STEREO_LOG(
-                    "PIPE_MODULE_MISS stage=0x%x module=%p renderPass=%p pipeline=%u",
+                    "PIPE_MODULE_MISS stage=0x%x module=%p renderPass=%p pipeline=%u — falling through",
                     ci->pStages[fs_s].stage,
                     (void *)ci->pStages[fs_s].module,
                     (void *)ci->renderPass,
                     p);
-                for (uint32_t k = 0; k < sd->shader_cache_count; ++k)
-                {
-                    STEREO_LOG(
-                        "CACHE_HANDLE[%u] module=%p hash=%016llx words=%zu",
-                        k,
-                        (void *)sd->shader_cache[k].handle,
-                        (unsigned long long)hash_spv(
-                            sd->shader_cache[k].spv,
-                            sd->shader_cache[k].words),
-                        sd->shader_cache[k].words);
-                }
-                continue;
             }
+            else
+            {
             uint64_t spv_hash =
                 hash_spv(fs_cache->spv, fs_cache->words);
             uint32_t pipeline_has_mv =
@@ -10508,6 +10499,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     p,
                     sc2);
                 continue;
+            }
+            }
             }
             STEREO_LOG(
                 "Pipe %u: FS patched; falling through to VS Path B",
