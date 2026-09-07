@@ -6453,6 +6453,7 @@ bool spirv_patch_stereo_fs(
             }
         }
     }
+    STEREO_LOG("FS_PRESCAN_DONE images=%u float_id=%u", s.n_img, s.float_id);
     if (s.n_img == 0 || !s.float_id)
     {
         STEREO_LOG(
@@ -8888,6 +8889,7 @@ bool spirv_patch_stereo_fs(
         nid,
         samp_nid,
         qsize_nid);
+    STEREO_LOG("FS_PATCH_DONE");
     return true;
 }
 
