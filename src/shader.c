@@ -10542,7 +10542,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
             else
             {
-            STEREO_LOG("FS_PATCH_INSTALL p=%u old_module=%p patched_words=%zu",p,(void *)ci->pStages[fs_s].module,patched_words);
+            STEREO_LOG("FS_PATCH_INSTALL p=%u old_module=%p patched_words=%zu",p,(void *)ci->pStages[fs_s].module,pc2);
             STEREO_LOG(
                 "FS_PATCH_DONE hash=%016llx",
                 (unsigned long long)spv_hash);
