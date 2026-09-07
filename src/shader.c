@@ -2414,6 +2414,9 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
+
     {
         static bool skip_list_init;
         static char skip_list[1024];
@@ -10128,12 +10131,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                        ci ? (void*)ci->renderPass : NULL);
             continue;
         }
-        bool has_vs=false, has_tcs=false, has_tes=false, has_gs=false, has_ms=false;
-        uint32_t vs_stage=~0u, tes_stage=~0u, gs_stage=~0u, ms_stage=~0u;
+        bool has_vs=false, has_tcs=false, has_tes=false, has_gs=false, has_ms=false, has_fs=false;
+        uint32_t vs_stage=~0u, tes_stage=~0u, gs_stage=~0u, ms_stage=~0u, fs_stage=~0u;
         for (uint32_t s=0;s<ci->stageCount;s++) {
             VkShaderStageFlagBits st=ci->pStages[s].stage;
             if (st==VK_SHADER_STAGE_VERTEX_BIT)
                 { has_vs=true; vs_stage=s; }
+            if (st==VK_SHADER_STAGE_FRAGMENT_BIT)
+                { has_fs=true; fs_stage=s; }
             if (st==VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)
                 has_tcs=true;
             if (st==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
@@ -10191,6 +10196,37 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (unsigned)has_ms,
             (!ci->pVertexInputState ||
                 ci->pVertexInputState->vertexBindingDescriptionCount == 0));
+        STEREO_LOG(
+            "SHADER_TOPOLOGY p=%u rp=%p in_mv=%u stages=%u has_vs=%u vs_stage=%u has_tcs=%u has_tes=%u tes_stage=%u has_gs=%u gs_stage=%u has_ms=%u ms_stage=%u has_fs=%u fs_stage=%u",
+            p,
+            (void*)ci->renderPass,
+            (unsigned)in_mv_rp,
+            ci->stageCount,
+            (unsigned)has_vs,
+            vs_stage,
+            (unsigned)has_tcs,
+            (unsigned)has_tes,
+            tes_stage,
+            (unsigned)has_gs,
+            gs_stage,
+            (unsigned)has_ms,
+            ms_stage,
+            (unsigned)has_fs,
+            fs_stage);
+        for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
+        {
+            StereoShaderCache *sc =
+            cache_find(sd, ci->pStages[s2].module);
+            STEREO_LOG(
+                "SHADER_STAGE p=%u index=%u stage=0x%x module=%p cached=%u hash=%016llx words=%zu",
+                p,
+                s2,
+                ci->pStages[s2].stage,
+                (void*)ci->pStages[s2].module,
+                sc != NULL,
+                (unsigned long long)(sc ? hash_spv(sc->spv, sc->words) : 0),
+                sc ? sc->words : 0);
+        }
         for (uint32_t fs_dbg_i = 0; fs_dbg_i < ci->stageCount; fs_dbg_i++) {
             if (ci->pStages[fs_dbg_i].stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
                 StereoShaderCache *fs_dbg =
@@ -10223,29 +10259,42 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              */
             goto PIPE_DECISION_CONTINUE;
         }
-        /* ── Full-screen quad detection ──────────────────────────────────
-         * Pipelines with no vertex input bindings are full-screen quads used
-         * by deferred lighting, SSAO, bloom, TAA, etc.  Their FS samples from
-         * G-buffer / render-target textures (all upgraded to 2D_ARRAY by
-         * stereo_CreateImage).  We patch the FS to use sampler2DArray +
-         * gl_ViewIndex so each eye reads its own G-buffer layer.
-         * The VS of a quad must NOT be patched — shifting the quad position
-         * would prevent it covering the full screen for one eye.
-         * Geometry pipelines (has vertex input) use Path A/B VS patching. */
         bool is_quad = !ci->pVertexInputState ||
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
-        STEREO_LOG(
-            "FS_GATE p=%u quad=%u stageCount=%u",
-            p,
-            is_quad,
-            ci->stageCount);
-        if (is_quad &&
+        bool vs_fullscreen = false;
+        bool vs_quad_fs = false;
+        if (has_vs && vs_stage != ~0u) {
+            StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
+            if (vs_cache) {
+                SpvMod vm = {0};
+                vm.words = vs_cache->spv;
+                vm.count = vs_cache->words;
+                vm.bound = vm.words[3];
+                vm.value_capacity = vm.bound + 64;
+                vm.value_from_matrix = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_matrix_type = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_matrix_ptr = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_proj_value = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
+                if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
+                    spv_scan(&vm);
+                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
+                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
+                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                }
+                free_spv_provenance(&vm);
+            }
+        }
+        STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
+        STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
+        if ((vs_fullscreen || (is_quad && vs_quad_fs)) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
             !has_tcs &&
             in_mv_rp &&
-            ci->stageCount > 0)
+            ci->stageCount > 0 &&
+            fs_stage != ~0u)
         {
             /* Find FS stage */
             uint32_t fs_s = ~0u;
@@ -10430,17 +10479,23 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 "FS_PATCH_BEGIN hash=%016llx pipe=%u",
                 (unsigned long long)spv_hash,
                 p);
-            if (!spirv_patch_stereo_fs(
-                    fs_cache->spv,
-                    fs_cache->words,
-                    &patched,
-                    &pc2))
+            STEREO_LOG("FS_ATTEMPT p=%u hash=%016llx quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)spv_hash,is_quad,vs_fullscreen);
+            bool fs_patched = spirv_patch_stereo_fs(
+                fs_cache->spv,
+                fs_cache->words,
+                &patched,
+                &pc2);
+            STEREO_LOG("FS_ATTEMPT_RESULT p=%u ok=%u",(unsigned)p,fs_patched);
+            STEREO_LOG("FS_PATCH_RESULT hash=%016llx result=%u words=%zu",
+                (unsigned long long)spv_hash,fs_patched ? 1 : 0,pc2);
+            if (!fs_patched)
             {
                 STEREO_LOG(
-                    "Pipe %u: FS patch skipped (no 2D samplers — material-only?)",
+                    "Pipe %u: FS patch skipped — falling through to VS",
                     p);
-                continue;
             }
+            else
+            {
             STEREO_LOG(
                 "FS_PATCH_DONE hash=%016llx",
                 (unsigned long long)spv_hash);
@@ -10503,7 +10558,13 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 "Pipe %u: Path FS — quad sampler2DArray patch (%u stages)",
                 p,
                 sc2);
+            STEREO_LOG(
+                "SHADER_PATH_FINAL p=%u path=FS patched_fs=1 has_vs=%u vs_stage=%u",
+                p,
+                (unsigned)has_vs,
+                vs_stage);
             continue;
+            }
         }
         if (in_mv_rp &&
             has_ms &&
@@ -10693,6 +10754,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
+            STEREO_LOG(
+                "SHADER_PATH_FINAL p=%u path=MS patched_ms=1 ms_stage=%u",
+                p,
+                ms_stage);
             continue;
         }
         if (has_gs && gs_stage != ~0u) {
@@ -10794,6 +10859,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 tmp_mod[p] = tmp;
                 tst[p] = st;
                 infos[p].renderPass = pipeline_rp;
+                STEREO_LOG(
+                    "SHADER_PATH_FINAL p=%u path=GS patched_gs=1 gs_stage=%u",
+                    p,
+                    gs_stage);
                 continue;
             }
         /* ── Path A: patch existing TES ──────────────────────────────── */
@@ -10917,15 +10986,29 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             STEREO_LOG(
                 "Pipe %u: Path A — TES patched (gl_ViewIndex)",
                 p);
+            STEREO_LOG(
+                "SHADER_PATH_FINAL p=%u path=TES patched_tes=1 tes_stage=%u",
+                p,
+                tes_stage);
             continue;
         }
         STEREO_LOG(
-        "PATHB_GATE p=%u in_mv=%d has_vs=%d has_tcs=%d vs_stage=%u",
+        "PATHB_GATE p=%u eligible=%u in_mv=%u quad=%u has_vs=%u vs_stage=%u has_tcs=%u has_tes=%u has_gs=%u has_ms=%u has_fs=%u",
         p,
-        in_mv_rp,
-        has_vs,
-        has_tcs,
-        vs_stage);
+        (unsigned)(in_mv_rp &&
+            ci->stageCount > 0 &&
+            has_vs &&
+            !has_tcs &&
+            vs_stage != ~0u),
+        (unsigned)in_mv_rp,
+        (unsigned)is_quad,
+        (unsigned)has_vs,
+        vs_stage,
+        (unsigned)has_tcs,
+        (unsigned)has_tes,
+        (unsigned)has_gs,
+        (unsigned)has_ms,
+        (unsigned)has_fs);
         /* ── Path B: patch VS with gl_ViewIndex ──────────────────────────
          * Only patch actual multiview render passes.
          * Non-multiview passes include deferred G-buffer, shadow, SSAO,
@@ -10935,7 +11018,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             ci->stageCount > 0 &&
             has_vs &&
             !has_tcs &&
-            vs_stage != ~0u) {
+            vs_stage != ~0u &&
+            !vs_fullscreen) {
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             STEREO_LOG(
@@ -11068,10 +11152,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             STEREO_LOG(
                 "Pipe %u: Path B — VS gl_ViewIndex patch",
                 p);
+            STEREO_LOG(
+                "SHADER_PATH_FINAL p=%u path=VS patched_vs=1 vs_stage=%u",
+                p,
+                vs_stage);
             continue;
         }
         STEREO_LOG("Pipe %u: no patchable VS/TES stage (stageCount=%u has_vs=%d has_tes=%d has_tcs=%d) — not patched",
                    p, ci->stageCount, has_vs, has_tes, has_tcs);
+        STEREO_LOG(
+            "SHADER_PATH_FINAL p=%u path=NONE has_vs=%u has_fs=%u quad=%u fs_result=%u vs_result=%u",
+            p,has_vs,has_fs,is_quad,has_fs ? 1 : 0,has_vs ? 1 : 0);
     }
     PIPE_DECISION_CONTINUE:
     /* ── PATCH 5: RenderPass-based multiview binding ─────────────── */
