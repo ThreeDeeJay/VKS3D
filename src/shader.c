@@ -956,6 +956,8 @@ static void do_scan(SpvMod *m, bool p2)
                     }
                     break;
                 }
+                break;
+            }
         } else {
             if(op==SpvOpTypePointer && wc>=4 &&
                w[i+2]==SpvStorageOutput)
