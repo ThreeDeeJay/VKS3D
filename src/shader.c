@@ -10286,14 +10286,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool vs_quad_fs = false;
         if (has_vs && vs_stage != ~0u) {
             StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
-            StereoShaderCache inline_vs_cache = {0};
-            const VkShaderModuleCreateInfo *vs_inline = stereo_stage_inline_spv(&ci->pStages[vs_stage]);
-            if (!vs_cache && vs_inline && vs_inline->pCode && vs_inline->codeSize >= 20 && (vs_inline->codeSize & 3) == 0) {
-                inline_vs_cache.spv = (uint32_t *)vs_inline->pCode;
-                inline_vs_cache.words = vs_inline->codeSize / 4;
-                vs_cache = &inline_vs_cache;
-                STEREO_LOG("INLINE_SPV stage=VS p=%u codeSize=%zu words=%zu hash=%016llx",p,vs_inline->codeSize,inline_vs_cache.words,(unsigned long long)hash_spv(inline_vs_cache.spv,inline_vs_cache.words));
-            }
             if (vs_cache) {
                 SpvMod vm = {0};
                 vm.words = vs_cache->spv;
