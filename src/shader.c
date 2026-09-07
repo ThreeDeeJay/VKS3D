@@ -10081,10 +10081,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         sd->stereo.flip_eyes);
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
-        //REMOVED StereoPipelineInfo *info =
-        //REMOVED     add_pipeline_info(sd);
         const VkBaseInStructure *base =
             (const VkBaseInStructure*)ci->pNext;
+        uint32_t gpl_flags = 0;
+        const VkBaseInStructure *gx=(const VkBaseInStructure *)ci->pNext;
+        while (gx)
+        {
+            if (gx->sType==VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT)
+                gpl_flags=((const VkGraphicsPipelineLibraryCreateInfoEXT *)gx)->flags;
+            gx=gx->pNext;
+        }
+        STEREO_LOG("PIPE_GPL_ROUTE p=%u gpl=0x%x",p,gpl_flags);
         uint32_t view_mask = 0;
         /* ── Safety: Vulkan 1.3 dynamic rendering pipelines may not use pNext ── */
         while (base)
@@ -11263,17 +11270,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (void*)pCI[p].renderPass,
             (void*)infos[p].renderPass,
             infos[p].stageCount);
-    }
-    for (uint32_t p = 0; p < N; ++p)
-    {
-        const VkBaseInStructure *gx=(const VkBaseInStructure *)pCI[p].pNext;
-        uint32_t gpl_flags=0;
-        while (gx)
-        {
-            if (gx->sType==VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT)
-                gpl_flags=((const VkGraphicsPipelineLibraryCreateInfoEXT *)gx)->flags;
-            gx=gx->pNext;
-        }
     }
     for (uint32_t p = 0; p < N; ++p)
     {
