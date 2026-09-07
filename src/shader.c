@@ -10285,6 +10285,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool vs_fullscreen = false;
         bool vs_quad_fs = false;
         bool vs_background = false;
+        bool vs_pure_quad = false;
         if (has_vs && vs_stage != ~0u) {
             StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
             if (vs_cache) {
@@ -10314,7 +10315,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
                     vs_background = vs_quad_fs && vs_has_user_output;
-                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    vs_pure_quad = vs_quad_fs && !vs_has_user_output;
+                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
                 free_spv_provenance(&vm);
             }
@@ -11077,7 +11079,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             has_vs &&
             !has_tcs &&
             vs_stage != ~0u &&
-            (!vs_fullscreen || vs_background)) 
+            !vs_pure_quad) 
         {
             StereoShaderCache inline_e;
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
