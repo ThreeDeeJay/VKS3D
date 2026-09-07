@@ -10525,7 +10525,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 "FS_PATCH_BEGIN hash=%016llx pipe=%u",
                 (unsigned long long)spv_hash,
                 p);
-            STEREO_LOG("FS_ATTEMPT p=%u hash=%016llx quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)spv_hash,is_quad,vs_fullscreen);
+            STEREO_LOG("FS_ATTEMPT p=%u hash=%016llx quad=%u vs_fullscreen=%u gpl_fs=%u module=%p",(unsigned)p,(unsigned long long)spv_hash,is_quad,vs_fullscreen,is_gpl_fs,(void *)ci->pStages[fs_s].module);
             bool fs_patched = spirv_patch_stereo_fs(
                 fs_cache->spv,
                 fs_cache->words,
