@@ -10006,6 +10006,18 @@ stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
     return VK_SUCCESS;
 }
 
+static const VkShaderModuleCreateInfo *stereo_stage_inline_spv(const VkPipelineShaderStageCreateInfo *stage)
+{
+    const VkBaseInStructure *x=(const VkBaseInStructure *)stage->pNext;
+    while(x)
+    {
+        if(x->sType==VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
+            return (const VkShaderModuleCreateInfo *)x;
+        x=x->pNext;
+    }
+    return NULL;
+}
+
 /* ── vkCreateGraphicsPipelines ───────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
@@ -10313,6 +10325,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
             StereoShaderCache *fs_cache =
                 cache_find(sd, ci->pStages[fs_s].module);
+            StereoShaderCache inline_fs_cache = {0};
+            const VkShaderModuleCreateInfo *fs_inline =
+            stereo_stage_inline_spv(&ci->pStages[fs_s]);
+            if (!fs_cache && fs_inline && fs_inline->pCode &&
+                fs_inline->codeSize >= 4 &&
+                (fs_inline->codeSize & 3) == 0)
+            {
+                inline_fs_cache.spv = (uint32_t *)fs_inline->pCode;
+                inline_fs_cache.words = fs_inline->codeSize / 4;
+                fs_cache = &inline_fs_cache;
+                STEREO_LOG("INLINE_SPV stage=FS codeSize=%zu words=%zu pCode=%p",
+                    fs_inline->codeSize,
+                    inline_fs_cache.words,
+                    (void *)fs_inline->pCode);
+            }
             if (!fs_cache)
             {
                 STEREO_LOG(
@@ -10544,6 +10571,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc2*sizeof(*st));
             st[fs_s].module = tmp;
+            if (stereo_stage_inline_spv(&st[fs_s]))
+            st[fs_s].pNext = NULL;
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
@@ -11140,6 +11169,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
             st[vs_stage].module = tmp;
+            if (stereo_stage_inline_spv(&st[vs_stage]))
+            st[vs_stage].pNext = NULL;
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
