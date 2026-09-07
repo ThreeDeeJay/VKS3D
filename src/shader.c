@@ -11209,16 +11209,16 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         VkPipelineCreateFlags2CreateInfoKHR *flags2_ci=NULL;
         VkGraphicsPipelineLibraryCreateInfoEXT *gpl_ci=NULL;
         VkPipelineLibraryCreateInfoKHR *lib_ci=NULL;
-        for (const VkBaseInStructure *x=(const VkBaseInStructure *)ci->pNext;x;x=x->pNext) {
+        for (const VkBaseInStructure *x=(const VkBaseInStructure *)pCI[p].pNext;x;x=x->pNext) {
             if (x->sType==VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT) gpl_ci=(VkGraphicsPipelineLibraryCreateInfoEXT *)x;
             if (x->sType==VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR) lib_ci=(VkPipelineLibraryCreateInfoKHR *)x;
             if (x->sType==VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR) flags2_ci=(VkPipelineCreateFlags2CreateInfoKHR *)x;
         }
-        STEREO_LOG("PIPE_GPL p=%u flags=0x%llx gpl=0x%x libs=%u flags2=%u",(unsigned)p,(unsigned long long)ci->flags,gpl_ci?(unsigned)gpl_ci->flags:0,lib_ci?(unsigned)lib_ci->libraryCount:0,flags2_ci?1:0);
+        STEREO_LOG("PIPE_GPL p=%u flags=0x%llx gpl=0x%x libs=%u flags2=%u",(unsigned)p,(unsigned long long)pCI[p].flags,gpl_ci?(unsigned)gpl_ci->flags:0,lib_ci?(unsigned)lib_ci->libraryCount:0,flags2_ci?1:0);
         STEREO_LOG(
             "PIPE_FINAL p=%u ci_rp=%p final_rp=%p stages=%u",
             p,
-            (void*)ci->renderPass,
+            (void*)pCI[p].renderPass,
             (void*)infos[p].renderPass,
             infos[p].stageCount);
     }
