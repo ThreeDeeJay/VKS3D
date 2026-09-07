@@ -10286,11 +10286,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
             StereoShaderCache inline_vs_cache = {0};
             const VkShaderModuleCreateInfo *vs_inline = stereo_stage_inline_spv(&ci->pStages[vs_stage]);
-            if (!vs_cache && vs_inline && vs_inline->pCode && vs_inline->codeSize >= 4 && (vs_inline->codeSize & 3) == 0) {
+            if (!vs_cache && vs_inline && vs_inline->pCode && vs_inline->codeSize >= 20 && (vs_inline->codeSize & 3) == 0) {
                 inline_vs_cache.spv = (uint32_t *)vs_inline->pCode;
                 inline_vs_cache.words = vs_inline->codeSize / 4;
                 vs_cache = &inline_vs_cache;
-                STEREO_LOG("INLINE_SPV stage=VS codeSize=%zu words=%zu pCode=%p",vs_inline->codeSize,inline_vs_cache.words,(void *)vs_inline->pCode);
+                STEREO_LOG("INLINE_SPV stage=VS p=%u codeSize=%zu words=%zu hash=%016llx",p,vs_inline->codeSize,inline_vs_cache.words,(unsigned long long)hash_spv(inline_vs_cache.spv,inline_vs_cache.words));
             }
             if (vs_cache) {
                 SpvMod vm = {0};
@@ -10344,16 +10344,18 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             const VkShaderModuleCreateInfo *fs_inline =
             stereo_stage_inline_spv(&ci->pStages[fs_s]);
             if (!fs_cache && fs_inline && fs_inline->pCode &&
-                fs_inline->codeSize >= 4 &&
+                fs_inline->codeSize >= 20 &&
                 (fs_inline->codeSize & 3) == 0)
             {
                 inline_fs_cache.spv = (uint32_t *)fs_inline->pCode;
                 inline_fs_cache.words = fs_inline->codeSize / 4;
                 fs_cache = &inline_fs_cache;
-                STEREO_LOG("INLINE_SPV stage=FS codeSize=%zu words=%zu pCode=%p",
+                STEREO_LOG("INLINE_SPV stage=FS p=%u codeSize=%zu words=%zu hash=%016llx",
+                    p,
                     fs_inline->codeSize,
                     inline_fs_cache.words,
-                    (void *)fs_inline->pCode);
+                    (unsigned long long)hash_spv(inline_fs_cache.spv,
+                    inline_fs_cache.words));
             }
             if (!fs_cache)
             {
