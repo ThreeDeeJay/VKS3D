@@ -11234,6 +11234,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         for (uint32_t s = 0; s < infos[p].stageCount; s++)
         {
             const VkPipelineShaderStageCreateInfo *pst=&infos[p].pStages[s];
+            STEREO_LOG("PIPE_STAGE_RAW p=%u stage=%u ptr=%p sType=%u pNext=%p module=%p flags=0x%x name=%s",
+                p,s,(void *)pst,(unsigned)pst->sType,(void *)pst->pNext,(void *)pst->module,
+                (unsigned)pst->flags,pst->pName ? pst->pName : "(null)");
             const VkBaseInStructure *sx=(const VkBaseInStructure *)pst->pNext;
             uint32_t has_identifier=0;
             while (sx)
