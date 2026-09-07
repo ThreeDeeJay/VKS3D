@@ -10535,6 +10535,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 NULL,0,pc2*4,patched};
             VkShaderModule tmp=VK_NULL_HANDLE;
             VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
+            STEREO_LOG("FS_CREATE_MODULE_RESULT p=%u hash=%016llx result=%d module=%p words=%zu",p,(unsigned long long)spv_hash,mr,(void*)tmp,pc2);
             spirv_patched_free(patched);
             if (mr!=VK_SUCCESS) {
                 STEREO_ERR("Pipe %u: quad FS module err %d",p,mr); continue; }
