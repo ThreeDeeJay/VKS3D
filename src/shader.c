@@ -10542,6 +10542,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
             else
             {
+            STEREO_LOG("FS_PATCH_INSTALL p=%u old_module=%p patched_words=%zu",p,(void *)ci->pStages[fs_s].module,patched_words);
             STEREO_LOG(
                 "FS_PATCH_DONE hash=%016llx",
                 (unsigned long long)spv_hash);
@@ -10593,6 +10594,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (stereo_stage_inline_spv(&st[fs_s]))
             st[fs_s].pNext = NULL;
             infos[p].pStages = st;
+            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp_mod[p]);
             tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
@@ -11645,6 +11647,7 @@ stereo_CreateRayTracingPipelinesKHR(
                 ci->pStages,
                 ci->stageCount * sizeof(*patched_stages[p]));
             patched_stages[p][s].module = tmp_module;
+            patched_stages[p][s].pNext=NULL;
             patched_ci[p].pStages = patched_stages[p];
             tmp_raygen_modules[p] = tmp_module;
             STEREO_LOG(
