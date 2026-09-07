@@ -11231,15 +11231,30 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].subpass);
         for (uint32_t s = 0; s < infos[p].stageCount; s++)
         {
+            const VkPipelineShaderStageCreateInfo *pst=&infos[p].pStages[s];
+            const VkBaseInStructure *sx=(const VkBaseInStructure *)pst->pNext;
+            uint32_t has_identifier=0;
+            while (sx)
+            {
+                if (sx->sType==VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT)
+                {
+                    const VkPipelineShaderStageModuleIdentifierCreateInfoEXT *mi=(const VkPipelineShaderStageModuleIdentifierCreateInfoEXT *)sx;
+                    has_identifier=1;
+                    STEREO_LOG("PIPE_STAGE_IDENTIFIER p=%u stage=%u module=%p identifierSize=%u",
+                        p,s,(void *)pst->module,mi->identifierSize);
+                }
+                sx=sx->pNext;
+            }
             STEREO_LOG(
-                "PIPE_STAGE p=%u stage=%u vkstage=0x%x module=%p patched_tmp=%u",
+                "PIPE_STAGE p=%u stage=%u vkstage=0x%x module=%p patched_tmp=%u identifier=%u",
                 p,
                 s,
-                infos[p].pStages[s].stage,
-                (void *)infos[p].pStages[s].module,
+                pst->stage,
+                (void *)pst->module,
                 (unsigned)(
                     tmp_mod[p] != VK_NULL_HANDLE &&
-                    infos[p].pStages[s].module == tmp_mod[p]));
+                    pst->module == tmp_mod[p]),
+                has_identifier);
         }
     }
     STEREO_LOG(
