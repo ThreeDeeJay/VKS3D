@@ -10329,9 +10329,20 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
                 if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
                     spv_scan(&vm);
+                    bool vs_has_user_output = false;
+                    for (size_t vi = 5; vi < vs_cache->words;)
+                    {
+                        uint32_t iw = vs_cache->spv[vi] >> 16;
+                        uint32_t io = vs_cache->spv[vi] & 0xffff;
+                        if (!iw || vi + iw > vs_cache->words)
+                            break;
+                        if (io == SpvOpDecorate && iw >= 4 && vs_cache->spv[vi + 2] == SpvDecorationLocation)
+                            vs_has_user_output = true;
+                        vi += iw;
+                    }
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
-                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u user_output=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_has_user_output,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
                 free_spv_provenance(&vm);
             }
