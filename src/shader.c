@@ -11072,8 +11072,18 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             has_vs &&
             !has_tcs &&
             vs_stage != ~0u &&
-            !vs_fullscreen) {
+            !vs_fullscreen) 
+        {
+            StereoShaderCache inline_e;
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
+            const VkShaderModuleCreateInfo *inline_smci=stereo_stage_inline_spv(&ci->pStages[vs_stage]);
+            if (!e && inline_smci && inline_smci->pCode && inline_smci->codeSize >= 4)
+            {
+                inline_e.spv=(uint32_t *)inline_smci->pCode;
+                inline_e.words=inline_smci->codeSize/4;
+                e=&inline_e;
+                STEREO_LOG("INLINE_VS PathB p=%u codeSize=%zu words=%zu hash=%016llx",p,inline_smci->codeSize,e->words,(unsigned long long)hash_spv(e->spv,e->words));
+            }
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             STEREO_LOG(
                 "SHADER_MODULE stage=VS hash=%016llx words=%zu module=%p",
