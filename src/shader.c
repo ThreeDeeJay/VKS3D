@@ -10548,6 +10548,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
+            STEREO_LOG("FS_STAGE_INSTALL p=%u fs_s=%u orig=%p patched=%p infos_stages=%u infos_pStages=%p st=%p",(unsigned)p,fs_s,(void*)ci->pStages[fs_s].module,(void*)infos[p].pStages[fs_s].module,infos[p].stageCount,(void*)infos[p].pStages,(void*)st);
             STEREO_LOG(
                 "PATCHED_STAGE PathFS p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
                 p,
