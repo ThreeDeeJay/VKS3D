@@ -1163,6 +1163,7 @@ typedef struct {
     uint32_t projection_mode;
     float lo_dbg;
     float ro_dbg;
+    bool force_far_depth;
     StereoDebugCtx *dbg;
 } BodyCtx;
 
@@ -1231,6 +1232,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     uint32_t nx = (*nid)++;
     uint32_t nx2 = (*nid)++;
     uint32_t np = (*nid)++;
+    uint32_t pw = c->force_far_depth ? (*nid)++ : 0;
+    uint32_t np_far = c->force_far_depth ? (*nid)++ : 0;
     STEREO_LOG(
         "VIEW_PATH "
         "haveView=%u "
@@ -1323,6 +1326,23 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             0u
         };
         sb_push_n(out, w, 5);
+    }
+    if (c->force_far_depth)
+    {
+        uint32_t w[] = {
+            op_(SpvOpCompositeExtract, 5),
+            m->ft,
+            pw,
+            lp,
+            3u
+        };
+        sb_push_n(out, w, 5);
+        STEREO_LOG(
+            "VS_FAR_DEPTH_W "
+            "w=%u "
+            "pos=%u",
+            pw,
+            lp);
     }
     STEREO_LOG(
         "VS_PATCH "
@@ -1468,11 +1488,34 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         };
         sb_push_n(out, w, 6);
     }
+    uint32_t final_pos = np;
+    if (c->force_far_depth)
+    {
+        uint32_t w[] = {
+            op_(SpvOpCompositeInsert, 6),
+            m->v4t,
+            np_far,
+            pw,
+            np,
+            2u
+        };
+        sb_push_n(out, w, 6);
+        final_pos = np_far;
+        STEREO_LOG(
+            "VS_FAR_DEPTH "
+            "pos_in=%u "
+            "pos_out=%u "
+            "w=%u "
+            "z_component=2",
+            np,
+            np_far,
+            pw);
+    }
     STEREO_LOG(
         "PROJ_WRITE pos_var=%u pptr=%u new_pos=%u x=%u view=%u pivot=1/conv",
         m->pos_var,
         pptr,
-        np,
+        final_pos,
         nx2,
         m->view_var);
     STEREO_LOG(
@@ -1489,7 +1532,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         uint32_t w[] = {
             op_(SpvOpStore, 3),
             pptr,
-            np
+            final_pos
         };
         sb_push_n(out, w, 3);
     }
@@ -2334,6 +2377,7 @@ bool spirv_patch_stereo_vertex(
     float ro,
     float conv,
     bool inj_vi,
+    bool force_far_depth,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
@@ -2859,6 +2903,7 @@ bool spirv_patch_stereo_vertex(
         .cr                  = id_cr,
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
+        .force_far_depth     = force_far_depth,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
         .dbg                 = dbg
@@ -10869,6 +10914,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 &patched, &pc2,
                 lo, ro, conv,
                 true,
+                vs_background,
                 dbgG))
             {
                 STEREO_LOG(
@@ -10983,6 +11029,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         &patched, &pc2,
                         lo, ro, conv,
                         true,
+                        vs_background,
                         &dbgA))
                 {
                 STEREO_LOG("TES patch failed");
@@ -11170,6 +11217,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     &patched, &pc2,
                     lo, ro, conv,
                     /*inj_vi=*/true,
+                    vs_background,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
@@ -11930,6 +11978,7 @@ stereo_CreateShadersEXT(
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
                 true,
+                vs_background,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
             ok = spirv_patch_stereo_fs(
