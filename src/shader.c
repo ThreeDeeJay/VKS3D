@@ -10966,7 +10966,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 &patched, &pc2,
                 lo, ro, conv,
                 true,
-                vs_background,
+                false,
                 dbgG))
             {
                 STEREO_LOG(
