@@ -1430,17 +1430,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             c->cc,
             bg_offset);
     }
-    else if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
-    {
-        uint32_t w[] = {
-            op_(SpvOpFAdd, 5),
-            m->ft,
-            nx,
-            px,
-            sel
-        };
-        sb_push_n(out, w, 5);
-    }
     else
     {
         uint32_t pw = (*nid)++;
