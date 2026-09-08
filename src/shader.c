@@ -1407,10 +1407,21 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             px
         };
         sb_push_n(out, w, 4);
+        {
+            uint32_t w2[] = {
+                op_(SpvOpCopyObject, 4),
+                m->ft,
+                nx2,
+                nx
+            };
+            sb_push_n(out, w2, 4);
+        }
         STEREO_LOG(
             "VS_BACKGROUND_FULLSCREEN "
-            "x=%u",
-            nx);
+            "x=%u "
+            "x2=%u",
+            nx,
+            nx2);
     }
     else if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
     {
