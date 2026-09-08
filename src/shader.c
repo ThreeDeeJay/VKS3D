@@ -1400,12 +1400,13 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cc);
     if (c->force_far_depth)
     {
+        uint32_t bg_offset = (*nid)++;
         uint32_t w[] = {
-            op_(SpvOpFAdd, 5),
+            op_(SpvOpFMul, 5),
             m->ft,
-            nx,
-            px,
-            px
+            bg_offset,
+            sel,
+            c->cc
         };
         sb_push_n(out, w, 5);
         {
@@ -1413,21 +1414,21 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
                 op_(SpvOpFSub, 5),
                 m->ft,
                 nx2,
-                nx,
-                sel
+                px,
+                bg_offset
             };
             sb_push_n(out, w2, 5);
         }
         STEREO_LOG(
-            "VS_BACKGROUND_FULLSCREEN "
+            "VS_BACKGROUND "
             "x=%u "
             "x2=%u "
-            "scale=2x "
-            "stereo_offset=%u "
-            "stereo_reversed=1",
-            nx,
+            "convergence=%u "
+            "stereo_offset=%u",
+            px,
             nx2,
-            sel);
+            c->cc,
+            bg_offset);
     }
     else if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
     {
