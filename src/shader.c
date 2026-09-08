@@ -1410,7 +1410,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out, w, 5);
         {
             uint32_t w2[] = {
-                op_(SpvOpFAdd, 5),
+                op_(SpvOpFSub, 5),
                 m->ft,
                 nx2,
                 nx,
@@ -1423,7 +1423,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             "x=%u "
             "x2=%u "
             "scale=2x "
-            "stereo_offset=%u",
+            "stereo_offset=%u "
+            "stereo_reversed=1",
             nx,
             nx2,
             sel);
