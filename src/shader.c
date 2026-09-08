@@ -1407,11 +1407,11 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         uint32_t bg_scale = (*nid)++;
         uint32_t bg_x = (*nid)++;
         uint32_t w[] = {
-            op_(SpvOpFAdd, 5),
+            op_(SpvOpFMul, 5),
             m->ft,
-            nx,
-            px,
-            px
+            bg_offset,
+            sel,
+            c->cc
         };
         sb_push_n(out, w, 5);
         {
@@ -1439,8 +1439,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
                 op_(SpvOpFSub, 5),
                 m->ft,
                 nx2,
-                nx,
-                sel
+                bg_x,
+                bg_offset
             };
             sb_push_n(out, w4, 5);
         }
