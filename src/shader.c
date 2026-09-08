@@ -1401,6 +1401,9 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     if (c->force_far_depth)
     {
         uint32_t bg_offset = (*nid)++;
+        uint32_t bg_abs = (*nid)++;
+        uint32_t bg_scale = (*nid)++;
+        uint32_t bg_x = (*nid)++;
         uint32_t w[] = {
             op_(SpvOpFMul, 5),
             m->ft,
@@ -1411,24 +1414,57 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out, w, 5);
         {
             uint32_t w2[] = {
+                op_(SpvOpExtInst, 10),
+                m->ft,
+                bg_abs,
+                %1,
+                4u,
+                bg_offset
+            };
+            sb_push_n(out, w2, 6);
+        }
+        {
+            uint32_t w3[] = {
+                op_(SpvOpFAdd, 5),
+                m->ft,
+                bg_scale,
+                bg_abs,
+                c->cl
+            };
+            sb_push_n(out, w3, 5);
+        }
+        {
+            uint32_t w4[] = {
+                op_(SpvOpFMul, 5),
+                m->ft,
+                bg_x,
+                px,
+                bg_scale
+            };
+            sb_push_n(out, w4, 5);
+        }
+        {
+            uint32_t w5[] = {
                 op_(SpvOpFSub, 5),
                 m->ft,
                 nx2,
-                px,
+                bg_x,
                 bg_offset
             };
-            sb_push_n(out, w2, 5);
+            sb_push_n(out, w5, 5);
         }
         STEREO_LOG(
             "VS_BACKGROUND "
             "x=%u "
             "x2=%u "
             "convergence=%u "
-            "stereo_offset=%u",
-            px,
+            "stereo_offset=%u "
+            "quad_scale=%u",
+            bg_x,
             nx2,
             c->cc,
-            bg_offset);
+            bg_offset,
+            bg_scale);
     }
     else
     {
