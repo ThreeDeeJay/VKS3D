@@ -1633,7 +1633,40 @@ static bool emit_mesh_position_adjust(
         };
         sb_push_n(out, w, 5);
     }
-    if (projection_mode == STEREO_PROJECTION_PARALLEL)
+    //Off-axis projection
+    uint32_t pw = (*nid)++;
+    uint32_t convmag = (*nid)++;
+    uint32_t tmp = (*nid)++;
+    {
+        uint32_t w[] = {
+            op_(SpvOpCompositeExtract, 5),
+            m->ft,
+            pw,
+            pos,
+            3u
+        };
+        sb_push_n(out, w, 5);
+    }
+    {
+        uint32_t w[] = {
+            op_(SpvOpFMul, 5),
+            m->ft,
+            convmag,
+            pw,
+            cc
+        };
+        sb_push_n(out, w, 5);
+    }
+    {
+        uint32_t w[] = {
+            op_(SpvOpFMul, 5),
+            m->ft,
+            tmp,
+            sel,
+            convmag
+        };
+        sb_push_n(out, w, 5);
+    }
     {
         uint32_t w[] = {
             op_(SpvOpFAdd, 5),
@@ -1644,61 +1677,15 @@ static bool emit_mesh_position_adjust(
         };
         sb_push_n(out, w, 5);
     }
-    else
     {
-        uint32_t pw = (*nid)++;
-        uint32_t convmag = (*nid)++;
-        uint32_t tmp = (*nid)++;
-        {
-            uint32_t w[] = {
-                op_(SpvOpCompositeExtract, 5),
-                m->ft,
-                pw,
-                pos,
-                3u
-            };
-            sb_push_n(out, w, 5);
-        }
-        {
-            uint32_t w[] = {
-                op_(SpvOpFMul, 5),
-                m->ft,
-                convmag,
-                pw,
-                cc
-            };
-            sb_push_n(out, w, 5);
-        }
-        {
-            uint32_t w[] = {
-                op_(SpvOpFMul, 5),
-                m->ft,
-                tmp,
-                sel,
-                convmag
-            };
-            sb_push_n(out, w, 5);
-        }
-        {
-            uint32_t w[] = {
-                op_(SpvOpFAdd, 5),
-                m->ft,
-                nx,
-                px,
-                sel
-            };
-            sb_push_n(out, w, 5);
-        }
-        {
-            uint32_t w[] = {
-                op_(SpvOpFSub, 5),
-                m->ft,
-                nx2,
-                nx,
-                tmp
-            };
-            sb_push_n(out, w, 5);
-        }
+        uint32_t w[] = {
+            op_(SpvOpFSub, 5),
+            m->ft,
+            nx2,
+            nx,
+            tmp
+        };
+        sb_push_n(out, w, 5);
     }
     {
         uint32_t w[] = {
@@ -9712,36 +9699,23 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, y, 5);
             sb_push_n(&ob, z, 5);
             sb_push_n(&ob, w, 5);
-            if (projection_mode == STEREO_PROJECTION_OFF_AXIS)
-            {
-                uint32_t x_conv[] = {
-                    (5u << 16) | SpvOpFMul,
-                    float_type,
-                    ray_conv,
-                    selected_offset,
-                    conv_const
-                };
-                uint32_t x_add[] = {
-                    (5u << 16) | SpvOpFAdd,
-                    float_type,
-                    ray_new_x,
-                    ray_x,
-                    ray_conv
-                };
-                sb_push_n(&ob, x_conv, 5);
-                sb_push_n(&ob, x_add, 5);
-            }
-            else
-            {
-                uint32_t x_copy[] = {
-                    (5u << 16) | SpvOpFAdd,
-                    float_type,
-                    ray_new_x,
-                    ray_x,
-                    float_zero
-                };
-                sb_push_n(&ob, x_copy, 5);
-            }
+            //Off-axis projection
+            uint32_t x_conv[] = {
+                (5u << 16) | SpvOpFMul,
+                float_type,
+                ray_conv,
+                selected_offset,
+                conv_const
+            };
+            uint32_t x_add[] = {
+                (5u << 16) | SpvOpFAdd,
+                float_type,
+                ray_new_x,
+                ray_x,
+                ray_conv
+            };
+            sb_push_n(&ob, x_conv, 5);
+            sb_push_n(&ob, x_add, 5);
             uint32_t construct[] = {
                 (7u << 16) | SpvOpCompositeConstruct,
                 v4float_type,
