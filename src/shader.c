@@ -1157,10 +1157,12 @@ typedef struct {
     uint32_t bt;
     uint32_t cz;
     uint32_t cf0;
+    uint32_t cf1;
     uint32_t cl;
     uint32_t cr;
     uint32_t cc;
     uint32_t projection_mode;
+    uint32_t bg_expand;
     float lo_dbg;
     float ro_dbg;
     bool force_far_depth;
@@ -1401,6 +1403,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     if (c->force_far_depth)
     {
         uint32_t bg_offset = (*nid)++;
+        uint32_t bg_scale = (*nid)++;
+        uint32_t bg_x = (*nid)++;
         uint32_t w[] = {
             op_(SpvOpFMul, 5),
             m->ft,
@@ -1411,24 +1415,48 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out, w, 5);
         {
             uint32_t w2[] = {
+                op_(SpvOpFAdd, 5),
+                m->ft,
+                bg_scale,
+                c->bg_expand,
+                c->cf1
+            };
+            sb_push_n(out, w2, 5);
+        }
+        {
+            uint32_t w3[] = {
+                op_(SpvOpFMul, 5),
+                m->ft,
+                bg_x,
+                px,
+                bg_scale
+            };
+            sb_push_n(out, w3, 5);
+        }
+        {
+            uint32_t w4[] = {
                 op_(SpvOpFSub, 5),
                 m->ft,
                 nx2,
-                px,
+                bg_x,
                 bg_offset
             };
-            sb_push_n(out, w2, 5);
+            sb_push_n(out, w4, 5);
         }
         STEREO_LOG(
             "VS_BACKGROUND "
             "x=%u "
             "x2=%u "
             "convergence=%u "
-            "stereo_offset=%u",
+            "stereo_offset=%u "
+            "expand=%u "
+            "scale=%u",
             px,
             nx2,
             c->cc,
-            bg_offset);
+            bg_offset,
+            c->bg_expand,
+            bg_scale);
     }
     else
     {
@@ -2707,9 +2735,11 @@ bool spirv_patch_stereo_vertex(
     }
     uint32_t id_cz = nid++;
     uint32_t id_cf0 = nid++;
+    uint32_t id_cf1 = nid++;
     uint32_t id_cl = nid++;
     uint32_t id_cr = nid++;
     uint32_t id_cc = nid++;
+    uint32_t id_bg_expand = nid++;
     STEREO_LOG(
         "VS_NEW_IDS "
         "bound=%u "
@@ -2832,6 +2862,18 @@ bool spirv_patch_stereo_vertex(
         {
             op_(SpvOpConstant, 4),
             m.ft,
+            id_cf1,
+            0
+        };
+        float one = 1.0f;
+        memcpy(&w[3], &one, sizeof(one));
+        sb_push_n(&te, w, 4);
+    }
+    {
+        uint32_t w[4] =
+        {
+            op_(SpvOpConstant, 4),
+            m.ft,
             id_cl,
             0
         };
@@ -2858,6 +2900,18 @@ bool spirv_patch_stereo_vertex(
             0
         };
         memcpy(&w[3], &conv, sizeof(conv));
+        sb_push_n(&te, w, 4);
+    }
+    {
+        uint32_t w[4] =
+        {
+            op_(SpvOpConstant, 4),
+            m.ft,
+            id_bg_expand,
+            0
+        };
+        float bg_expand = fmaxf(fabsf(lo * conv), fabsf(ro * conv));
+        memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
     }
     STEREO_LOG(
@@ -2907,11 +2961,13 @@ bool spirv_patch_stereo_vertex(
         .bt                  = bt,
         .cz                  = id_cz,
         .cf0                 = id_cf0,
+        .cf1                 = id_cf1,
         .cl                  = id_cl,
         .cr                  = id_cr,
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
         .force_far_depth     = force_far_depth,
+        .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
         .dbg                 = dbg
