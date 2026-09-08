@@ -1400,39 +1400,30 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cc);
     if (c->force_far_depth)
     {
-        uint32_t bg_scale = (*nid)++;
         uint32_t w[] = {
-            op_(SpvOpConstant, 4),
-            m->ft,
-            bg_scale,
-            0x40000000
-        };
-        sb_push_n(out, w, 4);
-        uint32_t w2[] = {
-            op_(SpvOpFMul, 5),
+            op_(SpvOpFAdd, 5),
             m->ft,
             nx,
             px,
-            bg_scale
+            px
         };
-        sb_push_n(out, w2, 5);
+        sb_push_n(out, w, 5);
         {
-            uint32_t w3[] = {
+            uint32_t w2[] = {
                 op_(SpvOpCopyObject, 4),
                 m->ft,
                 nx2,
                 nx
             };
-            sb_push_n(out, w3, 4);
+            sb_push_n(out, w2, 4);
         }
         STEREO_LOG(
             "VS_BACKGROUND_FULLSCREEN "
             "x=%u "
             "x2=%u "
-            "scale=%u",
+            "scale=2x",
             nx,
-            nx2,
-            bg_scale);
+            nx2);
     }
     else if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
     {
