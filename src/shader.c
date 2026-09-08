@@ -1459,7 +1459,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         }
         {
             uint32_t w3[] = {
-                op_(SpvOpFAdd, 5),
+                op_(SpvOpFSub, 5),
                 m->ft,
                 nx2,
                 px,
