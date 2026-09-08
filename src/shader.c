@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 #include "stereo_icd.h"
 #include "tes_inject.h"
 #include "spirv/unified1/spirv.h"
