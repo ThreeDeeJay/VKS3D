@@ -11197,6 +11197,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 e->words,
                 (void*)ci->pStages[vs_stage].module);
             STEREO_LOG(
+                "VS_PIPE_STATE hash=%016llx topology=%u cull=%u front=%u depth_test=%u depth_write=%u depth_compare=%u",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                ci->pInputAssemblyState ? ci->pInputAssemblyState->topology : UINT32_MAX,
+                ci->pRasterizationState ? ci->pRasterizationState->cullMode : UINT32_MAX,
+                ci->pRasterizationState ? ci->pRasterizationState->frontFace : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthTestEnable : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthWriteEnable : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthCompareOp : UINT32_MAX);
+            STEREO_LOG(
                 "VS_CONTEXT hash=%016llx rp=%p mv=%d color=%p depth=%d",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 (void*)ci->renderPass,
