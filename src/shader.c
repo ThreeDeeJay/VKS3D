@@ -2786,8 +2786,10 @@ bool spirv_patch_stereo_vertex(
         "new_it=%u "
         "inj_view=%u "
         "new_bool=%u "
+        "bg_expand=%u "
         "cz=%u "
         "cf0=%u "
+        "cf1=%u "
         "cl=%u "
         "cr=%u "
         "cc=%u",
@@ -2798,8 +2800,10 @@ bool spirv_patch_stereo_vertex(
         id_new_it,
         id_inj_view,
         id_new_bt,
+        id_bg_expand,
         id_cz,
         id_cf0,
+        id_cf1,
         id_cl,
         id_cr,
         id_cc);
