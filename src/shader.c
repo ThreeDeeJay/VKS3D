@@ -1186,6 +1186,7 @@ typedef struct {
     float lo_dbg;
     float ro_dbg;
     bool force_far_depth;
+    bool sky_extension;
     StereoDebugCtx *dbg;
 } BodyCtx;
 
@@ -1457,8 +1458,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     if (c->force_far_depth)
     {
         uint32_t bg_offset = (*nid)++;
-        uint32_t bg_scale = (*nid)++;
-        uint32_t bg_x = (*nid)++;
         uint32_t w[] = {
             op_(SpvOpFMul, 5),
             m->ft,
@@ -1467,79 +1466,51 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             c->cc
         };
         sb_push_n(out, w, 5);
+        if (c->sky_extension)
+        {
+            uint32_t bg_scale = (*nid)++;
+            uint32_t bg_x = (*nid)++;
+            {
+                uint32_t w2[] = {
+                    op_(SpvOpFAdd, 5),
+                    m->ft,
+                    bg_scale,
+                    c->bg_expand,
+                    c->cf1
+                };
+                sb_push_n(out, w2, 5);
+            }
+            {
+                uint32_t w3[] = {
+                    op_(SpvOpFMul, 5),
+                    m->ft,
+                    bg_x,
+                    px,
+                    bg_scale
+                };
+                sb_push_n(out, w3, 5);
+            }
+            {
+                uint32_t w4[] = {
+                    op_(SpvOpFSub, 5),
+                    m->ft,
+                    nx2,
+                    bg_x,
+                    bg_offset
+                };
+                sb_push_n(out, w4, 5);
+            }
+        }
+        else
         {
             uint32_t w2[] = {
-                op_(SpvOpFAdd, 5),
-                m->ft,
-                bg_scale,
-                c->bg_expand,
-                c->cf1
-            };
-            sb_push_n(out, w2, 5);
-        }
-        {
-            uint32_t w3[] = {
-                op_(SpvOpFMul, 5),
-                m->ft,
-                bg_x,
-                px,
-                bg_scale
-            };
-            sb_push_n(out, w3, 5);
-        }
-        {
-            uint32_t w4[] = {
                 op_(SpvOpFSub, 5),
                 m->ft,
                 nx2,
-                bg_x,
+                px,
                 bg_offset
             };
-            sb_push_n(out, w4, 5);
-        }
-        STEREO_LOG(
-            "VS_BACKGROUND "
-            "x=%u "
-            "x2=%u "
-            "convergence=%u "
-            "stereo_offset=%u "
-            "expand=%u "
-            "scale=%u "
-            "w=%u",
-            px,
-            nx2,
-            c->cc,
-            bg_offset,
-            c->bg_expand,
-            bg_scale,
-            pw);
-    }
-    else
-    {
-        uint32_t pw = (*nid)++;
-        uint32_t convmag = (*nid)++;
-        uint32_t tmp = (*nid)++;
-        STEREO_LOG(
-            "PROJ_PIVOT_IDS "
-            "pw=%u "
-            "convmag=%u "
-            "tmp=%u "
-            "px=%u "
-            "nx=%u",
-            pw,
-            convmag,
-            tmp,
-            px,
-            nx);
-        {
-            uint32_t w[] = {
-                op_(SpvOpCompositeExtract, 5),
-                m->ft,
-                pw,
-                lp,
-                3u
-            };
-            sb_push_n(out, w, 5);
+            sb_push_n(out, w2, 5);
         }
         {
             uint32_t w[] = {
@@ -2811,7 +2782,7 @@ bool spirv_patch_stereo_vertex(
     uint32_t id_cl = nid++;
     uint32_t id_cr = nid++;
     uint32_t id_cc = nid++;
-    uint32_t id_bg_expand = nid++;
+    uint32_t id_bg_expand = cfg && cfg->sky_extension ? nid++ : 0;
     STEREO_LOG(
         "VS_NEW_IDS "
         "bound=%u "
@@ -2978,6 +2949,7 @@ bool spirv_patch_stereo_vertex(
         memcpy(&w[3], &conv, sizeof(conv));
         sb_push_n(&te, w, 4);
     }
+    if (id_bg_expand)
     {
         uint32_t w[4] =
         {
@@ -3042,7 +3014,8 @@ bool spirv_patch_stereo_vertex(
         .cr                  = id_cr,
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
-        .force_far_depth     = force_far_depth,
+        .force_far_depth     = vs_background && cfg && cfg->sky_max_depth,
+        .sky_extension       = vs_background && cfg && cfg->sky_extension,
         .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,

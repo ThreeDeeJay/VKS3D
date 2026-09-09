@@ -211,6 +211,8 @@ typedef struct StereoConfig {
     bool                    multiview;
     bool                    shader_objects_mono;
     bool                    mono_ui;
+    bool                    sky_max_depth;
+    bool                    sky_extension;
     StereoProjectionMode    projection;
     float                   step_separation;
     float                   step_convergence;
