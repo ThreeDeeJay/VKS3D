@@ -149,6 +149,7 @@ typedef struct
     bool has_matrix_ops;
     bool has_direct_position_write;
     bool has_v2_position_input;
+    bool has_position_input;
     /* Matrix provenance tracking */
     uint32_t value_capacity;
     uint8_t *value_from_matrix;
@@ -847,6 +848,11 @@ static void do_scan(SpvMod *m, bool p2)
                         "VS_INPUT_VARIABLE var=%u ptr=%u",
                         w[i + 2],
                         w[i + 1]);
+                    if ((m->ptr_in_v2 && w[i + 1] == m->ptr_in_v2) ||
+                        (m->ptr_in_v4 && w[i + 1] == m->ptr_in_v4))
+                    {
+                        m->has_position_input = true;
+                    }
                     if (m->ptr_in_v2 &&
                         w[i + 1] == m->ptr_in_v2)
                     {
@@ -2596,7 +2602,7 @@ bool spirv_patch_stereo_vertex(
         dbg &&
         m.pos_is_block &&
         !m.has_matrix_ops &&
-        m.has_v2_position_input &&
+        m.has_position_input &&
         !m.has_emit_vertex &&
         m.exec_model == SpvExecVertex;
         if (ui_candidate)
