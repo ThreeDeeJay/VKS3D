@@ -2477,6 +2477,7 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     bool force_far_depth,
+    bool is_quad,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
@@ -2606,6 +2607,7 @@ bool spirv_patch_stereo_vertex(
     if (cfg && cfg->mono_ui) {
         bool ui_candidate =
         dbg &&
+        is_quad &&
         m.pos_var != 0 &&
         !m.has_matrix_ops &&
         m.has_position_input &&
@@ -11047,6 +11049,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 lo, ro, conv,
                 true,
                 false,
+                false,
                 dbgG))
             {
                 STEREO_LOG(
@@ -11161,6 +11164,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         &patched, &pc2,
                         lo, ro, conv,
                         true,
+                        false,
                         false,
                         &dbgA))
                 {
@@ -11359,6 +11363,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo, ro, conv,
                     /*inj_vi=*/true,
                     vs_background,
+                    is_quad,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
@@ -12119,6 +12124,7 @@ stereo_CreateShadersEXT(
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
                 true,
+                false,
                 false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
