@@ -1463,8 +1463,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
                 op_(SpvOpFMul, 5),
                 m->ft,
                 bg_x,
-                px,
-                bg_scale
+                bg_offset,
+                pw
             };
             sb_push_n(out, w3, 5);
         }
