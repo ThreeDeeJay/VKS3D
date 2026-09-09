@@ -217,10 +217,6 @@ void stereo_config_init(StereoConfig *cfg)
     /* Flatten detected screen-space UI by skipping stereo patching. */
     cfg->mono_ui = cfg_bool("mono_ui", true);
 
-    cfg->sky_max_depth = cfg_bool("sky_max_depth", false);
-
-    cfg->sky_extension = cfg_bool("sky_extension", false);
-
     cfg->projection = cfg_bool("projection", 1);
 
     /* ── hotkey steps ── */
