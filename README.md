@@ -1,5 +1,9 @@
 # VKS3D — Vulkan Stereoscopic 3D ICD
 
+## ℹ️ Skip the technical ReadMe below and go straight to the simplified description/download/instructions here: https://github.com/ThreeDeeJay/VKS3D/releases/tag/stable
+
+----------
+
 A **Vulkan 1.1 Installable Client Driver (ICD)** that transparently injects
 Side-By-Side (SBS) stereoscopic 3D rendering into **any Vulkan application**
 with no source changes required.
