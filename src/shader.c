@@ -2557,8 +2557,8 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.has_v2_position_input, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
 
     {
         static bool skip_list_init;
@@ -2606,11 +2606,12 @@ bool spirv_patch_stereo_vertex(
     if (cfg && cfg->mono_ui) {
         bool ui_candidate =
         dbg &&
-        m.pos_is_block &&
+        m.pos_var != 0 &&
         !m.has_matrix_ops &&
         m.has_position_input &&
         !m.has_emit_vertex &&
-        m.exec_model == SpvExecVertex;
+        m.exec_model == SpvExecVertex &&
+        (m.has_direct_position_write || m.pos_is_block);
         if (ui_candidate)
         {
             STEREO_LOG(
