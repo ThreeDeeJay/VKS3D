@@ -1459,14 +1459,14 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             sb_push_n(out, w2, 5);
         }
         {
-            uint32_t w3[] = {
+            uint32_t w2[] = {
                 op_(SpvOpFMul, 5),
                 m->ft,
                 bg_x,
                 bg_offset,
                 pw
             };
-            sb_push_n(out, w3, 5);
+            sb_push_n(out, w2, 5);
         }
         {
             uint32_t w4[] = {
