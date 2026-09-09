@@ -1621,6 +1621,20 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             final_pos
         };
         sb_push_n(out, w, 3);
+        STEREO_LOG(
+            "VS_FINAL_STORE "
+            "pptr=%u "
+            "value=%u "
+            "far=%u "
+            "np=%u "
+            "np_far=%u "
+            "pw=%u",
+            pptr,
+            final_pos,
+            c->force_far_depth,
+            np,
+            np_far,
+            pw);
     }
 }
 
