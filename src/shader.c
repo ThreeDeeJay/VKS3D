@@ -2914,18 +2914,6 @@ bool spirv_patch_stereo_vertex(
             id_cl,
             0
         };
-        float one = 1.0f;
-        memcpy(&w[3], &one, sizeof(one));
-        sb_push_n(&te, w, 4);
-    }
-    {
-        uint32_t w[4] =
-        {
-            op_(SpvOpConstant, 4),
-            m.ft,
-            id_cl,
-            0
-        };
         memcpy(&w[3], &lo, sizeof(lo));
         sb_push_n(&te, w, 4);
     }
@@ -2938,17 +2926,6 @@ bool spirv_patch_stereo_vertex(
             0
         };
         memcpy(&w[3], &ro, sizeof(ro));
-        sb_push_n(&te, w, 4);
-    }
-    {
-        uint32_t w[4] =
-        {
-            op_(SpvOpConstant, 4),
-            m.ft,
-            id_cc,
-            0
-        };
-        memcpy(&w[3], &conv, sizeof(conv));
         sb_push_n(&te, w, 4);
     }
     {
