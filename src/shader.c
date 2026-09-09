@@ -2606,7 +2606,6 @@ bool spirv_patch_stereo_vertex(
     if (cfg && cfg->mono_ui) {
         bool ui_candidate =
         dbg &&
-        is_quad &&
         m.pos_var != 0 &&
         !m.has_matrix_ops &&
         m.has_position_input &&
