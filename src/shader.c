@@ -2558,8 +2558,8 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.has_v2_position_input, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u is_quad=%u",
+    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.has_v2_position_input, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block, is_quad);
 
     {
         static bool skip_list_init;
@@ -10457,7 +10457,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              */
             goto PIPE_DECISION_CONTINUE;
         }
-        bool is_quad = !ci->pVertexInputState ||
+        bool is_quad = ci->pVertexInputState &&
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
         bool vs_fullscreen = false;
         bool vs_quad_fs = false;
