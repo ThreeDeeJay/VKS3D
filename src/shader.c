@@ -1274,6 +1274,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     uint32_t np = (*nid)++;
     uint32_t pw = c->force_far_depth ? (*nid)++ : 0;
     uint32_t np_far = c->force_far_depth ? (*nid)++ : 0;
+    uint32_t convmag = c->force_far_depth ? (*nid)++ : 0;
+    uint32_t tmp = c->force_far_depth ? (*nid)++ : 0;
     STEREO_LOG(
         "VIEW_PATH "
         "haveView=%u "
@@ -3031,8 +3033,8 @@ bool spirv_patch_stereo_vertex(
         .cr                  = id_cr,
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
-        .force_far_depth     = vs_background && cfg && cfg->sky_max_depth,
-        .sky_extension       = vs_background && cfg && cfg->sky_extension,
+        .force_far_depth     = force_far_depth && cfg && cfg->sky_max_depth,
+        .sky_extension       = force_far_depth && cfg && cfg->sky_extension,
         .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
