@@ -151,6 +151,7 @@ typedef struct
     bool has_direct_position_write;
     bool has_v2_position_input;
     bool has_position_input;
+    bool has_position_zw_use;
     /* Matrix provenance tracking */
     uint32_t value_capacity;
     uint8_t *value_from_matrix;
@@ -421,6 +422,12 @@ static void do_scan(SpvMod *m, bool p2)
                         SETPROJ(w[i + 2], PROJ(w[i + 3]));
                     if (VIEW(w[i + 3]))
                         SETVIEW(w[i + 2], VIEW(w[i + 3]));
+                    if (m->pos_var &&
+                        w[i + 3] == m->pos_var &&
+                        (w[i + 5] >= 2 || w[i + 6] >= 2 || w[i + 7] >= 2 || w[i + 8] >= 2))
+                    {
+                        m->has_position_zw_use = true;
+                    }
                 }
                 break;
             case SpvOpCompositeConstruct:
@@ -2557,8 +2564,8 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.has_v2_position_input, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u v2_pos=%u pos_zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.has_v2_position_input, m.has_position_zw_use, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
 
     {
         static bool skip_list_init;
@@ -2609,6 +2616,7 @@ bool spirv_patch_stereo_vertex(
         m.pos_var != 0 &&
         !m.has_matrix_ops &&
         m.has_position_input &&
+        !m.has_position_zw_use &&
         !m.has_emit_vertex &&
         m.exec_model == SpvExecVertex &&
         (m.has_direct_position_write || m.pos_is_block);
