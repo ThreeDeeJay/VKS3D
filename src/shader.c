@@ -126,6 +126,7 @@ typedef struct
     uint32_t bt_type;
     uint32_t bt;
     uint32_t ptr_in_v2;
+    uint32_t ptr_in_v4;
     uint32_t ptr_out_v4;
     uint32_t ptr_in_int;
     /* Entry point */
@@ -787,6 +788,11 @@ static void do_scan(SpvMod *m, bool p2)
                         w[i + 3] == m->v2t)
                     {
                         m->ptr_in_v2 = w[i + 1];
+                    }
+                    if (m->v4t &&
+                        w[i + 3] == m->v4t)
+                    {
+                        m->ptr_in_v4 = w[i + 1];
                     }
                     if (m->it &&
                         w[i + 3] == m->it)
