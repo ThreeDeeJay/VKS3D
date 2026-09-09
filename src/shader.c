@@ -1503,15 +1503,33 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         }
         else
         {
-            uint32_t w2[] = {
-                op_(SpvOpFSub, 5),
-                m->ft,
-                nx2,
-                px,
-                bg_offset
-            };
-            sb_push_n(out, w2, 5);
+            uint32_t pw_bg = (*nid)++;
+            {
+                uint32_t w2[] = {
+                    op_(SpvOpFMul, 5),
+                    m->ft,
+                    pw_bg,
+                    bg_offset,
+                    pw
+                };
+                sb_push_n(out, w2, 5);
+            }
+            {
+                uint32_t w3[] = {
+                    op_(SpvOpFSub, 5),
+                    m->ft,
+                    nx2,
+                    px,
+                    pw_bg
+                };
+                sb_push_n(out, w3, 5);
+            }
         }
+    }
+    else
+    {
+        uint32_t convmag = (*nid)++;
+        uint32_t tmp = (*nid)++;
         {
             uint32_t w[] = {
                 op_(SpvOpFMul, 5),
@@ -3014,8 +3032,8 @@ bool spirv_patch_stereo_vertex(
         .cr                  = id_cr,
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
-        .force_far_depth     = vs_background && cfg && cfg->sky_max_depth,
-        .sky_extension       = vs_background && cfg && cfg->sky_extension,
+        .force_far_depth     = force_far_depth && cfg && cfg->sky_max_depth,
+        .sky_extension       = force_far_depth && cfg && cfg->sky_extension,
         .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
