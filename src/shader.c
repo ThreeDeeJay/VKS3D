@@ -11275,6 +11275,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             vs_stage != ~0u &&
             !vs_pure_quad) 
         {
+            bool mono_ui_pipeline=cfg.mono_ui&&quad;
             StereoShaderCache inline_e;
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             const VkShaderModuleCreateInfo *inline_smci=stereo_stage_inline_spv(&ci->pStages[vs_stage]);
@@ -11374,7 +11375,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo, ro, conv,
                     /*inj_vi=*/true,
                     vs_background,
-                    ci->pDepthStencilState!=NULL&&ci->pDepthStencilState->depthTestEnable==VK_FALSE&&ci->pDepthStencilState->depthWriteEnable==VK_FALSE,
+                    mono_ui_pipeline,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
