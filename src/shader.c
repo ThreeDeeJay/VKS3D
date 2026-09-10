@@ -10507,45 +10507,68 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     }
                     if (vs_location_id)
                     {
+                        STEREO_LOG("VS_OUTPUT_SCAN location_id=%u",vs_location_id);
                         for (size_t vi = 5; vi < vs_cache->words;)
                         {
                             uint32_t iw = vs_cache->spv[vi] >> 16;
                             uint32_t io = vs_cache->spv[vi] & 0xffff;
                             if (!iw || vi + iw > vs_cache->words)
                                 break;
-                            if (io == SpvOpVariable && iw >= 4 && vs_cache->spv[vi + 2] == vs_location_id)
+                            if (io == SpvOpVariable && iw >= 4)
                             {
-                                uint32_t ptr_id = vs_cache->spv[vi + 1];
-                                for (size_t ti = 5; ti < vs_cache->words;)
+                                uint32_t var_type = vs_cache->spv[vi + 1];
+                                uint32_t var_id = vs_cache->spv[vi + 2];
+                                uint32_t storage = vs_cache->spv[vi + 3];
+                                if (var_id == vs_location_id)
                                 {
-                                    uint32_t tw = vs_cache->spv[ti] >> 16;
-                                    uint32_t to = vs_cache->spv[ti] & 0xffff;
-                                    if (!tw || ti + tw > vs_cache->words)
-                                        break;
-                                    if (to == SpvOpTypePointer && tw >= 4 && vs_cache->spv[ti + 1] == ptr_id && vs_cache->spv[ti + 3] == 3)
+                                    STEREO_LOG("VS_OUTPUT_VAR location=%u var=%u type=%u storage=%u",vs_location_id,var_id,var_type,storage);
+                                    for (size_t ti = 5; ti < vs_cache->words;)
                                     {
-                                        uint32_t type_id = vs_cache->spv[ti + 2];
-                                        for (size_t vi2 = 5; vi2 < vs_cache->words;)
+                                        uint32_t tw = vs_cache->spv[ti] >> 16;
+                                        uint32_t to = vs_cache->spv[ti] & 0xffff;
+                                        if (!tw || ti + tw > vs_cache->words)
+                                            break;
+                                        if (to == SpvOpTypePointer && tw >= 4)
                                         {
-                                            uint32_t iw2 = vs_cache->spv[vi2] >> 16;
-                                            uint32_t io2 = vs_cache->spv[vi2] & 0xffff;
-                                            if (!iw2 || vi2 + iw2 > vs_cache->words)
-                                                break;
-                                            if (io2 == SpvOpTypeVector && iw2 >= 4 && vs_cache->spv[vi2 + 1] == type_id && vs_cache->spv[vi2 + 3] == 3)
+                                            uint32_t pointer_id = vs_cache->spv[ti + 1];
+                                            uint32_t pointer_storage = vs_cache->spv[ti + 2];
+                                            uint32_t pointee_id = vs_cache->spv[ti + 3];
+                                            if (pointer_id == var_type)
+                                                STEREO_LOG("VS_OUTPUT_PTR pointer=%u storage=%u pointee=%u match=%u",pointer_id,pointer_storage,pointee_id,pointer_id == var_type && pointer_storage == 3);
+                                            if (pointer_id == var_type && pointer_storage == 3)
                                             {
-                                                vs_has_v3_user_output = true;
+                                                for (size_t vi2 = 5; vi2 < vs_cache->words;)
+                                                {
+                                                    uint32_t iw2 = vs_cache->spv[vi2] >> 16;
+                                                    uint32_t io2 = vs_cache->spv[vi2] & 0xffff;
+                                                    if (!iw2 || vi2 + iw2 > vs_cache->words)
+                                                        break;
+                                                    if (io2 == SpvOpTypeVector && iw2 >= 4)
+                                                    {
+                                                        uint32_t vector_id = vs_cache->spv[vi2 + 1];
+                                                        uint32_t component_id = vs_cache->spv[vi2 + 2];
+                                                        uint32_t component_count = vs_cache->spv[vi2 + 3];
+                                                        if (vector_id == pointee_id)
+                                                            STEREO_LOG("VS_OUTPUT_VEC vector=%u component=%u count=%u match=%u",vector_id,component_id,component_count,vector_id == pointee_id && component_count == 3);
+                                                        if (vector_id == pointee_id && component_count == 3)
+                                                        {
+                                                            vs_has_v3_user_output = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                    vi2 += iw2;
+                                                }
                                                 break;
                                             }
-                                            vi2 += iw2;
                                         }
-                                        break;
+                                        ti += tw;
                                     }
-                                    ti += tw;
                                 }
                             }
                             vi += iw;
                         }
                     }
+                    STEREO_LOG("VS_OUTPUT_RESULT location=%u has_user=%u has_v3=%u",vs_location_id,vs_has_user_output,vs_has_v3_user_output);
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
