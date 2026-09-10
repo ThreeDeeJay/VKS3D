@@ -152,11 +152,6 @@ typedef struct
     /* Matrix provenance tracking */
     uint32_t location0_vars[16];
     uint32_t location0_count;
-    uint32_t location1_vars[16];
-    uint32_t location1_count;
-    bool has_ui_branch;
-    uint32_t ui_branch_cond;
-    uint32_t float_100_id;
     uint32_t screen_values[16];
     uint32_t screen_value_count;
     bool screen_has_zw_use;
@@ -303,15 +298,6 @@ static bool is_location0_var(const SpvMod *m,uint32_t id)
     }
     return false;
 }
-static bool is_location1_var(const SpvMod *m,uint32_t id)
-{
-    for(uint32_t n=0;n<m->location1_count;n++)
-    {
-        if(m->location1_vars[n]==id)
-            return true;
-    }
-    return false;
-}
 static bool is_screen_value(const SpvMod *m,uint32_t id)
 {
     for(uint32_t n=0;n<m->screen_value_count;n++)
@@ -341,18 +327,6 @@ static void do_scan(SpvMod *m, bool p2)
         if (!wc||i+wc>m->count) break;
         if (!p2)
         {
-            uint32_t wc=w[i]>>16;
-            uint32_t op=w[i]&0xffff;
-            if(op==SpvOpFOrdLessThan&&wc>=5&&m->float_100_id)
-            {
-                uint32_t a=w[i+3];
-                uint32_t b=w[i+4];
-                if((a==m->float_100_id&&is_location1_var(m,b))||(b==m->float_100_id&&is_location1_var(m,a)))
-                {
-                    m->has_ui_branch=true;
-                    m->ui_branch_cond=w[i+2];
-                }
-            }
         switch(op) {
             case SpvOpDot:
                 m->dot_count++;
@@ -934,11 +908,6 @@ static void do_scan(SpvMod *m, bool p2)
                     if(m->location0_count<16)
                         m->location0_vars[m->location0_count++]=w[i+1];
                 }
-                if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==1)
-                {
-                    if(m->location1_count<16)
-                        m->location1_vars[m->location1_count++]=w[i+1];
-                }
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                         m->pos_var=w[i+1];
@@ -1238,8 +1207,6 @@ typedef struct {
     float lo_dbg;
     float ro_dbg;
     bool force_far_depth;
-    bool flatten_ui_branch;
-    uint32_t ui_branch_cond;
     StereoDebugCtx *dbg;
 } BodyCtx;
 
@@ -1392,29 +1359,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     else
     {
         sel = c->cl;
-    }
-    if(c->flatten_ui_branch&&c->ui_branch_cond)
-    {
-        uint32_t flat_sel=(*nid)++;
-        uint32_t zero=(*nid)++;
-        uint32_t zc[]={
-            op_(SpvOpConstant,4),
-            m->ft,
-            zero,
-            0u
-        };
-        sb_push_n(out,zc,4);
-        uint32_t sw[]={
-            op_(SpvOpSelect,6),
-            m->ft,
-            flat_sel,
-            c->ui_branch_cond,
-            zero,
-            sel
-        };
-        sb_push_n(out,sw,6);
-        sel=flat_sel;
-        STEREO_LOG("UI_BRANCH_FLATTEN cond=%u offset=%u zero=%u",c->ui_branch_cond,sel,zero);
     }
     {
         uint32_t w[] = {
@@ -2561,7 +2505,6 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     bool force_far_depth,
-    bool mono_ui_pipeline,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
@@ -2690,10 +2633,10 @@ bool spirv_patch_stereo_vertex(
      */
     if(cfg&&cfg->mono_ui)
     {
-        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&m.has_v2_position_input&&!m.has_emit_vertex)||(mono_ui_pipeline&&m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_matrix_ops&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.has_matrix_ops&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex);
+        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&m.has_v2_position_input&&!m.has_emit_vertex)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_matrix_ops&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.has_matrix_ops&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex);
         if(ui_candidate)
         {
-            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u direct=%u emit=%u proj=%u dots=%u pipeline=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count,mono_ui_pipeline);
+            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u direct=%u emit=%u proj=%u dots=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count);
             free_spv_provenance(&m);
             return false;
         }
@@ -3088,8 +3031,6 @@ bool spirv_patch_stereo_vertex(
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
         .force_far_depth     = force_far_depth,
-        .flatten_ui_branch   = cfg&&cfg->mono_ui&&m.has_ui_branch&&mono_ui_pipeline,
-        .ui_branch_cond      = m.ui_branch_cond,
         .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
@@ -11118,7 +11059,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 lo, ro, conv,
                 true,
                 false,
-                false,
                 dbgG))
             {
                 STEREO_LOG(
@@ -11234,7 +11174,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         lo, ro, conv,
                         true,
                         false,
-                        false,
                         &dbgA))
                 {
                 STEREO_LOG("TES patch failed");
@@ -11333,7 +11272,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             vs_stage != ~0u &&
             !vs_pure_quad) 
         {
-            bool mono_ui_pipeline=sd->stereo.mono_ui&&is_quad;
             StereoShaderCache inline_e;
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             const VkShaderModuleCreateInfo *inline_smci=stereo_stage_inline_spv(&ci->pStages[vs_stage]);
@@ -11433,7 +11371,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo, ro, conv,
                     /*inj_vi=*/true,
                     vs_background,
-                    mono_ui_pipeline,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
@@ -12194,7 +12131,6 @@ stereo_CreateShadersEXT(
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
                 true,
-                false,
                 false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
