@@ -156,6 +156,7 @@ typedef struct
     uint32_t location1_count;
     bool has_ui_branch;
     uint32_t ui_branch_cond;
+    uint32_t float_100_id;
     uint32_t screen_values[16];
     uint32_t screen_value_count;
     bool screen_has_zw_use;
@@ -340,6 +341,18 @@ static void do_scan(SpvMod *m, bool p2)
         if (!wc||i+wc>m->count) break;
         if (!p2)
         {
+            uint32_t wc=w[i]>>16;
+            uint32_t op=w[i]&0xffff;
+            if(op==SpvOpFOrdLessThan&&wc>=5&&m->float_100_id)
+            {
+                uint32_t a=w[i+3];
+                uint32_t b=w[i+4];
+                if((a==m->float_100_id&&is_location1_var(m,b))||(b==m->float_100_id&&is_location1_var(m,a)))
+                {
+                    m->has_ui_branch=true;
+                    m->ui_branch_cond=w[i+2];
+                }
+            }
         switch(op) {
             case SpvOpDot:
                 m->dot_count++;
@@ -730,18 +743,6 @@ static void do_scan(SpvMod *m, bool p2)
                         SETVIEW(w[i + 2], VIEW(w[i + 4]));
                     else if (VIEW(w[i + 5]))
                         SETVIEW(w[i + 2], VIEW(w[i + 5]));
-                }
-                break;
-            case SpvOpFOrdLessThan:
-                if(wc>=5)
-                {
-                    uint32_t a=w[i+3];
-                    uint32_t b=w[i+4];
-                    if((a==m->float_100&&is_location1_var(m,b))||(b==m->float_100&&is_location1_var(m,a)))
-                    {
-                        m->has_ui_branch=true;
-                        m->ui_branch_cond=w[i+2];
-                    }
                 }
                 break;
             case SpvOpSelect:
