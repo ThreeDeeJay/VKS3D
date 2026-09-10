@@ -151,13 +151,14 @@ typedef struct
     bool has_direct_position_write;
     bool has_v2_position_input;
     bool has_position_input;
+    uint32_t pos_input_var;
     bool has_position_zw_use;
+    uint8_t *is_position_value;
     /* Matrix provenance tracking */
     uint32_t value_capacity;
     uint8_t *value_from_matrix;
     uint8_t *is_matrix_type;
     uint8_t *is_matrix_ptr;
-    uint8_t *is_position_value;
     /* Projection UBO discovery */
     uint32_t proj_struct_type;
     uint32_t proj_ptr_type;
@@ -879,6 +880,7 @@ static void do_scan(SpvMod *m, bool p2)
                         (m->ptr_in_v4 && w[i + 1] == m->ptr_in_v4))
                     {
                         m->has_position_input = true;
+                        m->pos_input_var = w[i + 2];
                     }
                     if (m->ptr_in_v2 &&
                         w[i + 1] == m->ptr_in_v2)
@@ -963,38 +965,49 @@ static void do_scan(SpvMod *m, bool p2)
                 break;
             }
         } else {
-            if(op==SpvOpLoad)
-            {
-                STEREO_LOG("P2_LOAD op=%u wc=%u result=%u src=%u cap=%u pos=%u", op, wc, wc >= 3 ? w[i + 2] : 0, wc >= 4 ? w[i + 3] : 0, (uint32_t)m->value_capacity, m->pos_var);
-            }
             if(op==SpvOpLoad &&
                 wc>=4 &&
                 w[i+2]<m->value_capacity &&
                 w[i+3]<m->value_capacity)
             {
-                if(w[i+3]==m->pos_var)
+                if(w[i+3]==m->pos_input_var)
                 {
                     m->is_position_value[w[i+2]]=1;
                     STEREO_LOG(
-                        "POS_LOAD result=%u src=%u pos_var=%u marked=1",
+                        "POS_LOAD result=%u src=%u pos_input=%u marked=1",
                         w[i+2],
                         w[i+3],
-                        m->pos_var);
+                        m->pos_input_var);
                 }
             }
-            if(op==SpvOpTypePointer && wc>=4 &&
-               w[i+2]==SpvStorageOutput)
+            if(op==SpvOpVectorShuffle && wc>=9 &&
+                w[i+2]<m->value_capacity &&
+                w[i+3]<m->value_capacity)
             {
-                for(uint32_t k=0;k<m->pos_block_count;k++)
+                STEREO_LOG(
+                    "P2_SHUFFLE result=%u src=%u selectors=%u,%u,%u,%u marked=%u",
+                    w[i+2],
+                    w[i+3],
+                    w[i+5],
+                    w[i+6],
+                    w[i+7],
+                    w[i+8],
+                    m->is_position_value[w[i+3]]);
+                if(m->is_position_value[w[i+3]] &&
+                    (w[i+5]>=2||w[i+6]>=2||w[i+7]>=2||w[i+8]>=2))
                 {
-                    if(w[i+3]==m->pos_block_type[k])
-                    {
-                        m->pos_ptr_type=w[i+1];
-                        break;
-                    }
+                    m->has_position_zw_use=true;
+                    STEREO_LOG(
+                        "POS_ZW_USE result=%u src=%u selectors=%u,%u,%u,%u",
+                        w[i+2],
+                        w[i+3],
+                        w[i+5],
+                        w[i+6],
+                        w[i+7],
+                        w[i+8]);
                 }
             }
-            if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageOutput)
+            if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput)
             {
                 if(m->pos_ptr_type &&
                    w[i+1]==m->pos_ptr_type)
