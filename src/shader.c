@@ -11275,7 +11275,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             vs_stage != ~0u &&
             !vs_pure_quad) 
         {
-            bool mono_ui_pipeline=cfg->mono_ui&&is_quad;
+            bool mono_ui_pipeline=sd->stereo.mono_ui&&is_quad;
             StereoShaderCache inline_e;
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
             const VkShaderModuleCreateInfo *inline_smci=stereo_stage_inline_spv(&ci->pStages[vs_stage]);
