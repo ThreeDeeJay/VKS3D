@@ -126,7 +126,6 @@ typedef struct
     uint32_t bt_type;
     uint32_t bt;
     uint32_t ptr_in_v2;
-    uint32_t ptr_in_v4;
     uint32_t ptr_out_v4;
     uint32_t ptr_in_int;
     /* Entry point */
@@ -150,11 +149,6 @@ typedef struct
     bool has_matrix_ops;
     bool has_direct_position_write;
     bool has_v2_position_input;
-    bool has_position_input;
-    uint32_t pos_input_var;
-    uint32_t *is_location0;
-    bool has_position_zw_use;
-    uint8_t *is_position_value;
     /* Matrix provenance tracking */
     uint32_t value_capacity;
     uint8_t *value_from_matrix;
@@ -254,15 +248,11 @@ static void free_spv_provenance(SpvMod *m)
     free(m->value_from_matrix);
     free(m->is_matrix_type);
     free(m->is_matrix_ptr);
-    free(m->is_position_value);
-    free(m->is_location0);
     free(m->is_proj_value);
     free(m->is_view_value);
     m->value_from_matrix = NULL;
     m->is_matrix_type    = NULL;
     m->is_matrix_ptr     = NULL;
-    m->is_position_value = NULL;
-    m->is_location0      = NULL;
     m->is_proj_value     = NULL;
     m->is_view_value     = NULL;
     m->value_capacity = 0;
@@ -420,11 +410,7 @@ static void do_scan(SpvMod *m, bool p2)
                 }
                 break;
             case SpvOpVectorShuffle:
-                if (p2)
-                {
-                    STEREO_LOG("P2_SHUFFLE wc=%u result=%u src=%u selectors=%u,%u,%u,%u marked=%u", wc, wc >= 3 ? w[i + 2] : 0, wc >= 4 ? w[i + 3] : 0, wc >= 6 ? w[i + 5] : 0, wc >= 7 ? w[i + 6] : 0, wc >= 8 ? w[i + 7] : 0, wc >= 9 ? w[i + 8] : 0, wc >= 4 && w[i + 3] < m->value_capacity ? m->is_position_value[w[i + 3]] : 0);
-                }
-                if (wc >= 9 &&
+                if (wc >= 6 &&
                     w[i + 2] < m->value_capacity &&
                     w[i + 3] < m->value_capacity)
                 {
@@ -433,19 +419,6 @@ static void do_scan(SpvMod *m, bool p2)
                         SETPROJ(w[i + 2], PROJ(w[i + 3]));
                     if (VIEW(w[i + 3]))
                         SETVIEW(w[i + 2], VIEW(w[i + 3]));
-                    if (p2 && m->is_position_value[w[i + 3]] &&
-                        (w[i + 5] >= 2 || w[i + 6] >= 2 || w[i + 7] >= 2 || w[i + 8] >= 2))
-                    {
-                        m->has_position_zw_use = true;
-                        STEREO_LOG(
-                            "POS_ZW_USE result=%u src=%u selectors=%u,%u,%u,%u",
-                            w[i + 2],
-                            w[i + 3],
-                            w[i + 5],
-                            w[i + 6],
-                            w[i + 7],
-                            w[i + 8]);
-                    }
                 }
                 break;
             case SpvOpCompositeConstruct:
@@ -814,11 +787,6 @@ static void do_scan(SpvMod *m, bool p2)
                     {
                         m->ptr_in_v2 = w[i + 1];
                     }
-                    if (m->v4t &&
-                        w[i + 3] == m->v4t)
-                    {
-                        m->ptr_in_v4 = w[i + 1];
-                    }
                     if (m->it &&
                         w[i + 3] == m->it)
                     {
@@ -876,23 +844,11 @@ static void do_scan(SpvMod *m, bool p2)
                 if (w[i + 3] == SpvStorageInput)
                 {
                     STEREO_LOG(
-                        "VS_INPUT_VARIABLE var=%u ptr=%u loc0=%u",
+                        "VS_INPUT_VARIABLE var=%u ptr=%u",
                         w[i + 2],
-                        w[i + 1],
-                        w[i + 2] < m->value_capacity && m->is_location0[w[i + 2]]);
-                    if (w[i + 2] < m->value_capacity && m->is_location0[w[i + 2]])
-                    {
-                        m->has_position_input = true;
-                        m->pos_input_var = w[i + 2];
-                        STEREO_LOG(
-                            "VS_POSITION_INPUT var=%u ptr=%u location=0",
-                            m->pos_input_var,
-                            w[i + 1]);
-                    }
+                        w[i + 1]);
                     if (m->ptr_in_v2 &&
-                        w[i + 1] == m->ptr_in_v2 &&
-                        w[i + 2] < m->value_capacity &&
-                        m->is_location0[w[i + 2]])
+                        w[i + 1] == m->ptr_in_v2)
                     {
                         m->has_v2_position_input = true;
                     }
@@ -912,8 +868,6 @@ static void do_scan(SpvMod *m, bool p2)
                         m->proj_binding = w[i+3];
                     }
                 }
-                if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==0&&w[i+1]<m->value_capacity)
-                    m->is_location0[w[i+1]]=1;
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                         m->pos_var=w[i+1];
@@ -976,49 +930,19 @@ static void do_scan(SpvMod *m, bool p2)
                 break;
             }
         } else {
-            if(op==SpvOpLoad &&
-                wc>=4 &&
-                w[i+2]<m->value_capacity &&
-                w[i+3]<m->value_capacity)
+            if(op==SpvOpTypePointer && wc>=4 &&
+               w[i+2]==SpvStorageOutput)
             {
-                if(w[i+3]==m->pos_input_var)
+                for(uint32_t k=0;k<m->pos_block_count;k++)
                 {
-                    m->is_position_value[w[i+2]]=1;
-                    STEREO_LOG(
-                        "POS_LOAD result=%u src=%u pos_input=%u marked=1",
-                        w[i+2],
-                        w[i+3],
-                        m->pos_input_var);
+                    if(w[i+3]==m->pos_block_type[k])
+                    {
+                        m->pos_ptr_type=w[i+1];
+                        break;
+                    }
                 }
             }
-            if(op==SpvOpVectorShuffle && wc>=9 &&
-                w[i+2]<m->value_capacity &&
-                w[i+3]<m->value_capacity)
-            {
-                STEREO_LOG(
-                    "P2_SHUFFLE result=%u src=%u selectors=%u,%u,%u,%u marked=%u",
-                    w[i+2],
-                    w[i+3],
-                    w[i+5],
-                    w[i+6],
-                    w[i+7],
-                    w[i+8],
-                    m->is_position_value[w[i+3]]);
-                if(m->is_position_value[w[i+3]] &&
-                    (w[i+5]>=2||w[i+6]>=2||w[i+7]>=2||w[i+8]>=2))
-                {
-                    m->has_position_zw_use=true;
-                    STEREO_LOG(
-                        "POS_ZW_USE result=%u src=%u selectors=%u,%u,%u,%u",
-                        w[i+2],
-                        w[i+3],
-                        w[i+5],
-                        w[i+6],
-                        w[i+7],
-                        w[i+8]);
-                }
-            }
-            if(op==SpvOpTypePointer&&wc>=4&&w[i+2]==SpvStorageOutput)
+            if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageOutput)
             {
                 if(m->pos_ptr_type &&
                    w[i+1]==m->pos_ptr_type)
@@ -1041,7 +965,7 @@ static void spv_scan(SpvMod *m)
      * OpMemberDecorate(BuiltIn Position).
      */
     do_scan(m, false);
-    STEREO_LOG("SCAN_P2_BEGIN hash=%016llx pos=%u block=%u", (unsigned long long)hash_spv(m->words, m->count), m->pos_var, m->pos_is_block);
+    if (m->pos_is_block)
         do_scan(m, true);
     STEREO_LOG(
         "SCAN hash=%016llx exec=%u matrix=%u proj=%u dot=%u direct=%u emit=%u pos=%u block=%u",
@@ -1924,8 +1848,6 @@ bool spirv_patch_stereo_mesh(
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_matrix_ptr =
         calloc(m.value_capacity, sizeof(uint8_t));
-    m.is_position_value =
-        calloc(m.value_capacity, sizeof(uint8_t));
     m.is_proj_value =
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_view_value =
@@ -1933,7 +1855,6 @@ bool spirv_patch_stereo_mesh(
     if (!m.value_from_matrix ||
         !m.is_matrix_type ||
         !m.is_matrix_ptr ||
-        !m.is_position_value ||
         !m.is_proj_value ||
         !m.is_view_value)
     {
@@ -2562,10 +2483,6 @@ bool spirv_patch_stereo_vertex(
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_matrix_ptr =
         calloc(m.value_capacity, sizeof(uint8_t));
-    m.is_position_value =
-        calloc(m.value_capacity, sizeof(uint8_t));
-    m.is_location0 =
-        calloc(m.value_capacity,sizeof(uint8_t));
     m.is_proj_value =
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_view_value =
@@ -2573,8 +2490,6 @@ bool spirv_patch_stereo_vertex(
     if (!m.value_from_matrix ||
         !m.is_matrix_type ||
         !m.is_matrix_ptr ||
-        !m.is_position_value ||
-        !m.is_location0 ||
         !m.is_proj_value ||
         !m.is_view_value)
     {
@@ -2630,8 +2545,8 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u pos_input_var=%u v2_pos=%u pos_zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.pos_input_var, m.has_v2_position_input, m.has_position_zw_use, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
 
     {
         static bool skip_list_init;
@@ -2679,13 +2594,11 @@ bool spirv_patch_stereo_vertex(
     if (cfg && cfg->mono_ui) {
         bool ui_candidate =
         dbg &&
-        m.pos_var != 0 &&
+        m.pos_is_block &&
         !m.has_matrix_ops &&
-        m.has_position_input &&
-        !m.has_position_zw_use &&
+        m.has_v2_position_input &&
         !m.has_emit_vertex &&
-        m.exec_model == SpvExecVertex &&
-        (m.has_direct_position_write || m.pos_is_block);
+        m.exec_model == SpvExecVertex;
         if (ui_candidate)
         {
             STEREO_LOG(
@@ -6852,8 +6765,13 @@ bool spirv_patch_stereo_fs(
         s.images[img].replacement_pointer_type = nid++;
     }
     uint32_t samp_nid      = nid;
-    uint32_t qsize_nid     = nid;
-    uint32_t new_bound     = nid + n_patches * 10 + 32;
+    uint32_t qsize_nid     = samp_nid + n_patches * 5 + 8;
+    /*
+     * ImageSample/ImageFetch consume 5 ids.
+     * ImageQuerySizeLod consumes only 4 ids,
+     * but reserving 5 keeps accounting simple.
+     */
+    uint32_t new_bound     = samp_nid + n_patches * 5 + 8;
     STEREO_LOG(
         "FS_NID_INIT bound=%u nid=%u",
         new_bound,
@@ -7660,15 +7578,7 @@ bool spirv_patch_stereo_fs(
                 s.images[patch_img_idx].binding,
                 new_array_type);
             uint32_t w[9];
-            if (wc != 9)
-            {
-                sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                    emitted_type[in[i + 1]] = true;
-                i += wc;
-                continue;
-            }
-            memcpy(w, &in[i], sizeof(w));
+            memcpy(w, &in[i], wc * sizeof(uint32_t));
             w[1] = new_array_type;
             w[5] = 1;
             STEREO_LOG(
@@ -8441,16 +8351,8 @@ bool spirv_patch_stereo_fs(
                 in[i + 2],
                 in[i + 1],
                 in[i + 3]);
-            if (wc != 4)
-            {
-                sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                    emitted_type[in[i + 1]] = true;
-                i += wc;
-                continue;
-            }
             uint32_t w[4];
-            memcpy(w, &in[i], sizeof(w));
+            memcpy(w, &in[i], wc * sizeof(uint32_t));
             int load = fs_find_load(&s, in[i + 3]);
             STEREO_LOG(
                 "FS_PATCH_IMAGE_LOADINDEX sampledImage=%u load=%d",
@@ -8665,7 +8567,7 @@ bool spirv_patch_stereo_fs(
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t old_result_type = w[1];
             uint32_t old_result_id = w[2];
-            uint32_t query_v3_id = samp_nid++;
+            uint32_t query_v3_id = qsize_nid++;
             if (!s.v3int_id)
             {
                 STEREO_LOG(
@@ -9145,7 +9047,7 @@ bool spirv_patch_stereo_fs(
     }
     if (nid > samp_nid)
         samp_nid = nid;
-    ob.w[3] = samp_nid;
+    ob.w[3] = qsize_nid;
     *out   = ob.w;
     *out_c = ob.n;
     STEREO_LOG("FS patched: %u 2D img types→arr, %u samples extended, bound %u→%u",
@@ -10558,11 +10460,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vm.value_from_matrix = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_matrix_type = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_matrix_ptr = calloc(vm.value_capacity,sizeof(uint8_t));
-                vm.is_position_value = calloc(vm.value_capacity,sizeof(uint8_t));
-                vm.is_location0 = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_proj_value = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
-                if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_position_value && vm.is_location0 && vm.is_proj_value && vm.is_view_value) {
+                if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
                     spv_scan(&vm);
                     bool vs_has_user_output = false;
                     for (size_t vi = 5; vi < vs_cache->words;)
@@ -10585,7 +10485,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 free_spv_provenance(&vm);
             }
         }
-        STEREO_LOG("FS_GATE p=%u quad=%u vs_screen_space=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_screen_space,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
+        STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
         if (((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
             !has_ms &&
@@ -10752,8 +10652,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     calloc(fm.value_capacity, sizeof(uint8_t));
                 fm.is_matrix_ptr =
                     calloc(fm.value_capacity, sizeof(uint8_t));
-                fm.is_position_value =
-                    calloc(fm.value_capacity, sizeof(uint8_t));
                 fm.is_proj_value =
                     calloc(fm.value_capacity, sizeof(uint8_t));
                 fm.is_view_value =
@@ -10761,7 +10659,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 if (fm.value_from_matrix &&
                     fm.is_matrix_type &&
                     fm.is_matrix_ptr &&
-                    fm.is_position_value &&
                     fm.is_proj_value &&
                     fm.is_view_value)
                 {
