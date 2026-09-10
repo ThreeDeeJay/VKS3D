@@ -10572,7 +10572,62 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
-                    vs_background = (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable) || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
+                    bool vs_z_one_position = false;
+                    for (size_t vi = 5; vi < vs_cache->words;)
+                    {
+                        uint32_t iw = vs_cache->spv[vi] >> 16;
+                        uint32_t io = vs_cache->spv[vi] & 0xffff;
+                        if (!iw || vi + iw > vs_cache->words)
+                            break;
+                        if (io == SpvOpCompositeConstruct && iw >= 7)
+                        {
+                            uint32_t type_id = vs_cache->spv[vi + 1];
+                            uint32_t z_id = vs_cache->spv[vi + 4];
+                            uint32_t w_id = vs_cache->spv[vi + 5];
+                            bool v4_type = false;
+                            for (size_t ti = 5; ti < vs_cache->words;)
+                            {
+                                uint32_t tw = vs_cache->spv[ti] >> 16;
+                                uint32_t to = vs_cache->spv[ti] & 0xffff;
+                                if (!tw || ti + tw > vs_cache->words)
+                                    break;
+                                if (to == SpvOpTypeVector && tw >= 4 && vs_cache->spv[ti + 1] == type_id && vs_cache->spv[ti + 3] == 4)
+                                {
+                                    v4_type = true;
+                                    break;
+                                }
+                                ti += tw;
+                            }
+                            if (v4_type)
+                            {
+                                bool z_one = false;
+                                bool w_one = false;
+                                for (size_t ci2 = 5; ci2 < vs_cache->words;)
+                                {
+                                    uint32_t cw = vs_cache->spv[ci2] >> 16;
+                                    uint32_t co = vs_cache->spv[ci2] & 0xffff;
+                                    if (!cw || ci2 + cw > vs_cache->words)
+                                        break;
+                                    if (co == SpvOpConstant && cw >= 4 && vs_cache->spv[ci2 + 1] == type_id)
+                                    {
+                                        uint32_t bits = vs_cache->spv[ci2 + 3];
+                                        if (bits == 0x3f800000)
+                                        {
+                                            if (vs_cache->spv[ci2 + 2] == z_id)
+                                                z_one = true;
+                                            if (vs_cache->spv[ci2 + 2] == w_id)
+                                                w_one = true;
+                                        }
+                                    }
+                                    ci2 += cw;
+                                }
+                                if (z_one && w_one)
+                                    vs_z_one_position = true;
+                            }
+                        }
+                        vi += iw;
+                    }
+                    vs_background = (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable) || (vs_quad_fs && vs_has_user_output && !vm.has_v2_position_input && vs_z_one_position && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable) || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
