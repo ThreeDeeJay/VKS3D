@@ -152,6 +152,7 @@ typedef struct
     bool has_v2_position_input;
     bool has_position_input;
     uint32_t pos_input_var;
+    uint32_t location0_var;
     bool has_position_zw_use;
     uint8_t *is_position_value;
     /* Matrix provenance tracking */
@@ -873,17 +874,22 @@ static void do_scan(SpvMod *m, bool p2)
                 if (w[i + 3] == SpvStorageInput)
                 {
                     STEREO_LOG(
-                        "VS_INPUT_VARIABLE var=%u ptr=%u",
+                        "VS_INPUT_VARIABLE var=%u ptr=%u loc0=%u",
                         w[i + 2],
-                        w[i + 1]);
-                    if ((m->ptr_in_v2 && w[i + 1] == m->ptr_in_v2) ||
-                        (m->ptr_in_v4 && w[i + 1] == m->ptr_in_v4))
+                        w[i + 1],
+                        w[i + 2] == m->location0_var);
+                    if (w[i + 2] == m->location0_var)
                     {
                         m->has_position_input = true;
                         m->pos_input_var = w[i + 2];
+                        STEREO_LOG(
+                            "VS_POSITION_INPUT var=%u ptr=%u location=0",
+                            m->pos_input_var,
+                            w[i + 1]);
                     }
                     if (m->ptr_in_v2 &&
-                        w[i + 1] == m->ptr_in_v2)
+                        w[i + 1] == m->ptr_in_v2 &&
+                        w[i + 2] == m->location0_var)
                     {
                         m->has_v2_position_input = true;
                     }
@@ -903,6 +909,8 @@ static void do_scan(SpvMod *m, bool p2)
                         m->proj_binding = w[i+3];
                     }
                 }
+                if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==0)
+                    m->location0_var=w[i+1];
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                         m->pos_var=w[i+1];
@@ -2616,8 +2624,8 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u v2_pos=%u pos_zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.has_v2_position_input, m.has_position_zw_use, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u pos_input_var=%u loc0=%u v2_pos=%u pos_zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m->pos_input_var, m->location0_var, m.has_v2_position_input, m.has_position_zw_use, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
 
     {
         static bool skip_list_init;
