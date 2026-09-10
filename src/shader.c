@@ -152,7 +152,7 @@ typedef struct
     bool has_v2_position_input;
     bool has_position_input;
     uint32_t pos_input_var;
-    uint32_t location0_var;
+    uint8_t *is_location0;
     bool has_position_zw_use;
     uint8_t *is_position_value;
     /* Matrix provenance tracking */
@@ -255,12 +255,14 @@ static void free_spv_provenance(SpvMod *m)
     free(m->is_matrix_type);
     free(m->is_matrix_ptr);
     free(m->is_position_value);
+    free(m->is_location0);
     free(m->is_proj_value);
     free(m->is_view_value);
     m->value_from_matrix = NULL;
     m->is_matrix_type    = NULL;
     m->is_matrix_ptr     = NULL;
     m->is_position_value = NULL;
+    m->is_location0      = NULL;
     m->is_proj_value     = NULL;
     m->is_view_value     = NULL;
     m->value_capacity = 0;
@@ -877,8 +879,8 @@ static void do_scan(SpvMod *m, bool p2)
                         "VS_INPUT_VARIABLE var=%u ptr=%u loc0=%u",
                         w[i + 2],
                         w[i + 1],
-                        w[i + 2] == m->location0_var);
-                    if (w[i + 2] == m->location0_var)
+                        w[i + 2] < m->value_capacity && m->is_location0[w[i + 2]]);
+                    if (w[i + 2] < m->value_capacity && m->is_location0[w[i + 2]])
                     {
                         m->has_position_input = true;
                         m->pos_input_var = w[i + 2];
@@ -889,7 +891,8 @@ static void do_scan(SpvMod *m, bool p2)
                     }
                     if (m->ptr_in_v2 &&
                         w[i + 1] == m->ptr_in_v2 &&
-                        w[i + 2] == m->location0_var)
+                        w[i + 2] < m->value_capacity &&
+                        m->is_location0[w[i + 2]])
                     {
                         m->has_v2_position_input = true;
                     }
@@ -909,8 +912,8 @@ static void do_scan(SpvMod *m, bool p2)
                         m->proj_binding = w[i+3];
                     }
                 }
-                if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==0)
-                    m->location0_var=w[i+1];
+                if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==0&&w[i+1]<m->value_capacity)
+                    m->is_location0[w[i+1]]=1;
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                         m->pos_var=w[i+1];
@@ -2627,8 +2630,8 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u pos_input_var=%u loc0=%u v2_pos=%u pos_zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.pos_input_var, m.location0_var, m.has_v2_position_input, m.has_position_zw_use, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u pos_input_var=%u v2_pos=%u pos_zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.pos_input_var, m.has_v2_position_input, m.has_position_zw_use, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
 
     {
         static bool skip_list_init;
@@ -10556,9 +10559,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vm.is_matrix_type = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_matrix_ptr = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_position_value = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_location0 = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_proj_value = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
-                if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_position_value && vm.is_proj_value && vm.is_view_value) {
+                if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_position_value && vm.is_location0 && vm.is_proj_value && vm.is_view_value) {
                     spv_scan(&vm);
                     bool vs_has_user_output = false;
                     for (size_t vi = 5; vi < vs_cache->words;)
