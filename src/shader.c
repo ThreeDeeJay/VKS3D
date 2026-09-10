@@ -2574,6 +2574,7 @@ bool spirv_patch_stereo_vertex(
         !m.is_matrix_type ||
         !m.is_matrix_ptr ||
         !m.is_position_value ||
+        !m.is_location0 ||
         !m.is_proj_value ||
         !m.is_view_value)
     {
