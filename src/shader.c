@@ -1017,7 +1017,6 @@ static void spv_scan(SpvMod *m)
      * OpMemberDecorate(BuiltIn Position).
      */
     do_scan(m, false);
-    if (m->pos_is_block)
     STEREO_LOG("SCAN_P2_BEGIN hash=%016llx pos=%u block=%u", (unsigned long long)hash_spv(m->words, m->count), m->pos_var, m->pos_is_block);
         do_scan(m, true);
     STEREO_LOG(
