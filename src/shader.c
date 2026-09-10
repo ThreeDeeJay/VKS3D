@@ -2585,8 +2585,8 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u loc0=%u screen=%u zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.location0_var,m.has_screen_value,m.screen_has_zw_use,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u loc0_count=%u screen_count=%u zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input, m.location0_count,m.screen_value_count ,m.screen_has_zw_use,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
 
     {
         static bool skip_list_init;
