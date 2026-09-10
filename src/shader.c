@@ -150,9 +150,10 @@ typedef struct
     bool has_direct_position_write;
     bool has_v2_position_input;
     /* Matrix provenance tracking */
-    uint32_t location0_var;
-    uint32_t screen_value;
-    bool has_screen_value;
+    uint32_t location0_vars[16];
+    uint32_t location0_count;
+    uint32_t screen_values[16];
+    uint32_t screen_value_count;
     bool screen_has_zw_use;
     uint32_t value_capacity;
     uint8_t *value_from_matrix;
@@ -288,6 +289,25 @@ spv_resolve_u32_constant(const SpvMod *m, uint32_t id, uint32_t *value)
 static const char *
 spv_op_name(uint32_t op);
 
+static bool is_location0_var(const SpvMod *m,uint32_t id)
+{
+    for(uint32_t n=0;n<m->location0_count;n++)
+    {
+        if(m->location0_vars[n]==id)
+            return true;
+    }
+    return false;
+}
+static bool is_screen_value(const SpvMod *m,uint32_t id)
+{
+    for(uint32_t n=0;n<m->screen_value_count;n++)
+    {
+        if(m->screen_values[n]==id)
+            return true;
+    }
+    return false;
+}
+
 static void do_scan(SpvMod *m, bool p2)
 {
     const uint32_t *w=m->words;
@@ -373,15 +393,11 @@ static void do_scan(SpvMod *m, bool p2)
                         w[i + 2],
                         MAT(w[i + 3]) || PTR(w[i + 3]));
                 }
-                if (wc >= 4 &&
-                    w[i + 3] == m->location0_var)
+                if(wc>=4&&is_location0_var(m,w[i+3]))
                 {
-                    m->screen_value = w[i + 2];
-                    m->has_screen_value = true;
-                    STEREO_LOG(
-                        "SCREEN_LOAD result=%u input=%u",
-                        w[i + 2],
-                        w[i + 3]);
+                    if(m->screen_value_count<16)
+                        m->screen_values[m->screen_value_count++]=w[i+2];
+                    STEREO_LOG("SCREEN_LOAD result=%u input=%u",w[i+2],w[i+3]);
                 }
                 if (wc >= 4)
                 {
@@ -434,25 +450,10 @@ static void do_scan(SpvMod *m, bool p2)
                     if (VIEW(w[i + 3]))
                         SETVIEW(w[i + 2], VIEW(w[i + 3]));
                 }
-                if (wc >= 9 &&
-                    m->has_screen_value &&
-                    (w[i + 3] == m->screen_value ||
-                        w[i + 4] == m->screen_value) &&
-                    (w[i + 5] >= 2 ||
-                        w[i + 6] >= 2 ||
-                        w[i + 7] >= 2 ||
-                        w[i + 8] >= 2))
+                if(wc>=9&&(is_screen_value(m,w[i+3])||is_screen_value(m,w[i+4]))&&(w[i+5]>=2||w[i+6]>=2||w[i+7]>=2||w[i+8]>=2))
                 {
-                    m->screen_has_zw_use = true;
-                    STEREO_LOG(
-                        "SCREEN_ZW_USE result=%u src0=%u src1=%u selectors=%u,%u,%u,%u",
-                        w[i + 2],
-                        w[i + 3],
-                        w[i + 4],
-                        w[i + 5],
-                        w[i + 6],
-                        w[i + 7],
-                        w[i + 8]);
+                    m->screen_has_zw_use=true;
+                    STEREO_LOG("SCREEN_ZW_USE result=%u src0=%u src1=%u selectors=%u,%u,%u,%u",w[i+2],w[i+3],w[i+4],w[i+5],w[i+6],w[i+7],w[i+8]);
                 }
                 break;
             case SpvOpCompositeConstruct:
@@ -903,7 +904,10 @@ static void do_scan(SpvMod *m, bool p2)
                     }
                 }
                 if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==0)
-                    m->location0_var=w[i+1];
+                {
+                    if(m->location0_count<16)
+                        m->location0_vars[m->location0_count++]=w[i+1];
+                }
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                         m->pos_var=w[i+1];
@@ -2627,27 +2631,12 @@ bool spirv_patch_stereo_vertex(
      * Use the quad/vertex-binding test together with the direct
      * position test to identify screen-space shaders.
      */
-    if (cfg && cfg->mono_ui) {
-        bool ui_candidate =
-        m.exec_model == SpvExecVertex &&
-        m.location0_var &&
-        m.has_screen_value &&
-        !m.screen_has_zw_use &&
-        !m.has_matrix_ops &&
-        !m.has_emit_vertex &&
-        m.has_direct_position_write;
-        if (ui_candidate)
+    if(cfg&&cfg->mono_ui)
+    {
+        bool ui_candidate=m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_matrix_ops&&!m.has_emit_vertex&&m.has_direct_position_write;
+        if(ui_candidate)
         {
-            STEREO_LOG(
-                "SCREENSPACE_SKIP hash=%016llx exec=%u loc0=%u screen=%u zw=%u matrix=%u direct=%u emit=%u",
-                (unsigned long long)spv_hash,
-                (unsigned)m.exec_model,
-                m.location0_var,
-                m.screen_value,
-                m.screen_has_zw_use,
-                m.has_matrix_ops,
-                m.has_direct_position_write,
-                m.has_emit_vertex);
+            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx exec=%u loc0_count=%u screen_count=%u zw=%u matrix=%u direct=%u emit=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_direct_position_write,m.has_emit_vertex);
             free_spv_provenance(&m);
             return false;
         }
