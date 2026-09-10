@@ -732,7 +732,7 @@ static void do_scan(SpvMod *m, bool p2)
                         SETVIEW(w[i + 2], VIEW(w[i + 5]));
                 }
                 break;
-            case OpFOrdLessThan:
+            case SpvOpFOrdLessThan:
                 if(wc>=5)
                 {
                     uint32_t a=w[i+3];
