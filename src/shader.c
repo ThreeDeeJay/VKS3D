@@ -10573,59 +10573,113 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
                     bool vs_z_one_position = false;
+                    uint32_t vs_position_ptr = 0;
+                    uint32_t vs_position_value = 0;
+                    uint32_t vs_position_type = 0;
+                    uint32_t vs_position_component_type = 0;
+                    uint32_t vs_one_const = 0;
                     for (size_t vi = 5; vi < vs_cache->words;)
                     {
                         uint32_t iw = vs_cache->spv[vi] >> 16;
                         uint32_t io = vs_cache->spv[vi] & 0xffff;
                         if (!iw || vi + iw > vs_cache->words)
                             break;
-                        if (io == SpvOpCompositeConstruct && iw >= 7)
+                        if (io == SpvOpTypeVector && iw >= 4 && vs_cache->spv[vi + 3] == 4)
                         {
-                            uint32_t type_id = vs_cache->spv[vi + 1];
-                            uint32_t z_id = vs_cache->spv[vi + 4];
-                            uint32_t w_id = vs_cache->spv[vi + 5];
-                            bool v4_type = false;
-                            for (size_t ti = 5; ti < vs_cache->words;)
+                            uint32_t vector_id = vs_cache->spv[vi + 1];
+                            uint32_t component_type = vs_cache->spv[vi + 2];
+                            for (size_t pi = 5; pi < vs_cache->words;)
                             {
-                                uint32_t tw = vs_cache->spv[ti] >> 16;
-                                uint32_t to = vs_cache->spv[ti] & 0xffff;
-                                if (!tw || ti + tw > vs_cache->words)
+                                uint32_t pw = vs_cache->spv[pi] >> 16;
+                                uint32_t po = vs_cache->spv[pi] & 0xffff;
+                                if (!pw || pi + pw > vs_cache->words)
                                     break;
-                                if (to == SpvOpTypeVector && tw >= 4 && vs_cache->spv[ti + 1] == type_id && vs_cache->spv[ti + 3] == 4)
+                                if (po == SpvOpTypePointer && pw >= 4 && vs_cache->spv[pi + 2] == SpvStorageClassOutput && vs_cache->spv[pi + 3] == vector_id)
                                 {
-                                    v4_type = true;
-                                    break;
-                                }
-                                ti += tw;
-                            }
-                            if (v4_type)
-                            {
-                                bool z_one = false;
-                                bool w_one = false;
-                                for (size_t ci2 = 5; ci2 < vs_cache->words;)
-                                {
-                                    uint32_t cw = vs_cache->spv[ci2] >> 16;
-                                    uint32_t co = vs_cache->spv[ci2] & 0xffff;
-                                    if (!cw || ci2 + cw > vs_cache->words)
-                                        break;
-                                    if (co == SpvOpConstant && cw >= 4 && vs_cache->spv[ci2 + 1] == type_id)
+                                    uint32_t pointer_id = vs_cache->spv[pi + 1];
+                                    for (size_t ai = 5; ai < vs_cache->words;)
                                     {
-                                        uint32_t bits = vs_cache->spv[ci2 + 3];
-                                        if (bits == 0x3f800000)
+                                        uint32_t aw = vs_cache->spv[ai] >> 16;
+                                        uint32_t ao = vs_cache->spv[ai] & 0xffff;
+                                        if (!aw || ai + aw > vs_cache->words)
+                                            break;
+                                        if (ao == SpvOpAccessChain && aw >= 5 && vs_cache->spv[ai + 1] == pointer_id)
                                         {
-                                            if (vs_cache->spv[ci2 + 2] == z_id)
-                                                z_one = true;
-                                            if (vs_cache->spv[ci2 + 2] == w_id)
-                                                w_one = true;
+                                            uint32_t result_id = vs_cache->spv[ai + 2];
+                                            uint32_t index_id = vs_cache->spv[ai + aw - 1];
+                                            bool index_zero = false;
+                                            for (size_t ci2 = 5; ci2 < vs_cache->words;)
+                                            {
+                                                uint32_t cw = vs_cache->spv[ci2] >> 16;
+                                                uint32_t co = vs_cache->spv[ci2] & 0xffff;
+                                                if (!cw || ci2 + cw > vs_cache->words)
+                                                    break;
+                                                if (co == SpvOpConstant && cw >= 4 && vs_cache->spv[ci2 + 2] == index_id && vs_cache->spv[ci2 + 3] == 0)
+                                                {
+                                                    index_zero = true;
+                                                    break;
+                                                }
+                                                ci2 += cw;
+                                            }
+                                            if (index_zero)
+                                            {
+                                                for (size_t si = 5; si < vs_cache->words;)
+                                                {
+                                                    uint32_t sw = vs_cache->spv[si] >> 16;
+                                                    uint32_t so = vs_cache->spv[si] & 0xffff;
+                                                    if (!sw || si + sw > vs_cache->words)
+                                                        break;
+                                                    if (so == SpvOpStore && sw >= 3 && vs_cache->spv[si + 1] == result_id)
+                                                    {
+                                                        vs_position_ptr = result_id;
+                                                        vs_position_value = vs_cache->spv[si + 2];
+                                                        vs_position_type = vector_id;
+                                                        vs_position_component_type = component_type;
+                                                        break;
+                                                    }
+                                                    si += sw;
+                                                }
+                                            }
                                         }
+                                        ai += aw;
                                     }
-                                    ci2 += cw;
                                 }
-                                if (z_one && w_one)
-                                    vs_z_one_position = true;
+                                pi += pw;
                             }
                         }
                         vi += iw;
+                    }
+                    if (vs_position_value && vs_position_component_type)
+                    {
+                        for (size_t ci2 = 5; ci2 < vs_cache->words;)
+                        {
+                            uint32_t cw = vs_cache->spv[ci2] >> 16;
+                            uint32_t co = vs_cache->spv[ci2] & 0xffff;
+                            if (!cw || ci2 + cw > vs_cache->words)
+                                break;
+                            if (co == SpvOpConstant && cw >= 4 && vs_cache->spv[ci2 + 1] == vs_position_component_type && vs_cache->spv[ci2 + 3] == 0x3f800000)
+                            {
+                                vs_one_const = vs_cache->spv[ci2 + 2];
+                                break;
+                            }
+                            ci2 += cw;
+                        }
+                    }
+                    if (vs_position_value && vs_one_const)
+                    {
+                        for (size_t ci2 = 5; ci2 < vs_cache->words;)
+                        {
+                            uint32_t cw = vs_cache->spv[ci2] >> 16;
+                            uint32_t co = vs_cache->spv[ci2] & 0xffff;
+                            if (!cw || ci2 + cw > vs_cache->words)
+                                break;
+                            if (co == SpvOpCompositeConstruct && cw >= 7 && vs_cache->spv[ci2 + 1] == vs_position_type && vs_cache->spv[ci2 + 2] == vs_position_value && vs_cache->spv[ci2 + 5] == vs_one_const && vs_cache->spv[ci2 + 6] == vs_one_const)
+                            {
+                                vs_z_one_position = true;
+                                break;
+                            }
+                            ci2 += cw;
+                        }
                     }
                     vs_background = (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable) || (vs_quad_fs && vs_has_user_output && !vm.has_v2_position_input && vs_z_one_position && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable) || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
