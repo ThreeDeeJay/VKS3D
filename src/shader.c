@@ -10490,6 +10490,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
                     spv_scan(&vm);
                     bool vs_has_user_output = false;
+                    bool vs_has_v3_user_output = false;
+                    uint32_t vs_location_id = 0;
                     for (size_t vi = 5; vi < vs_cache->words;)
                     {
                         uint32_t iw = vs_cache->spv[vi] >> 16;
@@ -10497,13 +10499,57 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         if (!iw || vi + iw > vs_cache->words)
                             break;
                         if (io == SpvOpDecorate && iw >= 4 && vs_cache->spv[vi + 2] == SpvDecorationLocation)
+                        {
                             vs_has_user_output = true;
+                            vs_location_id = vs_cache->spv[vi + 1];
+                        }
                         vi += iw;
+                    }
+                    if (vs_location_id)
+                    {
+                        for (size_t vi = 5; vi < vs_cache->words;)
+                        {
+                            uint32_t iw = vs_cache->spv[vi] >> 16;
+                            uint32_t io = vs_cache->spv[vi] & 0xffff;
+                            if (!iw || vi + iw > vs_cache->words)
+                                break;
+                            if (io == SpvOpVariable && iw >= 4 && vs_cache->spv[vi + 2] == vs_location_id)
+                            {
+                                uint32_t ptr_id = vs_cache->spv[vi + 1];
+                                for (size_t ti = 5; ti < vs_cache->words;)
+                                {
+                                    uint32_t tw = vs_cache->spv[ti] >> 16;
+                                    uint32_t to = vs_cache->spv[ti] & 0xffff;
+                                    if (!tw || ti + tw > vs_cache->words)
+                                        break;
+                                    if (to == SpvOpTypePointer && tw >= 4 && vs_cache->spv[ti + 1] == ptr_id && vs_cache->spv[ti + 3] == 3)
+                                    {
+                                        uint32_t type_id = vs_cache->spv[ti + 2];
+                                        for (size_t vi2 = 5; vi2 < vs_cache->words;)
+                                        {
+                                            uint32_t iw2 = vs_cache->spv[vi2] >> 16;
+                                            uint32_t io2 = vs_cache->spv[vi2] & 0xffff;
+                                            if (!iw2 || vi2 + iw2 > vs_cache->words)
+                                                break;
+                                            if (io2 == SpvOpTypeVector && iw2 >= 4 && vs_cache->spv[vi2 + 1] == type_id && vs_cache->spv[vi2 + 3] == 3)
+                                            {
+                                                vs_has_v3_user_output = true;
+                                                break;
+                                            }
+                                            vi2 += iw2;
+                                        }
+                                        break;
+                                    }
+                                    ti += tw;
+                                }
+                            }
+                            vi += iw;
+                        }
                     }
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
-                    vs_background = (vs_quad_fs && vs_has_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT)))) || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
+                    vs_background = (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT)))) || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
