@@ -152,7 +152,7 @@ typedef struct
     bool has_v2_position_input;
     bool has_position_input;
     uint32_t pos_input_var;
-    uint8_t *is_location0;
+    uint32_t location0_var;
     bool has_position_zw_use;
     uint8_t *is_position_value;
     /* Matrix provenance tracking */
