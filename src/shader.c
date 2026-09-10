@@ -2564,6 +2564,8 @@ bool spirv_patch_stereo_vertex(
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_position_value =
         calloc(m.value_capacity, sizeof(uint8_t));
+    m.is_location0 =
+        calloc(m.value_capacity,sizeof(uint8_t));
     m.is_proj_value =
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_view_value =
