@@ -6852,13 +6852,8 @@ bool spirv_patch_stereo_fs(
         s.images[img].replacement_pointer_type = nid++;
     }
     uint32_t samp_nid      = nid;
-    uint32_t qsize_nid     = samp_nid + n_patches * 5 + 8;
-    /*
-     * ImageSample/ImageFetch consume 5 ids.
-     * ImageQuerySizeLod consumes only 4 ids,
-     * but reserving 5 keeps accounting simple.
-     */
-    uint32_t new_bound     = samp_nid + n_patches * 5 + 8;
+    uint32_t qsize_nid     = nid;
+    uint32_t new_bound     = nid + n_patches * 10 + 32;
     STEREO_LOG(
         "FS_NID_INIT bound=%u nid=%u",
         new_bound,
@@ -8662,7 +8657,7 @@ bool spirv_patch_stereo_fs(
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t old_result_type = w[1];
             uint32_t old_result_id = w[2];
-            uint32_t query_v3_id = qsize_nid++;
+            uint32_t query_v3_id = samp_nid++;
             if (!s.v3int_id)
             {
                 STEREO_LOG(
@@ -9142,7 +9137,7 @@ bool spirv_patch_stereo_fs(
     }
     if (nid > samp_nid)
         samp_nid = nid;
-    ob.w[3] = qsize_nid;
+    ob.w[3] = samp_nid;
     *out   = ob.w;
     *out_c = ob.n;
     STEREO_LOG("FS patched: %u 2D img types→arr, %u samples extended, bound %u→%u",
