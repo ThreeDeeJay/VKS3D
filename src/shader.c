@@ -7665,7 +7665,15 @@ bool spirv_patch_stereo_fs(
                 s.images[patch_img_idx].binding,
                 new_array_type);
             uint32_t w[9];
-            memcpy(w, &in[i], wc * sizeof(uint32_t));
+            if (wc != 9)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                    emitted_type[in[i + 1]] = true;
+                i += wc;
+                continue;
+            }
+            memcpy(w, &in[i], sizeof(w));
             w[1] = new_array_type;
             w[5] = 1;
             STEREO_LOG(
