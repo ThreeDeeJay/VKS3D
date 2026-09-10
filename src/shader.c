@@ -152,6 +152,10 @@ typedef struct
     /* Matrix provenance tracking */
     uint32_t location0_vars[16];
     uint32_t location0_count;
+    uint32_t location1_vars[16];
+    uint32_t location1_count;
+    bool has_ui_branch;
+    uint32_t ui_branch_cond;
     uint32_t screen_values[16];
     uint32_t screen_value_count;
     bool screen_has_zw_use;
@@ -294,6 +298,15 @@ static bool is_location0_var(const SpvMod *m,uint32_t id)
     for(uint32_t n=0;n<m->location0_count;n++)
     {
         if(m->location0_vars[n]==id)
+            return true;
+    }
+    return false;
+}
+static bool is_location1_var(const SpvMod *m,uint32_t id)
+{
+    for(uint32_t n=0;n<m->location1_count;n++)
+    {
+        if(m->location1_vars[n]==id)
             return true;
     }
     return false;
@@ -719,6 +732,18 @@ static void do_scan(SpvMod *m, bool p2)
                         SETVIEW(w[i + 2], VIEW(w[i + 5]));
                 }
                 break;
+            case OpFOrdLessThan:
+                if(wc>=5)
+                {
+                    uint32_t a=w[i+3];
+                    uint32_t b=w[i+4];
+                    if((a==m->float_100&&is_location1_var(m,b))||(b==m->float_100&&is_location1_var(m,a)))
+                    {
+                        m->has_ui_branch=true;
+                        m->ui_branch_cond=w[i+2];
+                    }
+                }
+                break;
             case SpvOpSelect:
                 if (wc >= 6 &&
                     w[i + 2] < m->value_capacity)
@@ -907,6 +932,11 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     if(m->location0_count<16)
                         m->location0_vars[m->location0_count++]=w[i+1];
+                }
+                if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==1)
+                {
+                    if(m->location1_count<16)
+                        m->location1_vars[m->location1_count++]=w[i+1];
                 }
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
@@ -1207,6 +1237,8 @@ typedef struct {
     float lo_dbg;
     float ro_dbg;
     bool force_far_depth;
+    bool flatten_ui_branch;
+    uint32_t ui_branch_cond;
     StereoDebugCtx *dbg;
 } BodyCtx;
 
@@ -1359,6 +1391,29 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     else
     {
         sel = c->cl;
+    }
+    if(c->flatten_ui_branch&&c->ui_branch_cond)
+    {
+        uint32_t flat_sel=(*nid)++;
+        uint32_t zero=(*nid)++;
+        uint32_t zc[]={
+            op_(SpvOpConstant,4),
+            m->ft,
+            zero,
+            0u
+        };
+        sb_push_n(out,zc,4);
+        uint32_t sw[]={
+            op_(SpvOpSelect,6),
+            m->ft,
+            flat_sel,
+            c->ui_branch_cond,
+            zero,
+            sel
+        };
+        sb_push_n(out,sw,6);
+        sel=flat_sel;
+        STEREO_LOG("UI_BRANCH_FLATTEN cond=%u offset=%u zero=%u",c->ui_branch_cond,sel,zero);
     }
     {
         uint32_t w[] = {
@@ -3032,6 +3087,8 @@ bool spirv_patch_stereo_vertex(
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
         .force_far_depth     = force_far_depth,
+        .flatten_ui_branch   = cfg&&cfg->mono_ui&&m.has_ui_branch&&mono_ui_pipeline,
+        .ui_branch_cond      = m.ui_branch_cond,
         .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
