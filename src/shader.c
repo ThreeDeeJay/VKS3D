@@ -2505,6 +2505,7 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     bool force_far_depth,
+    bool mono_ui_pipeline,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
@@ -2633,10 +2634,10 @@ bool spirv_patch_stereo_vertex(
      */
     if(cfg&&cfg->mono_ui)
     {
-        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&m.has_v2_position_input&&!m.has_emit_vertex)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_matrix_ops&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.has_matrix_ops&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex);
+        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&m.has_v2_position_input&&!m.has_emit_vertex)||(mono_ui_pipeline&&m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_matrix_ops&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.has_matrix_ops&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex);
         if(ui_candidate)
         {
-            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u direct=%u emit=%u proj=%u dots=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count);
+            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u direct=%u emit=%u proj=%u dots=%u pipeline=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count,mono_ui_pipeline);
             free_spv_provenance(&m);
             return false;
         }
@@ -11059,6 +11060,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 lo, ro, conv,
                 true,
                 false,
+                false,
                 dbgG))
             {
                 STEREO_LOG(
@@ -11173,6 +11175,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         &patched, &pc2,
                         lo, ro, conv,
                         true,
+                        false,
                         false,
                         &dbgA))
                 {
@@ -11371,6 +11374,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo, ro, conv,
                     /*inj_vi=*/true,
                     vs_background,
+                    ci->pDepthStencilState!=NULL&&ci->pDepthStencilState->depthTestEnable==VK_FALSE&&ci->pDepthStencilState->depthWriteEnable==VK_FALSE,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
@@ -12131,6 +12135,7 @@ stereo_CreateShadersEXT(
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
                 true,
+                false,
                 false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
