@@ -252,11 +252,13 @@ static void free_spv_provenance(SpvMod *m)
     free(m->value_from_matrix);
     free(m->is_matrix_type);
     free(m->is_matrix_ptr);
+    free(m->is_position_value);
     free(m->is_proj_value);
     free(m->is_view_value);
     m->value_from_matrix = NULL;
     m->is_matrix_type    = NULL;
     m->is_matrix_ptr     = NULL;
+    m->is_position_value = NULL;
     m->is_proj_value     = NULL;
     m->is_view_value     = NULL;
     m->value_capacity = 0;
@@ -1884,6 +1886,8 @@ bool spirv_patch_stereo_mesh(
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_matrix_ptr =
         calloc(m.value_capacity, sizeof(uint8_t));
+    m.is_position_value =
+        calloc(m.value_capacity, sizeof(uint8_t));
     m.is_proj_value =
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_view_value =
@@ -1891,6 +1895,7 @@ bool spirv_patch_stereo_mesh(
     if (!m.value_from_matrix ||
         !m.is_matrix_type ||
         !m.is_matrix_ptr ||
+        !m.is_position_value ||
         !m.is_proj_value ||
         !m.is_view_value)
     {
@@ -2519,6 +2524,8 @@ bool spirv_patch_stereo_vertex(
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_matrix_ptr =
         calloc(m.value_capacity, sizeof(uint8_t));
+    m.is_position_value =
+        calloc(m.value_capacity, sizeof(uint8_t));
     m.is_proj_value =
         calloc(m.value_capacity, sizeof(uint8_t));
     m.is_view_value =
@@ -2526,6 +2533,7 @@ bool spirv_patch_stereo_vertex(
     if (!m.value_from_matrix ||
         !m.is_matrix_type ||
         !m.is_matrix_ptr ||
+        !m.is_position_value ||
         !m.is_proj_value ||
         !m.is_view_value)
     {
@@ -10498,9 +10506,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vm.value_from_matrix = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_matrix_type = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_matrix_ptr = calloc(vm.value_capacity,sizeof(uint8_t));
+                vm.is_position_value = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_proj_value = calloc(vm.value_capacity,sizeof(uint8_t));
                 vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
-                if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
+                if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_position_value && vm.is_proj_value && vm.is_view_value) {
                     spv_scan(&vm);
                     bool vs_has_user_output = false;
                     for (size_t vi = 5; vi < vs_cache->words;)
@@ -10690,6 +10699,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     calloc(fm.value_capacity, sizeof(uint8_t));
                 fm.is_matrix_ptr =
                     calloc(fm.value_capacity, sizeof(uint8_t));
+                fm.is_position_value =
+                    calloc(fm.value_capacity, sizeof(uint8_t));
                 fm.is_proj_value =
                     calloc(fm.value_capacity, sizeof(uint8_t));
                 fm.is_view_value =
@@ -10697,6 +10708,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 if (fm.value_from_matrix &&
                     fm.is_matrix_type &&
                     fm.is_matrix_ptr &&
+                    fm.is_position_value &&
                     fm.is_proj_value &&
                     fm.is_view_value)
                 {
