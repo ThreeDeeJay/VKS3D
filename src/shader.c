@@ -416,6 +416,10 @@ static void do_scan(SpvMod *m, bool p2)
                 }
                 break;
             case SpvOpVectorShuffle:
+                if (p2)
+                {
+                    STEREO_LOG("P2_SHUFFLE wc=%u result=%u src=%u selectors=%u,%u,%u,%u marked=%u", wc, wc >= 3 ? w[i + 2] : 0, wc >= 4 ? w[i + 3] : 0, wc >= 6 ? w[i + 5] : 0, wc >= 7 ? w[i + 6] : 0, wc >= 8 ? w[i + 7] : 0, wc >= 9 ? w[i + 8] : 0, wc >= 4 && w[i + 3] < m->value_capacity ? m->is_position_value[w[i + 3]] : 0);
+                }
                 if (wc >= 9 &&
                     w[i + 2] < m->value_capacity &&
                     w[i + 3] < m->value_capacity)
@@ -959,6 +963,10 @@ static void do_scan(SpvMod *m, bool p2)
                 break;
             }
         } else {
+            if(op==SpvOpLoad)
+            {
+                STEREO_LOG("P2_LOAD op=%u wc=%u result=%u src=%u cap=%u pos=%u", op, wc, wc >= 3 ? w[i + 2] : 0, wc >= 4 ? w[i + 3] : 0, (uint32_t)m->value_capacity, m->pos_var);
+            }
             if(op==SpvOpLoad &&
                 wc>=4 &&
                 w[i+2]<m->value_capacity &&
@@ -1010,6 +1018,7 @@ static void spv_scan(SpvMod *m)
      */
     do_scan(m, false);
     if (m->pos_is_block)
+    STEREO_LOG("SCAN_P2_BEGIN hash=%016llx pos=%u block=%u", (unsigned long long)hash_spv(m->words, m->count), m->pos_var, m->pos_is_block);
         do_scan(m, true);
     STEREO_LOG(
         "SCAN hash=%016llx exec=%u matrix=%u proj=%u dot=%u direct=%u emit=%u pos=%u block=%u",
