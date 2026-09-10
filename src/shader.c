@@ -8439,8 +8439,16 @@ bool spirv_patch_stereo_fs(
                 in[i + 2],
                 in[i + 1],
                 in[i + 3]);
+            if (wc != 4)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                    emitted_type[in[i + 1]] = true;
+                i += wc;
+                continue;
+            }
             uint32_t w[4];
-            memcpy(w, &in[i], wc * sizeof(uint32_t));
+            memcpy(w, &in[i], sizeof(w));
             int load = fs_find_load(&s, in[i + 3]);
             STEREO_LOG(
                 "FS_PATCH_IMAGE_LOADINDEX sampledImage=%u load=%d",
