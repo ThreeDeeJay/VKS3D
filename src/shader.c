@@ -2625,7 +2625,7 @@ bool spirv_patch_stereo_vertex(
     //    }
     //}
     STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u pos_input=%u pos_input_var=%u loc0=%u v2_pos=%u pos_zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m->pos_input_var, m->location0_var, m.has_v2_position_input, m.has_position_zw_use, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
+    (unsigned long long)hash_spv(in, in_c), m.has_matrix_ops, m.has_direct_position_write, m.has_position_input, m.pos_input_var, m.location0_var, m.has_v2_position_input, m.has_position_zw_use, m.dot_count, m.has_emit_vertex, m.has_viewindex_builtin, m.pos_var, m.pos_is_block);
 
     {
         static bool skip_list_init;
