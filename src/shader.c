@@ -374,15 +374,6 @@ static void do_scan(SpvMod *m, bool p2)
                     SETMAT(
                         w[i + 2],
                         MAT(w[i + 3]) || PTR(w[i + 3]));
-                    if (w[i + 3] == m->pos_var)
-                    {
-                        m->is_position_value[w[i + 2]] = 1;
-                        STEREO_LOG(
-                            "POS_LOAD result=%u src=%u pos_var=%u marked=1",
-                            w[i + 2],
-                            w[i + 3],
-                            m->pos_var);
-                    }
                 }
                 if (wc >= 4)
                 {
@@ -434,7 +425,7 @@ static void do_scan(SpvMod *m, bool p2)
                         SETPROJ(w[i + 2], PROJ(w[i + 3]));
                     if (VIEW(w[i + 3]))
                         SETVIEW(w[i + 2], VIEW(w[i + 3]));
-                    if (m->is_position_value[w[i + 3]] &&
+                    if (p2 && m->is_position_value[w[i + 3]] &&
                         (w[i + 5] >= 2 || w[i + 6] >= 2 || w[i + 7] >= 2 || w[i + 8] >= 2))
                     {
                         m->has_position_zw_use = true;
@@ -968,6 +959,21 @@ static void do_scan(SpvMod *m, bool p2)
                 break;
             }
         } else {
+            if(op==SpvOpLoad &&
+                wc>=4 &&
+                w[i+2]<m->value_capacity &&
+                w[i+3]<m->value_capacity)
+            {
+                if(w[i+3]==m->pos_var)
+                {
+                    m->is_position_value[w[i+2]]=1;
+                    STEREO_LOG(
+                        "POS_LOAD result=%u src=%u pos_var=%u marked=1",
+                        w[i+2],
+                        w[i+3],
+                        m->pos_var);
+                }
+            }
             if(op==SpvOpTypePointer && wc>=4 &&
                w[i+2]==SpvStorageOutput)
             {
