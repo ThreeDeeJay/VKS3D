@@ -11592,6 +11592,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             {
                 depth_states[p] = *ci->pDepthStencilState;
                 depth_states[p].depthWriteEnable = VK_TRUE;
+                depth_states[p].depthCompareOp = VK_COMPARE_OP_ALWAYS;
                 infos[p].pDepthStencilState = &depth_states[p];
                 STEREO_LOG(
                     "VS_DEPTH_STATE_FORCE "
