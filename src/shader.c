@@ -2505,6 +2505,7 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     bool force_far_depth,
+    bool expand_background,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
@@ -2974,7 +2975,7 @@ bool spirv_patch_stereo_vertex(
             id_bg_expand,
             0
         };
-        float bg_expand = vs_quad_fs && vs_has_v3_user_output ? fmaxf(fabsf(lo * conv), fabsf(ro * conv)) : 0.0f;
+        float bg_expand = expand_background ? fmaxf(fabsf(lo * conv), fabsf(ro * conv)) : 0.0f;
         memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
     }
@@ -10570,6 +10571,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     }
                     STEREO_LOG("VS_OUTPUT_RESULT location=%u has_user=%u has_v3=%u",vs_location_id,vs_has_user_output,vs_has_v3_user_output);
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
+                    bool expand_background = vs_quad_fs && vs_has_v3_user_output
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
                     bool vs_z_one_position = false;
@@ -11238,6 +11240,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 lo, ro, conv,
                 true,
                 false,
+                false,
                 dbgG))
             {
                 STEREO_LOG(
@@ -11352,6 +11355,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         &patched, &pc2,
                         lo, ro, conv,
                         true,
+                        false,
                         false,
                         &dbgA))
                 {
@@ -11550,6 +11554,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo, ro, conv,
                     /*inj_vi=*/true,
                     vs_background,
+                    expand_background,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
@@ -12310,6 +12315,7 @@ stereo_CreateShadersEXT(
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
                 true,
+                false,
                 false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
