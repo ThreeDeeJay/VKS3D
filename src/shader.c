@@ -799,6 +799,28 @@ static void do_scan(SpvMod *m, bool p2)
                 w[i + 3] == m->v4t)
                 {
                 m->ptr_out_v4 = w[i + 1];
+                }
+                if (w[i + 2] == SpvStorageOutput &&
+                    w[i + 3] != m->v4t)
+                {
+                    for (size_t di = 5; di < m->count;)
+                    {
+                        uint32_t dw = w[di] >> 16;
+                        uint32_t dop = w[di] & 0xffff;
+                        if (!dw || di + dw > m->count)
+                            break;
+                        if (dop == SpvOpTypeVector &&
+                            dw >= 4 &&
+                            w[di + 1] == w[i + 3] &&
+                            w[di + 2] == m->ft &&
+                            w[di + 3] == 3)
+                        {
+                            m->has_v3_position_output = true;
+                            break;
+                        }
+                        di += dw;
+                    }
+                }
                 if (m->exec_model == SpvExecMeshEXT &&
                     w[i + 2] == SpvStorageOutput &&
                     m->mesh_vertices_type &&
@@ -876,6 +898,48 @@ static void do_scan(SpvMod *m, bool p2)
                         "MESH_VERTICES_VAR var=%u ptr=%u",
                         m->mesh_vertices_var,
                         m->mesh_vertices_ptr_type);
+                }
+                if (w[i + 3] == SpvStorageOutput)
+                {
+                    for (uint32_t li = 0; li < m->location0_count; ++li)
+                    {
+                        if (m->location0_vars[li] != w[i + 2])
+                            continue;
+                        uint32_t pointer_id = w[i + 1];
+                        for (size_t ti = 5; ti < m->count;)
+                        {
+                            uint32_t tw = w[ti] >> 16;
+                            uint32_t top = w[ti] & 0xffff;
+                            if (!tw || ti + tw > m->count)
+                                break;
+                            if (top == SpvOpTypePointer &&
+                                tw >= 4 &&
+                                w[ti + 1] == pointer_id &&
+                                w[ti + 2] == SpvStorageOutput)
+                            {
+                                uint32_t pointee = w[ti + 3];
+                                for (size_t vi = 5; vi < m->count;)
+                                {
+                                    uint32_t vw = w[vi] >> 16;
+                                    uint32_t vop = w[vi] & 0xffff;
+                                    if (!vw || vi + vw > m->count)
+                                        break;
+                                    if (vop == SpvOpTypeVector &&
+                                        vw >= 4 &&
+                                        w[vi + 1] == pointee &&
+                                        w[vi + 2] == m->ft &&
+                                        w[vi + 3] == 3)
+                                    {
+                                        m->has_v3_position_output = true;
+                                        break;
+                                    }
+                                    vi += vw;
+                                }
+                                break;
+                            }
+                            ti += tw;
+                        }
+                    }
                 }
                 if (w[i + 3] == SpvStorageInput)
                 {
@@ -2975,7 +3039,7 @@ bool spirv_patch_stereo_vertex(
             id_bg_expand,
             0
         };
-        bool expand_background = !m.has_matrix_ops && !m.has_direct_position_write && m.has_v3_position_output;
+        bool expand_background = !m.has_matrix_ops && m.has_v3_position_output;
         float bg_expand = expand_background ? fmaxf(fabsf(lo * conv), fabsf(ro * conv)) : 0.0f;
         memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
