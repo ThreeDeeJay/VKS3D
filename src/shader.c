@@ -11606,7 +11606,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vs_uv_quad);
             if (vs_uv_quad)
             {
-                free_spv_provenance(&fm);
+                free_spv_provenance(&m);
                 return false;
             }
             if (!spirv_patch_stereo_vertex(
