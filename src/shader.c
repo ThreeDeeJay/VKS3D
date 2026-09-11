@@ -1207,7 +1207,6 @@ typedef struct {
     float lo_dbg;
     float ro_dbg;
     bool force_far_depth;
-    bool expand_background;
     StereoDebugCtx *dbg;
 } BodyCtx;
 
@@ -2801,9 +2800,6 @@ bool spirv_patch_stereo_vertex(
     uint32_t id_cr = nid++;
     uint32_t id_cc = nid++;
     uint32_t id_bg_expand = nid++;
-    bool expand_background =
-    force_far_depth &&
-    !m.has_matrix_ops;
     STEREO_LOG(
         "VS_NEW_IDS "
         "bound=%u "
@@ -2978,7 +2974,7 @@ bool spirv_patch_stereo_vertex(
             id_bg_expand,
             0
         };
-        float bg_expand = expand_background ? fmaxf(fabsf(lo * conv), fabsf(ro * conv)) : 0.0f;
+        float bg_expand = fmaxf(fabsf(lo * conv), fabsf(ro * conv));
         memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
     }
@@ -3035,7 +3031,6 @@ bool spirv_patch_stereo_vertex(
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
         .force_far_depth     = force_far_depth,
-        .expand_background   = expand_background,
         .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
