@@ -11606,8 +11606,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vs_uv_quad);
             if (vs_uv_quad)
             {
-                free_spv_provenance(&m);
-                return false;
+                STEREO_LOG("PATHB_SKIP_UV_QUAD hash=%016llx",
+                    (unsigned long long)hash_spv(e->spv, e->words));
+                continue;
             }
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
