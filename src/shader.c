@@ -1679,6 +1679,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out, w, 6);
     }
     uint32_t final_pos = np;
+    STEREO_LOG("VS_DEPTH_STRATEGY force=%u expand=%u px=%u pw=%u",c->force_far_depth,c->expand_background,px,pw);
     if (c->force_far_depth)
     {
         uint32_t w[] = {
