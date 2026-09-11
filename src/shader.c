@@ -799,7 +799,6 @@ static void do_scan(SpvMod *m, bool p2)
                 w[i + 3] == m->v4t)
                 {
                 m->ptr_out_v4 = w[i + 1];
-                }
                 if (w[i + 2] == SpvStorageOutput &&
                     w[i + 3] != m->v4t)
                 {
