@@ -1692,7 +1692,9 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             2u
         };
         sb_push_n(out, w, 6);
+        STEREO_LOG("VS_BACKGROUND_ZW np=%u np_far=%u w=%u",np,np_far,pw);
         final_pos = np_far;
+        STEREO_LOG("VS_BACKGROUND_FINAL pos=%u np=%u np_far=%u pw=%u",final_pos,np,np_far,pw);
         STEREO_LOG(
             "VS_FAR_DEPTH "
             "pos_in=%u "
