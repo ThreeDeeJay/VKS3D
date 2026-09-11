@@ -2800,6 +2800,7 @@ bool spirv_patch_stereo_vertex(
     uint32_t id_cr = nid++;
     uint32_t id_cc = nid++;
     uint32_t id_bg_expand = nid++;
+    bool disable_bg_expand = spv_hash == 0xaa941a076b8f90a6ULL;
     STEREO_LOG(
         "VS_NEW_IDS "
         "bound=%u "
@@ -2974,7 +2975,10 @@ bool spirv_patch_stereo_vertex(
             id_bg_expand,
             0
         };
-        float bg_expand = fmaxf(fabsf(lo * conv), fabsf(ro * conv));
+        float bg_expand =
+        disable_bg_expand ?
+        0.0f :
+        fmaxf(fabsf(lo * conv), fabsf(ro * conv));
         memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
     }
