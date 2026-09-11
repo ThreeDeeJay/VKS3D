@@ -149,7 +149,6 @@ typedef struct
     bool has_matrix_ops;
     bool has_direct_position_write;
     bool has_v2_position_input;
-    bool has_v3_position_output;
     /* Matrix provenance tracking */
     uint32_t location0_vars[16];
     uint32_t location0_count;
@@ -799,27 +798,6 @@ static void do_scan(SpvMod *m, bool p2)
                 w[i + 3] == m->v4t)
                 {
                 m->ptr_out_v4 = w[i + 1];
-                if (w[i + 2] == SpvStorageOutput &&
-                    w[i + 3] != m->v4t)
-                {
-                    for (size_t di = 5; di < m->count;)
-                    {
-                        uint32_t dw = w[di] >> 16;
-                        uint32_t dop = w[di] & 0xffff;
-                        if (!dw || di + dw > m->count)
-                            break;
-                        if (dop == SpvOpTypeVector &&
-                            dw >= 4 &&
-                            w[di + 1] == w[i + 3] &&
-                            w[di + 2] == m->ft &&
-                            w[di + 3] == 3)
-                        {
-                            m->has_v3_position_output = true;
-                            break;
-                        }
-                        di += dw;
-                    }
-                }
                 if (m->exec_model == SpvExecMeshEXT &&
                     w[i + 2] == SpvStorageOutput &&
                     m->mesh_vertices_type &&
@@ -897,48 +875,6 @@ static void do_scan(SpvMod *m, bool p2)
                         "MESH_VERTICES_VAR var=%u ptr=%u",
                         m->mesh_vertices_var,
                         m->mesh_vertices_ptr_type);
-                }
-                if (w[i + 3] == SpvStorageOutput)
-                {
-                    for (uint32_t li = 0; li < m->location0_count; ++li)
-                    {
-                        if (m->location0_vars[li] != w[i + 2])
-                            continue;
-                        uint32_t pointer_id = w[i + 1];
-                        for (size_t ti = 5; ti < m->count;)
-                        {
-                            uint32_t tw = w[ti] >> 16;
-                            uint32_t top = w[ti] & 0xffff;
-                            if (!tw || ti + tw > m->count)
-                                break;
-                            if (top == SpvOpTypePointer &&
-                                tw >= 4 &&
-                                w[ti + 1] == pointer_id &&
-                                w[ti + 2] == SpvStorageOutput)
-                            {
-                                uint32_t pointee = w[ti + 3];
-                                for (size_t vi = 5; vi < m->count;)
-                                {
-                                    uint32_t vw = w[vi] >> 16;
-                                    uint32_t vop = w[vi] & 0xffff;
-                                    if (!vw || vi + vw > m->count)
-                                        break;
-                                    if (vop == SpvOpTypeVector &&
-                                        vw >= 4 &&
-                                        w[vi + 1] == pointee &&
-                                        w[vi + 2] == m->ft &&
-                                        w[vi + 3] == 3)
-                                    {
-                                        m->has_v3_position_output = true;
-                                        break;
-                                    }
-                                    vi += vw;
-                                }
-                                break;
-                            }
-                            ti += tw;
-                        }
-                    }
                 }
                 if (w[i + 3] == SpvStorageInput)
                 {
@@ -1268,7 +1204,6 @@ typedef struct {
     uint32_t cc;
     uint32_t projection_mode;
     uint32_t bg_expand;
-    uint32_t expand_background;
     float lo_dbg;
     float ro_dbg;
     bool force_far_depth;
@@ -1680,7 +1615,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out, w, 6);
     }
     uint32_t final_pos = np;
-    STEREO_LOG("VS_DEPTH_STRATEGY force=%u expand=%u px=%u pw=%u",c->force_far_depth,c->expand_background,px,pw);
     if (c->force_far_depth)
     {
         uint32_t w[] = {
@@ -1692,9 +1626,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             2u
         };
         sb_push_n(out, w, 6);
-        STEREO_LOG("VS_BACKGROUND_ZW np=%u np_far=%u w=%u",np,np_far,pw);
         final_pos = np_far;
-        STEREO_LOG("VS_BACKGROUND_FINAL pos=%u np=%u np_far=%u pw=%u",final_pos,np,np_far,pw);
         STEREO_LOG(
             "VS_FAR_DEPTH "
             "pos_in=%u "
@@ -3042,8 +2974,7 @@ bool spirv_patch_stereo_vertex(
             id_bg_expand,
             0
         };
-        bool expand_background = !m.has_matrix_ops && m.has_v3_position_output;
-        float bg_expand = expand_background ? fmaxf(fabsf(lo * conv), fabsf(ro * conv)) : 0.0f;
+        float bg_expand = fmaxf(fabsf(lo * conv), fabsf(ro * conv));
         memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
     }
@@ -10751,7 +10682,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         }
                     }
                     vs_background = (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable) || (vs_quad_fs && vs_has_user_output && !vm.has_v2_position_input && vs_z_one_position && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable) || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
-                    bool expand_background = vs_background && vs_quad_fs && vs_has_v3_user_output;
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
