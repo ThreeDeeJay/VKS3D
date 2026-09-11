@@ -1268,6 +1268,7 @@ typedef struct {
     uint32_t cc;
     uint32_t projection_mode;
     uint32_t bg_expand;
+    uint32_t expand_background;
     float lo_dbg;
     float ro_dbg;
     bool force_far_depth;
