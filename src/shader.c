@@ -2505,7 +2505,6 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     bool force_far_depth,
-    bool expand_background,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
@@ -2975,6 +2974,7 @@ bool spirv_patch_stereo_vertex(
             id_bg_expand,
             0
         };
+        bool expand_background = !m.has_matrix_ops && !m.has_direct_position_write && m.has_v3_output;
         float bg_expand = expand_background ? fmaxf(fabsf(lo * conv), fabsf(ro * conv)) : 0.0f;
         memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
@@ -11239,7 +11239,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 lo, ro, conv,
                 true,
                 false,
-                false,
                 dbgG))
             {
                 STEREO_LOG(
@@ -11354,7 +11353,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         &patched, &pc2,
                         lo, ro, conv,
                         true,
-                        false,
                         false,
                         &dbgA))
                 {
@@ -11553,7 +11551,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     lo, ro, conv,
                     /*inj_vi=*/true,
                     vs_background,
-                    expand_background,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
@@ -12314,7 +12311,6 @@ stereo_CreateShadersEXT(
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
                 true,
-                false,
                 false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {

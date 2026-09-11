@@ -861,7 +861,6 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     bool force_far_depth,
-    bool expand_background,
     StereoDebugCtx *dbg);
 bool spirv_patch_stereo_raygen(
     const uint32_t *in,
