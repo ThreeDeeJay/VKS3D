@@ -10689,7 +10689,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable)
                     || (vs_quad_fs && vs_has_user_output && !vm.has_v2_position_input && vs_z_one_position && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable)
                     || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
-                    vs_procedural_sky = vs_background && vm.has_matrix_ops;
+                    vs_procedural_sky = vs_background && vs_quad_fs;
                     STEREO_LOG(
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
@@ -11554,11 +11554,13 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             };
             bool procedural_sky = vs_procedural_sky;
             bool flatten_sky = vs_background && !procedural_sky;
-            STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u",
+            STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 vs_background,
                 procedural_sky,
-                flatten_sky);
+                flatten_sky,
+                vs_quad_fs,
+                vs_procedural_sky);
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
                     e->spv, e->words,
