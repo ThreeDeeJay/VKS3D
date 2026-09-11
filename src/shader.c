@@ -1207,6 +1207,7 @@ typedef struct {
     float lo_dbg;
     float ro_dbg;
     bool force_far_depth;
+    bool procedural_sky;
     StereoDebugCtx *dbg;
 } BodyCtx;
 
@@ -1475,7 +1476,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cl,
         c->cr,
         c->cc);
-    if (c->force_far_depth)
+    if (c->force_far_depth && !c->procedural_sky)
     {
         uint32_t bg_offset = (*nid)++;
         uint32_t bg_scale = (*nid)++;
@@ -2505,6 +2506,7 @@ bool spirv_patch_stereo_vertex(
     float conv,
     bool inj_vi,
     bool force_far_depth,
+    bool procedural_sky,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
@@ -3031,6 +3033,7 @@ bool spirv_patch_stereo_vertex(
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
         .force_far_depth     = force_far_depth,
+        .procedural_sky      = procedural_sky,
         .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
@@ -11237,6 +11240,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 lo, ro, conv,
                 true,
                 false,
+                false,
                 dbgG))
             {
                 STEREO_LOG(
@@ -11351,6 +11355,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         &patched, &pc2,
                         lo, ro, conv,
                         true,
+                        false,
                         false,
                         &dbgA))
                 {
@@ -11542,13 +11547,22 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
+            bool procedural_sky = vs_background && vm.has_matrix_ops;
+            bool flatten_sky = vs_background && !procedural_sky;
+            STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u matrix=%u",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                vs_background,
+                procedural_sky,
+                flatten_sky,
+                vm.has_matrix_ops);
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
                     e->spv, e->words,
                     &patched, &pc2,
                     lo, ro, conv,
                     /*inj_vi=*/true,
-                    vs_background,
+                    flatten_sky,
+                    procedural_sky,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
@@ -12309,6 +12323,7 @@ stereo_CreateShadersEXT(
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
                 true,
+                false,
                 false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
