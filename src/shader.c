@@ -10516,6 +10516,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool vs_background = false;
         bool vs_procedural_sky = false;
         bool vs_pure_quad = false;
+        bool vs_uv_quad = false;
         if (has_vs && vs_stage != ~0u) {
             StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
             if (vs_cache) {
@@ -10727,6 +10728,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable)
                     || (vs_quad_fs && vs_has_user_output && !vm.has_v2_position_input && vs_z_one_position && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable)
                     || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
+                    vs_uv_quad = vs_quad_fs && !vm.has_v2_position_input && !vm.has_direct_position_write && vm.location0_count == 2 && vm.screen_value_count == 2;
                     vs_procedural_sky = vs_background && vs_quad_fs;
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG(
@@ -11594,16 +11596,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             bool procedural_sky = vs_procedural_sky && sd->stereo.sky_extend;
             bool flatten_sky = vs_background && !vs_procedural_sky && sd->stereo.sky_flatten;
             bool force_sky_depth = flatten_sky || procedural_sky;
-            bool skip_uv_quad = vs_quad_fs && m.has_v2_position_input == false && m.has_direct_position_write == false && m.location0_count == 2 && m.screen_value_count == 2;
-            STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u skip_uv_quad=%u",
+            STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u uv_quad=%u",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 vs_background,
                 procedural_sky,
                 flatten_sky,
                 vs_quad_fs,
                 vs_procedural_sky && !vs_quad_fs,
-                skip_uv_quad);
-            if (skip_uv_quad)
+                vs_uv_quad);
+            if (vs_uv_quad)
             {
                 free_spv_provenance(&m);
                 return false;
