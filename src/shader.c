@@ -149,6 +149,7 @@ typedef struct
     bool has_matrix_ops;
     bool has_direct_position_write;
     bool has_v2_position_input;
+    bool has_v3_position_output;
     /* Matrix provenance tracking */
     uint32_t location0_vars[16];
     uint32_t location0_count;
@@ -2974,7 +2975,7 @@ bool spirv_patch_stereo_vertex(
             id_bg_expand,
             0
         };
-        bool expand_background = !m.has_matrix_ops && !m.has_direct_position_write && m.has_v3_output;
+        bool expand_background = !m.has_matrix_ops && !m.has_direct_position_write && m.has_v3_position_output;
         float bg_expand = expand_background ? fmaxf(fabsf(lo * conv), fabsf(ro * conv)) : 0.0f;
         memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
