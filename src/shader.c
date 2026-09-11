@@ -11590,8 +11590,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
-            bool procedural_sky = vs_procedural_sky;
-            bool flatten_sky = vs_background && !procedural_sky;
+            bool procedural_sky = vs_procedural_sky && sd->stereo.sky_extend;
+            bool flatten_sky = vs_background && !vs_procedural_sky && sd->stereo.sky_flatten;
+            bool force_sky_depth = flatten_sky || procedural_sky;
             STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 vs_background,
@@ -11605,7 +11606,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     &patched, &pc2,
                     lo, ro, conv,
                     /*inj_vi=*/true,
-                    vs_background,
+                    force_sky_depth,
                     procedural_sky,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));

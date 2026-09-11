@@ -217,6 +217,10 @@ void stereo_config_init(StereoConfig *cfg)
     /* Flatten detected screen-space UI by skipping stereo patching. */
     cfg->mono_ui = cfg_bool("mono_ui", true);
 
+    /* Push sky to far plane. */
+    cfg->sky_flatten = cfg_bool("sky_flatten", true);
+    cfg->sky_extend = cfg_bool("sky_extend", true);
+
     cfg->projection = cfg_bool("projection", 1);
 
     /* ── hotkey steps ── */
@@ -226,7 +230,7 @@ void stereo_config_init(StereoConfig *cfg)
     stereo_config_compute_offsets(cfg);
     STEREO_LOG(
         "Stereo config: enabled=%d separation=%.4f convergence=%.4f "
-        "projection=%s flip=%d mono_ui=%d mode=%d",
+        "projection=%s flip=%d mono_ui=%d sky_flatten=%d sky_extend=%d mode=%d",
         cfg->enabled,
         cfg->separation,
         cfg->convergence,
@@ -234,6 +238,8 @@ void stereo_config_init(StereoConfig *cfg)
             "off-axis" : "parallel",
         cfg->flip_eyes,
         cfg->mono_ui,
+        cfg->sky_flatten,
+        cfg->sky_extend,
         (int)cfg->present_mode);
     STEREO_LOG("  res_override=%ux%u  refresh=%uHz  half_fps=%d  hotkey_step_sep=%.4f  hotkey_step_conv=%.4f",
                cfg->override_width, cfg->override_height, cfg->refresh_rate,
