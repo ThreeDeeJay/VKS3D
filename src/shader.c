@@ -1564,6 +1564,16 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
                     };
                     sb_push_n(out, w3, 5);
                 }
+                {
+                    uint32_t w4[] = {
+                        op_(SpvOpFSub, 5),
+                        m->ft,
+                        nx2,
+                        bg_x,
+                        bg_offset
+                    };
+                    sb_push_n(out, w4, 5);
+                }
                 STEREO_LOG(
                     "VS_BACKGROUND_FLAT "
                     "x=%u "
@@ -1591,16 +1601,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
                     c->cf1
                 };
                 sb_push_n(out, w3, 5);
-            }
-            {
-                uint32_t w4[] = {
-                    op_(SpvOpFSub, 5),
-                    m->ft,
-                    nx2,
-                    bg_x,
-                    bg_offset
-                };
-                sb_push_n(out, w4, 5);
             }
         }
     }
