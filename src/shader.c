@@ -1540,159 +1540,106 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         }
         else
         {
-            if (m->has_direct_position_write && !m->has_matrix_ops)
             {
-                uint32_t bg_scale = (*nid)++;
-                {
-                    uint32_t w2[] = {
-                        op_(SpvOpFAdd, 5),
-                        m->ft,
-                        bg_scale,
-                        c->bg_expand,
-                        c->cf1
-                    };
-                    sb_push_n(out, w2, 5);
-                }
-                {
-                    uint32_t w3[] = {
-                        op_(SpvOpFMul, 5),
-                        m->ft,
-                        bg_x,
-                        px,
-                        bg_scale
-                    };
-                    sb_push_n(out, w3, 5);
-                }
-                {
-                    uint32_t w4[] = {
-                        op_(SpvOpFSub, 5),
-                        m->ft,
-                        nx2,
-                        bg_x,
-                        bg_offset
-                    };
-                    sb_push_n(out, w4, 5);
-                }
-                STEREO_LOG(
-                    "VS_BACKGROUND_FLAT "
-                    "x=%u "
-                    "x2=%u "
-                    "convergence=%u "
-                    "stereo_offset=%u "
-                    "expand=%u "
-                    "scale=%u "
-                    "w=%u",
-                    px,
-                    nx2,
-                    c->cc,
-                    bg_offset,
-                    c->bg_expand,
-                    bg_scale,
-                    pw);
-            }
-            else
-            {
-                {
-                    uint32_t w2[] = {
-                        op_(SpvOpFMul, 5),
-                        m->ft,
-                        bg_x,
-                        bg_offset,
-                        pw
-                    };
-                    sb_push_n(out, w2, 5);
-                }
-                {
-                    uint32_t w3[] = {
-                        op_(SpvOpFSub, 5),
-                        m->ft,
-                        nx2,
-                        px,
-                        bg_x
-                    };
-                    sb_push_n(out, w3, 5);
-                }
-                STEREO_LOG(
-                    "VS_BACKGROUND_FLAT "
-                    "x=%u "
-                    "x2=%u "
-                    "convergence=%u "
-                    "stereo_offset=%u "
-                    "w=%u",
-                    px,
-                    nx2,
-                    c->cc,
-                    bg_offset,
-                    pw);
-            }
-        }
-        else
-        {
-            uint32_t pw = (*nid)++;
-            uint32_t convmag = (*nid)++;
-            uint32_t tmp = (*nid)++;
-            STEREO_LOG(
-                "PROJ_PIVOT_IDS "
-                "pw=%u "
-                "convmag=%u "
-                "tmp=%u "
-                "px=%u "
-                "nx=%u",
-                pw,
-                convmag,
-                tmp,
-                px,
-                nx);
-            {
-                uint32_t w[] = {
-                    op_(SpvOpCompositeExtract, 5),
-                    m->ft,
-                    pw,
-                    lp,
-                    3u
-                };
-                sb_push_n(out, w, 5);
-            }
-            {
-                uint32_t w[] = {
+                uint32_t w2[] = {
                     op_(SpvOpFMul, 5),
                     m->ft,
-                    convmag,
-                    pw,
-                    c->cc
+                    bg_x,
+                    bg_offset,
+                    pw
                 };
-                sb_push_n(out, w, 5);
+                sb_push_n(out, w2, 5);
             }
             {
-                uint32_t w[] = {
-                    op_(SpvOpFMul, 5),
-                    m->ft,
-                    tmp,
-                    sel,
-                    convmag
-                };
-                sb_push_n(out, w, 5);
-            }
-            {
-                uint32_t w[] = {
-                    op_(SpvOpFAdd, 5),
-                    m->ft,
-                    nx,
-                    px,
-                    sel
-                };
-                sb_push_n(out, w, 5);
-            }
-            {
-                uint32_t w[] = {
+                uint32_t w3[] = {
                     op_(SpvOpFSub, 5),
                     m->ft,
                     nx2,
-                    nx,
-                    tmp
+                    px,
+                    bg_x
                 };
-                sb_push_n(out, w, 5);
+                sb_push_n(out, w3, 5);
             }
+            STEREO_LOG(
+                "VS_BACKGROUND_FLAT "
+                "x=%u "
+                "x2=%u "
+                "convergence=%u "
+                "stereo_offset=%u "
+                "w=%u",
+                px,
+                nx2,
+                c->cc,
+                bg_offset,
+                pw);
+        }
+    }
+    else
+    {
+        uint32_t pw = (*nid)++;
+        uint32_t convmag = (*nid)++;
+        uint32_t tmp = (*nid)++;
+        STEREO_LOG(
+            "PROJ_PIVOT_IDS "
+            "pw=%u "
+            "convmag=%u "
+            "tmp=%u "
+            "px=%u "
+            "nx=%u",
+            pw,
+            convmag,
+            tmp,
+            px,
+            nx);
+        {
+            uint32_t w[] = {
+                op_(SpvOpCompositeExtract, 5),
+                m->ft,
+                pw,
+                lp,
+                3u
+            };
+            sb_push_n(out, w, 5);
+        }
+        {
+            uint32_t w[] = {
+                op_(SpvOpFMul, 5),
+                m->ft,
+                convmag,
+                pw,
+                c->cc
+            };
+            sb_push_n(out, w, 5);
+        }
+        {
+            uint32_t w[] = {
+                op_(SpvOpFMul, 5),
+                m->ft,
+                tmp,
+                sel,
+                convmag
+            };
+            sb_push_n(out, w, 5);
+        }
+        {
+            uint32_t w[] = {
+                op_(SpvOpFAdd, 5),
+                m->ft,
+                nx,
+                px,
+                sel
+            };
+            sb_push_n(out, w, 5);
+        }
+        {
+            uint32_t w[] = {
+                op_(SpvOpFSub, 5),
+                m->ft,
+                nx2,
+                nx,
+                tmp
+            };
+            sb_push_n(out, w, 5);
         }
     }
     {
