@@ -10267,7 +10267,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     VkShaderModule                   *tmp_mod = calloc(N, sizeof(VkShaderModule));
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
-    VkPipelineDepthStencilStateCreateInfo *depth_states = calloc(N, sizeof(*depth_states));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
     for (uint32_t i = 0; i < N; i++)
     {
@@ -10276,8 +10275,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         dbg_out[i].proj_member_mask     = UINT32_MAX;
         dbg_out[i].proj_var             = UINT32_MAX;
     }
-    if (!tmp_mod||!tst||!infos||!depth_states) {
-        free(tmp_mod); free(tst); free(infos); free(depth_states);
+    if (!tmp_mod||!tst||!infos) {
+        free(tmp_mod); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
@@ -11588,22 +11587,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             bool procedural_sky = vs_procedural_sky && sd->stereo.sky_extend;
             bool flatten_sky = vs_background && !vs_procedural_sky && sd->stereo.sky_flatten;
             bool force_sky_depth = flatten_sky || procedural_sky;
-            if (flatten_sky && ci->pDepthStencilState)
-            {
-                depth_states[p] = *ci->pDepthStencilState;
-                depth_states[p].depthWriteEnable = VK_TRUE;
-                infos[p].pDepthStencilState = &depth_states[p];
-                STEREO_LOG(
-                    "VS_DEPTH_STATE_FORCE "
-                    "p=%u "
-                    "depth_test=%u "
-                    "depth_write=%u "
-                    "compare=%u",
-                    p,
-                    depth_states[p].depthTestEnable,
-                    depth_states[p].depthWriteEnable,
-                    depth_states[p].depthCompareOp);
-            }
             STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u uv_quad=%u",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 vs_background,
@@ -11944,7 +11927,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         free(tst[p]);
     }
-    free(tmp_mod); free(tst); free(infos); free(depth_states);
+    free(tmp_mod); free(tst); free(infos);
     return res;
 }
 
