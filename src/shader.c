@@ -1540,7 +1540,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         }
         else
         {
-            if (m->has_direct_position_write && !m->has_matrix_ops)
+            if (!m->has_matrix_ops)
             {
                 uint32_t bg_scale = (*nid)++;
                 {
