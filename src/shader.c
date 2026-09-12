@@ -1442,40 +1442,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cl,
         c->cr,
         c->cc);
-    STEREO_LOG(
-        "VS_PATCH_IDS "
-        "ch=%u "
-        "lp=%u "
-        "lv=%u "
-        "isl=%u "
-        "sel=%u "
-        "px=%u "
-        "nx=%u "
-        "nx2=%u "
-        "np=%u "
-        "mode=%d "
-        "pos_var=%u "
-        "pptr=%u "
-        "view_var=%u "
-        "leftConst=%u "
-        "rightConst=%u "
-        "convConst=%u",
-        ch,
-        lp,
-        lv,
-        isl,
-        sel,
-        px,
-        nx,
-        nx2,
-        np,
-        c->projection_mode,
-        m->pos_var,
-        pptr,
-        m->view_var,
-        c->cl,
-        c->cr,
-        c->cc);
     if (c->force_far_depth)
     {
         uint32_t bg_offset = (*nid)++;
@@ -1669,6 +1635,16 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out, w, 6);
     }
     uint32_t final_pos = np;
+    STEREO_LOG(
+        "VS_DEPTH_FINAL "
+        "force=%u "
+        "np=%u "
+        "np_far=%u "
+        "pw=%u",
+        c->force_far_depth,
+        np,
+        np_far,
+        pw);
     if (c->force_far_depth)
     {
         uint32_t w[] = {
@@ -10291,6 +10267,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     VkShaderModule                   *tmp_mod = calloc(N, sizeof(VkShaderModule));
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
+    VkPipelineDepthStencilStateCreateInfo *depth_states = calloc(N, sizeof(*depth_states));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
     for (uint32_t i = 0; i < N; i++)
     {
@@ -10299,8 +10276,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         dbg_out[i].proj_member_mask     = UINT32_MAX;
         dbg_out[i].proj_var             = UINT32_MAX;
     }
-    if (!tmp_mod||!tst||!infos) {
-        free(tmp_mod); free(tst); free(infos);
+    if (!tmp_mod||!tst||!infos||!depth_states) {
+        free(tmp_mod); free(tst); free(infos); free(depth_states);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
@@ -11951,7 +11928,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         free(tst[p]);
     }
-    free(tmp_mod); free(tst); free(infos);
+    free(tmp_mod); free(tst); free(infos); free(depth_states);
     return res;
 }
 
