@@ -1276,8 +1276,9 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     uint32_t nx = (*nid)++;
     uint32_t nx2 = (*nid)++;
     uint32_t np = (*nid)++;
-    uint32_t pw = c->force_far_depth ? (*nid)++ : 0;
-    uint32_t np_far = c->force_far_depth ? (*nid)++ : 0;
+    bool force_far_depth = c->force_far_depth || (c->background && c->flatten);
+    uint32_t pw = force_far_depth ? (*nid)++ : 0;
+    uint32_t np_far = force_far_depth ? (*nid)++ : 0;
     STEREO_LOG(
         "VIEW_PATH "
         "haveView=%u "
@@ -1371,7 +1372,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         };
         sb_push_n(out, w, 5);
     }
-    if (c->force_far_depth)
+    if (force_far_depth)
     {
         uint32_t w[] = {
             op_(SpvOpCompositeExtract, 5),
@@ -1683,7 +1684,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out, w, 6);
     }
     uint32_t final_pos = np;
-    if (c->force_far_depth)
+    if (force_far_depth)
     {
         uint32_t w[] = {
             op_(SpvOpCompositeInsert, 6),
