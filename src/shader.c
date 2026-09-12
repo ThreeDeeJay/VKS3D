@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 #include "stereo_icd.h"
 #include "tes_inject.h"
 #include "spirv/unified1/spirv.h"
@@ -149,6 +150,11 @@ typedef struct
     bool has_direct_position_write;
     bool has_v2_position_input;
     /* Matrix provenance tracking */
+    uint32_t location0_vars[16];
+    uint32_t location0_count;
+    uint32_t screen_values[16];
+    uint32_t screen_value_count;
+    bool screen_has_zw_use;
     uint32_t value_capacity;
     uint8_t *value_from_matrix;
     uint8_t *is_matrix_type;
@@ -283,6 +289,25 @@ spv_resolve_u32_constant(const SpvMod *m, uint32_t id, uint32_t *value)
 static const char *
 spv_op_name(uint32_t op);
 
+static bool is_location0_var(const SpvMod *m,uint32_t id)
+{
+    for(uint32_t n=0;n<m->location0_count;n++)
+    {
+        if(m->location0_vars[n]==id)
+            return true;
+    }
+    return false;
+}
+static bool is_screen_value(const SpvMod *m,uint32_t id)
+{
+    for(uint32_t n=0;n<m->screen_value_count;n++)
+    {
+        if(m->screen_values[n]==id)
+            return true;
+    }
+    return false;
+}
+
 static void do_scan(SpvMod *m, bool p2)
 {
     const uint32_t *w=m->words;
@@ -368,6 +393,12 @@ static void do_scan(SpvMod *m, bool p2)
                         w[i + 2],
                         MAT(w[i + 3]) || PTR(w[i + 3]));
                 }
+                if(wc>=4&&is_location0_var(m,w[i+3]))
+                {
+                    if(m->screen_value_count<16)
+                        m->screen_values[m->screen_value_count++]=w[i+2];
+                    STEREO_LOG("SCREEN_LOAD result=%u input=%u",w[i+2],w[i+3]);
+                }
                 if (wc >= 4)
                 {
                     if (PROJ(w[i + 3]))
@@ -418,6 +449,11 @@ static void do_scan(SpvMod *m, bool p2)
                         SETPROJ(w[i + 2], PROJ(w[i + 3]));
                     if (VIEW(w[i + 3]))
                         SETVIEW(w[i + 2], VIEW(w[i + 3]));
+                }
+                if(wc>=9&&(is_screen_value(m,w[i+3])||is_screen_value(m,w[i+4]))&&(w[i+5]>=2||w[i+6]>=2||w[i+7]>=2||w[i+8]>=2))
+                {
+                    m->screen_has_zw_use=true;
+                    STEREO_LOG("SCREEN_ZW_USE result=%u src0=%u src1=%u selectors=%u,%u,%u,%u",w[i+2],w[i+3],w[i+4],w[i+5],w[i+6],w[i+7],w[i+8]);
                 }
                 break;
             case SpvOpCompositeConstruct:
@@ -867,6 +903,11 @@ static void do_scan(SpvMod *m, bool p2)
                         m->proj_binding = w[i+3];
                     }
                 }
+                if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==0)
+                {
+                    if(m->location0_count<16)
+                        m->location0_vars[m->location0_count++]=w[i+1];
+                }
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                         m->pos_var=w[i+1];
@@ -1157,12 +1198,16 @@ typedef struct {
     uint32_t bt;
     uint32_t cz;
     uint32_t cf0;
+    uint32_t cf1;
     uint32_t cl;
     uint32_t cr;
     uint32_t cc;
     uint32_t projection_mode;
+    uint32_t bg_expand;
     float lo_dbg;
     float ro_dbg;
+    bool force_far_depth;
+    bool procedural_sky;
     StereoDebugCtx *dbg;
 } BodyCtx;
 
@@ -1231,6 +1276,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     uint32_t nx = (*nid)++;
     uint32_t nx2 = (*nid)++;
     uint32_t np = (*nid)++;
+    uint32_t pw = c->force_far_depth ? (*nid)++ : 0;
+    uint32_t np_far = c->force_far_depth ? (*nid)++ : 0;
     STEREO_LOG(
         "VIEW_PATH "
         "haveView=%u "
@@ -1324,6 +1371,23 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         };
         sb_push_n(out, w, 5);
     }
+    if (c->force_far_depth)
+    {
+        uint32_t w[] = {
+            op_(SpvOpCompositeExtract, 5),
+            m->ft,
+            pw,
+            lp,
+            3u
+        };
+        sb_push_n(out, w, 5);
+        STEREO_LOG(
+            "VS_FAR_DEPTH_W "
+            "w=%u "
+            "pos=%u",
+            pw,
+            lp);
+    }
     STEREO_LOG(
         "VS_PATCH "
         "mode=%d "
@@ -1378,16 +1442,190 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cl,
         c->cr,
         c->cc);
-    if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
+    STEREO_LOG(
+        "VS_PATCH_IDS "
+        "ch=%u "
+        "lp=%u "
+        "lv=%u "
+        "isl=%u "
+        "sel=%u "
+        "px=%u "
+        "nx=%u "
+        "nx2=%u "
+        "np=%u "
+        "mode=%d "
+        "pos_var=%u "
+        "pptr=%u "
+        "view_var=%u "
+        "leftConst=%u "
+        "rightConst=%u "
+        "convConst=%u",
+        ch,
+        lp,
+        lv,
+        isl,
+        sel,
+        px,
+        nx,
+        nx2,
+        np,
+        c->projection_mode,
+        m->pos_var,
+        pptr,
+        m->view_var,
+        c->cl,
+        c->cr,
+        c->cc);
+    if (c->force_far_depth)
     {
+        uint32_t bg_offset = (*nid)++;
+        uint32_t bg_x = (*nid)++;
         uint32_t w[] = {
-            op_(SpvOpFAdd, 5),
+            op_(SpvOpFMul, 5),
             m->ft,
-            nx,
-            px,
-            sel
+            bg_offset,
+            sel,
+            c->cc
         };
         sb_push_n(out, w, 5);
+        if (c->procedural_sky)
+        {
+            uint32_t bg_scale = (*nid)++;
+            {
+                uint32_t w2[] = {
+                    op_(SpvOpFAdd, 5),
+                    m->ft,
+                    bg_scale,
+                    c->bg_expand,
+                    c->cf1
+                };
+                sb_push_n(out, w2, 5);
+            }
+            {
+                uint32_t w3[] = {
+                    op_(SpvOpFMul, 5),
+                    m->ft,
+                    bg_x,
+                    px,
+                    bg_scale
+                };
+                sb_push_n(out, w3, 5);
+            }
+            {
+                uint32_t w4[] = {
+                    op_(SpvOpFSub, 5),
+                    m->ft,
+                    nx2,
+                    bg_x,
+                    bg_offset
+                };
+                sb_push_n(out, w4, 5);
+            }
+            STEREO_LOG(
+                "VS_BACKGROUND "
+                "x=%u "
+                "x2=%u "
+                "convergence=%u "
+                "stereo_offset=%u "
+                "expand=%u "
+                "scale=%u "
+                "w=%u",
+                px,
+                nx2,
+                c->cc,
+                bg_offset,
+                c->bg_expand,
+                bg_scale,
+                pw);
+        }
+        else
+        {
+            if (!m->has_matrix_ops)
+            {
+                uint32_t bg_scale = (*nid)++;
+                {
+                    uint32_t w2[] = {
+                        op_(SpvOpFAdd, 5),
+                        m->ft,
+                        bg_scale,
+                        c->bg_expand,
+                        c->cf1
+                    };
+                    sb_push_n(out, w2, 5);
+                }
+                {
+                    uint32_t w3[] = {
+                        op_(SpvOpFMul, 5),
+                        m->ft,
+                        bg_x,
+                        px,
+                        bg_scale
+                    };
+                    sb_push_n(out, w3, 5);
+                }
+                {
+                    uint32_t w4[] = {
+                        op_(SpvOpFSub, 5),
+                        m->ft,
+                        nx2,
+                        bg_x,
+                        bg_offset
+                    };
+                    sb_push_n(out, w4, 5);
+                }
+                STEREO_LOG(
+                    "VS_BACKGROUND_FLAT "
+                    "x=%u "
+                    "x2=%u "
+                    "convergence=%u "
+                    "stereo_offset=%u "
+                    "expand=%u "
+                    "scale=%u "
+                    "w=%u",
+                    px,
+                    nx2,
+                    c->cc,
+                    bg_offset,
+                    c->bg_expand,
+                    bg_scale,
+                    pw);
+            }
+            else
+            {
+                {
+                    uint32_t w2[] = {
+                        op_(SpvOpFMul, 5),
+                        m->ft,
+                        bg_x,
+                        bg_offset,
+                        pw
+                    };
+                    sb_push_n(out, w2, 5);
+                }
+                {
+                    uint32_t w3[] = {
+                        op_(SpvOpFSub, 5),
+                        m->ft,
+                        nx2,
+                        px,
+                        bg_x
+                    };
+                    sb_push_n(out, w3, 5);
+                }
+                STEREO_LOG(
+                    "VS_BACKGROUND_FLAT "
+                    "x=%u "
+                    "x2=%u "
+                    "convergence=%u "
+                    "stereo_offset=%u "
+                    "w=%u",
+                    px,
+                    nx2,
+                    c->cc,
+                    bg_offset,
+                    pw);
+            }
+        }
     }
     else
     {
@@ -1468,11 +1706,34 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         };
         sb_push_n(out, w, 6);
     }
+    uint32_t final_pos = np;
+    if (c->force_far_depth)
+    {
+        uint32_t w[] = {
+            op_(SpvOpCompositeInsert, 6),
+            m->v4t,
+            np_far,
+            pw,
+            np,
+            2u
+        };
+        sb_push_n(out, w, 6);
+        final_pos = np_far;
+        STEREO_LOG(
+            "VS_FAR_DEPTH "
+            "pos_in=%u "
+            "pos_out=%u "
+            "w=%u "
+            "z_component=2",
+            np,
+            np_far,
+            pw);
+    }
     STEREO_LOG(
         "PROJ_WRITE pos_var=%u pptr=%u new_pos=%u x=%u view=%u pivot=1/conv",
         m->pos_var,
         pptr,
-        np,
+        final_pos,
         nx2,
         m->view_var);
     STEREO_LOG(
@@ -1489,9 +1750,23 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         uint32_t w[] = {
             op_(SpvOpStore, 3),
             pptr,
-            np
+            final_pos
         };
         sb_push_n(out, w, 3);
+        STEREO_LOG(
+            "VS_FINAL_STORE "
+            "pptr=%u "
+            "value=%u "
+            "far=%u "
+            "np=%u "
+            "np_far=%u "
+            "pw=%u",
+            pptr,
+            final_pos,
+            c->force_far_depth,
+            np,
+            np_far,
+            pw);
     }
 }
 
@@ -1569,7 +1844,40 @@ static bool emit_mesh_position_adjust(
         };
         sb_push_n(out, w, 5);
     }
-    if (projection_mode == STEREO_PROJECTION_PARALLEL)
+    //Off-axis projection
+    uint32_t pw = (*nid)++;
+    uint32_t convmag = (*nid)++;
+    uint32_t tmp = (*nid)++;
+    {
+        uint32_t w[] = {
+            op_(SpvOpCompositeExtract, 5),
+            m->ft,
+            pw,
+            pos,
+            3u
+        };
+        sb_push_n(out, w, 5);
+    }
+    {
+        uint32_t w[] = {
+            op_(SpvOpFMul, 5),
+            m->ft,
+            convmag,
+            pw,
+            cc
+        };
+        sb_push_n(out, w, 5);
+    }
+    {
+        uint32_t w[] = {
+            op_(SpvOpFMul, 5),
+            m->ft,
+            tmp,
+            sel,
+            convmag
+        };
+        sb_push_n(out, w, 5);
+    }
     {
         uint32_t w[] = {
             op_(SpvOpFAdd, 5),
@@ -1580,61 +1888,15 @@ static bool emit_mesh_position_adjust(
         };
         sb_push_n(out, w, 5);
     }
-    else
     {
-        uint32_t pw = (*nid)++;
-        uint32_t convmag = (*nid)++;
-        uint32_t tmp = (*nid)++;
-        {
-            uint32_t w[] = {
-                op_(SpvOpCompositeExtract, 5),
-                m->ft,
-                pw,
-                pos,
-                3u
-            };
-            sb_push_n(out, w, 5);
-        }
-        {
-            uint32_t w[] = {
-                op_(SpvOpFMul, 5),
-                m->ft,
-                convmag,
-                pw,
-                cc
-            };
-            sb_push_n(out, w, 5);
-        }
-        {
-            uint32_t w[] = {
-                op_(SpvOpFMul, 5),
-                m->ft,
-                tmp,
-                sel,
-                convmag
-            };
-            sb_push_n(out, w, 5);
-        }
-        {
-            uint32_t w[] = {
-                op_(SpvOpFAdd, 5),
-                m->ft,
-                nx,
-                px,
-                sel
-            };
-            sb_push_n(out, w, 5);
-        }
-        {
-            uint32_t w[] = {
-                op_(SpvOpFSub, 5),
-                m->ft,
-                nx2,
-                nx,
-                tmp
-            };
-            sb_push_n(out, w, 5);
-        }
+        uint32_t w[] = {
+            op_(SpvOpFSub, 5),
+            m->ft,
+            nx2,
+            nx,
+            tmp
+        };
+        sb_push_n(out, w, 5);
     }
     {
         uint32_t w[] = {
@@ -2334,6 +2596,8 @@ bool spirv_patch_stereo_vertex(
     float ro,
     float conv,
     bool inj_vi,
+    bool force_far_depth,
+    bool procedural_sky,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
@@ -2414,8 +2678,8 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u loc0_count=%u screen_count=%u zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input, m.location0_count,m.screen_value_count ,m.screen_has_zw_use,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
 
     {
         static bool skip_list_init;
@@ -2460,25 +2724,12 @@ bool spirv_patch_stereo_vertex(
      * Use the quad/vertex-binding test together with the direct
      * position test to identify screen-space shaders.
      */
-    if (cfg && cfg->mono_ui) {
-        bool ui_candidate =
-        dbg &&
-        m.pos_is_block &&
-        !m.has_matrix_ops &&
-        m.has_v2_position_input &&
-        !m.has_emit_vertex &&
-        m.exec_model == SpvExecVertex;
-        if (ui_candidate)
+    if(cfg&&cfg->mono_ui)
+    {
+        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&m.has_v2_position_input&&!m.has_emit_vertex)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_matrix_ops&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.has_matrix_ops&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex);
+        if(ui_candidate)
         {
-            STEREO_LOG(
-                "SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u matrix=%u direct=%u emit=%u",
-                (unsigned long long)spv_hash,
-                (unsigned)m.exec_model,
-                m.pos_var,
-                m.pos_is_block,
-                m.has_matrix_ops,
-                m.has_direct_position_write,
-                m.has_emit_vertex);
+            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u direct=%u emit=%u proj=%u dots=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count);
             free_spv_provenance(&m);
             return false;
         }
@@ -2573,24 +2824,6 @@ bool spirv_patch_stereo_vertex(
             free_spv_provenance(&m);
             return false;
         }
-        if (cfg && cfg->mono_ui &&
-            m.pos_is_block &&
-            !m.has_matrix_ops &&
-            m.has_v2_position_input)
-        {
-            STEREO_LOG(
-                "SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u matrix=%u v2pos=%u direct=%u emit=%u",
-                (unsigned long long)spv_hash,
-                (unsigned)m.exec_model,
-                m.pos_var,
-                m.pos_is_block,
-                m.has_matrix_ops,
-                m.has_v2_position_input,
-                m.has_direct_position_write,
-                m.has_emit_vertex);
-            free_spv_provenance(&m);
-            return false;
-        }
     }
     if (!m.is_patchable)
     {
@@ -2655,9 +2888,11 @@ bool spirv_patch_stereo_vertex(
     }
     uint32_t id_cz = nid++;
     uint32_t id_cf0 = nid++;
+    uint32_t id_cf1 = nid++;
     uint32_t id_cl = nid++;
     uint32_t id_cr = nid++;
     uint32_t id_cc = nid++;
+    uint32_t id_bg_expand = nid++;
     STEREO_LOG(
         "VS_NEW_IDS "
         "bound=%u "
@@ -2667,8 +2902,10 @@ bool spirv_patch_stereo_vertex(
         "new_it=%u "
         "inj_view=%u "
         "new_bool=%u "
+        "bg_expand=%u "
         "cz=%u "
         "cf0=%u "
+        "cf1=%u "
         "cl=%u "
         "cr=%u "
         "cc=%u",
@@ -2679,8 +2916,10 @@ bool spirv_patch_stereo_vertex(
         id_new_it,
         id_inj_view,
         id_new_bt,
+        id_bg_expand,
         id_cz,
         id_cf0,
+        id_cf1,
         id_cl,
         id_cr,
         id_cc);
@@ -2780,6 +3019,18 @@ bool spirv_patch_stereo_vertex(
         {
             op_(SpvOpConstant, 4),
             m.ft,
+            id_cf1,
+            0
+        };
+        float one = 1.0f;
+        memcpy(&w[3], &one, sizeof(one));
+        sb_push_n(&te, w, 4);
+    }
+    {
+        uint32_t w[4] =
+        {
+            op_(SpvOpConstant, 4),
+            m.ft,
             id_cl,
             0
         };
@@ -2806,6 +3057,18 @@ bool spirv_patch_stereo_vertex(
             0
         };
         memcpy(&w[3], &conv, sizeof(conv));
+        sb_push_n(&te, w, 4);
+    }
+    {
+        uint32_t w[4] =
+        {
+            op_(SpvOpConstant, 4),
+            m.ft,
+            id_bg_expand,
+            0
+        };
+        float bg_expand = fmaxf(fabsf(lo * conv), fabsf(ro * conv));
+        memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
     }
     STEREO_LOG(
@@ -2855,10 +3118,14 @@ bool spirv_patch_stereo_vertex(
         .bt                  = bt,
         .cz                  = id_cz,
         .cf0                 = id_cf0,
+        .cf1                 = id_cf1,
         .cl                  = id_cl,
         .cr                  = id_cr,
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
+        .force_far_depth     = force_far_depth,
+        .procedural_sky      = procedural_sky,
+        .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
         .dbg                 = dbg
@@ -3212,6 +3479,17 @@ bool spirv_patch_stereo_vertex(
                     ob.w[j + 1],
                     ob.w[j + 3]);
             }
+        }
+        if (op == SpvOpStore && wc >= 3)
+        {
+            STEREO_LOG(
+                "OUT_STORE "
+                "ptr=%u "
+                "value=%u "
+                "targetPos=%u",
+                ob.w[j + 1],
+                ob.w[j + 2],
+                m.pos_var);
         }
         if (!wc || j + wc > ob.n)
             break;
@@ -6453,6 +6731,7 @@ bool spirv_patch_stereo_fs(
             }
         }
     }
+    STEREO_LOG("FS_PRESCAN_DONE images=%u float_id=%u", s.n_img, s.float_id);
     if (s.n_img == 0 || !s.float_id)
     {
         STEREO_LOG(
@@ -6589,13 +6868,13 @@ bool spirv_patch_stereo_fs(
         s.images[img].replacement_pointer_type = nid++;
     }
     uint32_t samp_nid      = nid;
-    uint32_t qsize_nid     = samp_nid + n_patches * 5 + 8;
+    uint32_t qsize_nid     = nid;
     /*
      * ImageSample/ImageFetch consume 5 ids.
      * ImageQuerySizeLod consumes only 4 ids,
      * but reserving 5 keeps accounting simple.
      */
-    uint32_t new_bound     = samp_nid + n_patches * 5 + 8;
+    uint32_t new_bound     = nid + n_patches * 10 + 32;
     STEREO_LOG(
         "FS_NID_INIT bound=%u nid=%u",
         new_bound,
@@ -7402,7 +7681,15 @@ bool spirv_patch_stereo_fs(
                 s.images[patch_img_idx].binding,
                 new_array_type);
             uint32_t w[9];
-            memcpy(w, &in[i], wc * sizeof(uint32_t));
+            if (wc != 9)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                    emitted_type[in[i + 1]] = true;
+                i += wc;
+                continue;
+            }
+            memcpy(w, &in[i], sizeof(w));
             w[1] = new_array_type;
             w[5] = 1;
             STEREO_LOG(
@@ -8175,8 +8462,16 @@ bool spirv_patch_stereo_fs(
                 in[i + 2],
                 in[i + 1],
                 in[i + 3]);
+            if (wc != 4)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                    emitted_type[in[i + 1]] = true;
+                i += wc;
+                continue;
+            }
             uint32_t w[4];
-            memcpy(w, &in[i], wc * sizeof(uint32_t));
+            memcpy(w, &in[i], sizeof(w));
             int load = fs_find_load(&s, in[i + 3]);
             STEREO_LOG(
                 "FS_PATCH_IMAGE_LOADINDEX sampledImage=%u load=%d",
@@ -8391,7 +8686,7 @@ bool spirv_patch_stereo_fs(
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t old_result_type = w[1];
             uint32_t old_result_id = w[2];
-            uint32_t query_v3_id = qsize_nid++;
+            uint32_t query_v3_id = samp_nid++;
             if (!s.v3int_id)
             {
                 STEREO_LOG(
@@ -8871,7 +9166,7 @@ bool spirv_patch_stereo_fs(
     }
     if (nid > samp_nid)
         samp_nid = nid;
-    ob.w[3] = qsize_nid;
+    ob.w[3] = samp_nid;
     *out   = ob.w;
     *out_c = ob.n;
     STEREO_LOG("FS patched: %u 2D img types→arr, %u samples extended, bound %u→%u",
@@ -8888,6 +9183,7 @@ bool spirv_patch_stereo_fs(
         nid,
         samp_nid,
         qsize_nid);
+    STEREO_LOG("FS_PATCH_DONE");
     return true;
 }
 
@@ -9644,36 +9940,23 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, y, 5);
             sb_push_n(&ob, z, 5);
             sb_push_n(&ob, w, 5);
-            if (projection_mode == STEREO_PROJECTION_OFF_AXIS)
-            {
-                uint32_t x_conv[] = {
-                    (5u << 16) | SpvOpFMul,
-                    float_type,
-                    ray_conv,
-                    selected_offset,
-                    conv_const
-                };
-                uint32_t x_add[] = {
-                    (5u << 16) | SpvOpFAdd,
-                    float_type,
-                    ray_new_x,
-                    ray_x,
-                    ray_conv
-                };
-                sb_push_n(&ob, x_conv, 5);
-                sb_push_n(&ob, x_add, 5);
-            }
-            else
-            {
-                uint32_t x_copy[] = {
-                    (5u << 16) | SpvOpFAdd,
-                    float_type,
-                    ray_new_x,
-                    ray_x,
-                    float_zero
-                };
-                sb_push_n(&ob, x_copy, 5);
-            }
+            //Off-axis projection
+            uint32_t x_conv[] = {
+                (5u << 16) | SpvOpFMul,
+                float_type,
+                ray_conv,
+                selected_offset,
+                conv_const
+            };
+            uint32_t x_add[] = {
+                (5u << 16) | SpvOpFAdd,
+                float_type,
+                ray_new_x,
+                ray_x,
+                ray_conv
+            };
+            sb_push_n(&ob, x_conv, 5);
+            sb_push_n(&ob, x_add, 5);
             uint32_t construct[] = {
                 (7u << 16) | SpvOpCompositeConstruct,
                 v4float_type,
@@ -10006,6 +10289,18 @@ stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
     return VK_SUCCESS;
 }
 
+static const VkShaderModuleCreateInfo *stereo_stage_inline_spv(const VkPipelineShaderStageCreateInfo *stage)
+{
+    const VkBaseInStructure *x=(const VkBaseInStructure *)stage->pNext;
+    while(x)
+    {
+        if(x->sType==VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
+            return (const VkShaderModuleCreateInfo *)x;
+        x=x->pNext;
+    }
+    return NULL;
+}
+
 /* ── vkCreateGraphicsPipelines ───────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
@@ -10069,10 +10364,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         sd->stereo.flip_eyes);
     for (uint32_t p=0; p<N; p++) {
         const VkGraphicsPipelineCreateInfo *ci=&pCI[p];
-        //REMOVED StereoPipelineInfo *info =
-        //REMOVED     add_pipeline_info(sd);
         const VkBaseInStructure *base =
             (const VkBaseInStructure*)ci->pNext;
+        uint32_t gpl_flags = 0;
+        const VkBaseInStructure *gx=(const VkBaseInStructure *)ci->pNext;
+        while (gx)
+        {
+            if (gx->sType==VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT)
+                gpl_flags=((const VkGraphicsPipelineLibraryCreateInfoEXT *)gx)->flags;
+            gx=gx->pNext;
+        }
+        STEREO_LOG("PIPE_GPL_ROUTE p=%u gpl=0x%x",p,gpl_flags);
         uint32_t view_mask = 0;
         /* ── Safety: Vulkan 1.3 dynamic rendering pipelines may not use pNext ── */
         while (base)
@@ -10263,6 +10565,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
         bool vs_fullscreen = false;
         bool vs_quad_fs = false;
+        bool vs_screen_space = false;
+        bool vs_background = false;
+        bool vs_procedural_sky = false;
+        bool vs_pure_quad = false;
+        bool vs_uv_quad = false;
         if (has_vs && vs_stage != ~0u) {
             StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
             if (vs_cache) {
@@ -10278,16 +10585,214 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
                 if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
                     spv_scan(&vm);
+                    bool vs_has_user_output = false;
+                    bool vs_has_v3_user_output = false;
+                    uint32_t vs_location_id = 0;
+                    for (size_t vi = 5; vi < vs_cache->words;)
+                    {
+                        uint32_t iw = vs_cache->spv[vi] >> 16;
+                        uint32_t io = vs_cache->spv[vi] & 0xffff;
+                        if (!iw || vi + iw > vs_cache->words)
+                            break;
+                        if (io == SpvOpDecorate && iw >= 4 && vs_cache->spv[vi + 2] == SpvDecorationLocation)
+                        {
+                            vs_has_user_output = true;
+                            vs_location_id = vs_cache->spv[vi + 1];
+                        }
+                        vi += iw;
+                    }
+                    if (vs_location_id)
+                    {
+                        STEREO_LOG("VS_OUTPUT_SCAN location_id=%u",vs_location_id);
+                        for (size_t vi = 5; vi < vs_cache->words;)
+                        {
+                            uint32_t iw = vs_cache->spv[vi] >> 16;
+                            uint32_t io = vs_cache->spv[vi] & 0xffff;
+                            if (!iw || vi + iw > vs_cache->words)
+                                break;
+                            if (io == SpvOpVariable && iw >= 4)
+                            {
+                                uint32_t var_type = vs_cache->spv[vi + 1];
+                                uint32_t var_id = vs_cache->spv[vi + 2];
+                                uint32_t storage = vs_cache->spv[vi + 3];
+                                if (var_id == vs_location_id)
+                                {
+                                    STEREO_LOG("VS_OUTPUT_VAR location=%u var=%u type=%u storage=%u",vs_location_id,var_id,var_type,storage);
+                                    for (size_t ti = 5; ti < vs_cache->words;)
+                                    {
+                                        uint32_t tw = vs_cache->spv[ti] >> 16;
+                                        uint32_t to = vs_cache->spv[ti] & 0xffff;
+                                        if (!tw || ti + tw > vs_cache->words)
+                                            break;
+                                        if (to == SpvOpTypePointer && tw >= 4)
+                                        {
+                                            uint32_t pointer_id = vs_cache->spv[ti + 1];
+                                            uint32_t pointer_storage = vs_cache->spv[ti + 2];
+                                            uint32_t pointee_id = vs_cache->spv[ti + 3];
+                                            if (pointer_id == var_type)
+                                                STEREO_LOG("VS_OUTPUT_PTR pointer=%u storage=%u pointee=%u match=%u",pointer_id,pointer_storage,pointee_id,pointer_id == var_type && pointer_storage == 3);
+                                            if (pointer_id == var_type && pointer_storage == 3)
+                                            {
+                                                for (size_t vi2 = 5; vi2 < vs_cache->words;)
+                                                {
+                                                    uint32_t iw2 = vs_cache->spv[vi2] >> 16;
+                                                    uint32_t io2 = vs_cache->spv[vi2] & 0xffff;
+                                                    if (!iw2 || vi2 + iw2 > vs_cache->words)
+                                                        break;
+                                                    if (io2 == SpvOpTypeVector && iw2 >= 4)
+                                                    {
+                                                        uint32_t vector_id = vs_cache->spv[vi2 + 1];
+                                                        uint32_t component_id = vs_cache->spv[vi2 + 2];
+                                                        uint32_t component_count = vs_cache->spv[vi2 + 3];
+                                                        if (vector_id == pointee_id)
+                                                            STEREO_LOG("VS_OUTPUT_VEC vector=%u component=%u count=%u match=%u",vector_id,component_id,component_count,vector_id == pointee_id && component_count == 3);
+                                                        if (vector_id == pointee_id && component_count == 3)
+                                                        {
+                                                            vs_has_v3_user_output = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                    vi2 += iw2;
+                                                }
+                                                break;
+                                            }
+                                        }
+                                        ti += tw;
+                                    }
+                                }
+                            }
+                            vi += iw;
+                        }
+                    }
+                    STEREO_LOG("VS_OUTPUT_RESULT location=%u has_user=%u has_v3=%u",vs_location_id,vs_has_user_output,vs_has_v3_user_output);
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
-                    STEREO_LOG("VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
+                    bool vs_z_one_position = false;
+                    uint32_t vs_position_ptr = 0;
+                    uint32_t vs_position_value = 0;
+                    uint32_t vs_position_type = 0;
+                    uint32_t vs_position_component_type = 0;
+                    uint32_t vs_one_const = 0;
+                    for (size_t vi = 5; vi < vs_cache->words;)
+                    {
+                        uint32_t iw = vs_cache->spv[vi] >> 16;
+                        uint32_t io = vs_cache->spv[vi] & 0xffff;
+                        if (!iw || vi + iw > vs_cache->words)
+                            break;
+                        if (io == SpvOpTypeVector && iw >= 4 && vs_cache->spv[vi + 3] == 4)
+                        {
+                            uint32_t vector_id = vs_cache->spv[vi + 1];
+                            uint32_t component_type = vs_cache->spv[vi + 2];
+                            for (size_t pi = 5; pi < vs_cache->words;)
+                            {
+                                uint32_t pw = vs_cache->spv[pi] >> 16;
+                                uint32_t po = vs_cache->spv[pi] & 0xffff;
+                                if (!pw || pi + pw > vs_cache->words)
+                                    break;
+                                if (po == SpvOpTypePointer && pw >= 4 && vs_cache->spv[pi + 2] == SpvStorageClassOutput && vs_cache->spv[pi + 3] == vector_id)
+                                {
+                                    uint32_t pointer_id = vs_cache->spv[pi + 1];
+                                    for (size_t ai = 5; ai < vs_cache->words;)
+                                    {
+                                        uint32_t aw = vs_cache->spv[ai] >> 16;
+                                        uint32_t ao = vs_cache->spv[ai] & 0xffff;
+                                        if (!aw || ai + aw > vs_cache->words)
+                                            break;
+                                        if (ao == SpvOpAccessChain && aw >= 5 && vs_cache->spv[ai + 1] == pointer_id)
+                                        {
+                                            uint32_t result_id = vs_cache->spv[ai + 2];
+                                            uint32_t index_id = vs_cache->spv[ai + aw - 1];
+                                            bool index_zero = false;
+                                            for (size_t ci2 = 5; ci2 < vs_cache->words;)
+                                            {
+                                                uint32_t cw = vs_cache->spv[ci2] >> 16;
+                                                uint32_t co = vs_cache->spv[ci2] & 0xffff;
+                                                if (!cw || ci2 + cw > vs_cache->words)
+                                                    break;
+                                                if (co == SpvOpConstant && cw >= 4 && vs_cache->spv[ci2 + 2] == index_id && vs_cache->spv[ci2 + 3] == 0)
+                                                {
+                                                    index_zero = true;
+                                                    break;
+                                                }
+                                                ci2 += cw;
+                                            }
+                                            if (index_zero)
+                                            {
+                                                for (size_t si = 5; si < vs_cache->words;)
+                                                {
+                                                    uint32_t sw = vs_cache->spv[si] >> 16;
+                                                    uint32_t so = vs_cache->spv[si] & 0xffff;
+                                                    if (!sw || si + sw > vs_cache->words)
+                                                        break;
+                                                    if (so == SpvOpStore && sw >= 3 && vs_cache->spv[si + 1] == result_id)
+                                                    {
+                                                        vs_position_ptr = result_id;
+                                                        vs_position_value = vs_cache->spv[si + 2];
+                                                        vs_position_type = vector_id;
+                                                        vs_position_component_type = component_type;
+                                                        break;
+                                                    }
+                                                    si += sw;
+                                                }
+                                            }
+                                        }
+                                        ai += aw;
+                                    }
+                                }
+                                pi += pw;
+                            }
+                        }
+                        vi += iw;
+                    }
+                    if (vs_position_value && vs_position_component_type)
+                    {
+                        for (size_t ci2 = 5; ci2 < vs_cache->words;)
+                        {
+                            uint32_t cw = vs_cache->spv[ci2] >> 16;
+                            uint32_t co = vs_cache->spv[ci2] & 0xffff;
+                            if (!cw || ci2 + cw > vs_cache->words)
+                                break;
+                            if (co == SpvOpConstant && cw >= 4 && vs_cache->spv[ci2 + 1] == vs_position_component_type && vs_cache->spv[ci2 + 3] == 0x3f800000)
+                            {
+                                vs_one_const = vs_cache->spv[ci2 + 2];
+                                break;
+                            }
+                            ci2 += cw;
+                        }
+                    }
+                    if (vs_position_value && vs_one_const)
+                    {
+                        for (size_t ci2 = 5; ci2 < vs_cache->words;)
+                        {
+                            uint32_t cw = vs_cache->spv[ci2] >> 16;
+                            uint32_t co = vs_cache->spv[ci2] & 0xffff;
+                            if (!cw || ci2 + cw > vs_cache->words)
+                                break;
+                            if (co == SpvOpCompositeConstruct && cw >= 7 && vs_cache->spv[ci2 + 1] == vs_position_type && vs_cache->spv[ci2 + 2] == vs_position_value && vs_cache->spv[ci2 + 5] == vs_one_const && vs_cache->spv[ci2 + 6] == vs_one_const)
+                            {
+                                vs_z_one_position = true;
+                                break;
+                            }
+                            ci2 += cw;
+                        }
+                    }
+                    vs_background =
+                    (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable)
+                    || (vs_quad_fs && vs_has_user_output && !vm.has_v2_position_input && vs_z_one_position && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable)
+                    || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
+                    vs_uv_quad = vs_quad_fs && vs_has_user_output && !vs_has_v3_user_output && !vm.has_v2_position_input && !vm.has_direct_position_write && vm.location0_count == 2 && vm.screen_value_count == 2 && !vs_z_one_position;
+                    vs_procedural_sky = vs_background && vs_quad_fs && !vs_z_one_position;
+                    vs_pure_quad = vs_quad_fs && !vs_has_user_output;
+                    STEREO_LOG(
+                    "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
                 free_spv_provenance(&vm);
             }
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        if ((vs_fullscreen || (is_quad && vs_quad_fs)) &&
+        if (((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
@@ -10313,6 +10818,23 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
             StereoShaderCache *fs_cache =
                 cache_find(sd, ci->pStages[fs_s].module);
+            StereoShaderCache inline_fs_cache = {0};
+            const VkShaderModuleCreateInfo *fs_inline =
+            stereo_stage_inline_spv(&ci->pStages[fs_s]);
+            if (!fs_cache && fs_inline && fs_inline->pCode &&
+                fs_inline->codeSize >= 20 &&
+                (fs_inline->codeSize & 3) == 0)
+            {
+                inline_fs_cache.spv = (uint32_t *)fs_inline->pCode;
+                inline_fs_cache.words = fs_inline->codeSize / 4;
+                fs_cache = &inline_fs_cache;
+                STEREO_LOG("INLINE_SPV stage=FS p=%u codeSize=%zu words=%zu hash=%016llx",
+                    p,
+                    fs_inline->codeSize,
+                    inline_fs_cache.words,
+                    (unsigned long long)hash_spv(inline_fs_cache.spv,
+                    inline_fs_cache.words));
+            }
             if (!fs_cache)
             {
                 STEREO_LOG(
@@ -10479,7 +11001,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 "FS_PATCH_BEGIN hash=%016llx pipe=%u",
                 (unsigned long long)spv_hash,
                 p);
-            STEREO_LOG("FS_ATTEMPT p=%u hash=%016llx quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)spv_hash,is_quad,vs_fullscreen);
+            STEREO_LOG("FS_ATTEMPT p=%u hash=%016llx quad=%u vs_fullscreen=%u gpl_flags=%u module=%p",(unsigned)p,(unsigned long long)spv_hash,is_quad,vs_fullscreen,gpl_flags,(void *)ci->pStages[fs_s].module);
             bool fs_patched = spirv_patch_stereo_fs(
                 fs_cache->spv,
                 fs_cache->words,
@@ -10496,6 +11018,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
             else
             {
+            STEREO_LOG("FS_PATCH_INSTALL p=%u old_module=%p patched_words=%zu",p,(void *)ci->pStages[fs_s].module,pc2);
             STEREO_LOG(
                 "FS_PATCH_DONE hash=%016llx",
                 (unsigned long long)spv_hash);
@@ -10535,6 +11058,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 NULL,0,pc2*4,patched};
             VkShaderModule tmp=VK_NULL_HANDLE;
             VkResult mr=sd->real.CreateShaderModule(sd->real_device,&smci,NULL,&tmp);
+            STEREO_LOG("FS_CREATE_MODULE_RESULT p=%u hash=%016llx result=%d module=%p words=%zu",p,(unsigned long long)spv_hash,mr,(void*)tmp,pc2);
             spirv_patched_free(patched);
             if (mr!=VK_SUCCESS) {
                 STEREO_ERR("Pipe %u: quad FS module err %d",p,mr); continue; }
@@ -10543,10 +11067,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc2*sizeof(*st));
             st[fs_s].module = tmp;
+            if (stereo_stage_inline_spv(&st[fs_s]))
+            st[fs_s].pNext = NULL;
             infos[p].pStages = st;
+            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp_mod[p]);
             tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
+            STEREO_LOG("FS_STAGE_INSTALL p=%u fs_s=%u orig=%p patched=%p infos_stages=%u infos_pStages=%p st=%p",(unsigned)p,fs_s,(void*)ci->pStages[fs_s].module,(void*)infos[p].pStages[fs_s].module,infos[p].stageCount,(void*)infos[p].pStages,(void*)st);
             STEREO_LOG(
                 "PATCHED_STAGE PathFS p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
                 p,
@@ -10810,6 +11338,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 &patched, &pc2,
                 lo, ro, conv,
                 true,
+                false,
+                false,
                 dbgG))
             {
                 STEREO_LOG(
@@ -10924,6 +11454,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         &patched, &pc2,
                         lo, ro, conv,
                         true,
+                        false,
+                        false,
                         &dbgA))
                 {
                 STEREO_LOG("TES patch failed");
@@ -10993,8 +11525,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             continue;
         }
         STEREO_LOG(
-        "PATHB_GATE p=%u eligible=%u in_mv=%u quad=%u has_vs=%u vs_stage=%u has_tcs=%u has_tes=%u has_gs=%u has_ms=%u has_fs=%u",
+        "PATHB_GATE p=%u gpl=0x%x eligible=%u in_mv=%u quad=%u has_vs=%u vs_stage=%u has_tcs=%u has_tes=%u has_gs=%u has_ms=%u has_fs=%u",
         p,
+        gpl_flags,
         (unsigned)(in_mv_rp &&
             ci->stageCount > 0 &&
             has_vs &&
@@ -11019,14 +11552,33 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             has_vs &&
             !has_tcs &&
             vs_stage != ~0u &&
-            !vs_fullscreen) {
+            !vs_pure_quad) 
+        {
+            StereoShaderCache inline_e;
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
+            const VkShaderModuleCreateInfo *inline_smci=stereo_stage_inline_spv(&ci->pStages[vs_stage]);
+            if (!e && inline_smci && inline_smci->pCode && inline_smci->codeSize >= 4)
+            {
+                inline_e.spv=(uint32_t *)inline_smci->pCode;
+                inline_e.words=inline_smci->codeSize/4;
+                e=&inline_e;
+                STEREO_LOG("INLINE_VS PathB p=%u codeSize=%zu words=%zu hash=%016llx",p,inline_smci->codeSize,e->words,(unsigned long long)hash_spv(e->spv,e->words));
+            }
             if (!e) { STEREO_LOG("Pipe %u PathB: VS not cached",p); continue; }
             STEREO_LOG(
                 "SHADER_MODULE stage=VS hash=%016llx words=%zu module=%p",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 e->words,
                 (void*)ci->pStages[vs_stage].module);
+            STEREO_LOG(
+                "VS_PIPE_STATE hash=%016llx topology=%u cull=%u front=%u depth_test=%u depth_write=%u depth_compare=%u",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                ci->pInputAssemblyState ? ci->pInputAssemblyState->topology : UINT32_MAX,
+                ci->pRasterizationState ? ci->pRasterizationState->cullMode : UINT32_MAX,
+                ci->pRasterizationState ? ci->pRasterizationState->frontFace : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthTestEnable : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthWriteEnable : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthCompareOp : UINT32_MAX);
             STEREO_LOG(
                 "VS_CONTEXT hash=%016llx rp=%p mv=%d color=%p depth=%d",
                 (unsigned long long)hash_spv(e->spv, e->words),
@@ -11094,12 +11646,31 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
+            bool procedural_sky = vs_procedural_sky && sd->stereo.sky_extend;
+            bool flatten_sky = vs_background && !vs_procedural_sky && sd->stereo.sky_flatten;
+            bool force_sky_depth = flatten_sky || procedural_sky;
+            STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u uv_quad=%u",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                vs_background,
+                procedural_sky,
+                flatten_sky,
+                vs_quad_fs,
+                vs_procedural_sky && !vs_quad_fs,
+                vs_uv_quad);
+            if (vs_uv_quad)
+            {
+                STEREO_LOG("PATHB_SKIP_UV_QUAD hash=%016llx",
+                    (unsigned long long)hash_spv(e->spv, e->words));
+                continue;
+            }
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
                     e->spv, e->words,
                     &patched, &pc2,
                     lo, ro, conv,
                     /*inj_vi=*/true,
+                    force_sky_depth,
+                    procedural_sky,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
@@ -11138,6 +11709,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
             st[vs_stage].module = tmp;
+            if (stereo_stage_inline_spv(&st[vs_stage]))
+            st[vs_stage].pNext = NULL;
             infos[p].pStages = st;
             tmp_mod[p] = tmp;
             tst[p] = st;
@@ -11204,6 +11777,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].renderPass = pCI[p].renderPass;
     }
     for (uint32_t p = 0; p < N; p++) {
+        VkPipelineCreateFlags2CreateInfoKHR *flags2_ci=NULL;
+        VkGraphicsPipelineLibraryCreateInfoEXT *gpl_ci=NULL;
+        VkPipelineLibraryCreateInfoKHR *lib_ci=NULL;
+        for (const VkBaseInStructure *x=(const VkBaseInStructure *)pCI[p].pNext;x;x=x->pNext) {
+            if (x->sType==VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT) gpl_ci=(VkGraphicsPipelineLibraryCreateInfoEXT *)x;
+            if (x->sType==VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR) lib_ci=(VkPipelineLibraryCreateInfoKHR *)x;
+            if (x->sType==VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR) flags2_ci=(VkPipelineCreateFlags2CreateInfoKHR *)x;
+            STEREO_LOG("PIPE_PNEXT p=%u sType=%u ptr=%p next=%p",
+                p,(unsigned)x->sType,(void *)x,(void *)x->pNext);
+        }
+        STEREO_LOG("PIPE_GPL p=%u flags=0x%llx gpl=0x%x libs=%u flags2=%u",(unsigned)p,(unsigned long long)pCI[p].flags,gpl_ci?(unsigned)gpl_ci->flags:0,lib_ci?(unsigned)lib_ci->libraryCount:0,flags2_ci?1:0);
         STEREO_LOG(
             "PIPE_FINAL p=%u ci_rp=%p final_rp=%p stages=%u",
             p,
@@ -11220,15 +11804,35 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             infos[p].subpass);
         for (uint32_t s = 0; s < infos[p].stageCount; s++)
         {
+            const VkPipelineShaderStageCreateInfo *pst=&infos[p].pStages[s];
+            STEREO_LOG("PIPE_STAGE_RAW p=%u stage=%u ptr=%p sType=%u pNext=%p module=%p flags=0x%x name=%s",
+                p,s,(void *)pst,(unsigned)pst->sType,(void *)pst->pNext,(void *)pst->module,
+                (unsigned)pst->flags,pst->pName ? pst->pName : "(null)");
+            const VkBaseInStructure *sx=(const VkBaseInStructure *)pst->pNext;
+            uint32_t has_identifier=0;
+            while (sx)
+            {
+                STEREO_LOG("PIPE_STAGE_PNEXT p=%u stage=%u sType=%u ptr=%p next=%p",
+                    p,s,(unsigned)sx->sType,(void *)sx,(void *)sx->pNext);
+                if (sx->sType==VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT)
+                {
+                    const VkPipelineShaderStageModuleIdentifierCreateInfoEXT *mi=(const VkPipelineShaderStageModuleIdentifierCreateInfoEXT *)sx;
+                    has_identifier=1;
+                    STEREO_LOG("PIPE_STAGE_IDENTIFIER p=%u stage=%u module=%p identifierSize=%u",
+                        p,s,(void *)pst->module,mi->identifierSize);
+                }
+                sx=sx->pNext;
+            }
             STEREO_LOG(
-                "PIPE_STAGE p=%u stage=%u vkstage=0x%x module=%p patched_tmp=%u",
+                "PIPE_STAGE p=%u stage=%u vkstage=0x%x module=%p patched_tmp=%u identifier=%u",
                 p,
                 s,
-                infos[p].pStages[s].stage,
-                (void *)infos[p].pStages[s].module,
+                pst->stage,
+                (void *)pst->module,
                 (unsigned)(
                     tmp_mod[p] != VK_NULL_HANDLE &&
-                    infos[p].pStages[s].module == tmp_mod[p]));
+                    pst->module == tmp_mod[p]),
+                has_identifier);
         }
     }
     STEREO_LOG(
@@ -11561,6 +12165,7 @@ stereo_CreateRayTracingPipelinesKHR(
                 ci->pStages,
                 ci->stageCount * sizeof(*patched_stages[p]));
             patched_stages[p][s].module = tmp_module;
+            patched_stages[p][s].pNext=NULL;
             patched_ci[p].pStages = patched_stages[p];
             tmp_raygen_modules[p] = tmp_module;
             STEREO_LOG(
@@ -11826,6 +12431,8 @@ stereo_CreateShadersEXT(
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
                 true,
+                false,
+                false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
             ok = spirv_patch_stereo_fs(

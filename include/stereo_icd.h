@@ -211,6 +211,8 @@ typedef struct StereoConfig {
     bool                    multiview;
     bool                    shader_objects_mono;
     bool                    mono_ui;
+    bool                    sky_flatten;
+    bool                    sky_extend;
     StereoProjectionMode    projection;
     float                   step_separation;
     float                   step_convergence;
@@ -860,6 +862,8 @@ bool spirv_patch_stereo_vertex(
     float lo, float ro,
     float conv,
     bool inj_vi,
+    bool force_far_depth,
+    bool procedural_sky,
     StereoDebugCtx *dbg);
 bool spirv_patch_stereo_raygen(
     const uint32_t *in,
