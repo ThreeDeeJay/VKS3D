@@ -10797,10 +10797,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_procedural_sky = vs_background && vs_quad_fs && !vs_z_one_position;
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG(
-                    "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_has_v3_user_output,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    }
                     if (vs_screen_space && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable)
                     {
                         STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_screen_space,ci->pDepthStencilState->depthTestEnable,ci->pDepthStencilState->depthWriteEnable,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
+                        goto PIPE_DECISION_CONTINUE;
                     }
                 }
                 free_spv_provenance(&vm);
