@@ -3154,6 +3154,13 @@ bool spirv_patch_stereo_vertex(
                 in[i + 1],
                 in[i + 3]);
         }
+        if (opx == SpvOpTypeSampledImage && wcx >= 3)
+        {
+            STEREO_LOG(
+                "VS_SAMPLED_IMAGE_IN result=%u imageType=%u",
+                in[i + 1],
+                in[i + 2]);
+        }
         if (!ins_ann &&
             (opx == SpvOpTypeVoid ||
              opx == SpvOpTypeBool ||
@@ -3410,6 +3417,13 @@ bool spirv_patch_stereo_vertex(
                 opj,
                 spv_op_name(opj),
                 ob.w[j + 1]);
+        }
+        if (opj == SpvOpTypeSampledImage && wcj >= 3)
+        {
+            STEREO_LOG(
+                "VS_SAMPLED_IMAGE_OUT result=%u imageType=%u",
+                ob.w[j + 1],
+                ob.w[j + 2]);
         }
         if (!wcj || j + wcj > ob.n)
             break;
