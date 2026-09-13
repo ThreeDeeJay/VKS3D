@@ -10804,7 +10804,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_screen_space,ci->pDepthStencilState->depthTestEnable,ci->pDepthStencilState->depthWriteEnable,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
                         goto PIPE_DECISION_CONTINUE;
                     }
-                }
                 free_spv_provenance(&vm);
             }
         }
