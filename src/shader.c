@@ -7248,11 +7248,6 @@ bool spirv_patch_stereo_fs(
                 i += wc;
                 continue;
             }
-            if (sampled_id < id_bound && emitted_type[sampled_id])
-            {
-                i += wc;
-                continue;
-            }
             sb_push_n(&ob, &in[i], wc);
             if (sampled_id < id_bound)
                 emitted_type[sampled_id] = true;
