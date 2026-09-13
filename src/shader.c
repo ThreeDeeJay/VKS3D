@@ -2718,6 +2718,26 @@ bool spirv_patch_stereo_vertex(
             }
         }
     }
+    /*
+     * Reject known monoscopic screen-space/UI shaders.
+     *
+     * A direct position write alone is not sufficient to classify
+     * a vertex shader as UI: some geometry shaders also write
+     * positions directly without recognizable matrix operations.
+     * Use the quad/vertex-binding test together with the direct
+     * position test to identify screen-space shaders.
+     */
+    if(cfg&&cfg->mono_ui)
+    {
+        bool fixed_plane_ui=ci&&ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable;
+        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.has_emit_vertex&&fixed_plane_ui)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex);
+        if(ui_candidate)
+        {
+            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u vmatrix=%u direct=%u emit=%u proj=%u dots=%u depth_test=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_vector_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count,ci&&ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0);
+            free_spv_provenance(&m);
+            return false;
+        }
+    }
     if (dbg && !dbg->is_multiview)
     {
         STEREO_LOG(
@@ -10782,11 +10802,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
                 free_spv_provenance(&vm);
             }
-        }
-        if (cfg->mono_ui && has_vs && vs_stage != ~0u && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && vs_screen_space)
-        {
-            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx depth_test=%u depth_write=%u screen_space=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ci->pDepthStencilState->depthTestEnable,ci->pDepthStencilState->depthWriteEnable,vs_screen_space,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
-            goto PIPE_DECISION_CONTINUE;
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
