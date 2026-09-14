@@ -1022,7 +1022,7 @@ stereo_CmdBindPipeline(
         STEREO_LOG(
             "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
             "orig_rp=%p patched_vs=%u patched_fs=%u "
-            "quad=%u bindings=%u",
+            "quad=%u bindings=%u stages=%u vs_module=%p fs_module=%p",
             (void*)pipeline,
             (void*)active_fb,
             (void*)active_rp,
@@ -1031,7 +1031,20 @@ stereo_CmdBindPipeline(
             info->patched_vs,
             info->patched_fs,
             info->is_quad,
-            info->vertex_binding_count);
+            info->vertex_binding_count,
+            info->stage_count,
+            (void*)info->vs_module,
+            (void*)info->fs_module);
+        STEREO_LOG(
+            "PIPE_BIND_MATCH pipe=%p rp_match=%u mv_match=%u "
+            "fb=%p active_rp=%p orig_rp=%p mv_rp=%p",
+            (void*)pipeline,
+            active_rp == info->original_renderpass,
+            active_rp == info->mv_renderpass,
+            (void*)active_fb,
+            (void*)active_rp,
+            (void*)info->original_renderpass,
+            (void*)info->mv_renderpass);
     }
     else
     {
