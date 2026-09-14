@@ -11943,9 +11943,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     STEREO_LOG(
         "DUAL_PATCH_STATE p=%u vs=%p fs=%p stages=%u",
         dbg_p,
-        (void*)tmp_vs_mod[dbg_p],
-        (void*)tmp_fs_mod[dbg_p],
-        infos[dbg_p].stageCount);
+        (void*)tmp_vs_mod[p],
+        (void*)tmp_fs_mod[p],
+        infos[p].stageCount);
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG(
         "[PIPE AFTER DRIVER] res=%d",
