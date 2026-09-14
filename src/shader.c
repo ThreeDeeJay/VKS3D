@@ -1342,8 +1342,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
                 m->ft,
                 sel,
                 isl,
-                c->cr,
-                c->cl
+                c->cl,
+                c->cr
             };
             sb_push_n(out, w, 6);
         }
