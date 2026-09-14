@@ -1019,6 +1019,18 @@ stereo_CmdBindPipeline(
     }
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipeline);
+    if (info && active_rp != VK_NULL_HANDLE &&
+        info->mv_renderpass != VK_NULL_HANDLE &&
+        active_rp == info->original_renderpass)
+    {
+        active_rp = info->mv_renderpass;
+        STEREO_LOG(
+            "MV_BIND_RP_REMAP cb=%p pipeline=%p orig=%p mv=%p",
+            (void*)commandBuffer,
+            (void*)pipeline,
+            (void*)info->original_renderpass,
+            (void*)info->mv_renderpass);
+    }
     remember_bound_pipeline(
         sd,
         commandBuffer,
