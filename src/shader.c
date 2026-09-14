@@ -11772,8 +11772,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
-            if (tmp_vs_mod[p] != VK_NULL_HANDLE)
-                st[vs_stage].module = tmp_vs_mod[p];
+            st[vs_stage].module = tmp;
             if (stereo_stage_inline_spv(&st[vs_stage]))
                 st[vs_stage].pNext = NULL;
             if (tmp_fs_mod[p] != VK_NULL_HANDLE && fs_stage != ~0u)
@@ -11789,7 +11788,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             STEREO_LOG(
                 "PATCHED_STAGE PathB p=%u vs=%p fs=%p pipeline_rp=%p",
                 p,
-                (void*)tmp_vs_mod[p],
+                (void*)tmp,
                 (void*)tmp_fs_mod[p],
                 (void*)pipeline_rp);
             STEREO_LOG(
