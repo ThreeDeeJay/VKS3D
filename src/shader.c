@@ -147,6 +147,7 @@ typedef struct
     /* Shader analysis */
     uint32_t dot_count;
     bool has_matrix_ops;
+    bool has_vector_matrix_ops;
     bool has_direct_position_write;
     bool has_v2_position_input;
     /* Matrix provenance tracking */
@@ -604,6 +605,8 @@ static void do_scan(SpvMod *m, bool p2)
             case SpvOpVectorTimesScalar:
             case SpvOpVectorTimesMatrix:
             case SpvOpMatrixTimesScalar:
+                if (op == SpvOpVectorTimesMatrix)
+                    m->has_vector_matrix_ops = true;
                 if (wc >= 5)
                 {
                     if (w[i + 2] < m->value_capacity)
@@ -2726,10 +2729,10 @@ bool spirv_patch_stereo_vertex(
      */
     if(cfg&&cfg->mono_ui)
     {
-        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&m.has_v2_position_input&&!m.has_emit_vertex)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_matrix_ops&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.has_matrix_ops&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex);
+        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.has_emit_vertex)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex);
         if(ui_candidate)
         {
-            STEREO_LOG("SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u direct=%u emit=%u proj=%u dots=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count);
+            STEREO_LOG("VERTEX_UI_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u vmatrix=%u direct=%u emit=%u proj=%u dots=%u",(unsigned long long)spv_hash,(unsigned)m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_vector_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count);
             free_spv_provenance(&m);
             return false;
         }
@@ -3154,6 +3157,13 @@ bool spirv_patch_stereo_vertex(
                 in[i + 1],
                 in[i + 3]);
         }
+        if (opx == SpvOpTypeSampledImage && wcx >= 3)
+        {
+            STEREO_LOG(
+                "VS_SAMPLED_IMAGE_IN result=%u imageType=%u",
+                in[i + 1],
+                in[i + 2]);
+        }
         if (!ins_ann &&
             (opx == SpvOpTypeVoid ||
              opx == SpvOpTypeBool ||
@@ -3410,6 +3420,13 @@ bool spirv_patch_stereo_vertex(
                 opj,
                 spv_op_name(opj),
                 ob.w[j + 1]);
+        }
+        if (opj == SpvOpTypeSampledImage && wcj >= 3)
+        {
+            STEREO_LOG(
+                "VS_SAMPLED_IMAGE_OUT result=%u imageType=%u",
+                ob.w[j + 1],
+                ob.w[j + 2]);
         }
         if (!wcj || j + wcj > ob.n)
             break;
@@ -7234,11 +7251,6 @@ bool spirv_patch_stereo_fs(
                 i += wc;
                 continue;
             }
-            if (sampled_id < id_bound && emitted_type[sampled_id])
-            {
-                i += wc;
-                continue;
-            }
             sb_push_n(&ob, &in[i], wc);
             if (sampled_id < id_bound)
                 emitted_type[sampled_id] = true;
@@ -10786,7 +10798,29 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG(
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
-                }
+                    }
+                    if (sd->stereo.mono_ui && vs_screen_space && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable)
+                    {
+                        STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
+                            (unsigned long long)hash_spv(vs_cache->spv,
+                                vs_cache->words),
+                            vs_screen_space,
+                            ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,
+                            ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,
+                            ci->pDepthStencilState?ci->pDepthStencilState->depthCompareOp:0,
+                            ci->pInputAssemblyState?ci->pInputAssemblyState->topology:0,
+                            ci->pRasterizationState?ci->pRasterizationState->cullMode:0,
+                            ci->pRasterizationState?ci->pRasterizationState->frontFace:0,
+                            ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:0,
+                            ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0,
+                            ci->subpass,
+                            vm.has_matrix_ops,
+                            vm.has_vector_matrix_ops,
+                            vm.has_v2_position_input,
+                            vm.dot_count);
+                        STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_screen_space,ci->pDepthStencilState->depthTestEnable,ci->pDepthStencilState->depthWriteEnable,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
+                        goto PIPE_DECISION_CONTINUE;
+                    }
                 free_spv_provenance(&vm);
             }
         }

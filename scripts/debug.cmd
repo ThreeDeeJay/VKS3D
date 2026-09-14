@@ -35,6 +35,7 @@ For %%A in (%*) do (
                 If !ErrorLevel! NEQ 0 (Pause)
                 Echo Decompiling "%%~nxA"
                 If exist "!VULKAN_SDK!\Bin\spirv-dis.exe" ("!VULKAN_SDK!\Bin\spirv-dis.exe" "%%~A" -o "%%~dpA\%%~nxA.asm")
+                Set Run=%%~dpA\%%~nxA.asm
                 If exist "%%~dpA\%%~nxA.asm" (Start "" "%%~dpA\%%~nxA.asm")
             ) else (
                 pushD "%%~dpA"
@@ -53,6 +54,7 @@ For %%A in (%*) do (
                 )
                 Echo %%~nA
                 "%%~dpA%%~nxA"
+                REM "%%~dpA%%~nxA" -fullscreen --fullscreen --full-screen --width 1920 --height 1080 -mode 1920x1080x144x32
                 if !ErrorLevel! NEQ 0 (
                     Echo Error code !ErrorLevel!
                     Pause
@@ -76,10 +78,11 @@ For %%A in (%*) do (
                                     "!VULKAN_SDK!\Bin\spirv-val.exe" "%%~nxS"
                                     if !ErrorLevel! NEQ 0 (
                                         If exist "!VULKAN_SDK!\Bin\spirv-dis.exe" (
+                                            Set ShaderFile=%%~nxS
                                             Echo Decompiling "%%~nxS"...
-                                            "!VULKAN_SDK!\Bin\spirv-dis.exe" "%%~nxS" -o "%%~nxS.asm"
+                                            "!VULKAN_SDK!\Bin\spirv-dis.exe" "!ShaderFile!"     -o "!ShaderFile!.asm"
+                                            "!VULKAN_SDK!\Bin\spirv-dis.exe" "!ShaderFile:+=-!" -o "!ShaderFile:+=-!.asm"
                                         )
-                                        If exist "%%~nxS.asm" (Start "" "%%~nxS.asm")
                                         Pause
                                     )
                                 )
@@ -106,4 +109,7 @@ For %%A in (%*) do (
 )
 Echo Done.
 pause
+If defined Run (
+    "!Run!"
+)
 exit
