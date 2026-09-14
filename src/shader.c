@@ -11772,20 +11772,26 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
-            st[vs_stage].module = tmp;
+            if (tmp_vs_mod[p] != VK_NULL_HANDLE)
+                st[vs_stage].module = tmp_vs_mod[p];
             if (stereo_stage_inline_spv(&st[vs_stage]))
                 st[vs_stage].pNext = NULL;
+            if (tmp_fs_mod[p] != VK_NULL_HANDLE && fs_stage != ~0u)
+                st[fs_stage].module = tmp_fs_mod[p];
+            if (tmp_fs_mod[p] != VK_NULL_HANDLE && fs_stage != ~0u)
+            {
+                if (stereo_stage_inline_spv(&st[fs_stage]))
+                    st[fs_stage].pNext = NULL;
+            }
             infos[p].pStages = st;
-            tmp_vs_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
             STEREO_LOG(
-                "PATCHED_STAGE PathB p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
+                "PATCHED_STAGE PathB p=%u vs=%p fs=%p pipeline_rp=%p",
                 p,
-                vs_stage,
-                (void *)ci->pStages[vs_stage].module,
-                (void *)tmp,
-                (void *)pipeline_rp);
+                (void*)tmp_vs_mod[p],
+                (void*)tmp_fs_mod[p],
+                (void*)pipeline_rp);
             STEREO_LOG(
                 "Pipe %u: Path B — VS gl_ViewIndex patch",
                 p);
@@ -11935,11 +11941,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (void*)tmp_vs_mod[dbg_p],
             (void*)tmp_fs_mod[dbg_p],
             infos[dbg_p].stageCount);
-        STEREO_LOG(
-            "DUAL_PATCH_MODULES p=%u vs=%p fs=%p",
-            dbg_p,
-            (void*)infos[dbg_p].pStages[0].module,
-            (void*)infos[dbg_p].pStages[1].module);
         for (uint32_t dbg_s = 0; dbg_s < infos[dbg_p].stageCount; ++dbg_s) {
             const VkPipelineShaderStageCreateInfo *dbg_st = &infos[dbg_p].pStages[dbg_s];
             STEREO_LOG(
