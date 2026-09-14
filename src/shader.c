@@ -10801,6 +10801,23 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     }
                     if (vs_screen_space && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable)
                     {
+                        STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
+                            (unsigned long long)hash_spv(vs_cache->spv,
+                                vs_cache->words),
+                            vs_screen_space,
+                            ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,
+                            ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,
+                            ci->pDepthStencilState?ci->pDepthStencilState->depthCompareOp:0,
+                            ci->pInputAssemblyState?ci->pInputAssemblyState->topology:0,
+                            ci->pRasterizationState?ci->pRasterizationState->cullMode:0,
+                            ci->pRasterizationState?ci->pRasterizationState->frontFace:0,
+                            ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:0,
+                            ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0,
+                            ci->subpass,
+                            vm.has_matrix_ops,
+                            vm.has_vector_matrix_ops,
+                            vm.has_v2_position_input,
+                            vm.dot_count);
                         STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_screen_space,ci->pDepthStencilState->depthTestEnable,ci->pDepthStencilState->depthWriteEnable,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
                         goto PIPE_DECISION_CONTINUE;
                     }
