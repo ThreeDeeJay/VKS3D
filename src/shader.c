@@ -10798,6 +10798,34 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG(
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    STEREO_LOG("VS_ROUTING_DECISION p=%u hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u pos=%u patchable=%u fs_gate=%u pathb_gate=%u",
+                        p,
+                        (unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),
+                        vs_fullscreen,
+                        vs_quad_fs,
+                        vs_screen_space,
+                        vs_pure_quad,
+                        vs_has_user_output,
+                        vs_background,
+                        vm.has_matrix_ops,
+                        vm.has_direct_position_write,
+                        vm.has_v2_position_input,
+                        vm.pos_var,
+                        vm.is_patchable,
+                        ((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
+                        !has_ms &&
+                        !has_gs &&
+                        !has_tes &&
+                        !has_tcs &&
+                        in_mv_rp &&
+                        ci->stageCount > 0 &&
+                        fs_stage != ~0u,
+                        in_mv_rp &&
+                        ci->stageCount > 0 &&
+                        has_vs &&
+                        !has_tcs &&
+                        vs_stage != ~0u &&
+                        !vs_pure_quad);
                     }
                     if (sd->stereo.mono_ui && vs_screen_space && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable)
                     {
@@ -10822,34 +10850,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         goto PIPE_DECISION_CONTINUE;
                     }
                 free_spv_provenance(&vm);
-                STEREO_LOG("VS_ROUTING_DECISION p=%u hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u pos=%u patchable=%u fs_gate=%u pathb_gate=%u",
-                    p,
-                    (unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),
-                    vs_fullscreen,
-                    vs_quad_fs,
-                    vs_screen_space,
-                    vs_pure_quad,
-                    vs_has_user_output,
-                    vs_background,
-                    vm.has_matrix_ops,
-                    vm.has_direct_position_write,
-                    vm.has_v2_position_input,
-                    vm.pos_var,
-                    vm.is_patchable,
-                    ((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
-                    !has_ms &&
-                    !has_gs &&
-                    !has_tes &&
-                    !has_tcs &&
-                    in_mv_rp &&
-                    ci->stageCount > 0 &&
-                    fs_stage != ~0u,
-                    in_mv_rp &&
-                    ci->stageCount > 0 &&
-                    has_vs &&
-                    !has_tcs &&
-                    vs_stage != ~0u &&
-                    !vs_pure_quad);
             }
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
