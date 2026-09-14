@@ -10582,11 +10582,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool vs_procedural_sky = false;
         bool vs_pure_quad = false;
         bool vs_uv_quad = false;
-        uint64_t vs_hash = 0;
         if (has_vs && vs_stage != ~0u) {
             StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
             if (vs_cache) {
-                vs_hash = hash_spv(vs_cache->spv,vs_cache->words);
                 SpvMod vm = {0};
                 vm.words = vs_cache->spv;
                 vm.count = vs_cache->words;
@@ -11911,12 +11909,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         {
             StereoPipelineInfo *info =
                 add_pipeline_info(sd);
-            vs_hash = hash_spv(vs_cache->spv,vs_cache->words);
             if (info)
             {
                 info->pipeline = pP[p];
-                info->vs_hash =
-                    vs_hash;
                 info->original_renderpass =
                     pCI[p].renderPass;
                 info->mv_renderpass =

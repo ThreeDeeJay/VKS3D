@@ -539,15 +539,6 @@ typedef struct StereoFramebufferTrack {
     bool          has_mv;
 } StereoFramebufferTrack;
 
-uint64_t hash_spv(const uint32_t *data, size_t words);
-
-typedef struct StereoVertexBindingState
-{
-    VkBuffer buffer;
-    VkDeviceSize offset;
-    VkDeviceSize stride;
-} StereoVertexBindingState;
-
 typedef struct StereoPipelineInfo
 {
     VkPipeline pipeline;
@@ -563,7 +554,6 @@ typedef struct StereoPipelineInfo
     VkBool32 patched_vs;
     VkBool32 patched_fs;
     VkBool32 patched_ms;
-    uint64_t vs_hash;
     /* Classification recorded at pipeline creation */
     VkBool32 is_quad;
     uint32_t vertex_binding_count;
