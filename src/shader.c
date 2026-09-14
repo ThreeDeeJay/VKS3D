@@ -1445,40 +1445,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cl,
         c->cr,
         c->cc);
-    STEREO_LOG(
-        "VS_PATCH_IDS "
-        "ch=%u "
-        "lp=%u "
-        "lv=%u "
-        "isl=%u "
-        "sel=%u "
-        "px=%u "
-        "nx=%u "
-        "nx2=%u "
-        "np=%u "
-        "mode=%d "
-        "pos_var=%u "
-        "pptr=%u "
-        "view_var=%u "
-        "leftConst=%u "
-        "rightConst=%u "
-        "convConst=%u",
-        ch,
-        lp,
-        lv,
-        isl,
-        sel,
-        px,
-        nx,
-        nx2,
-        np,
-        c->projection_mode,
-        m->pos_var,
-        pptr,
-        m->view_var,
-        c->cl,
-        c->cr,
-        c->cc);
     if (c->force_far_depth)
     {
         uint32_t bg_offset = (*nid)++;
