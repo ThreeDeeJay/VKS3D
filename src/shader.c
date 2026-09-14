@@ -10338,7 +10338,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         sd->stereo.enabled);
     if (!sd->stereo.enabled)
         return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
-    VkShaderModule                   *tmp_mod = calloc(N, sizeof(VkShaderModule));
+    VkShaderModule                   *tmp_mod    = calloc(N, sizeof(VkShaderModule));
+    VkShaderModule                   *tmp_vs_mod = calloc(N, sizeof(*tmp_vs_mod));
+    VkShaderModule                   *tmp_fs_mod = calloc(N, sizeof(*tmp_fs_mod));
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
@@ -11133,6 +11135,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             st[fs_s].pNext = NULL;
             infos[p].pStages = st;
             STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp);
+            tmp_fs_mod[p] = tmp;
             tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
@@ -11773,6 +11776,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (stereo_stage_inline_spv(&st[vs_stage]))
                 st[vs_stage].pNext = NULL;
             infos[p].pStages = st;
+            tmp_vs_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
             STEREO_LOG(
@@ -11936,6 +11940,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (void *)dbg_st->module);
         }
     }
+    STEREO_LOG(
+        "DUAL_PATCH_STATE p=%u vs=%p fs=%p stages=%u",
+        p,
+        (void*)tmp_vs_mod[p],
+        (void*)tmp_fs_mod[p],
+        infos[p].stageCount);
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG(
         "[PIPE AFTER DRIVER] res=%d",
