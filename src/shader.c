@@ -11911,7 +11911,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         {
             StereoPipelineInfo *info =
                 add_pipeline_info(sd);
-            uint64_t vs_hash = 0;
+            vs_hash = hash_spv(vs_cache->spv,vs_cache->words);
             if (info)
             {
                 info->pipeline = pP[p];
