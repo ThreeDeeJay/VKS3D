@@ -11942,7 +11942,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     }
     STEREO_LOG(
         "DUAL_PATCH_STATE p=%u vs=%p fs=%p stages=%u",
-        p,
+        dbg_p,
         (void*)tmp_vs_mod[p],
         (void*)tmp_fs_mod[p],
         infos[p].stageCount);
