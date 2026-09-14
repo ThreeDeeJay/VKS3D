@@ -11995,8 +11995,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     {
                         info->vs_module = st->module;
                         info->patched_vs =
-                            (tmp_mod[p] != VK_NULL_HANDLE &&
-                             st->module == tmp_mod[p]);
+                            (st->module != pCI[p].pStages[s].module);
                     }
                     if (st->stage == VK_SHADER_STAGE_GEOMETRY_BIT)
                     {
@@ -12013,8 +12012,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     {
                         info->fs_module = st->module;
                         info->patched_fs =
-                            (tmp_mod[p] != VK_NULL_HANDLE &&
-                             st->module == tmp_mod[p]);
+                            (st->module != pCI[p].pStages[s].module);
                         /*
                          * Always probe the fragment shader too.
                          * VS/TES may already have filled proj info, but FS can carry
