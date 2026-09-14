@@ -11132,7 +11132,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (stereo_stage_inline_spv(&st[fs_s]))
             st[fs_s].pNext = NULL;
             infos[p].pStages = st;
-            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp_mod[p]);
+            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp);
             tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
@@ -11149,11 +11149,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 p,
                 sc2);
             STEREO_LOG(
-                "SHADER_PATH_FINAL p=%u path=FS patched_fs=1 has_vs=%u vs_stage=%u",
+                "SHADER_PATH_FS_DONE p=%u patched_fs=1 has_vs=%u vs_stage=%u",
                 p,
                 (unsigned)has_vs,
                 vs_stage);
-            continue;
             }
         }
         if (in_mv_rp &&
