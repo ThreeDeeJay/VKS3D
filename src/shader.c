@@ -11929,6 +11929,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             tst[dbg_p] != NULL,
             (void*)tmp_mod[dbg_p],
             (void*)infos[dbg_p].renderPass);
+        STEREO_LOG(
+            "DUAL_PATCH_STATE p=%u vs=%p fs=%p stages=%u",
+            dbg_p,
+            (void*)tmp_vs_mod[dbg_p],
+            (void*)tmp_fs_mod[dbg_p],
+            infos[dbg_p].stageCount);
         for (uint32_t dbg_s = 0; dbg_s < infos[dbg_p].stageCount; ++dbg_s) {
             const VkPipelineShaderStageCreateInfo *dbg_st =
             &infos[dbg_p].pStages[dbg_s];
@@ -11940,12 +11946,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (void *)dbg_st->module);
         }
     }
-    STEREO_LOG(
-        "DUAL_PATCH_STATE p=%u vs=%p fs=%p stages=%u",
-        p,
-        (void*)tmp_vs_mod[p],
-        (void*)tmp_fs_mod[p],
-        infos[p].stageCount);
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG(
         "[PIPE AFTER DRIVER] res=%d",
