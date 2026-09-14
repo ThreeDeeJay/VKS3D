@@ -1915,10 +1915,16 @@ stereo_CmdSetViewport(
     uint32_t viewportCount,
     const VkViewport *pViewports)
 {
-    STEREO_LOG("CMD_SET_VIEWPORT cb=%p first=%u count=%u",
+    STEREO_LOG("CMD_SET_VIEWPORT cb=%p first=%u count=%u x=%f y=%f w=%f h=%f min=%f max=%f",
         (void*)commandBuffer,
         firstViewport,
-        viewportCount);
+        viewportCount,
+        pViewports ? pViewports[0].x : 0.0f,
+        pViewports ? pViewports[0].y : 0.0f,
+        pViewports ? pViewports[0].width : 0.0f,
+        pViewports ? pViewports[0].height : 0.0f,
+        pViewports ? pViewports[0].minDepth : 0.0f,
+        pViewports ? pViewports[0].maxDepth : 0.0f);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetViewport)
         return;
