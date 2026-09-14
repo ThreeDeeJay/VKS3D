@@ -11935,6 +11935,22 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (void*)tmp_vs_mod[dbg_p],
             (void*)tmp_fs_mod[dbg_p],
             infos[dbg_p].stageCount);
+        STEREO_LOG(
+            "DUAL_PATCH_MODULES p=%u vs=%p fs=%p",
+            dbg_p,
+            (void*)infos[dbg_p].pStages[0].module,
+            (void*)infos[dbg_p].pStages[1].module);
+        for (uint32_t dbg_s = 0; dbg_s < infos[dbg_p].stageCount; ++dbg_s) {
+            const VkPipelineShaderStageCreateInfo *dbg_st = &infos[dbg_p].pStages[dbg_s];
+            STEREO_LOG(
+                "DUAL_PATCH_STAGE p=%u stage=%u vkstage=0x%x module=%p vs_match=%u fs_match=%u",
+                dbg_p,
+                dbg_s,
+                dbg_st->stage,
+                (void*)dbg_st->module,
+                (unsigned)(dbg_st->module == tmp_vs_mod[dbg_p]),
+                (unsigned)(dbg_st->module == tmp_fs_mod[dbg_p]));
+        }
         for (uint32_t dbg_s = 0; dbg_s < infos[dbg_p].stageCount; ++dbg_s) {
             const VkPipelineShaderStageCreateInfo *dbg_st =
             &infos[dbg_p].pStages[dbg_s];
