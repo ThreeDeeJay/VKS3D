@@ -1057,6 +1057,13 @@ stereo_CmdBindPipeline(
             (void*)active_rp,
             (void*)info->original_renderpass,
             (void*)info->mv_renderpass);
+        STEREO_LOG(
+            "MV_PIPE_BIND pipe=%p active_rp=%p mv_rp=%p patched_vs=%u patched_fs=%u",
+            (void*)pipeline,
+            (void*)active_rp,
+            (void*)info->mv_renderpass,
+            info->patched_vs,
+            info->patched_fs);
     }
     else
     {
