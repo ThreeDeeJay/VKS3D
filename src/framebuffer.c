@@ -822,6 +822,20 @@ stereo_CmdBeginRenderPass(
                 sd->cb_track_count,
                 MAX_CB_TRACK);
         }
+        for (uint32_t ti = 0; ti < sd->cb_track_count; ti++)
+        {
+            if (sd->cb_track[ti].cb == commandBuffer)
+            {
+                STEREO_LOG(
+                    "MV_CB_TRACK_BEFORE cb=%p tracked_rp=%p tracked_fb=%p driver_rp=%p driver_fb=%p",
+                    (void*)commandBuffer,
+                    (void*)sd->cb_track[ti].render_pass,
+                    (void*)sd->cb_track[ti].framebuffer,
+                    (void*)modified.renderPass,
+                    (void*)modified.framebuffer);
+                break;
+            }
+        }
         sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
     } else {
         STEREO_LOG(
