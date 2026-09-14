@@ -11768,15 +11768,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             uint32_t sc=ci->stageCount;
             VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
-            if (infos[p].pStages)
-                memcpy(st,infos[p].pStages,sc*sizeof(*st));
-            else
-                memcpy(st,ci->pStages,sc*sizeof(*st));
+            memcpy(st,ci->pStages,sc*sizeof(*st));
             st[vs_stage].module = tmp;
             if (stereo_stage_inline_spv(&st[vs_stage]))
                 st[vs_stage].pNext = NULL;
-            if (infos[p].pStages)
-                free((void *)infos[p].pStages);
             infos[p].pStages = st;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
