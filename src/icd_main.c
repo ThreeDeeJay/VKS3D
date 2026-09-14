@@ -347,8 +347,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_DestroyShaderEXT);
     GDPA_WRAP("vkCmdBindShadersEXT",
               stereo_CmdBindShadersEXT);
-    //GDPA_WRAP("vkCmdSetViewport",
-    //          stereo_CmdSetViewport);
+    GDPA_WRAP("vkCmdSetViewport",
+              stereo_CmdSetViewport);
     //GDPA_WRAP("vkCmdSetScissor",
     //          stereo_CmdSetScissor);
     //GDPA_WRAP("vkCmdSetCullMode",
@@ -363,8 +363,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
     //          stereo_CmdSetPrimitiveTopology);
     //GDPA_WRAP("vkCmdSetPrimitiveTopologyEXT",
     //          stereo_CmdSetPrimitiveTopology);
-    //GDPA_WRAP("vkCmdSetViewportWithCountEXT",
-    //          stereo_CmdSetViewportWithCountEXT);
+    GDPA_WRAP("vkCmdSetViewportWithCountEXT",
+              stereo_CmdSetViewportWithCountEXT);
     //GDPA_WRAP("vkCmdSetScissorWithCountEXT",
     //          stereo_CmdSetScissorWithCountEXT);
     //GDPA_WRAP("vkCmdSetDepthTestEnableEXT",
