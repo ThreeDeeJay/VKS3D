@@ -1433,16 +1433,19 @@ stereo_CmdDraw(
     if (info)
     {
         STEREO_LOG(
-            "DRAW pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
-            "verts=%u inst=%u",
+            "DRAW pipe=%p vs_hash=%016llx rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
+            "verts=%u inst=%u firstVertex=%u firstInstance=%u",
             (void *)pipe,
+            (unsigned long long)info->vs_hash,
             (void *)rp,
             (void *)fb,
             info->is_quad,
             info->patched_vs,
             info->patched_fs,
             vertexCount,
-            instanceCount);
+            instanceCount,
+            firstVertex,
+            firstInstance);
     }
     else
     {

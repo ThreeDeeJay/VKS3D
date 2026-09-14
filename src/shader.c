@@ -10585,6 +10585,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         if (has_vs && vs_stage != ~0u) {
             StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
             if (vs_cache) {
+                info->vs_hash = hash_spv(vs_cache->spv,vs_cache->words);
                 SpvMod vm = {0};
                 vm.words = vs_cache->spv;
                 vm.count = vs_cache->words;
