@@ -925,7 +925,9 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             sc,
             sd->swapchain_count);
         sc->stereo_active = false;
+        VkSwapchainKHR persistent_compose = sc->real_swapchain;
         memset(sc, 0, sizeof(*sc));
+        sc->real_swapchain = persistent_compose;
         if (sd->swapchain_count > 0)
         sd->swapchain_count--;
         STEREO_LOG("[DESTROY SC RECLAIM] count_after=%u",sd->swapchain_count);
