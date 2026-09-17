@@ -1094,6 +1094,8 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
     b2.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     b2.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     b2.newLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    b2.subresourceRange.baseArrayLayer = 0;
+    b2.subresourceRange.layerCount = 2;
     sd->real.CmdPipelineBarrier(cmd,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,0,NULL,0,NULL,1,&b2);
