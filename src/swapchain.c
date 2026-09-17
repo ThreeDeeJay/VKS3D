@@ -911,6 +911,9 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         /* leave structure in table */
         sc->stereo_active = false;
+        memset(sc, 0, sizeof(*sc));
+        if (sd->swapchain_count > 0)
+        sd->swapchain_count--;
 
     } else {
     STEREO_LOG(
