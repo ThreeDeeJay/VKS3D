@@ -335,8 +335,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
         sd->swapchain_count,
         pCreateInfo->oldSwapchain);
 
-    StereoSwapchain *old_sc = NULL;
-
     STEREO_LOG("[CREATE SC SLOTS] count=%u",sd->swapchain_count);
     for (uint32_t i=0;i<sd->swapchain_count;i++) {
         StereoSwapchain *entry=&sd->swapchains[i];
