@@ -337,6 +337,21 @@ stereo_CreateSwapchainKHR(VkDevice device,
 
     StereoSwapchain *old_sc = NULL;
 
+    STEREO_LOG("[CREATE SC SLOTS] count=%u",sd->swapchain_count);
+    for (uint32_t i=0;i<sd->swapchain_count;i++) {
+        StereoSwapchain *entry=&sd->swapchains[i];
+        STEREO_LOG("[CREATE SC SLOT] i=%u sc=%p active=%d reused=%d mode=%d real=%p app=%p images=%p image_count=%u",
+            i,
+            (void*)entry,
+            (int)entry->stereo_active,
+            (int)entry->resize_reused,
+            (int)entry->present_mode,
+            (void*)entry->real_swapchain,
+            (void*)entry->app_handle,
+            (void*)entry->stereo_images,
+            entry->image_count);
+    }
+    StereoSwapchain *old_sc = NULL;
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
     {
         old_sc =
@@ -351,9 +366,20 @@ stereo_CreateSwapchainKHR(VkDevice device,
     
     if (!old_sc) {
         for (uint32_t i=0;i<sd->swapchain_count;i++) {
-            if (sd->swapchains[i].resize_reused &&
-                sd->swapchains[i].present_mode == STEREO_PRESENT_SBS) {
-                old_sc = &sd->swapchains[i];
+            StereoSwapchain *entry=&sd->swapchains[i];
+            STEREO_LOG("[CREATE SC REUSE_SCAN] i=%u sc=%p active=%d reused=%d mode=%d real=%p",
+                i,
+                (void*)entry,
+                (int)entry->stereo_active,
+                (int)entry->resize_reused,
+                (int)entry->present_mode,
+                (void*)entry->real_swapchain);
+            if (entry->resize_reused &&
+                entry->present_mode == STEREO_PRESENT_SBS) {
+                old_sc=entry;
+            STEREO_LOG("[CREATE SC REUSE_SCAN] selected i=%u sc=%p",
+                i,
+                (void*)entry);
             break;
             }
         }
