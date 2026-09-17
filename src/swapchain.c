@@ -655,14 +655,23 @@ try_dx9:
                 (void*)sc);
         }
     if (sc->hwnd && (sc->real_swapchain != VK_NULL_HANDLE || gpu_compose_sc_init(sd, sc, pCreateInfo->surface))) {
-        STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",sc,(void*)sc->real_swapchain);
+        STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",(void*)sc,(void*)sc->real_swapchain);
         VkResult res = alloc_alt_stereo_swapchain(sd, sc);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
-            STEREO_LOG("[CREATE SC ALT_RESULT] sc=%p res=%d real=%p",
-                sc,
+            STEREO_LOG("[CREATE SC ALT_RESULT] sc=%p res=%d images=%p image_count=%u real=%p",
+                (void*)sc,
                 res,
+                (void*)sc->stereo_images,
+                sc->image_count,
                 (void*)sc->real_swapchain);
-            if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
+            if (res == VK_SUCCESS) {
+                bool barriers_ok = setup_barrier_resources(sd, sc);
+                STEREO_LOG("[CREATE SC BARRIER_RESULT] sc=%p ok=%d cmds=%p fences=%p",
+                    (void*)sc,
+                    (int)barriers_ok,
+                    (void*)sc->barrier_cmds,
+                    (void*)sc->barrier_fences);
+            if (barriers_ok) {
                 sc->present_mode  = req;
                 sc->dxgi_mode     = false;
                 sc->stereo_active = true;
@@ -720,8 +729,22 @@ try_dx9:
             }
             /* GPU compose init failed — fall to passthrough */
             //STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
+            STEREO_LOG("[CREATE SC SBS_RESOURCE_FAIL] sc=%p res=%d images=%p image_count=%u cmds=%p fences=%p",
+                (void*)sc,
+                res,
+                (void*)sc->stereo_images,
+                sc->image_count,
+                (void*)sc->barrier_cmds,
+                (void*)sc->barrier_fences);
+                }
+            } else {
+                STEREO_LOG("[CREATE SC COMPOSE_FAIL] sc=%p hwnd=%p real=%p",
+                    (void*)sc,
+                    (void*)sc->hwnd,
+                    (void*)sc->real_swapchain);
+            }
             STEREO_LOG("[CREATE SC SBS_FALLBACK] sc=%p req=%d real=%p",
-                sc,
+                (void*)sc,
                 (int)req,
                 (void*)sc->real_swapchain);
             gpu_compose_sc_destroy(sd, sc);
