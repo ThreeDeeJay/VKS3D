@@ -820,7 +820,9 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
 
     if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
         STEREO_ERR("[GPU Compose] TRANSFER_DST not in supportedUsageFlags — falling back to CPU");
-        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=usage_flags sc=%p",sc);
+        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=usage_flags sc=%p flags=0x%x",
+            (void*)sc,
+            caps.supportedUsageFlags);
         return false;
     }
 
@@ -940,6 +942,11 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         STEREO_LOG(
             "[GPU Compose] CreateSwapchainKHR OUT_OF_DATE");
 
+        STEREO_LOG(
+            "[COMPOSE_INIT_FAIL] reason=out_of_date sc=%p res=%d",
+            (void*)sc,
+            res);
+
         return false;
     }
 
@@ -955,7 +962,7 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
             res);
 
         STEREO_LOG("[COMPOSE_CREATE_FAIL] sc=%p res=%d real=%p",
-            sc,
+            (void*)sc,
             res,
             (void*)sc->real_swapchain);
         return false;
@@ -968,6 +975,9 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain, &sc->comp_sc_count, NULL);
     sc->comp_sc_images = calloc(sc->comp_sc_count, sizeof(VkImage));
     if (!sc->comp_sc_images) {
+        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=comp_images_alloc sc=%p count=%u",
+            (void*)sc,
+            sc->comp_sc_count);
         return false;
     }
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain,
