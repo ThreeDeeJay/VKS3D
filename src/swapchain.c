@@ -765,7 +765,6 @@ try_dx9:
                 sc->real_swapchain = VK_NULL_HANDLE;
             }
         }
-    }
 
 passthrough:
     STEREO_ERR("All stereo modes failed — passthrough");
