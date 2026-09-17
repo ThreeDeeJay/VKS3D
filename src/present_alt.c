@@ -965,20 +965,64 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         "[COMPOSE CREATE] active=%p",
         sc->real_swapchain);
 
-    sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain, &sc->comp_sc_count, NULL);
-    sc->comp_sc_images = calloc(sc->comp_sc_count, sizeof(VkImage));
-    if (!sc->comp_sc_images) {
+    uint32_t image_count=0;
+    VkResult image_res=sd->real.GetSwapchainImagesKHR(sd->real_device,sc->real_swapchain,&image_count,NULL);
+    STEREO_LOG("[COMPOSE_IMAGES_COUNT] sc=%p res=%d count=%u",
+        (void*)sc,
+        (int)image_res,
+        image_count);
+    if (image_res!=VK_SUCCESS || image_count==0) {
+        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=get_images_count sc=%p res=%d count=%u",
+            (void*)sc,
+            (int)image_res,
+            image_count);
         return false;
     }
-    sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain,
-                                    &sc->comp_sc_count, sc->comp_sc_images);
-    STEREO_LOG(
-        "[GPU Compose] real swapchain image_count=%u",
-        sc->comp_sc_count);
-    VkSemaphoreCreateInfo sinfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_acquire_sem);
-    sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_blit_done_sem);
-
+    sc->comp_sc_count=image_count;
+    sc->comp_sc_images=calloc(sc->comp_sc_count,sizeof(VkImage));
+    if (!sc->comp_sc_images) {
+        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=images_alloc sc=%p count=%u",
+            (void*)sc,
+            sc->comp_sc_count);
+        return false;
+    }
+    image_res=sd->real.GetSwapchainImagesKHR(sd->real_device,sc->real_swapchain,&sc->comp_sc_count,sc->comp_sc_images);
+    STEREO_LOG("[COMPOSE_IMAGES_FETCH] sc=%p res=%d count=%u images=%p",
+        (void*)sc,
+        (int)image_res,
+        sc->comp_sc_count,
+        (void*)sc->comp_sc_images);
+    if (image_res!=VK_SUCCESS) {
+        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=get_images sc=%p res=%d count=%u",
+            (void*)sc,
+            (int)image_res,
+            sc->comp_sc_count);
+        return false;
+    }
+    STEREO_LOG("[GPU Compose] real swapchain image_count=%u",sc->comp_sc_count);
+    VkSemaphoreCreateInfo sinfo={VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VkResult sem_res=sd->real.CreateSemaphore(sd->real_device,&sinfo,NULL,&sc->comp_acquire_sem);
+    STEREO_LOG("[COMPOSE_SEM_ACQUIRE] sc=%p res=%d sem=%p",
+        (void*)sc,
+        (int)sem_res,
+        (void*)sc->comp_acquire_sem);
+    if (sem_res!=VK_SUCCESS) {
+        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=acquire_sem sc=%p res=%d",
+            (void*)sc,
+            (int)sem_res);
+        return false;
+    }
+    sem_res=sd->real.CreateSemaphore(sd->real_device,&sinfo,NULL,&sc->comp_blit_done_sem);
+    STEREO_LOG("[COMPOSE_SEM_BLIT] sc=%p res=%d sem=%p",
+        (void*)sc,
+        (int)sem_res,
+        (void*)sc->comp_blit_done_sem);
+    if (sem_res!=VK_SUCCESS) {
+        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=blit_sem sc=%p res=%d",
+            (void*)sc,
+            (int)sem_res);
+        return false;
+    }
     STEREO_LOG("[GPU Compose] init: sc=%p  %u images  %ux%u  %s",
                (void*)sc->real_swapchain, sc->comp_sc_count,
                sc->app_width, sc->app_height,
