@@ -626,6 +626,7 @@ try_dx9:
             STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",sc,(void*)sc->real_swapchain);
             VkResult res = alloc_alt_stereo_swapchain(sd, sc);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
+            STEREO_LOG("[CREATE SC ALT_RESULT] sc=%p res=%d real=%p",
                 sc,
                 res,
                 (void*)sc->real_swapchain);
