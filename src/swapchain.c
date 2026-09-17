@@ -1652,12 +1652,36 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         (_r == VK_SUCCESS) ? (void *)(uintptr_t)*pView : NULL);
     if (_r == VK_SUCCESS)
     {
+        uint32_t stereo_sc = UINT32_MAX;
+        uint32_t stereo_img = UINT32_MAX;
+        bool stereo_image_match = false;
+        for (uint32_t si = 0; si < sd->swapchain_count; si++)
+        {
+            StereoSwapchain *scc = &sd->swapchains[si];
+            if (!scc->stereo_active || !scc->stereo_images)
+                continue;
+            for (uint32_t ii = 0; ii < scc->image_count; ii++)
+            {
+                if (scc->stereo_images[ii] == pCreateInfo->image)
+                {
+                    stereo_image_match = true;
+                    stereo_sc = si;
+                    stereo_img = ii;
+                    break;
+                }
+            }
+            if (stereo_image_match)
+                break;
+        }
         STEREO_LOG(
-            "VIEW_CREATED view=%p image=%p type=%u layers=%u",
+            "VIEW_CREATED view=%p image=%p type=%u layers=%u stereo=%u sc=%u image_index=%u",
             (void *)(uintptr_t)*pView,
             (void *)(uintptr_t)upgraded.image,
             upgraded.viewType,
-            upgraded.subresourceRange.layerCount);
+            upgraded.subresourceRange.layerCount,
+            stereo_image_match,
+            stereo_sc,
+            stereo_img);
     }
     /* Track upgraded views for framebuffer multiview detection */
     if (_r == VK_SUCCESS &&

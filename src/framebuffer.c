@@ -78,10 +78,22 @@ stereo_CreateFramebuffer(
         pCreateInfo->layers,
         pCreateInfo->attachmentCount);
     for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+        VkImageView view = pCreateInfo->pAttachments[i];
+        bool upgraded = false;
+        uint32_t upgraded_index = UINT32_MAX;
+        for (uint32_t k = 0; k < sd->upgraded_view_count; k++) {
+            if (sd->upgraded_views[k] == view) {
+                upgraded = true;
+                upgraded_index = k;
+                break;
+            }
+        }
         STEREO_LOG(
-            "FB_CREATE_ATTACHMENT i=%u view=%p",
+            "FB_CREATE_ATTACHMENT i=%u view=%p upgraded=%u upgraded_index=%u",
             i,
-            (void*)pCreateInfo->pAttachments[i]);
+            (void*)view,
+            (unsigned)upgraded,
+            upgraded_index);
     }
     if (debug_original == VK_NULL_HANDLE) {
         STEREO_LOG("[FATAL] upstream pCreateInfo->renderPass already NULL!");
@@ -712,6 +724,18 @@ stereo_CmdBeginRenderPass(
         (void*)pRenderPassBegin->framebuffer,
         (void*)mv_rp,
         mv_rp != VK_NULL_HANDLE);
+    if (fb_found)
+    {
+        StereoFramebufferTrack *t = &sd->fb_tracks[fb_track_index];
+        STEREO_LOG(
+            "FB_BEGIN_TRACK fb=%p track=%u rp=%p rp_used=%p mv_rp=%p has_mv=%u",
+            (void*)t->fb,
+            fb_track_index,
+            (void*)t->rp,
+            (void*)t->rp_used_at_create,
+            (void*)t->mv_rp,
+            (unsigned)t->has_mv);
+    }
     if (mv_rp)
     {
         VkRenderPassBeginInfo modified = *pRenderPassBegin;
