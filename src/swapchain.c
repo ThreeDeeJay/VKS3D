@@ -388,11 +388,17 @@ stereo_CreateSwapchainKHR(VkDevice device,
     if (old_sc)
     {
         sc = old_sc;
-        sc->resize_reused = true;
-    
+        if (sc->present_mode == STEREO_PRESENT_SBS &&
+            sc->real_swapchain != VK_NULL_HANDLE)
+            sc->resize_reused = true;
+        else
+            sc->resize_reused = false;
         STEREO_LOG(
-            "[CREATE SC REUSE] sc=%p",
-            sc);
+            "[CREATE SC REUSE] sc=%p mode=%d real=%p reused=%d",
+            (void*)sc,
+            (int)sc->present_mode,
+            (void*)sc->real_swapchain,
+            (int)sc->resize_reused);
     }
     else
     {
