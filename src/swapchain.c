@@ -820,6 +820,31 @@ passthrough:
     STEREO_LOG("[CREATE SC PASSTHROUGH_RESULT] res=%d real=%p",
         (int)fallback_res,
         pSwapchain ? (void*)*pSwapchain : NULL);
+    if (fallback_res == VK_SUCCESS && pSwapchain)
+    {
+        StereoSwapchain *slot = NULL;
+        for (uint32_t i=0;i<sd->swapchain_count;i++)
+        {
+            StereoSwapchain *entry=&sd->swapchains[i];
+            if (!entry->stereo_active && !entry->resize_reused)
+            {
+                slot=entry;
+                break;
+            }
+        }
+        if (slot)
+        {
+            memset(slot,0,sizeof(*slot));
+            slot->real_swapchain=*pSwapchain;
+            slot->app_handle=*pSwapchain;
+            STEREO_LOG("[CREATE SC PASSTHROUGH_TRACK] slot=%p app=%p real=%p",
+                (void*)slot,
+                (void*)slot->app_handle,
+                (void*)slot->real_swapchain);
+            if (slot == &sd->swapchains[sd->swapchain_count])
+                sd->swapchain_count++;
+        }
+    }
     return fallback_res;
     STEREO_LOG(
         "[PASSTHROUGH] entering real CreateSwapchainKHR old=%p",
