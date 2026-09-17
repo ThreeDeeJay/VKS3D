@@ -478,6 +478,9 @@ stereo_CreateSwapchainKHR(VkDevice device,
             (int)sc->resize_reused,
             sd->swapchain_count,
             pCreateInfo->oldSwapchain);
+        STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p",
+            *pSwapchain,
+            sc);
         return VK_SUCCESS;
     }
 
@@ -560,6 +563,9 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 (int)sc->resize_reused,
                 sd->swapchain_count,
                 pCreateInfo->oldSwapchain);
+            STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p",
+                *pSwapchain,
+                sc);
             return VK_SUCCESS;
         }
         if (req == STEREO_PRESENT_DXGI) { STEREO_ERR("DXGI forced but failed"); goto passthrough; }
@@ -597,6 +603,9 @@ try_dx9:
                     (int)sc->resize_reused,
                     sd->swapchain_count,
                     pCreateInfo->oldSwapchain);
+                STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p",
+                    *pSwapchain,
+                    sc);
                 return VK_SUCCESS;
             }
         }
@@ -665,6 +674,9 @@ try_dx9:
                     (int)sc->resize_reused,
                     sd->swapchain_count,
                     pCreateInfo->oldSwapchain);
+                STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p",
+                    *pSwapchain,
+                    sc);
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
@@ -1238,7 +1250,16 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         pPresentInfo->swapchainCount : 0);
     STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
                (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
-    STEREO_LOG("[PRESENT_ENTER] first_sc=%p",pPresentInfo && pPresentInfo->swapchainCount ? pPresentInfo->pSwapchains[0] : VK_NULL_HANDLE);
+    STEREO_LOG("[PRESENT_ENTER] first_sc=%p",
+        pPresentInfo && pPresentInfo->swapchainCount ?
+        pPresentInfo->pSwapchains[0] : VK_NULL_HANDLE);
+    if (pPresentInfo && pPresentInfo->swapchainCount) {
+        for (uint32_t i=0;i<pPresentInfo->swapchainCount;i++) {
+            STEREO_LOG("[PRESENT_HANDLE] i=%u app=%p",
+                i,
+                pPresentInfo->pSwapchains[i]);
+        }
+    }
     extern StereoDevice g_devices[];
     extern uint32_t     g_device_count;
 
