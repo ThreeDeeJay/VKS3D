@@ -1035,6 +1035,7 @@ stereo_GetSwapchainImagesKHR(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
+    STEREO_LOG("[GET_IMAGES_ENTER] app=%p",swapchain);
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
     //STEREO_LOG(
     //    "[GET IMAGES] sc=%p",
@@ -1049,6 +1050,12 @@ stereo_GetSwapchainImagesKHR(
     //    sc,
     //    sc ? sc->real_swapchain : VK_NULL_HANDLE,
     //    sc ? sc->stereo_active : -1);
+    STEREO_LOG("[GET_IMAGES_LOOKUP] app=%p sc=%p real=%p active=%d mode=%d",
+        swapchain,
+        sc,
+        sc ? (void*)sc->real_swapchain : NULL,
+        sc ? (int)sc->stereo_active : -1,
+        sc ? (int)sc->present_mode : -1);
     if (!sc || !sc->stereo_active)
     {
         //STEREO_LOG(

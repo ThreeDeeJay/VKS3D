@@ -922,6 +922,10 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         (int)res,
         sc->real_swapchain,
         sc->real_swapchain != VK_NULL_HANDLE);
+    STEREO_LOG("[COMPOSE_SC_HANDLE] wrapper=%p real=%p res=%d",
+        sc,
+        (void*)sc->real_swapchain,
+        res);
     if (res == VK_ERROR_OUT_OF_DATE_KHR)
     {
         STEREO_LOG(
