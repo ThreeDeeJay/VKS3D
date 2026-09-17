@@ -326,20 +326,6 @@ stereo_CreateSwapchainKHR(VkDevice device,
             stereo_swapchain_lookup(
                 sd,
                 pCreateInfo->oldSwapchain);
-
-        STEREO_LOG(
-            "[CREATE SC OLD LOOKUP] old=%p old_sc=%p",
-            pCreateInfo->oldSwapchain,
-            old_sc);
-    }
-    
-    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
-    {
-        old_sc =
-            stereo_swapchain_lookup(
-                sd,
-                pCreateInfo->oldSwapchain);
-    
         STEREO_LOG(
             "[CREATE SC OLD LOOKUP] old=%p old_sc=%p",
             pCreateInfo->oldSwapchain,
