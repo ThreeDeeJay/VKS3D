@@ -916,6 +916,10 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
             &sci,
             NULL,
             &sc->real_swapchain);
+        STEREO_LOG("[COMPOSE_CREATE_CALL] sc=%p res=%d real=%p",
+            sc,
+            res,
+            (void*)sc->real_swapchain);
     }
     STEREO_LOG(
         "[COMPOSE CREATE RESULT] res=%d real=%p reused=%d",
@@ -950,6 +954,10 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
             "[GPU Compose] CreateSwapchainKHR failed: %d",
             res);
 
+        STEREO_LOG("[COMPOSE_CREATE_FAIL] sc=%p res=%d real=%p",
+            sc,
+            res,
+            (void*)sc->real_swapchain);
         return false;
     }
 
