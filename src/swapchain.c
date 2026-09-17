@@ -1156,7 +1156,9 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
         };
         if (sd->gfx_queue) sd->real.QueueSubmit(sd->gfx_queue, 1, &sig, fence);
     }
+    uint32_t idx = sc->acquire_idx++ % sc->image_count;
     *pImageIndex = idx;
+    STEREO_LOG("[ACQUIRE] sc=%p image=%u/%u", (void *)sc, idx, sc->image_count);
     return VK_SUCCESS;
 }
 
@@ -1218,10 +1220,12 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
                 wsems);
             break;
         case STEREO_PRESENT_SBS:
+            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems, pPresentInfo->pImageIndices[i]);
+            break;
         case STEREO_PRESENT_TAB:
         case STEREO_PRESENT_INTERLACED:
             /* GPU blit compose — no CPU readback, no GDI */
-            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems);
+            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems, pPresentInfo->pImageIndices[i]);
             break;
         default:
             pr = VK_SUCCESS;
