@@ -333,14 +333,17 @@ stereo_CreateSwapchainKHR(VkDevice device,
             old_sc);
     }
     
-    if (!old_sc) {
-        for (uint32_t i=0;i<sd->swapchain_count;i++) {
-            if (sd->swapchains[i].resize_reused &&
-                sd->swapchains[i].present_mode == STEREO_PRESENT_SBS) {
-                old_sc = &sd->swapchains[i];
-            break;
-            }
-        }
+    if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
+    {
+        old_sc =
+            stereo_swapchain_lookup(
+                sd,
+                pCreateInfo->oldSwapchain);
+    
+        STEREO_LOG(
+            "[CREATE SC OLD LOOKUP] old=%p old_sc=%p",
+            pCreateInfo->oldSwapchain,
+            old_sc);
     }
     
     StereoSwapchain *sc;
