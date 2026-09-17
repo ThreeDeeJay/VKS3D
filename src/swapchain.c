@@ -887,60 +887,60 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         /* real_swapchain: GPU compose output SC or passthrough SC */
         if (sc->real_swapchain)
         {
-            //STEREO_LOG(
-            //    "[DESTROY SC] app=%p sc=%p real=%p",
-            //    swapchain,
-            //    sc,
-            //    sc->real_swapchain);
-            //STEREO_LOG(
-            //    "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
-            //    sc->real_swapchain);
+            STEREO_LOG(
+                "[DESTROY SC] app=%p sc=%p real=%p",
+                swapchain,
+                sc,
+                sc->real_swapchain);
+            STEREO_LOG(
+                "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+                sc->real_swapchain);
             sd->real.DestroySwapchainKHR(
                 sd->real_device,
                 sc->real_swapchain,
                 pAllocator);
-            //STEREO_LOG(
-            //    "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
-            //    sc->real_swapchain);
+            STEREO_LOG(
+                "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
+                sc->real_swapchain);
             sc->real_swapchain = VK_NULL_HANDLE;
         }
 
-        //STEREO_LOG(
-        //    "[DESTROY SC] keeping slot alive sc=%p",
-        //    sc);
+        STEREO_LOG(
+            "[DESTROY SC] keeping slot alive sc=%p",
+            sc);
 
         /* leave structure in table */
         sc->stereo_active = false;
 
     } else {
-    //STEREO_LOG(
-    //    "[DESTROY SC PASSTHROUGH] BEFORE destroy swapchain=%p",
-    //    swapchain);
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] BEFORE destroy swapchain=%p",
+        swapchain);
 
-    //STEREO_LOG(
-    //    "[DESTROY SC PASSTHROUGH] device=%p",
-    //    sd->real_device);
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] device=%p",
+        sd->real_device);
 
-    //STEREO_LOG(
-    //    "[DESTROY SC PASSTHROUGH] calling real destroy device=%p swapchain=%p",
-    //    sd->real_device,
-    //    swapchain);
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] calling real destroy device=%p swapchain=%p",
+        sd->real_device,
+        swapchain);
 
     sd->real.DestroySwapchainKHR(
         sd->real_device,
         swapchain,
         pAllocator);
 
-    //STEREO_LOG(
-    //    "[DESTROY SC PASSTHROUGH] real destroy returned");
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] real destroy returned");
 
-    //STEREO_LOG(
-    //    "[DESTROY SC PASSTHROUGH] AFTER destroy swapchain=%p",
-    //    swapchain);
+    STEREO_LOG(
+        "[DESTROY SC PASSTHROUGH] AFTER destroy swapchain=%p",
+        swapchain);
     }
-    //STEREO_LOG(
-    //    "[DESTROY SC END] count=%u",
-    //    sd->swapchain_count);
+    STEREO_LOG(
+        "[DESTROY SC END] count=%u",
+        sd->swapchain_count);
 }
 
 /* ── vkGetSwapchainImagesKHR ────────────────────────────────────────────── */
