@@ -140,7 +140,7 @@ static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = sc->barrier_pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
+        .commandBufferCount = sc->image_count,
     };
     if (sd->real.AllocateCommandBuffers(sd->real_device, &cbai, sc->barrier_cmds)
             != VK_SUCCESS) return false;
@@ -148,57 +148,55 @@ static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,  /* starts signaled → first acquire never blocks */
     };
-    return sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[0])
-           == VK_SUCCESS;
+    for (uint32_t i = 0; i < sc->image_count; i++)
+    {
+        if (sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[i])
+            != VK_SUCCESS) return false;
+    }
+    return true;
 }
 
 /* ── Allocate stereo render target (2-layer image + view, no CPU staging) ─ */
-static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc)
+static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc, uint32_t image_count)
 {
-    sc->image_count      = 1;
-    sc->stereo_images    = calloc(1, sizeof(VkImage));
-    sc->stereo_memory    = calloc(1, sizeof(VkDeviceMemory));
-    sc->stereo_views_arr = calloc(1, sizeof(VkImageView));
-    sc->barrier_cmds     = calloc(1, sizeof(VkCommandBuffer));
-    sc->barrier_fences   = calloc(1, sizeof(VkFence));
+    sc->image_count      = image_count;
+    sc->stereo_images    = calloc(image_count, sizeof(VkImage));
+    sc->stereo_memory    = calloc(image_count, sizeof(VkDeviceMemory));
+    sc->stereo_views_arr = calloc(image_count, sizeof(VkImageView));
+    sc->barrier_cmds     = calloc(image_count, sizeof(VkCommandBuffer));
+    sc->barrier_fences   = calloc(image_count, sizeof(VkFence));
     if (!sc->stereo_images || !sc->stereo_memory || !sc->stereo_views_arr ||
         !sc->barrier_cmds  || !sc->barrier_fences)
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+    for (uint32_t i = 0; i < image_count; i++)
+    {
     VkResult res = alt_alloc_stereo_image(sd, sc,
-                       &sc->stereo_images[0], &sc->stereo_memory[0]);
+                       &sc->stereo_images[i], &sc->stereo_memory[i]);
     if (res != VK_SUCCESS) return res;
 
     VkImageViewCreateInfo vci = {
         .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image    = sc->stereo_images[0],
+        .image    = sc->stereo_images[i],
         .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
         .format   = sc->format,
         .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2 },
     };
-    STEREO_LOG("CALL real CreateImageView");
-    res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
-    STEREO_LOG("RETURN real CreateImageView result=%d", res);
-    if (res != VK_SUCCESS) return res;
 
+    VkResult res_view = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[i]);
+    if (res_view != VK_SUCCESS) return res_view;
     if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
     {
         CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
         sd->upgraded_views[sd->upgraded_view_count++] =
-            sc->stereo_views_arr[0];
+            sc->stereo_views_arr[i];
     
         //STEREO_LOG(
         //    "[VIEW TRACK ADD NV3D] view=%p count=%u",
         //    sc->stereo_views_arr[0],
         //    sd->upgraded_view_count);
     }
-    //STEREO_LOG(
-    //    "[NV3D TEST] alloc_alt_stereo_swapchain image=%p view=%p count=%u",
-    //    sc->stereo_images[0],
-    //    sc->stereo_views_arr[0],
-    //    sc->image_count);
-
-    /* CPU staging NOT created here — caller adds it for DX9, not for GPU compose */
+    }
     return VK_SUCCESS;
 }
 
@@ -313,11 +311,13 @@ stereo_CreateSwapchainKHR(VkDevice device,
     uint32_t app_w = pCreateInfo->imageExtent.width;
     uint32_t app_h = pCreateInfo->imageExtent.height;
 
+    uint32_t image_count = pCreateInfo->minImageCount;
+    if (image_count < 2) image_count = 2;
     STEREO_LOG(
-        "[CREATE SC] swapchain_count=%u old=%p",
+        "[CREATE SC] swapchain_count=%u old=%p image_count=%u",
         sd->swapchain_count,
-        pCreateInfo->oldSwapchain);
-
+        pCreateInfo->oldSwapchain,
+        image_count);
     StereoSwapchain *old_sc = NULL;
 
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
@@ -406,7 +406,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
         STEREO_LOG("[NV3D] init succeeded");
 
         VkResult nvres =
-            alloc_alt_stereo_swapchain(sd, sc);
+            alloc_alt_stereo_swapchain(sd, sc, image_count);
 
         if (nvres == VK_SUCCESS)
         {
@@ -586,11 +586,12 @@ try_dx9:
         req == STEREO_PRESENT_INTERLACED) {
         STEREO_LOG("[SBS] gpu_compose_sc_init surface=%p", (void*)(uintptr_t)pCreateInfo->surface);
         STEREO_LOG(
-            "[CREATE SC GPU] hwnd=%p surface=%p",
+            "[CREATE SC GPU] hwnd=%p surface=%p image_count=%u",
             sc->hwnd,
-            pCreateInfo->surface);
+            pCreateInfo->surface,
+            image_count);
         if (sc->hwnd && gpu_compose_sc_init(sd, sc, pCreateInfo->surface)) {
-            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            VkResult res = alloc_alt_stereo_swapchain(sd, sc, image_count);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
             if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
                 sc->present_mode  = req;
@@ -1136,12 +1137,13 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
             pImageIndex);
     }
 
+    uint32_t idx = sc->acquire_idx++ % sc->image_count;
     /* Wait for the previous frame's GPU work (DXGI barrier or GPU blit) to
      * complete before allowing the app to render into stereo_images[0] again.
      * barrier_fences[0] starts SIGNALED so the very first acquire never blocks. */
-    if (sc->barrier_fences && sc->barrier_fences[0]) {
+    if (sc->barrier_fences && sc->barrier_fences[idx]) {
         VkResult wres = sd->real.WaitForFences(
-            sd->real_device, 1, &sc->barrier_fences[0], VK_TRUE, timeout);
+            sd->real_device, 1, &sc->barrier_fences[idx], VK_TRUE, timeout);
         if (wres != VK_SUCCESS) return wres;
     }
 
@@ -1154,7 +1156,7 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
         };
         if (sd->gfx_queue) sd->real.QueueSubmit(sd->gfx_queue, 1, &sig, fence);
     }
-    *pImageIndex = 0;
+    *pImageIndex = idx;
     return VK_SUCCESS;
 }
 
