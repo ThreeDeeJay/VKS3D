@@ -1137,7 +1137,6 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
             pImageIndex);
     }
 
-    uint32_t idx = sc->acquire_idx++ % sc->image_count;
     /* Wait for the previous frame's GPU work (DXGI barrier or GPU blit) to
      * complete before allowing the app to render into stereo_images[0] again.
      * barrier_fences[0] starts SIGNALED so the very first acquire never blocks. */
