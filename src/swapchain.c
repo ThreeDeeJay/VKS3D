@@ -312,10 +312,22 @@ stereo_CreateSwapchainKHR(VkDevice device,
         (int)pCreateInfo->imageFormat,
         (int)pCreateInfo->presentMode);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    if (!sd->stereo.enabled || sd->swapchain_count >= MAX_SWAPCHAINS)
-        return sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
-
-    uint32_t app_w = pCreateInfo->imageExtent.width;
+    if (!sd->stereo.enabled)
+        return sd->real.CreateSwapchainKHR(sd->real_device,pCreateInfo,pAllocator,pSwapchain);
+    if (sd->swapchain_count >= MAX_SWAPCHAINS) {
+        bool reusable=false;
+        for (uint32_t i=0;i<sd->swapchain_count;i++) {
+            StereoSwapchain *entry=&sd->swapchains[i];
+            if (!entry->stereo_active ||
+                entry->resize_reused) {
+                reusable=true;
+            break;
+        }
+    }
+    if (!reusable)
+        return sd->real.CreateSwapchainKHR(sd->real_device,pCreateInfo,pAllocator,pSwapchain);
+    }
+    uint32_t app_w=pCreateInfo->imageExtent.width;
     uint32_t app_h = pCreateInfo->imageExtent.height;
 
     STEREO_LOG(
@@ -639,31 +651,9 @@ try_dx9:
         req == STEREO_PRESENT_INTERLACED) {
         STEREO_LOG("[SBS] gpu_compose_sc_init surface=%p", (void*)pCreateInfo->surface);
         if (req == STEREO_PRESENT_SBS) {
-            for (uint32_t i=0;i<sd->swapchain_count;i++) {
-                StereoSwapchain *other=&sd->swapchains[i];
-                if (other == sc) continue;
-                if (other->stereo_active &&
-                    other->present_mode == STEREO_PRESENT_SBS &&
-                    other->real_swapchain != VK_NULL_HANDLE &&
-                    other->comp_sc_images &&
-                    other->comp_sc_count > 0) {
-                    sc->real_swapchain=other->real_swapchain;
-                sc->comp_sc_images=other->comp_sc_images;
-                sc->comp_sc_count=other->comp_sc_count;
-                sc->comp_acquire_sem=other->comp_acquire_sem;
-                sc->comp_blit_done_sem=other->comp_blit_done_sem;
-                sc->present_mode=STEREO_PRESENT_SBS;
-                sc->dxgi_mode=false;
-                sc->stereo_active=true;
-                *pSwapchain=(VkSwapchainKHR)(uintptr_t)sc;
-                sc->app_handle=*pSwapchain;
-                STEREO_LOG("[CREATE SC SBS_ALIAS] app=%p sc=%p owner=%p real=%p",
-                    *pSwapchain,sc,other,(void*)sc->real_swapchain);
-                sd->swapchain_count++;
-                return VK_SUCCESS;
-            }
+            STEREO_LOG("[CREATE SC SBS_ALIAS_DISABLED] sc=%p",
+                (void*)sc);
         }
-    }
     if (sc->hwnd && (sc->real_swapchain != VK_NULL_HANDLE || gpu_compose_sc_init(sd, sc, pCreateInfo->surface))) {
         STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",sc,(void*)sc->real_swapchain);
         VkResult res = alloc_alt_stereo_swapchain(sd, sc);
