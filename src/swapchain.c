@@ -306,6 +306,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
         "[CREATE SC START] count=%u old=%p",
         sd->swapchain_count,
         pCreateInfo->oldSwapchain);
+    STEREO_LOG("[CREATE SC REQUEST] extent=%ux%u format=%d presentMode=%d",
+        pCreateInfo->imageExtent.width,
+        pCreateInfo->imageExtent.height,
+        (int)pCreateInfo->imageFormat,
+        (int)pCreateInfo->presentMode);
     if (!sd) return VK_ERROR_DEVICE_LOST;
     if (!sd->stereo.enabled || sd->swapchain_count >= MAX_SWAPCHAINS)
         return sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
@@ -379,6 +384,12 @@ stereo_CreateSwapchainKHR(VkDevice device,
         (int)sd->stereo.present_mode);
 
     StereoPresentMode req = sd->stereo.present_mode;
+
+    STEREO_LOG("[CREATE SC] requested present mode=%d extent=%ux%u old=%p",
+        (int)req,
+        pCreateInfo->imageExtent.width,
+        pCreateInfo->imageExtent.height,
+        pCreateInfo->oldSwapchain);
 
     STEREO_LOG(
         "CreateSwapchain: req=%d stereo.enabled=%d",
