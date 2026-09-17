@@ -812,7 +812,27 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
 
 bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR surface)
 {
-    /* Query surface capabilities */
+    for (uint32_t i = 0; i < sd->swapchain_count; i++) {
+        StereoSwapchain *other = &sd->swapchains[i];
+        if (other == sc) continue;
+        if (other->stereo_active &&
+            other->present_mode == STEREO_PRESENT_SBS &&
+            other->real_swapchain != VK_NULL_HANDLE &&
+            other->comp_sc_images &&
+            other->comp_sc_count > 0) {
+            sc->real_swapchain = other->real_swapchain;
+        sc->comp_sc_images = other->comp_sc_images;
+        sc->comp_sc_count = other->comp_sc_count;
+        sc->comp_acquire_sem = other->comp_acquire_sem;
+        sc->comp_blit_done_sem = other->comp_blit_done_sem;
+        STEREO_LOG("[COMPOSE_REUSE] sc=%p source=%p real=%p images=%u",
+            sc,
+            other,
+            (void*)sc->real_swapchain,
+            sc->comp_sc_count);
+        return true;
+        }
+    }
     VkSurfaceCapabilitiesKHR caps;
     memset(&caps, 0, sizeof(caps));
     if (sd->si && sd->si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR)
@@ -821,6 +841,7 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
 
     if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
         STEREO_ERR("[GPU Compose] TRANSFER_DST not in supportedUsageFlags — falling back to CPU");
+        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=usage_flags sc=%p",sc);
         return false;
     }
 
