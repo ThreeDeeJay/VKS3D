@@ -332,6 +332,16 @@ stereo_CreateSwapchainKHR(VkDevice device,
             old_sc);
     }
     
+    if (!old_sc) {
+        for (uint32_t i=0;i<sd->swapchain_count;i++) {
+            if (sd->swapchains[i].resize_reused &&
+                sd->swapchains[i].present_mode == STEREO_PRESENT_SBS) {
+                old_sc = &sd->swapchains[i];
+            break;
+            }
+        }
+    }
+    
     StereoSwapchain *sc;
     
     if (old_sc)
