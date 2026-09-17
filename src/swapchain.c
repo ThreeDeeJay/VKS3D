@@ -469,6 +469,15 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 "[NV3D] fence0=%p",
                 sc->barrier_fences[0]);
         }
+        STEREO_LOG("[CREATE SC FINAL] app=%p sc=%p real=%p mode=%d active=%d reused=%d count=%u old=%p",
+            *pSwapchain,
+            sc,
+            (void*)sc->real_swapchain,
+            (int)sc->present_mode,
+            (int)sc->stereo_active,
+            (int)sc->resize_reused,
+            sd->swapchain_count,
+            pCreateInfo->oldSwapchain);
         return VK_SUCCESS;
     }
 
@@ -542,6 +551,15 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 sd->swapchain_count++;
             STEREO_LOG("DXGI stereo swapchain (external mem): %ux%u  handle=%p",
                        app_w, app_h, (void*)*pSwapchain);
+            STEREO_LOG("[CREATE SC FINAL] app=%p sc=%p real=%p mode=%d active=%d reused=%d count=%u old=%p",
+                *pSwapchain,
+                sc,
+                (void*)sc->real_swapchain,
+                (int)sc->present_mode,
+                (int)sc->stereo_active,
+                (int)sc->resize_reused,
+                sd->swapchain_count,
+                pCreateInfo->oldSwapchain);
             return VK_SUCCESS;
         }
         if (req == STEREO_PRESENT_DXGI) { STEREO_ERR("DXGI forced but failed"); goto passthrough; }
@@ -570,6 +588,15 @@ try_dx9:
                 if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
                     sd->swapchain_count++;
                 STEREO_LOG("DX9 stereo swapchain: %ux%u  handle=%p", app_w, app_h, (void*)*pSwapchain);
+                STEREO_LOG("[CREATE SC FINAL] app=%p sc=%p real=%p mode=%d active=%d reused=%d count=%u old=%p",
+                    *pSwapchain,
+                    sc,
+                    (void*)sc->real_swapchain,
+                    (int)sc->present_mode,
+                    (int)sc->stereo_active,
+                    (int)sc->resize_reused,
+                    sd->swapchain_count,
+                    pCreateInfo->oldSwapchain);
                 return VK_SUCCESS;
             }
         }
@@ -629,6 +656,15 @@ try_dx9:
                     VK_SUCCESS,
                     pCreateInfo->oldSwapchain,
                     (void*)sc->real_swapchain);
+                STEREO_LOG("[CREATE SC FINAL] app=%p sc=%p real=%p mode=%d active=%d reused=%d count=%u old=%p",
+                    *pSwapchain,
+                    sc,
+                    (void*)sc->real_swapchain,
+                    (int)sc->present_mode,
+                    (int)sc->stereo_active,
+                    (int)sc->resize_reused,
+                    sd->swapchain_count,
+                    pCreateInfo->oldSwapchain);
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
@@ -917,9 +953,22 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             sc,
             sd->swapchain_count);
         if (sc->present_mode == STEREO_PRESENT_SBS) {
+            STEREO_LOG("[DESTROY SC SBS_KEEP] app=%p sc=%p real=%p mode=%d active=%d resize=%d",
+                swapchain,
+                sc,
+                (void*)sc->real_swapchain,
+                (int)sc->present_mode,
+                (int)sc->stereo_active,
+                (int)sc->resize_reused);
             sc->resize_reused = true;
             return;
         }
+        STEREO_LOG("[DESTROY SC CLEAR] app=%p sc=%p real=%p mode=%d active=%d",
+            swapchain,
+            sc,
+            (void*)sc->real_swapchain,
+            (int)sc->present_mode,
+            (int)sc->stereo_active);
         sc->stereo_active = false;
         memset(sc, 0, sizeof(*sc));
         if (sd->swapchain_count > 0)
