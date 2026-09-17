@@ -1324,12 +1324,6 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         pPresentInfo->swapchainCount : 0);
     STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
                (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
-    STEREO_LOG("[PRESENT_ENTER] first_sc=%p queue=%p",
-        first_sc,
-        (void*)queue);
-    STEREO_LOG("[PRESENT_HANDLE] i=%u app=%p",
-        i,
-        pPresentInfo->pSwapchains[i]);
     if (pPresentInfo && pPresentInfo->swapchainCount) {
         for (uint32_t i=0;i<pPresentInfo->swapchainCount;i++) {
             VkSwapchainKHR first_sc = pPresentInfo->pSwapchains[i];
