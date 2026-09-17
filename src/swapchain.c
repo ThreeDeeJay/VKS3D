@@ -1143,7 +1143,7 @@ stereo_GetSwapchainImagesKHR(
     StereoDevice *sd = stereo_device_from_handle(device);
     if (!sd) return VK_ERROR_DEVICE_LOST;
 
-    STEREO_LOG("[GET_IMAGES_ENTER] app=%p",swapchain);
+    STEREO_LOG("[GET_IMAGES_ENTER] app=%p device=%p",swapchain,(void*)device);
     StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
     //STEREO_LOG(
     //    "[GET IMAGES] sc=%p",
@@ -1158,17 +1158,20 @@ stereo_GetSwapchainImagesKHR(
     //    sc,
     //    sc ? sc->real_swapchain : VK_NULL_HANDLE,
     //    sc ? sc->stereo_active : -1);
-    STEREO_LOG("[GET_IMAGES_LOOKUP] app=%p sc=%p real=%p active=%d mode=%d",
+    STEREO_LOG("[GET_IMAGES_LOOKUP] app=%p sc=%p real=%p active=%d mode=%d app_handle=%p reused=%d",
         swapchain,
         sc,
         sc ? (void*)sc->real_swapchain : NULL,
         sc ? (int)sc->stereo_active : -1,
-        sc ? (int)sc->present_mode : -1);
+        sc ? (int)sc->present_mode : -1,
+        sc ? (void*)sc->app_handle : NULL,
+        sc ? (int)sc->resize_reused : -1);
     if (sc && sc->stereo_active)
-        STEREO_LOG("[GET_IMAGES_STEREO] app=%p sc=%p count=%u",
+        STEREO_LOG("[GET_IMAGES_STEREO] app=%p sc=%p count=%u stereo_images=%p",
             swapchain,
             sc,
-            sc->image_count);
+            sc->image_count,
+            (void*)sc->stereo_images);
     if (!sc || !sc->stereo_active)
     {
         //STEREO_LOG(
@@ -1187,6 +1190,10 @@ stereo_GetSwapchainImagesKHR(
         VkSwapchainKHR real =
             sc ? sc->real_swapchain : swapchain;
 
+        STEREO_LOG("[GET_IMAGES_FORWARD] app=%p sc=%p real=%p",
+            swapchain,
+            sc,
+            (void*)real);
         return sd->real.GetSwapchainImagesKHR(
             sd->real_device,
             real,
@@ -1200,7 +1207,10 @@ stereo_GetSwapchainImagesKHR(
     if (!pImages)
     {
         STEREO_LOG(
-            "[NV3D TEST] count query image_count=%u",
+            "[GET_IMAGES_RETURN] app=%p sc=%p mode=%d count=%u images=NULL",
+            swapchain,
+            sc,
+            (int)sc->present_mode,
             sc->image_count);
 
         *pCount = sc->image_count;
@@ -1208,9 +1218,12 @@ stereo_GetSwapchainImagesKHR(
     }
     uint32_t copy = (*pCount < sc->image_count) ? *pCount : sc->image_count;
     STEREO_LOG(
-        "GetSwapchainImagesKHR returning %u images stereo_images=%p",
+        "[GET_IMAGES_RETURN] app=%p sc=%p mode=%d count=%u images=%p",
+        swapchain,
+        sc,
+        (int)sc->present_mode,
         copy,
-        sc->stereo_images);
+        (void*)sc->stereo_images);
     for (uint32_t i = 0; i < copy; i++)
     {
         pImages[i] = sc->stereo_images[i];
