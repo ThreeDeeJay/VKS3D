@@ -628,14 +628,36 @@ try_dx9:
     if (req == STEREO_PRESENT_SBS  ||
         req == STEREO_PRESENT_TAB  ||
         req == STEREO_PRESENT_INTERLACED) {
-        STEREO_LOG("[SBS] gpu_compose_sc_init surface=%p", (void*)(uintptr_t)pCreateInfo->surface);
-        STEREO_LOG(
-            "[CREATE SC GPU] hwnd=%p surface=%p",
-            sc->hwnd,
-            pCreateInfo->surface);
-        if (sc->hwnd && (sc->real_swapchain != VK_NULL_HANDLE || gpu_compose_sc_init(sd, sc, pCreateInfo->surface))) {
-            STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",sc,(void*)sc->real_swapchain);
-            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+        STEREO_LOG("[SBS] gpu_compose_sc_init surface=%p", (void*)pCreateInfo->surface);
+        if (req == STEREO_PRESENT_SBS) {
+            for (uint32_t i=0;i<sd->swapchain_count;i++) {
+                StereoSwapchain *other=&sd->swapchains[i];
+                if (other == sc) continue;
+                if (other->stereo_active &&
+                    other->present_mode == STEREO_PRESENT_SBS &&
+                    other->real_swapchain != VK_NULL_HANDLE &&
+                    other->comp_sc_images &&
+                    other->comp_sc_count > 0) {
+                    sc->real_swapchain=other->real_swapchain;
+                sc->comp_sc_images=other->comp_sc_images;
+                sc->comp_sc_count=other->comp_sc_count;
+                sc->comp_acquire_sem=other->comp_acquire_sem;
+                sc->comp_blit_done_sem=other->comp_blit_done_sem;
+                sc->present_mode=STEREO_PRESENT_SBS;
+                sc->dxgi_mode=false;
+                sc->stereo_active=true;
+                *pSwapchain=(VkSwapchainKHR)(uintptr_t)sc;
+                sc->app_handle=*pSwapchain;
+                STEREO_LOG("[CREATE SC SBS_ALIAS] app=%p sc=%p owner=%p real=%p",
+                    *pSwapchain,sc,other,(void*)sc->real_swapchain);
+                sd->swapchain_count++;
+                return VK_SUCCESS;
+            }
+        }
+    }
+    if (sc->hwnd && (sc->real_swapchain != VK_NULL_HANDLE || gpu_compose_sc_init(sd, sc, pCreateInfo->surface))) {
+        STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",sc,(void*)sc->real_swapchain);
+        VkResult res = alloc_alt_stereo_swapchain(sd, sc);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
             STEREO_LOG("[CREATE SC ALT_RESULT] sc=%p res=%d real=%p",
                 sc,
