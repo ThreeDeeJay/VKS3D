@@ -590,6 +590,7 @@ try_dx9:
             sc->hwnd,
             pCreateInfo->surface);
         if (sc->hwnd && gpu_compose_sc_init(sd, sc, pCreateInfo->surface)) {
+            STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",sc,(void*)sc->real_swapchain);
             VkResult res = alloc_alt_stereo_swapchain(sd, sc);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
             if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
@@ -623,11 +624,14 @@ try_dx9:
                     sc->app_handle,
                     *pSwapchain);
                 STEREO_LOG(
-                    "GPU-blit stereo swapchain (mode=%d): %ux%u  handle=%p",
+                    "GPU-blit stereo swapchain (mode=%d): %ux%u handle=%p res=%d old=%p real=%p",
                     (int)req,
                     app_w,
                     app_h,
-                    (void*)*pSwapchain);
+                    (void*)*pSwapchain,
+                    VK_SUCCESS,
+                    pCreateInfo->oldSwapchain,
+                    (void*)sc->real_swapchain);
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
