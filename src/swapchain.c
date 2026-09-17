@@ -764,6 +764,10 @@ passthrough:
     STEREO_LOG("[CREATE SC FALLBACK_RESULT] res=%d returned=%p",
         fallback_res,
         pSwapchain ? (void*)*pSwapchain : NULL);
+    STEREO_LOG("[CREATE SC FALLBACK_STATE] sd=%p count=%u returned=%p",
+        sd,
+        sd->swapchain_count,
+        pSwapchain ? (void*)*pSwapchain : NULL);
     return fallback_res;
     STEREO_LOG(
         "[PASSTHROUGH] entering real CreateSwapchainKHR old=%p",
@@ -1340,21 +1344,39 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 
     StereoDevice    *sd = NULL;
     StereoSwapchain *sc = NULL;
+    uint32_t present_count=pPresentInfo ? pPresentInfo->swapchainCount : 0;
+    STEREO_LOG("[PRESENT_DEVICE] queue=%p sd=%p devices=%u present_count=%u",
+        (void*)queue,
+        (void*)sd,
+        g_device_count,
+        present_count);
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
-        for (uint32_t p = 0; p < pPresentInfo->swapchainCount; p++) {
-            StereoSwapchain *found = stereo_swapchain_lookup(
-                &g_devices[d], pPresentInfo->pSwapchains[p]);
-            if (found) { sd = &g_devices[d]; sc = found; break; }
+        STEREO_LOG("[PRESENT_DEVICE_SCAN] d=%u device=%p",
+            d,
+            (void*)&g_devices[d]);
+        for (uint32_t p=0;p<present_count;p++) {
+            VkSwapchainKHR app_sc=pPresentInfo->pSwapchains[p];
+            StereoSwapchain *found=stereo_swapchain_lookup(&g_devices[d],app_sc);
+            STEREO_LOG("[PRESENT_DEVICE_MATCH] d=%u p=%u app=%p found=%p",
+                d,
+                p,
+                (void*)app_sc,
+                (void*)found);
+            if (found) {
+                sd=&g_devices[d];
+                sc=found;
+                break;
+            }
         }
     }
 
     STEREO_LOG("[PRESENT_LOOKUP] sd=%p sc=%p enabled=%d active=%d mode=%d count=%u",
-        sd,
-        sc,
+        (void*)sd,
+        (void*)sc,
         sd ? (int)sd->stereo.enabled : -1,
         sc ? (int)sc->stereo_active : -1,
         sc ? (int)sc->present_mode : -1,
-        pPresentInfo ? pPresentInfo->swapchainCount : 0);
+        present_count);
     if (!sd || !sc || !sd->stereo.enabled || !sc->stereo_active) {
         STEREO_LOG("[PRESENT_FORWARD] sd=%p sc=%p active=%d mode=%d",
             sd,
@@ -1369,12 +1391,12 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
     hotkeys_poll(sd);
 
     VkResult result = VK_SUCCESS;
-    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
+    for (uint32_t i = 0; i < present_count; i++) {
         StereoSwapchain *sc_i = stereo_swapchain_lookup(sd, pPresentInfo->pSwapchains[i]);
         STEREO_LOG("[PRESENT_ITEM] i=%u app=%p sc=%p active=%d mode=%d",
             i,
-            pPresentInfo->pSwapchains[i],
-            sc_i,
+            (void*)pPresentInfo->pSwapchains[i],
+            (void*)sc_i,
             sc_i ? (int)sc_i->stereo_active : -1,
             sc_i ? (int)sc_i->present_mode : -1);
         if (!sc_i || !sc_i->stereo_active) continue;
