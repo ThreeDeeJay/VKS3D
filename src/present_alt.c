@@ -812,27 +812,6 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
 
 bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR surface)
 {
-    for (uint32_t i = 0; i < sd->swapchain_count; i++) {
-        StereoSwapchain *other = &sd->swapchains[i];
-        if (other == sc) continue;
-        if (other->stereo_active &&
-            other->present_mode == STEREO_PRESENT_SBS &&
-            other->real_swapchain != VK_NULL_HANDLE &&
-            other->comp_sc_images &&
-            other->comp_sc_count > 0) {
-            sc->real_swapchain = other->real_swapchain;
-        sc->comp_sc_images = other->comp_sc_images;
-        sc->comp_sc_count = other->comp_sc_count;
-        sc->comp_acquire_sem = other->comp_acquire_sem;
-        sc->comp_blit_done_sem = other->comp_blit_done_sem;
-        STEREO_LOG("[COMPOSE_REUSE] sc=%p source=%p real=%p images=%u",
-            sc,
-            other,
-            (void*)sc->real_swapchain,
-            sc->comp_sc_count);
-        return true;
-        }
-    }
     VkSurfaceCapabilitiesKHR caps;
     memset(&caps, 0, sizeof(caps));
     if (sd->si && sd->si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR)
@@ -881,7 +860,7 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         .minImageCount    = min_img,
         .imageFormat      = sc->format,
         .imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-        .imageExtent      = caps.currentExtent,
+        .imageExtent      = (VkExtent2D){sc->app_width * 2, sc->app_height},
         .imageArrayLayers = 1,
         .imageUsage       = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
