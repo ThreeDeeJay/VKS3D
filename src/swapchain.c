@@ -360,8 +360,9 @@ stereo_CreateSwapchainKHR(VkDevice device,
     else
     {
     sc = &sd->swapchains[sd->swapchain_count];
-
+    VkSwapchainKHR persistent_compose = sc->real_swapchain;
     memset(sc, 0, sizeof(*sc));
+    sc->real_swapchain = persistent_compose;
     sc->resize_reused = false;
     STEREO_LOG(
         "[CREATE SC NEW] sc=%p count=%u reused=%d",
