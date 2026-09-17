@@ -816,6 +816,7 @@ passthrough:
     STEREO_LOG("[CREATE SC FALLBACK_STATE] sd=%p count=%u returned=%p",
         sd,
         sd->swapchain_count,
+        pSwapchain ? (void*)*pSwapchain : NULL);
     STEREO_LOG("[CREATE SC PASSTHROUGH_RESULT] res=%d real=%p",
         (int)fallback_res,
         pSwapchain ? (void*)*pSwapchain : NULL);
