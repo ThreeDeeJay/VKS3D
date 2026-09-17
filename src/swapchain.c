@@ -896,7 +896,7 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
         dxgi_sc_destroy(sc);
 
         /* real_swapchain: GPU compose output SC or passthrough SC */
-        if (sc->real_swapchain && sc->present_mode != STEREO_PRESENT_SBS && sc->present_mode != STEREO_PRESENT_NV3DLIB)
+        if (sc->real_swapchain && sc->present_mode != STEREO_PRESENT_SBS)
         {
             STEREO_LOG(
                 "[DESTROY SC] app=%p sc=%p real=%p",
