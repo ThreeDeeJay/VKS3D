@@ -1351,9 +1351,23 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         g_device_count,
         present_count);
     for (uint32_t d = 0; d < g_device_count && !sd; d++) {
-        STEREO_LOG("[PRESENT_DEVICE_SCAN] d=%u device=%p",
+        STEREO_LOG("[PRESENT_DEVICE_SCAN] d=%u device=%p swapchain_count=%u",
             d,
-            (void*)&g_devices[d]);
+            (void*)&g_devices[d],
+            g_devices[d].swapchain_count);
+        for (uint32_t s=0;s<g_devices[d].swapchain_count;s++) {
+            StereoSwapchain *entry=&g_devices[d].swapchains[s];
+            STEREO_LOG("[PRESENT_SC_TABLE] d=%u s=%u sc=%p app=%p real=%p active=%d mode=%d reused=%d images=%u",
+                d,
+                s,
+                (void*)entry,
+                (void*)entry->app_handle,
+                (void*)entry->real_swapchain,
+                (int)entry->stereo_active,
+                (int)entry->present_mode,
+                (int)entry->resize_reused,
+                entry->image_count);
+        }
         for (uint32_t p=0;p<present_count;p++) {
             VkSwapchainKHR app_sc=pPresentInfo->pSwapchains[p];
             StereoSwapchain *found=stereo_swapchain_lookup(&g_devices[d],app_sc);
