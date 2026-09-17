@@ -64,7 +64,8 @@ void     gpu_compose_sc_destroy(StereoDevice *sd, StereoSwapchain *sc);
 VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
                              VkQueue queue,
                              uint32_t wait_sem_count,
-                             const VkSemaphore *wait_sems);
+                             const VkSemaphore *wait_sems,
+                             uint32_t app_img_idx);
 
 /* ── CPU compose (SBS / TAB / Interlaced, GDI fallback) ─────────────────── */
 bool     compose_init(StereoDevice *sd, StereoSwapchain *sc);
