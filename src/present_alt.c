@@ -856,7 +856,7 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
     VkSwapchainCreateInfoKHR sci = {
         .sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface          = surface,
-        .oldSwapchain     = (sc->real_swapchain != VK_NULL_HANDLE) ? sc->real_swapchain : VK_NULL_HANDLE,
+        .oldSwapchain     = VK_NULL_HANDLE,
         .minImageCount    = min_img,
         .imageFormat      = sc->format,
         .imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -909,17 +909,19 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         caps.minImageCount,
         caps.maxImageCount,
         (unsigned)caps.currentTransform);
-    VkResult res = sd->real.CreateSwapchainKHR(
-        sd->real_device,
-        &sci,
-        NULL,
-        &sc->real_swapchain);
+    VkResult res = VK_SUCCESS;
+    if (sc->real_swapchain == VK_NULL_HANDLE) {
+        res = sd->real.CreateSwapchainKHR(
+            sd->real_device,
+            &sci,
+            NULL,
+            &sc->real_swapchain);
+    }
     STEREO_LOG(
-        "[COMPOSE CREATE RESULT] res=%d new_real=%p old=%p",
+        "[COMPOSE CREATE RESULT] res=%d real=%p reused=%d",
         (int)res,
         sc->real_swapchain,
-        sci.oldSwapchain);
-    
+        sc->real_swapchain != VK_NULL_HANDLE);
     if (res == VK_ERROR_OUT_OF_DATE_KHR)
     {
         STEREO_LOG(
@@ -948,24 +950,12 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
     }
 
     STEREO_LOG(
-        "[COMPOSE CREATE] created=%p",
+        "[COMPOSE CREATE] active=%p",
         sc->real_swapchain);
 
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain, &sc->comp_sc_count, NULL);
     sc->comp_sc_images = calloc(sc->comp_sc_count, sizeof(VkImage));
     if (!sc->comp_sc_images) {
-        VkSwapchainKHR dead = sc->real_swapchain;
-
-        STEREO_LOG(
-            "[COMPOSE DESTROY] sc=%p real=%p",
-            sc,
-            sc->real_swapchain);
-        sd->real.DestroySwapchainKHR(
-            sd->real_device,
-            dead,
-            NULL);
-
-        sc->real_swapchain = VK_NULL_HANDLE;
         return false;
     }
     sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain,
