@@ -1203,7 +1203,19 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         }
     }
 
+    STEREO_LOG("[PRESENT_LOOKUP] sd=%p sc=%p enabled=%d active=%d mode=%d count=%u",
+        sd,
+        sc,
+        sd ? (int)sd->stereo.enabled : -1,
+        sc ? (int)sc->stereo_active : -1,
+        sc ? (int)sc->present_mode : -1,
+        pPresentInfo ? pPresentInfo->swapchainCount : 0);
     if (!sd || !sc || !sd->stereo.enabled || !sc->stereo_active) {
+        STEREO_LOG("[PRESENT_FORWARD] sd=%p sc=%p active=%d mode=%d",
+            sd,
+            sc,
+            sc ? (int)sc->stereo_active : -1,
+            sc ? (int)sc->present_mode : -1);
         StereoDevice *fwd = sd ? sd : (g_device_count > 0 ? &g_devices[0] : NULL);
         if (!fwd) return VK_ERROR_DEVICE_LOST;
         return fwd->real.QueuePresentKHR(queue, pPresentInfo);
@@ -1214,6 +1226,12 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
     VkResult result = VK_SUCCESS;
     for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
         StereoSwapchain *sc_i = stereo_swapchain_lookup(sd, pPresentInfo->pSwapchains[i]);
+        STEREO_LOG("[PRESENT_ITEM] i=%u app=%p sc=%p active=%d mode=%d",
+            i,
+            pPresentInfo->pSwapchains[i],
+            sc_i,
+            sc_i ? (int)sc_i->stereo_active : -1,
+            sc_i ? (int)sc_i->present_mode : -1);
         if (!sc_i || !sc_i->stereo_active) continue;
 
         uint32_t           wcount = (i == 0) ? pPresentInfo->waitSemaphoreCount : 0;
@@ -1238,7 +1256,10 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         case STEREO_PRESENT_SBS:
         case STEREO_PRESENT_TAB:
         case STEREO_PRESENT_INTERLACED:
-            /* GPU blit compose — no CPU readback, no GDI */
+            STEREO_LOG("[PRESENT_COMPOSE] mode=%d sc=%p real=%p",
+                (int)sc_i->present_mode,
+                sc_i,
+                sc_i->real_swapchain);
             pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems);
             break;
         default:
