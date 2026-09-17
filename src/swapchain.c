@@ -927,8 +927,20 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             sd->swapchain_count);
         sc->stereo_active = false;
         VkSwapchainKHR persistent_compose = sc->real_swapchain;
+        VkImage *persistent_comp_images = sc->comp_sc_images;
+        uint32_t persistent_comp_count = sc->comp_sc_count;
+        VkSemaphore persistent_acquire = sc->comp_acquire_sem;
+        VkSemaphore persistent_blit_done = sc->comp_blit_done_sem;
+        VkCommandBuffer *persistent_barrier_cmds = sc->barrier_cmds;
+        VkFence *persistent_barrier_fences = sc->barrier_fences;
         memset(sc, 0, sizeof(*sc));
         sc->real_swapchain = persistent_compose;
+        sc->comp_sc_images = persistent_comp_images;
+        sc->comp_sc_count = persistent_comp_count;
+        sc->comp_acquire_sem = persistent_acquire;
+        sc->comp_blit_done_sem = persistent_blit_done;
+        sc->barrier_cmds = persistent_barrier_cmds;
+        sc->barrier_fences = persistent_barrier_fences;
         if (sd->swapchain_count > 0)
         sd->swapchain_count--;
         STEREO_LOG("[DESTROY SC RECLAIM] count_after=%u",sd->swapchain_count);
