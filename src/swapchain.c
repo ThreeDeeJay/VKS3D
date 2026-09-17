@@ -652,7 +652,6 @@ try_dx9:
                 sc->comp_sc_count=other->comp_sc_count;
                 sc->comp_acquire_sem=other->comp_acquire_sem;
                 sc->comp_blit_done_sem=other->comp_blit_done_sem;
-                sc->compose_owner=other;
                 sc->present_mode=STEREO_PRESENT_SBS;
                 sc->dxgi_mode=false;
                 sc->stereo_active=true;
@@ -1333,6 +1332,10 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         pPresentInfo->pSwapchains[i]);
     if (pPresentInfo && pPresentInfo->swapchainCount) {
         for (uint32_t i=0;i<pPresentInfo->swapchainCount;i++) {
+            VkSwapchainKHR first_sc = pPresentInfo->pSwapchains[i];
+            STEREO_LOG("[PRESENT_ENTER] first_sc=%p queue=%p",
+                first_sc,
+                (void*)queue);
             STEREO_LOG("[PRESENT_HANDLE] i=%u app=%p",
                 i,
                 pPresentInfo->pSwapchains[i]);
