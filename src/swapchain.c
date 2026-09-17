@@ -648,15 +648,16 @@ try_dx9:
                     "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
                     sc->real_swapchain);
                 sc->real_swapchain = VK_NULL_HANDLE;
-                sc->stereo_active = false;
-            } else {
-                sd->real.DestroySwapchainKHR(
-                    sd->real_device,
-                    swapchain,
-                    pAllocator);
             }
+            sc->stereo_active = false;
+        } else {
+            sd->real.DestroySwapchainKHR(
+                sd->real_device,
+                swapchain,
+                pAllocator);
         }
     }
+}
 
 passthrough:
     STEREO_ERR("All stereo modes failed — passthrough");
