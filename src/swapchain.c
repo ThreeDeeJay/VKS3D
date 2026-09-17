@@ -626,6 +626,9 @@ try_dx9:
             STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",sc,(void*)sc->real_swapchain);
             VkResult res = alloc_alt_stereo_swapchain(sd, sc);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
+                sc,
+                res,
+                (void*)sc->real_swapchain);
             if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
                 sc->present_mode  = req;
                 sc->dxgi_mode     = false;
@@ -681,6 +684,10 @@ try_dx9:
             }
             /* GPU compose init failed — fall to passthrough */
             //STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
+            STEREO_LOG("[CREATE SC SBS_FALLBACK] sc=%p req=%d real=%p",
+                sc,
+                (int)req,
+                (void*)sc->real_swapchain);
             gpu_compose_sc_destroy(sd, sc);
             STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
             if (sc->real_swapchain) {
@@ -703,6 +710,15 @@ try_dx9:
 
 passthrough:
     STEREO_ERR("All stereo modes failed — passthrough");
+    VkResult fallback_res = sd->real.CreateSwapchainKHR(
+        sd->real_device,
+        pCreateInfo,
+        pAllocator,
+        pSwapchain);
+    STEREO_LOG("[CREATE SC FALLBACK_RESULT] res=%d returned=%p",
+        fallback_res,
+        pSwapchain ? (void*)*pSwapchain : NULL);
+    return fallback_res;
     STEREO_LOG(
         "[PASSTHROUGH] entering real CreateSwapchainKHR old=%p",
         pCreateInfo->oldSwapchain);
