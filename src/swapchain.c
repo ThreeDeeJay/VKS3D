@@ -489,9 +489,12 @@ stereo_CreateSwapchainKHR(VkDevice device,
             (int)sc->resize_reused,
             sd->swapchain_count,
             pCreateInfo->oldSwapchain);
-        STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p",
+        STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p mode=%d active=%d real=%p",
             *pSwapchain,
-            sc);
+            sc,
+            (int)sc->present_mode,
+            (int)sc->stereo_active,
+            (void*)sc->real_swapchain);
         return VK_SUCCESS;
     }
 
@@ -574,9 +577,12 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 (int)sc->resize_reused,
                 sd->swapchain_count,
                 pCreateInfo->oldSwapchain);
-            STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p",
+            STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p mode=%d active=%d real=%p",
                 *pSwapchain,
-                sc);
+                sc,
+                (int)sc->present_mode,
+                (int)sc->stereo_active,
+                (void*)sc->real_swapchain);
             return VK_SUCCESS;
         }
         if (req == STEREO_PRESENT_DXGI) { STEREO_ERR("DXGI forced but failed"); goto passthrough; }
@@ -614,9 +620,12 @@ try_dx9:
                     (int)sc->resize_reused,
                     sd->swapchain_count,
                     pCreateInfo->oldSwapchain);
-                STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p",
+                STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p mode=%d active=%d real=%p",
                     *pSwapchain,
-                    sc);
+                    sc,
+                    (int)sc->present_mode,
+                    (int)sc->stereo_active,
+                    (void*)sc->real_swapchain);
                 return VK_SUCCESS;
             }
         }
@@ -643,6 +652,7 @@ try_dx9:
                 sc->comp_sc_count=other->comp_sc_count;
                 sc->comp_acquire_sem=other->comp_acquire_sem;
                 sc->comp_blit_done_sem=other->comp_blit_done_sem;
+                sc->compose_owner=other;
                 sc->present_mode=STEREO_PRESENT_SBS;
                 sc->dxgi_mode=false;
                 sc->stereo_active=true;
@@ -711,9 +721,12 @@ try_dx9:
                     (int)sc->resize_reused,
                     sd->swapchain_count,
                     pCreateInfo->oldSwapchain);
-                STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p",
+                STEREO_LOG("[CREATE SC HANDLE] returned=%p expected_sc=%p mode=%d active=%d real=%p",
                     *pSwapchain,
-                    sc);
+                    sc,
+                    (int)sc->present_mode,
+                    (int)sc->stereo_active,
+                    (void*)sc->real_swapchain);
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
@@ -1106,6 +1119,11 @@ stereo_GetSwapchainImagesKHR(
         sc ? (void*)sc->real_swapchain : NULL,
         sc ? (int)sc->stereo_active : -1,
         sc ? (int)sc->present_mode : -1);
+    if (sc && sc->stereo_active)
+        STEREO_LOG("[GET_IMAGES_STEREO] app=%p sc=%p count=%u",
+            swapchain,
+            sc,
+            sc->image_count);
     if (!sc || !sc->stereo_active)
     {
         //STEREO_LOG(
@@ -1307,9 +1325,12 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         pPresentInfo->swapchainCount : 0);
     STEREO_LOG("stereo_QueuePresentKHR: queue=%p swapchainCount=%u",
                (void*)queue, pPresentInfo ? pPresentInfo->swapchainCount : 0);
-    STEREO_LOG("[PRESENT_ENTER] first_sc=%p",
-        pPresentInfo && pPresentInfo->swapchainCount ?
-        pPresentInfo->pSwapchains[0] : VK_NULL_HANDLE);
+    STEREO_LOG("[PRESENT_ENTER] first_sc=%p queue=%p",
+        first_sc,
+        (void*)queue);
+    STEREO_LOG("[PRESENT_HANDLE] i=%u app=%p",
+        i,
+        pPresentInfo->pSwapchains[i]);
     if (pPresentInfo && pPresentInfo->swapchainCount) {
         for (uint32_t i=0;i<pPresentInfo->swapchainCount;i++) {
             STEREO_LOG("[PRESENT_HANDLE] i=%u app=%p",
