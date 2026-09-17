@@ -798,6 +798,13 @@ try_dx9:
 
 passthrough:
     STEREO_ERR("All stereo modes failed — passthrough");
+    STEREO_LOG("[CREATE SC PASSTHROUGH] old=%p surface=%p extent=%ux%u layers=%u usage=0x%x",
+        pCreateInfo ? (void*)pCreateInfo->oldSwapchain : NULL,
+        pCreateInfo ? (void*)pCreateInfo->surface : NULL,
+        pCreateInfo ? pCreateInfo->imageExtent.width : 0,
+        pCreateInfo ? pCreateInfo->imageExtent.height : 0,
+        pCreateInfo ? pCreateInfo->imageArrayLayers : 0,
+        pCreateInfo ? pCreateInfo->imageUsage : 0);
     VkResult fallback_res = sd->real.CreateSwapchainKHR(
         sd->real_device,
         pCreateInfo,
@@ -809,6 +816,8 @@ passthrough:
     STEREO_LOG("[CREATE SC FALLBACK_STATE] sd=%p count=%u returned=%p",
         sd,
         sd->swapchain_count,
+    STEREO_LOG("[CREATE SC PASSTHROUGH_RESULT] res=%d real=%p",
+        (int)fallback_res,
         pSwapchain ? (void*)*pSwapchain : NULL);
     return fallback_res;
     STEREO_LOG(
