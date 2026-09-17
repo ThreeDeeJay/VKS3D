@@ -590,7 +590,7 @@ try_dx9:
             "[CREATE SC GPU] hwnd=%p surface=%p",
             sc->hwnd,
             pCreateInfo->surface);
-        if (sc->hwnd && gpu_compose_sc_init(sd, sc, pCreateInfo->surface)) {
+        if (sc->hwnd && (sc->real_swapchain != VK_NULL_HANDLE || gpu_compose_sc_init(sd, sc, pCreateInfo->surface))) {
             STEREO_LOG("[CREATE SC COMPOSE_OK] sc=%p real=%p",sc,(void*)sc->real_swapchain);
             VkResult res = alloc_alt_stereo_swapchain(sd, sc);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */

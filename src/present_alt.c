@@ -976,18 +976,8 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
 
 void gpu_compose_sc_destroy(StereoDevice *sd, StereoSwapchain *sc)
 {
-    if (sc->comp_acquire_sem)   {
-        sd->real.DestroySemaphore(sd->real_device, sc->comp_acquire_sem, NULL);
-        sc->comp_acquire_sem = VK_NULL_HANDLE;
-    }
-    if (sc->comp_blit_done_sem) {
-        sd->real.DestroySemaphore(sd->real_device, sc->comp_blit_done_sem, NULL);
-        sc->comp_blit_done_sem = VK_NULL_HANDLE;
-    }
-    free(sc->comp_sc_images);
-    sc->comp_sc_images = NULL;
-    sc->comp_sc_count  = 0;
-    /* sc->real_swapchain is destroyed by stereo_DestroySwapchainKHR */
+    /* Persistent SBS compose resources survive app swapchain recreation. */
+    /* sc->real_swapchain and its image/semaphore resources remain active. */
 }
 
 VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
