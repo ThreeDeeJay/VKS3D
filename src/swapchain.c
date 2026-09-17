@@ -633,20 +633,20 @@ try_dx9:
             /* GPU compose init failed — fall to passthrough */
             //STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
             gpu_compose_sc_destroy(sd, sc);
-            //STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
+            STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
             if (sc->real_swapchain) {
-                //STEREO_LOG(
-                //    "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
-                //    sc->real_swapchain);
-                //STEREO_LOG(
-                //    "[COMPOSE DESTROY] sc=%p app=%p real=%p",
-                //    sc,
-                //    sc->app_handle,
-                //    sc->real_swapchain);
+                STEREO_LOG(
+                    "[COMPOSE DESTROY] (swapchain.c) destroying=%p",
+                    sc->real_swapchain);
+                STEREO_LOG(
+                    "[COMPOSE DESTROY] sc=%p app=%p real=%p",
+                    sc,
+                    sc->app_handle,
+                    sc->real_swapchain);
                 sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
-                //STEREO_LOG(
-                //    "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
-                //    sc->real_swapchain);
+                STEREO_LOG(
+                    "[COMPOSE DESTROY] (swapchain.c) destroyed=%p",
+                    sc->real_swapchain);
                 sc->real_swapchain = VK_NULL_HANDLE;
             }
         }
