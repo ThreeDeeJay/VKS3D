@@ -554,7 +554,7 @@ try_dx9:
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DX9) {
         if (!sd->d3d11_ok) dxgi_device_init(sd);
         if (sc->hwnd && dx9_init(sd, sc)) {
-            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            VkResult res = alloc_alt_stereo_swapchain(sd, sc, image_count);
             if (res == VK_SUCCESS) res = alt_cpu_staging_init(sd, sc); /* DX9 needs CPU staging */
             if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
                 sc->present_mode  = STEREO_PRESENT_DX9;
