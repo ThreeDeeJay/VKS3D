@@ -11893,12 +11893,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     }
     for (uint32_t dbg_p = 0; dbg_p < N; ++dbg_p) {
         STEREO_LOG(
-            "[FINAL_PIPE %u] stages=%u patched=%u tmp=%p renderPass=%p",
+            "[FINAL_PIPE %u] stages=%u patched=%u tmp=%p renderPass=%p origRenderPass=%p subpass=%u",
             dbg_p,
             infos[dbg_p].stageCount,
             tst[dbg_p] != NULL,
             (void*)tmp_mod[dbg_p],
-            (void*)infos[dbg_p].renderPass);
+            (void*)infos[dbg_p].renderPass,
+            (void*)pCI[dbg_p].renderPass,
+            infos[dbg_p].subpass);
         for (uint32_t dbg_s = 0; dbg_s < infos[dbg_p].stageCount; ++dbg_s) {
             const VkPipelineShaderStageCreateInfo *dbg_st =
             &infos[dbg_p].pStages[dbg_s];

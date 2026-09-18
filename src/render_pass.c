@@ -368,15 +368,15 @@ stereo_CreateRenderPass(
             (void*)*pRenderPass,
             (void*)mv);
         rpi->has_multiview = true;
+        rpi->view_mask = STEREO_VIEW_MASK;
         STEREO_LOG(
-            "RP_STORE slot=%u handle=%08x mv=%08x has_mv=%u addr=%08x",
+            "RP_STORE slot=%u handle=%08x mv=%08x has_mv=%u viewMask=0x%X subpasses=%u",
             (unsigned)(sd->render_pass_count - 1),
             (unsigned)(uintptr_t)rpi->handle,
             (unsigned)(uintptr_t)rpi->mv_handle,
             (unsigned)rpi->has_multiview,
-            (unsigned)(uintptr_t)rpi);
-        rpi->view_mask     = STEREO_VIEW_MASK;
-
+            rpi->view_mask,
+            rpi->subpass_count);
         sd->multiview_pass_exists = true;
 
         STEREO_LOG("RenderPass %p: original=returned mv=%p (att=%u sub=%u)",
