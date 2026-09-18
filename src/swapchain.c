@@ -1555,8 +1555,6 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
                 break;
             }
         }
-        if (stereo_sc != UINT32_MAX)
-            break;
     }
     uint32_t depth_matches = 0;
     uint32_t color_matches = 0;
@@ -1566,7 +1564,7 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         {
             depth_matches++;
             needs_upgrade = true;
-            swapchain_match = true;
+            depth_match = true;
         }
     }
     for (uint32_t i = 0; i < sd->intercepted_color_count; i++)
@@ -1575,7 +1573,7 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         {
             color_matches++;
             needs_upgrade = true;
-            swapchain_match = true;
+            color_match = true;
         }
     }
     for (uint32_t i = 0; i < sd->intercepted_storage_count; i++)
@@ -1592,19 +1590,12 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         {
             color_matches++;
             needs_upgrade = true;
+            color_match = true;
             STEREO_LOG(
                 "UPGRADED_IMAGE_MATCH index=%u image=%p",
                 i,
                 (void *)(uintptr_t)pCreateInfo->image);
         }
-    }
-    if (stereo_sc != UINT32_MAX)
-    {
-        STEREO_LOG(
-            "STEREO_IMAGE_MATCH image=%p sc=%u image_index=%u",
-            (void *)(uintptr_t)pCreateInfo->image,
-            stereo_sc,
-            stereo_img);
     }
     if (!needs_upgrade &&
         (pCreateInfo->subresourceRange.aspectMask &
