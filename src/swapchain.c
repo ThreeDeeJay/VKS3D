@@ -190,6 +190,12 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
 
     VkResult res_view = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[i]);
     if (res_view != VK_SUCCESS) return res_view;
+    STEREO_LOG(
+        "STEREO_VIEW_ALLOC sc=%p index=%u image=%p view=%p",
+        (void *)sc,
+        i,
+        (void *)(uintptr_t)sc->stereo_images[i],
+        (void *)(uintptr_t)sc->stereo_views_arr[i]);
     if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
     {
         CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
