@@ -175,6 +175,11 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
                        &sc->stereo_images[i], &sc->stereo_memory[i]);
     if (res != VK_SUCCESS) return res;
 
+    STEREO_LOG(
+        "STEREO_IMAGE_ALLOC sc=%p index=%u image=%p",
+        (void *)sc,
+        i,
+        (void *)(uintptr_t)sc->stereo_images[i]);
     VkImageViewCreateInfo vci = {
         .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image    = sc->stereo_images[i],
@@ -1022,9 +1027,10 @@ stereo_GetSwapchainImagesKHR(
         pImages[i] = sc->stereo_images[i];
 
         STEREO_LOG(
-            "[NV3D TEST] image[%u]=%p",
+            "STEREO_IMAGE_RETURN sc=%p index=%u image=%p",
+            (void *)sc,
             i,
-            (void*)pImages[i]);
+            (void*)(uintptr_t)pImages[i]);
     }
     *pCount = copy;
     return (copy < sc->image_count) ? VK_INCOMPLETE : VK_SUCCESS;
