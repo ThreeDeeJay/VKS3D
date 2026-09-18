@@ -406,7 +406,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
     else
     {
     sc = &sd->swapchains[sd->swapchain_count];
-    if (req == STEREO_PRESENT_SBS)
+    if (sd->stereo.present_mode == STEREO_PRESENT_SBS)
     {
         for (uint32_t i=0;i<sd->swapchain_count;i++)
         {
