@@ -156,6 +156,17 @@ static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
 static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc)
 {
     sc->image_count      = 1;
+    if (sc->stereo_images && sc->stereo_memory &&
+        sc->stereo_views_arr && sc->barrier_cmds && sc->barrier_fences &&
+        sc->stereo_images[0] != VK_NULL_HANDLE &&
+        sc->stereo_memory[0] != VK_NULL_HANDLE)
+    {
+        STEREO_LOG("[ALT_REUSE] sc=%p image=%p memory=%p",
+            (void*)sc,
+            (void*)sc->stereo_images[0],
+            (void*)sc->stereo_memory[0]);
+        return VK_SUCCESS;
+    }
     sc->stereo_images    = calloc(1, sizeof(VkImage));
     sc->stereo_memory    = calloc(1, sizeof(VkDeviceMemory));
     sc->stereo_views_arr = calloc(1, sizeof(VkImageView));
