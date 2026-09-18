@@ -406,6 +406,25 @@ stereo_CreateSwapchainKHR(VkDevice device,
     else
     {
     sc = &sd->swapchains[sd->swapchain_count];
+    if (req == STEREO_PRESENT_SBS)
+    {
+        for (uint32_t i=0;i<sd->swapchain_count;i++)
+        {
+            StereoSwapchain *entry=&sd->swapchains[i];
+            if (entry->stereo_active &&
+                entry->present_mode==STEREO_PRESENT_SBS &&
+                entry->real_swapchain!=VK_NULL_HANDLE)
+            {
+                sc=entry;
+                sc->resize_reused=true;
+                STEREO_LOG("[CREATE SC SBS_SLOT_REUSE] sc=%p real=%p app=%p",
+                    (void*)sc,
+                    (void*)sc->real_swapchain,
+                    (void*)sc->app_handle);
+                break;
+            }
+        }
+    }
     VkSwapchainKHR persistent_compose = sc->real_swapchain;
     memset(sc, 0, sizeof(*sc));
     sc->real_swapchain = persistent_compose;
