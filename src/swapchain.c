@@ -167,6 +167,11 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
 
     VkResult res = alt_alloc_stereo_image(sd, sc,
                        &sc->stereo_images[0], &sc->stereo_memory[0]);
+    STEREO_LOG("[ALT_IMAGE_ALLOC] sc=%p res=%d image=%p memory=%p",
+        (void*)sc,
+        (int)res,
+        (void*)sc->stereo_images[0],
+        (void*)sc->stereo_memory[0]);
     if (res != VK_SUCCESS) return res;
 
     VkImageViewCreateInfo vci = {
