@@ -1592,11 +1592,21 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         case STEREO_PRESENT_SBS:
         case STEREO_PRESENT_TAB:
         case STEREO_PRESENT_INTERLACED:
-            STEREO_LOG("[PRESENT_COMPOSE] mode=%d sc=%p real=%p",
+            STEREO_LOG("[PRESENT_COMPOSE] mode=%d sc=%p app=%p real=%p active=%d",
                 (int)sc_i->present_mode,
-                sc_i,
-                sc_i->real_swapchain);
-            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems);
+                (void*)sc_i,
+                (void*)sc_i->app_handle,
+                (void*)sc_i->real_swapchain,
+                (int)sc_i->stereo_active);
+            STEREO_LOG("[PRESENT_COMPOSE_CALL] sc=%p mode=%d",
+                (void*)sc_i,
+                (int)sc_i->present_mode);
+            pr=gpu_compose_present(sd,sc_i,queue,
+                wait_sem_count,
+                wait_sems);
+            STEREO_LOG("[PRESENT_COMPOSE_RETURN] sc=%p res=%d",
+                (void*)sc_i,
+                (int)pr);
             break;
         default:
             pr = VK_SUCCESS;
