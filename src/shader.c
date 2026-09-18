@@ -1342,8 +1342,8 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
                 m->ft,
                 sel,
                 isl,
-                c->cl,
-                c->cr
+                c->cr,
+                c->cl
             };
             sb_push_n(out, w, 6);
         }
@@ -1411,6 +1411,40 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cc,
         c->cl,
         c->cr);
+    STEREO_LOG(
+        "VS_PATCH_IDS "
+        "ch=%u "
+        "lp=%u "
+        "lv=%u "
+        "isl=%u "
+        "sel=%u "
+        "px=%u "
+        "nx=%u "
+        "nx2=%u "
+        "np=%u "
+        "mode=%d "
+        "pos_var=%u "
+        "pptr=%u "
+        "view_var=%u "
+        "leftConst=%u "
+        "rightConst=%u "
+        "convConst=%u",
+        ch,
+        lp,
+        lv,
+        isl,
+        sel,
+        px,
+        nx,
+        nx2,
+        np,
+        c->projection_mode,
+        m->pos_var,
+        pptr,
+        m->view_var,
+        c->cl,
+        c->cr,
+        c->cc);
     STEREO_LOG(
         "VS_PATCH_IDS "
         "ch=%u "
@@ -10304,9 +10338,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         sd->stereo.enabled);
     if (!sd->stereo.enabled)
         return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
-    VkShaderModule                   *tmp_mod    = calloc(N, sizeof(VkShaderModule));
-    VkShaderModule                   *tmp_vs_mod = calloc(N, sizeof(*tmp_vs_mod));
-    VkShaderModule                   *tmp_fs_mod = calloc(N, sizeof(*tmp_fs_mod));
+    VkShaderModule                   *tmp_mod = calloc(N, sizeof(VkShaderModule));
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
@@ -10766,34 +10798,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG(
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
-                    STEREO_LOG("VS_ROUTING_DECISION p=%u hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u pos=%u patchable=%u fs_gate=%u pathb_gate=%u",
-                        p,
-                        (unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),
-                        vs_fullscreen,
-                        vs_quad_fs,
-                        vs_screen_space,
-                        vs_pure_quad,
-                        vs_has_user_output,
-                        vs_background,
-                        vm.has_matrix_ops,
-                        vm.has_direct_position_write,
-                        vm.has_v2_position_input,
-                        vm.pos_var,
-                        vm.is_patchable,
-                        ((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
-                        !has_ms &&
-                        !has_gs &&
-                        !has_tes &&
-                        !has_tcs &&
-                        in_mv_rp &&
-                        ci->stageCount > 0 &&
-                        fs_stage != ~0u,
-                        in_mv_rp &&
-                        ci->stageCount > 0 &&
-                        has_vs &&
-                        !has_tcs &&
-                        vs_stage != ~0u &&
-                        !vs_pure_quad);
                     }
                     if (sd->stereo.mono_ui && vs_screen_space && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable)
                     {
@@ -11100,8 +11104,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (stereo_stage_inline_spv(&st[fs_s]))
             st[fs_s].pNext = NULL;
             infos[p].pStages = st;
-            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp);
-            tmp_fs_mod[p] = tmp;
+            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp_mod[p]);
             tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
@@ -11118,10 +11121,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 p,
                 sc2);
             STEREO_LOG(
-                "SHADER_PATH_FS_DONE p=%u patched_fs=1 has_vs=%u vs_stage=%u",
+                "SHADER_PATH_FINAL p=%u path=FS patched_fs=1 has_vs=%u vs_stage=%u",
                 p,
                 (unsigned)has_vs,
                 vs_stage);
+            continue;
             }
         }
         if (in_mv_rp &&
@@ -11740,23 +11744,18 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             memcpy(st,ci->pStages,sc*sizeof(*st));
             st[vs_stage].module = tmp;
             if (stereo_stage_inline_spv(&st[vs_stage]))
-                st[vs_stage].pNext = NULL;
-            if (tmp_fs_mod[p] != VK_NULL_HANDLE && fs_stage != ~0u)
-                st[fs_stage].module = tmp_fs_mod[p];
-            if (tmp_fs_mod[p] != VK_NULL_HANDLE && fs_stage != ~0u)
-            {
-                if (stereo_stage_inline_spv(&st[fs_stage]))
-                    st[fs_stage].pNext = NULL;
-            }
+            st[vs_stage].pNext = NULL;
             infos[p].pStages = st;
+            tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
             STEREO_LOG(
-                "PATCHED_STAGE PathB p=%u vs=%p fs=%p pipeline_rp=%p",
+                "PATCHED_STAGE PathB p=%u stage=%u orig=%p patched=%p pipeline_rp=%p",
                 p,
-                (void*)tmp,
-                (void*)tmp_fs_mod[p],
-                (void*)pipeline_rp);
+                vs_stage,
+                (void *)ci->pStages[vs_stage].module,
+                (void *)tmp,
+                (void *)pipeline_rp);
             STEREO_LOG(
                 "Pipe %u: Path B — VS gl_ViewIndex patch",
                 p);
@@ -11900,23 +11899,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             tst[dbg_p] != NULL,
             (void*)tmp_mod[dbg_p],
             (void*)infos[dbg_p].renderPass);
-        STEREO_LOG(
-            "DUAL_PATCH_STATE p=%u vs=%p fs=%p stages=%u",
-            dbg_p,
-            (void*)tmp_vs_mod[dbg_p],
-            (void*)tmp_fs_mod[dbg_p],
-            infos[dbg_p].stageCount);
-        for (uint32_t dbg_s = 0; dbg_s < infos[dbg_p].stageCount; ++dbg_s) {
-            const VkPipelineShaderStageCreateInfo *dbg_st = &infos[dbg_p].pStages[dbg_s];
-            STEREO_LOG(
-                "DUAL_PATCH_STAGE p=%u stage=%u vkstage=0x%x module=%p vs_match=%u fs_match=%u",
-                dbg_p,
-                dbg_s,
-                dbg_st->stage,
-                (void*)dbg_st->module,
-                (unsigned)(dbg_st->module == tmp_vs_mod[dbg_p]),
-                (unsigned)(dbg_st->module == tmp_fs_mod[dbg_p]));
-        }
         for (uint32_t dbg_s = 0; dbg_s < infos[dbg_p].stageCount; ++dbg_s) {
             const VkPipelineShaderStageCreateInfo *dbg_st =
             &infos[dbg_p].pStages[dbg_s];
@@ -11926,22 +11908,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 dbg_s,
                 dbg_st->stage,
                 (void *)dbg_st->module);
-        }
-    }
-    for (uint32_t dbg_p = 0; dbg_p < N; ++dbg_p) {
-        STEREO_LOG(
-            "PIPE_MV_FINAL p=%u rp=%p subpass=%u stages=%u",
-            dbg_p,
-            (void*)infos[dbg_p].renderPass,
-            infos[dbg_p].subpass,
-            infos[dbg_p].stageCount);
-        for (uint32_t dbg_s = 0; dbg_s < infos[dbg_p].stageCount; ++dbg_s) {
-            const VkPipelineShaderStageCreateInfo *dbg_st=&infos[dbg_p].pStages[dbg_s];
-            STEREO_LOG(
-                "PIPE_MV_FINAL_STAGE p=%u stage=0x%x module=%p",
-                dbg_p,
-                dbg_st->stage,
-                (void*)dbg_st->module);
         }
     }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
@@ -11998,7 +11964,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     {
                         info->vs_module = st->module;
                         info->patched_vs =
-                            (st->module != pCI[p].pStages[s].module);
+                            (tmp_mod[p] != VK_NULL_HANDLE &&
+                             st->module == tmp_mod[p]);
                     }
                     if (st->stage == VK_SHADER_STAGE_GEOMETRY_BIT)
                     {
@@ -12015,7 +11982,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     {
                         info->fs_module = st->module;
                         info->patched_fs =
-                            (st->module != pCI[p].pStages[s].module);
+                            (tmp_mod[p] != VK_NULL_HANDLE &&
+                             st->module == tmp_mod[p]);
                         /*
                          * Always probe the fragment shader too.
                          * VS/TES may already have filled proj info, but FS can carry

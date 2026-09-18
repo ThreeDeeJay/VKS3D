@@ -812,6 +812,7 @@ VkResult compose_present(StereoDevice *sd, StereoSwapchain *sc,
 
 bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR surface)
 {
+    /* Query surface capabilities */
     VkSurfaceCapabilitiesKHR caps;
     memset(&caps, 0, sizeof(caps));
     if (sd->si && sd->si->real.GetPhysicalDeviceSurfaceCapabilitiesKHR)
@@ -820,7 +821,6 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
 
     if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
         STEREO_ERR("[GPU Compose] TRANSFER_DST not in supportedUsageFlags — falling back to CPU");
-        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=usage_flags sc=%p",sc);
         return false;
     }
 
@@ -856,7 +856,7 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
     VkSwapchainCreateInfoKHR sci = {
         .sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface          = surface,
-        .oldSwapchain     = VK_NULL_HANDLE,
+        .oldSwapchain     = (sc->real_swapchain != VK_NULL_HANDLE) ? sc->real_swapchain : VK_NULL_HANDLE,
         .minImageCount    = min_img,
         .imageFormat      = sc->format,
         .imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -909,27 +909,17 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         caps.minImageCount,
         caps.maxImageCount,
         (unsigned)caps.currentTransform);
-    VkResult res = VK_SUCCESS;
-    if (sc->real_swapchain == VK_NULL_HANDLE) {
-        res = sd->real.CreateSwapchainKHR(
-            sd->real_device,
-            &sci,
-            NULL,
-            &sc->real_swapchain);
-        STEREO_LOG("[COMPOSE_CREATE_CALL] sc=%p res=%d real=%p",
-            sc,
-            res,
-            (void*)sc->real_swapchain);
-    }
+    VkResult res = sd->real.CreateSwapchainKHR(
+        sd->real_device,
+        &sci,
+        NULL,
+        &sc->real_swapchain);
     STEREO_LOG(
-        "[COMPOSE CREATE RESULT] res=%d real=%p reused=%d",
+        "[COMPOSE CREATE RESULT] res=%d new_real=%p old=%p",
         (int)res,
         sc->real_swapchain,
-        sc->real_swapchain != VK_NULL_HANDLE);
-    STEREO_LOG("[COMPOSE_SC_HANDLE] wrapper=%p real=%p res=%d",
-        sc,
-        (void*)sc->real_swapchain,
-        res);
+        sci.oldSwapchain);
+    
     if (res == VK_ERROR_OUT_OF_DATE_KHR)
     {
         STEREO_LOG(
@@ -954,75 +944,39 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
             "[GPU Compose] CreateSwapchainKHR failed: %d",
             res);
 
-        STEREO_LOG("[COMPOSE_CREATE_FAIL] sc=%p res=%d real=%p",
-            sc,
-            res,
-            (void*)sc->real_swapchain);
         return false;
     }
 
     STEREO_LOG(
-        "[COMPOSE CREATE] active=%p",
+        "[COMPOSE CREATE] created=%p",
         sc->real_swapchain);
 
-    uint32_t image_count=0;
-    VkResult image_res=sd->real.GetSwapchainImagesKHR(sd->real_device,sc->real_swapchain,&image_count,NULL);
-    STEREO_LOG("[COMPOSE_IMAGES_COUNT] sc=%p res=%d count=%u",
-        (void*)sc,
-        (int)image_res,
-        image_count);
-    if (image_res!=VK_SUCCESS || image_count==0) {
-        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=get_images_count sc=%p res=%d count=%u",
-            (void*)sc,
-            (int)image_res,
-            image_count);
-        return false;
-    }
-    sc->comp_sc_count=image_count;
-    sc->comp_sc_images=calloc(sc->comp_sc_count,sizeof(VkImage));
+    sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain, &sc->comp_sc_count, NULL);
+    sc->comp_sc_images = calloc(sc->comp_sc_count, sizeof(VkImage));
     if (!sc->comp_sc_images) {
-        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=images_alloc sc=%p count=%u",
-            (void*)sc,
-            sc->comp_sc_count);
+        VkSwapchainKHR dead = sc->real_swapchain;
+
+        STEREO_LOG(
+            "[COMPOSE DESTROY] sc=%p real=%p",
+            sc,
+            sc->real_swapchain);
+        sd->real.DestroySwapchainKHR(
+            sd->real_device,
+            dead,
+            NULL);
+
+        sc->real_swapchain = VK_NULL_HANDLE;
         return false;
     }
-    image_res=sd->real.GetSwapchainImagesKHR(sd->real_device,sc->real_swapchain,&sc->comp_sc_count,sc->comp_sc_images);
-    STEREO_LOG("[COMPOSE_IMAGES_FETCH] sc=%p res=%d count=%u images=%p",
-        (void*)sc,
-        (int)image_res,
-        sc->comp_sc_count,
-        (void*)sc->comp_sc_images);
-    if (image_res!=VK_SUCCESS) {
-        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=get_images sc=%p res=%d count=%u",
-            (void*)sc,
-            (int)image_res,
-            sc->comp_sc_count);
-        return false;
-    }
-    STEREO_LOG("[GPU Compose] real swapchain image_count=%u",sc->comp_sc_count);
-    VkSemaphoreCreateInfo sinfo={VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VkResult sem_res=sd->real.CreateSemaphore(sd->real_device,&sinfo,NULL,&sc->comp_acquire_sem);
-    STEREO_LOG("[COMPOSE_SEM_ACQUIRE] sc=%p res=%d sem=%p",
-        (void*)sc,
-        (int)sem_res,
-        (void*)sc->comp_acquire_sem);
-    if (sem_res!=VK_SUCCESS) {
-        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=acquire_sem sc=%p res=%d",
-            (void*)sc,
-            (int)sem_res);
-        return false;
-    }
-    sem_res=sd->real.CreateSemaphore(sd->real_device,&sinfo,NULL,&sc->comp_blit_done_sem);
-    STEREO_LOG("[COMPOSE_SEM_BLIT] sc=%p res=%d sem=%p",
-        (void*)sc,
-        (int)sem_res,
-        (void*)sc->comp_blit_done_sem);
-    if (sem_res!=VK_SUCCESS) {
-        STEREO_LOG("[COMPOSE_INIT_FAIL] reason=blit_sem sc=%p res=%d",
-            (void*)sc,
-            (int)sem_res);
-        return false;
-    }
+    sd->real.GetSwapchainImagesKHR(sd->real_device, sc->real_swapchain,
+                                    &sc->comp_sc_count, sc->comp_sc_images);
+    STEREO_LOG(
+        "[GPU Compose] real swapchain image_count=%u",
+        sc->comp_sc_count);
+    VkSemaphoreCreateInfo sinfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+    sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_acquire_sem);
+    sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_blit_done_sem);
+
     STEREO_LOG("[GPU Compose] init: sc=%p  %u images  %ux%u  %s",
                (void*)sc->real_swapchain, sc->comp_sc_count,
                sc->app_width, sc->app_height,
@@ -1032,8 +986,18 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
 
 void gpu_compose_sc_destroy(StereoDevice *sd, StereoSwapchain *sc)
 {
-    /* Persistent SBS compose resources survive app swapchain recreation. */
-    /* sc->real_swapchain and its image/semaphore resources remain active. */
+    if (sc->comp_acquire_sem)   {
+        sd->real.DestroySemaphore(sd->real_device, sc->comp_acquire_sem, NULL);
+        sc->comp_acquire_sem = VK_NULL_HANDLE;
+    }
+    if (sc->comp_blit_done_sem) {
+        sd->real.DestroySemaphore(sd->real_device, sc->comp_blit_done_sem, NULL);
+        sc->comp_blit_done_sem = VK_NULL_HANDLE;
+    }
+    free(sc->comp_sc_images);
+    sc->comp_sc_images = NULL;
+    sc->comp_sc_count  = 0;
+    /* sc->real_swapchain is destroyed by stereo_DestroySwapchainKHR */
 }
 
 VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
@@ -1119,23 +1083,6 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
             .dstOffsets     = { {w/2,0,0}, {w,h,1} },
         },
     };
-    STEREO_LOG("COMPOSE_BLIT src=%p dst=%p src_wh=%dx%d dst_left=%dx%d dst_right=%dx%d layer0=%u layer1=%u dst0=%u dst1=%u",
-        (void*)(uintptr_t)src,
-        (void*)(uintptr_t)dst,
-        w,h,
-        blits[0].dstOffsets[1].x,
-        blits[0].dstOffsets[1].y,
-        blits[1].dstOffsets[1].x,
-        blits[1].dstOffsets[1].y,
-        blits[0].srcSubresource.baseArrayLayer,
-        blits[1].srcSubresource.baseArrayLayer,
-        blits[0].dstSubresource.baseArrayLayer,
-        blits[1].dstSubresource.baseArrayLayer);
-    STEREO_LOG("COMPOSE_LAYERS srcRangeBase=%u srcRangeCount=%u dstRangeBase=%u dstRangeCount=%u",
-        b0.subresourceRange.baseArrayLayer,
-        b0.subresourceRange.layerCount,
-        b1.subresourceRange.baseArrayLayer,
-        b1.subresourceRange.layerCount);
     sd->real.CmdBlitImage(cmd,
         src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -1147,8 +1094,6 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
     b2.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     b2.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     b2.newLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    b2.subresourceRange.baseArrayLayer = 0;
-    b2.subresourceRange.layerCount = 2;
     sd->real.CmdPipelineBarrier(cmd,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,0,NULL,0,NULL,1,&b2);

@@ -722,18 +722,6 @@ stereo_CmdBeginRenderPass(
             (void*)modified.renderPass,
             (void*)modified.framebuffer);
         STEREO_LOG(
-            "MV_BEGIN_STATE cb=%p original_rp=%p driver_rp=%p fb=%p lookup_mv=%p has_mv=%u",
-            (void*)commandBuffer,
-            (void*)pRenderPassBegin->renderPass,
-            (void*)modified.renderPass,
-            (void*)modified.framebuffer,
-            lookup ? (void*)lookup->mv_handle : NULL,
-            lookup ? (unsigned)lookup->has_multiview : 0);
-        STEREO_LOG(
-            "MV_BEGIN_ACTIVE cb=%p mv_rp=%p",
-            (void*)commandBuffer,
-            (void*)modified.renderPass);
-        STEREO_LOG(
             "DXVK_RP_CORRELATE original=%p driver=%p framebuffer=%p lookup=%p lookup_orig=%p lookup_mv=%p has_mv=%u",
             (void*)pRenderPassBegin->renderPass,
             (void*)modified.renderPass,
@@ -821,20 +809,6 @@ stereo_CmdBeginRenderPass(
                 (void*)commandBuffer,
                 sd->cb_track_count,
                 MAX_CB_TRACK);
-        }
-        for (uint32_t ti = 0; ti < sd->cb_track_count; ti++)
-        {
-            if (sd->cb_track[ti].cb == commandBuffer)
-            {
-                STEREO_LOG(
-                    "MV_CB_TRACK_BEFORE cb=%p tracked_rp=%p tracked_fb=%p driver_rp=%p driver_fb=%p",
-                    (void*)commandBuffer,
-                    (void*)sd->cb_track[ti].render_pass,
-                    (void*)sd->cb_track[ti].framebuffer,
-                    (void*)modified.renderPass,
-                    (void*)modified.framebuffer);
-                break;
-            }
         }
         sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
     } else {
@@ -1033,18 +1007,6 @@ stereo_CmdBindPipeline(
     }
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipeline);
-    if (info && active_rp != VK_NULL_HANDLE &&
-        info->mv_renderpass != VK_NULL_HANDLE &&
-        active_rp == info->original_renderpass)
-    {
-        active_rp = info->mv_renderpass;
-        STEREO_LOG(
-            "MV_BIND_RP_REMAP cb=%p pipeline=%p orig=%p mv=%p",
-            (void*)commandBuffer,
-            (void*)pipeline,
-            (void*)info->original_renderpass,
-            (void*)info->mv_renderpass);
-    }
     remember_bound_pipeline(
         sd,
         commandBuffer,
@@ -1060,7 +1022,7 @@ stereo_CmdBindPipeline(
         STEREO_LOG(
             "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
             "orig_rp=%p patched_vs=%u patched_fs=%u "
-            "quad=%u bindings=%u stages=%u vs_module=%p fs_module=%p",
+            "quad=%u bindings=%u",
             (void*)pipeline,
             (void*)active_fb,
             (void*)active_rp,
@@ -1069,31 +1031,7 @@ stereo_CmdBindPipeline(
             info->patched_vs,
             info->patched_fs,
             info->is_quad,
-            info->vertex_binding_count,
-            info->stage_count,
-            (void*)info->vs_module,
-            (void*)info->fs_module);
-        STEREO_LOG(
-            "PIPE_BIND_MATCH pipe=%p rp_match=%u mv_match=%u "
-            "fb=%p active_rp=%p orig_rp=%p mv_rp=%p",
-            (void*)pipeline,
-            active_rp == info->original_renderpass,
-            active_rp == info->mv_renderpass,
-            (void*)active_fb,
-            (void*)active_rp,
-            (void*)info->original_renderpass,
-            (void*)info->mv_renderpass);
-        STEREO_LOG(
-            "MV_PIPE_BIND pipe=%p active_rp=%p orig_rp=%p mv_rp=%p "
-            "active_orig=%u active_mv=%u patched_vs=%u patched_fs=%u",
-            (void*)pipeline,
-            (void*)active_rp,
-            (void*)info->original_renderpass,
-            (void*)info->mv_renderpass,
-            (unsigned)(active_rp == info->original_renderpass),
-            (unsigned)(active_rp == info->mv_renderpass),
-            info->patched_vs,
-            info->patched_fs);
+            info->vertex_binding_count);
     }
     else
     {
@@ -1964,16 +1902,10 @@ stereo_CmdSetViewport(
     uint32_t viewportCount,
     const VkViewport *pViewports)
 {
-    STEREO_LOG("CMD_SET_VIEWPORT cb=%p first=%u count=%u x=%f y=%f w=%f h=%f min=%f max=%f",
+    STEREO_LOG("CMD_SET_VIEWPORT cb=%p first=%u count=%u",
         (void*)commandBuffer,
         firstViewport,
-        viewportCount,
-        pViewports ? pViewports[0].x : 0.0f,
-        pViewports ? pViewports[0].y : 0.0f,
-        pViewports ? pViewports[0].width : 0.0f,
-        pViewports ? pViewports[0].height : 0.0f,
-        pViewports ? pViewports[0].minDepth : 0.0f,
-        pViewports ? pViewports[0].maxDepth : 0.0f);
+        viewportCount);
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetViewport)
         return;
