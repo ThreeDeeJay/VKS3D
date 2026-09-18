@@ -855,26 +855,9 @@ passthrough:
         }
         else
         {
-            for (uint32_t i=0;i<sd->swapchain_count;i++)
-            {
-                StereoSwapchain *entry=&sd->swapchains[i];
-                if (entry->stereo_active &&
-                    entry->present_mode==STEREO_PRESENT_SBS)
-                {
-                    STEREO_LOG("[PASSTHROUGH_MAP_SBS] slot=%p old_app=%p old_real=%p new_app=%p",
-                        (void*)entry,
-                        (void*)entry->app_handle,
-                        (void*)entry->real_swapchain,
-                        (void*)*pSwapchain);
-                    entry->real_swapchain=*pSwapchain;
-                    entry->app_handle=*pSwapchain;
-                    STEREO_LOG("[PASSTHROUGH_MAP_SBS_DONE] slot=%p app=%p real=%p",
-                        (void*)entry,
-                        (void*)entry->app_handle,
-                        (void*)entry->real_swapchain);
-                    break;
-                }
-            }
+            STEREO_LOG("[PASSTHROUGH_SLOT_NONE] app=%p count=%u",
+                (void*)*pSwapchain,
+                sd->swapchain_count);
         }
     }
     return fallback_res;
