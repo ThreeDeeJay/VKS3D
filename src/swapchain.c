@@ -388,6 +388,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
     
     StereoSwapchain *sc;
     
+    bool slot_reused = false;
     if (old_sc)
     {
         sc = old_sc;
@@ -416,6 +417,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 entry->real_swapchain!=VK_NULL_HANDLE)
             {
                 sc=entry;
+                slot_reused=true;
                 sc->resize_reused=true;
                 STEREO_LOG("[CREATE SC SBS_SLOT_REUSE] sc=%p real=%p app=%p",
                     (void*)sc,
@@ -425,15 +427,19 @@ stereo_CreateSwapchainKHR(VkDevice device,
             }
         }
     }
+        if (!slot_reused)
+        {
     VkSwapchainKHR persistent_compose = sc->real_swapchain;
     memset(sc, 0, sizeof(*sc));
     sc->real_swapchain = persistent_compose;
     sc->resize_reused = false;
+        }
     STEREO_LOG(
-        "[CREATE SC NEW] sc=%p count=%u reused=%d",
+        "[CREATE SC NEW] sc=%p count=%u reused=%d slot_reused=%d",
         sc,
         sd->swapchain_count,
-        (int)sc->resize_reused);
+        (int)sc->resize_reused,
+        (int)slot_reused);
     }
 
     sc->device     = sd->real_device;
@@ -744,7 +750,7 @@ try_dx9:
                     (int)sc->stereo_active,
                     sd->swapchain_count);
                 CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
-                if (!old_sc)
+                if (!old_sc && !slot_reused)
                     sd->swapchain_count++;
                 STEREO_LOG(
                     "[CREATE SC GPU FINAL] sc=%p app=%p real=%p active=%d count=%u",
