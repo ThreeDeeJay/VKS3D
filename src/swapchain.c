@@ -823,9 +823,20 @@ passthrough:
     if (fallback_res == VK_SUCCESS && pSwapchain)
     {
         StereoSwapchain *slot = NULL;
+        STEREO_LOG("[PASSTHROUGH_SLOT_SCAN] count=%u max=%u",
+            sd->swapchain_count,
+            MAX_SWAPCHAINS);
         for (uint32_t i=0;i<sd->swapchain_count;i++)
         {
             StereoSwapchain *entry=&sd->swapchains[i];
+            STEREO_LOG("[PASSTHROUGH_SLOT] i=%u sc=%p active=%d reused=%d mode=%d real=%p app=%p",
+                i,
+                (void*)entry,
+                (int)entry->stereo_active,
+                (int)entry->resize_reused,
+                (int)entry->present_mode,
+                (void*)entry->real_swapchain,
+                (void*)entry->app_handle);
             if (!entry->stereo_active && !entry->resize_reused)
             {
                 slot=entry;
@@ -841,8 +852,12 @@ passthrough:
                 (void*)slot,
                 (void*)slot->app_handle,
                 (void*)slot->real_swapchain);
-            if (slot == &sd->swapchains[sd->swapchain_count])
-                sd->swapchain_count++;
+        }
+        else
+        {
+            STEREO_LOG("[PASSTHROUGH_SLOT_NONE] app=%p count=%u",
+                (void*)*pSwapchain,
+                sd->swapchain_count);
         }
     }
     return fallback_res;
