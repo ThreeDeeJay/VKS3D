@@ -1598,12 +1598,13 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
                 (void*)sc_i->app_handle,
                 (void*)sc_i->real_swapchain,
                 (int)sc_i->stereo_active);
-            STEREO_LOG("[PRESENT_COMPOSE_CALL] sc=%p mode=%d",
+            STEREO_LOG("[PRESENT_COMPOSE_CALL] sc=%p mode=%d wcount=%u",
                 (void*)sc_i,
-                (int)sc_i->present_mode);
+                (int)sc_i->present_mode,
+                wcount);
             pr=gpu_compose_present(sd,sc_i,queue,
-                wait_sem_count,
-                wait_sems);
+                wcount,
+                wsems);
             STEREO_LOG("[PRESENT_COMPOSE_RETURN] sc=%p res=%d",
                 (void*)sc_i,
                 (int)pr);
