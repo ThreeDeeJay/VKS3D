@@ -1547,6 +1547,11 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
                 swapchain_match = true;
                 stereo_sc = si;
                 stereo_img = ii;
+                STEREO_LOG(
+                    "STEREO_IMAGE_MATCH sc=%p stereo_index=%u image=%p",
+                    (void *)scc,
+                    ii,
+                    (void *)(uintptr_t)pCreateInfo->image);
                 break;
             }
         }
@@ -1587,6 +1592,10 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         {
             color_matches++;
             needs_upgrade = true;
+            STEREO_LOG(
+                "UPGRADED_IMAGE_MATCH index=%u image=%p",
+                i,
+                (void *)(uintptr_t)pCreateInfo->image);
         }
     }
     if (stereo_sc != UINT32_MAX)
