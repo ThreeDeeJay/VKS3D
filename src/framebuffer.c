@@ -1198,6 +1198,10 @@ stereo_CmdTraceRaysKHR(
         return;
     }
     VkImage dst_image = sc->stereo_images[0];
+    STEREO_LOG("COMPOSE_IMAGES src=%p dst=%p app_idx=%u",
+        (void *)(uintptr_t)rt_image,
+        (void *)(uintptr_t)dst_image,
+        app_img_idx);
     STEREO_LOG(
         "RT_TRACE_COPY_BEGIN src=%p dst=%p width=%u height=%u layers=%u",
         (void *)(uintptr_t)rt_image,
@@ -1278,6 +1282,12 @@ stereo_CmdTraceRaysKHR(
         .dstOffset = { 0, 0, 0 },
         .extent = { width, height, 1 }
     };
+    STEREO_LOG("COMPOSE_COPY src=%p dst=%p srcLayer=%u dstLayer=%u layerCount=%u",
+        (void *)(uintptr_t)rt_image,
+        (void *)(uintptr_t)dst_image,
+        copy.srcSubresource.baseArrayLayer,
+        copy.dstSubresource.baseArrayLayer,
+        copy.srcSubresource.layerCount);
     sd->real.CmdCopyImage(
         commandBuffer,
         rt_image,

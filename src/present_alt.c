@@ -1006,6 +1006,11 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
                              const VkSemaphore *wait_sems,
                              uint32_t app_img_idx)
 {
+    STEREO_LOG("COMPOSE_ENTER sc=%p app_idx=%u stereo_count=%u dst=%p",
+        (void *)sc,
+        app_img_idx,
+        sc->image_count,
+        (void *)(uintptr_t)sc->stereo_images[app_img_idx]);
     if (!sc->real_swapchain || !sc->comp_sc_images || !sc->barrier_cmds)
         return VK_ERROR_INITIALIZATION_FAILED;
 
