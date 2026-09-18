@@ -1682,42 +1682,59 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         (_r == VK_SUCCESS) ? (void *)(uintptr_t)*pView : NULL);
     if (_r == VK_SUCCESS)
     {
+        uint32_t upgraded_view_index = UINT32_MAX;
+        uint32_t upgraded_image_index = UINT32_MAX;
+        for (uint32_t ui = 0; ui < sd->upgraded_view_count; ui++)
+        {
+            if (sd->upgraded_views[ui] == *pView)
+            {
+                upgraded_view_index = ui;
+                break;
+            }
+        }
+        for (uint32_t ui = 0; ui < sd->upgraded_image_count; ui++)
+        {
+            if (sd->upgraded_images[ui] == pCreateInfo->image)
+            {
+                upgraded_image_index = ui;
+                break;
+            }
+        }
         STEREO_LOG(
-            "VIEW_CREATED view=%p image=%p type=%u layers=%u stereo=%u sc=%u image_index=%u",
+            "VIEW_CREATED view=%p image=%p type=%u layers=%u stereo=%u sc=%u image_index=%u upgraded_view=%u upgraded_image=%u",
             (void *)(uintptr_t)*pView,
             (void *)(uintptr_t)upgraded.image,
             upgraded.viewType,
             upgraded.subresourceRange.layerCount,
             stereo_sc != UINT32_MAX,
             stereo_sc,
-            stereo_img);
+            stereo_img,
+            upgraded_view_index,
+            upgraded_image_index);
     }
     /* Track upgraded views for framebuffer multiview detection */
     if (_r == VK_SUCCESS &&
         sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
     {
+        uint32_t view_index = sd->upgraded_view_count;
         STEREO_LOG(
-            "UPGRADED_VIEW_TRACK image=%p view=%p",
+            "UPGRADED_VIEW_TRACK image=%p view=%p index=%u",
             (void*)(uintptr_t)pCreateInfo->image,
-            (void*)(uintptr_t)*pView);
-        if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
-        {
-            CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
-            sd->upgraded_views[sd->upgraded_view_count++] = *pView;
-            STEREO_LOG(
-                "VIEW_TRACK count=%u view=%p",
-                sd->upgraded_view_count,
-                (void *)(uintptr_t)*pView);
-        }
+            (void*)(uintptr_t)*pView,
+            view_index);
+        CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
+        sd->upgraded_views[sd->upgraded_view_count++] = *pView;
         if (sd->upgraded_image_count < MAX_UPGRADED_VIEWS)
         {
+            uint32_t image_index = sd->upgraded_image_count;
             CHECK_ARRAY_COUNT(sd->upgraded_image_count, MAX_UPGRADED_VIEWS, "upgraded_image_count");
             sd->upgraded_images[sd->upgraded_image_count++] =
                 pCreateInfo->image;
             STEREO_LOG(
-                "IMAGE_TRACK count=%u image=%p",
+                "IMAGE_TRACK count=%u image=%p index=%u",
                 sd->upgraded_image_count,
-                (void *)(uintptr_t)pCreateInfo->image);
+                (void *)(uintptr_t)pCreateInfo->image,
+                image_index);
             STEREO_LOG(
                 "COUNTS depth=%u color=%u upgradedImages=%u upgradedViews=%u",
                 sd->intercepted_depth_count,
@@ -1725,6 +1742,28 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
                 sd->upgraded_image_count,
                 sd->upgraded_view_count);
         }
+    }
+    if (_r == VK_SUCCESS)
+    {
+        uint32_t upgraded_image_index = UINT32_MAX;
+        for (uint32_t ui = 0; ui < sd->upgraded_image_count; ui++)
+        {
+            if (sd->upgraded_images[ui] == pCreateInfo->image)
+            {
+                upgraded_image_index = ui;
+                break;
+            }
+        }
+        STEREO_LOG(
+            "VIEW_CREATED view=%p image=%p type=%u layers=%u stereo=%u sc=%u image_index=%u upgraded_index=%u",
+            (void *)(uintptr_t)*pView,
+            (void *)(uintptr_t)upgraded.image,
+            upgraded.viewType,
+            upgraded.subresourceRange.layerCount,
+            stereo_sc != UINT32_MAX,
+            stereo_sc,
+            stereo_img,
+            upgraded_image_index);
     }
     return _r;
 }
