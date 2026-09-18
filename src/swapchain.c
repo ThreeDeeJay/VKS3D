@@ -765,6 +765,14 @@ try_dx9:
                     (int)sc->present_mode,
                     (int)sc->stereo_active,
                     (void*)sc->real_swapchain);
+                STEREO_LOG("[CREATE SC RETURN] app=%p sc=%p real=%p mode=%d active=%d reused=%d count=%u",
+                    (void*)*pSwapchain,
+                    (void*)sc,
+                    (void*)sc->real_swapchain,
+                    (int)sc->present_mode,
+                    (int)sc->stereo_active,
+                    (int)sc->resize_reused,
+                    sd->swapchain_count);
                 return VK_SUCCESS;
             }
             /* GPU compose init failed — fall to passthrough */
@@ -783,10 +791,17 @@ try_dx9:
                     (void*)sc->hwnd,
                     (void*)sc->real_swapchain);
             }
-            STEREO_LOG("[CREATE SC SBS_FALLBACK] sc=%p req=%d real=%p",
+            STEREO_LOG("[CREATE SC SBS_FALLBACK] sc=%p req=%d real=%p active=%d mode=%d images=%p image_count=%u cmds=%p fences=%p",
                 (void*)sc,
                 (int)req,
-                (void*)sc->real_swapchain);
+                (void*)sc->real_swapchain,
+                (int)sc->stereo_active,
+                (int)sc->present_mode,
+                (void*)sc->stereo_images,
+                sc->image_count,
+                (void*)sc->barrier_cmds,
+                (void*)sc->barrier_fences);
+                gpu_compose_sc_destroy(sd, sc);
             gpu_compose_sc_destroy(sd, sc);
             STEREO_LOG("[DESTROY SC] after gpu_compose_sc_destroy");
             if (sc->real_swapchain) {
