@@ -81,19 +81,23 @@ stereo_CreateFramebuffer(
         VkImageView view = pCreateInfo->pAttachments[i];
         bool upgraded = false;
         uint32_t upgraded_index = UINT32_MAX;
+        VkImage tracked_image = VK_NULL_HANDLE;
         for (uint32_t k = 0; k < sd->upgraded_view_count; k++) {
             if (sd->upgraded_views[k] == view) {
                 upgraded = true;
                 upgraded_index = k;
+                if (k < sd->upgraded_image_count)
+                    tracked_image = sd->upgraded_images[k];
                 break;
             }
         }
         STEREO_LOG(
-            "FB_CREATE_ATTACHMENT i=%u view=%p upgraded=%u upgraded_index=%u",
+            "FB_CREATE_ATTACHMENT i=%u view=%p upgraded=%u upgraded_index=%u image=%p",
             i,
             (void*)view,
             (unsigned)upgraded,
-            upgraded_index);
+            upgraded_index,
+            (void*)(uintptr_t)tracked_image);
     }
     if (debug_original == VK_NULL_HANDLE) {
         STEREO_LOG("[FATAL] upstream pCreateInfo->renderPass already NULL!");
