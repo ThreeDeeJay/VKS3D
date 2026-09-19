@@ -1749,45 +1749,43 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
             upgraded_view_index,
             upgraded_image_index);
     }
-    /* Track upgraded views for framebuffer multiview detection */
+    /* Track upgraded views and images as a paired mapping */
     if (_r == VK_SUCCESS &&
-        sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
+        sd->upgraded_view_count < MAX_UPGRADED_VIEWS &&
+        sd->upgraded_image_count < MAX_UPGRADED_VIEWS)
     {
-        uint32_t view_index = sd->upgraded_view_count;
+        uint32_t track_index = sd->upgraded_view_count;
+        CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
+        CHECK_ARRAY_COUNT(sd->upgraded_image_count, MAX_UPGRADED_VIEWS, "upgraded_image_count");
+        sd->upgraded_views[track_index] = *pView;
+        sd->upgraded_images[track_index] = pCreateInfo->image;
+        sd->upgraded_view_count++;
+        sd->upgraded_image_count++;
         STEREO_LOG(
             "UPGRADED_VIEW_TRACK image=%p view=%p index=%u",
             (void*)(uintptr_t)pCreateInfo->image,
             (void*)(uintptr_t)*pView,
-            view_index);
-        CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
-        sd->upgraded_views[sd->upgraded_view_count++] = *pView;
-        if (sd->upgraded_image_count < MAX_UPGRADED_VIEWS)
-        {
-            uint32_t image_index = sd->upgraded_image_count;
-            CHECK_ARRAY_COUNT(sd->upgraded_image_count, MAX_UPGRADED_VIEWS, "upgraded_image_count");
-            sd->upgraded_images[sd->upgraded_image_count++] =
-                pCreateInfo->image;
-            STEREO_LOG(
-                "IMAGE_TRACK count=%u image=%p index=%u",
-                sd->upgraded_image_count,
-                (void *)(uintptr_t)pCreateInfo->image,
-                image_index);
-            STEREO_LOG(
-                "COUNTS depth=%u color=%u upgradedImages=%u upgradedViews=%u",
-                sd->intercepted_depth_count,
-                sd->intercepted_color_count,
-                sd->upgraded_image_count,
-                sd->upgraded_view_count);
-        }
+            track_index);
+        STEREO_LOG(
+            "IMAGE_TRACK count=%u image=%p index=%u",
+            sd->upgraded_image_count,
+            (void *)(uintptr_t)pCreateInfo->image,
+            track_index);
+        STEREO_LOG(
+            "COUNTS depth=%u color=%u upgradedImages=%u upgradedViews=%u",
+            sd->intercepted_depth_count,
+            sd->intercepted_color_count,
+            sd->upgraded_image_count,
+            sd->upgraded_view_count);
     }
     if (_r == VK_SUCCESS)
     {
-        uint32_t upgraded_image_index = UINT32_MAX;
-        for (uint32_t ui = 0; ui < sd->upgraded_image_count; ui++)
+        uint32_t upgraded_view_index = UINT32_MAX;
+        for (uint32_t ui = 0; ui < sd->upgraded_view_count; ui++)
         {
-            if (sd->upgraded_images[ui] == pCreateInfo->image)
+            if (sd->upgraded_views[ui] == *pView)
             {
-                upgraded_image_index = ui;
+                upgraded_view_index = ui;
                 break;
             }
         }
@@ -1800,7 +1798,7 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
             stereo_sc != UINT32_MAX,
             stereo_sc,
             stereo_img,
-            upgraded_image_index);
+            upgraded_view_index);
     }
     return _r;
 }
