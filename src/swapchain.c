@@ -1503,6 +1503,16 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
             }
         }
     }
+    STEREO_LOG("IMAGE_CREATED image=%p type=%u format=%u extent=%ux%ux%u layers=%u usage=0x%X flags=0x%X",
+        (void *)(uintptr_t)*pImage,
+        pCreateInfo->imageType,
+        pCreateInfo->format,
+        pCreateInfo->extent.width,
+        pCreateInfo->extent.height,
+        pCreateInfo->extent.depth,
+        pCreateInfo->arrayLayers,
+        pCreateInfo->usage,
+        pCreateInfo->flags);
     return res;
 }
 
@@ -1706,6 +1716,10 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         upgraded.viewType,
         upgraded.subresourceRange.layerCount);
     STEREO_LOG("CALL real CreateImageView");
+    STEREO_LOG("UPGRADE_IMAGE image=%p viewType=%u layers=%u",
+        (void *)(uintptr_t)pCreateInfo->image,
+        pCreateInfo->viewType,
+        pCreateInfo->subresourceRange.layerCount);
     VkResult _r=
         sd->real.CreateImageView(
         sd->real_device,
