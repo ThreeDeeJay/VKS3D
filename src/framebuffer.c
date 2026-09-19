@@ -2317,15 +2317,7 @@ stereo_CmdCopyImage(
     uint32_t regionCount,
     const VkImageCopy *pRegions)
 {
-    StereoDevice *sd = NULL;
-    for (uint32_t i = 0; i < g_device_count; i++)
-    {
-        if (g_devices[i].real.CmdCopyImage)
-        {
-            sd = &g_devices[i];
-            break;
-        }
-    }
+    StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdCopyImage)
         return;
     STEREO_LOG("COPY_IMAGE cmd=%p src=%p dst=%p regions=%u",
@@ -2346,15 +2338,7 @@ stereo_CmdBlitImage(
     const VkImageBlit *pRegions,
     VkFilter filter)
 {
-    StereoDevice *sd = NULL;
-    for (uint32_t i = 0; i < g_device_count; i++)
-    {
-        if (g_devices[i].real.CmdBlitImage)
-        {
-            sd = &g_devices[i];
-            break;
-        }
-    }
+    StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdBlitImage)
         return;
     STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u",
@@ -2374,15 +2358,7 @@ stereo_CmdResolveImage(
     uint32_t regionCount,
     const VkImageResolve *pRegions)
 {
-    StereoDevice *sd = NULL;
-    for (uint32_t i = 0; i < g_device_count; i++)
-    {
-        if (g_devices[i].real.CmdResolveImage)
-        {
-            sd = &g_devices[i];
-            break;
-        }
-    }
+    StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdResolveImage)
         return;
     STEREO_LOG("RESOLVE_IMAGE cmd=%p src=%p dst=%p regions=%u",
