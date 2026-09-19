@@ -2306,3 +2306,89 @@ stereo_CmdSetVertexInputEXT(
         vertexAttributeDescriptionCount,
         pVertexAttributeDescriptions);
 }
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdCopyImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageCopy *pRegions)
+{
+    StereoDevice *sd = NULL;
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real.CmdCopyImage)
+        {
+            sd = &g_devices[i];
+            break;
+        }
+    }
+    if (!sd || !sd->real.CmdCopyImage)
+        return;
+    STEREO_LOG("COPY_IMAGE cmd=%p src=%p dst=%p regions=%u",
+        (void*)commandBuffer,
+        (void*)srcImage,
+        (void*)dstImage,
+        regionCount);
+    sd->real.CmdCopyImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBlitImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageBlit *pRegions,
+    VkFilter filter)
+{
+    StereoDevice *sd = NULL;
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real.CmdBlitImage)
+        {
+            sd = &g_devices[i];
+            break;
+        }
+    }
+    if (!sd || !sd->real.CmdBlitImage)
+        return;
+    STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u",
+        (void*)commandBuffer,
+        (void*)srcImage,
+        (void*)dstImage,
+        regionCount);
+    sd->real.CmdBlitImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions,filter);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdResolveImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageResolve *pRegions)
+{
+    StereoDevice *sd = NULL;
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real.CmdResolveImage)
+        {
+            sd = &g_devices[i];
+            break;
+        }
+    }
+    if (!sd || !sd->real.CmdResolveImage)
+        return;
+    STEREO_LOG("RESOLVE_IMAGE cmd=%p src=%p dst=%p regions=%u",
+        (void*)commandBuffer,
+        (void*)srcImage,
+        (void*)dstImage,
+        regionCount);
+    sd->real.CmdResolveImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions);
+}
