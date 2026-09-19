@@ -1519,6 +1519,23 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         pCreateInfo->subresourceRange.layerCount,
         pCreateInfo->subresourceRange.aspectMask);
     if (!sd) return VK_ERROR_DEVICE_LOST;
+    for (uint32_t si = 0; si < sd->swapchain_count; si++)
+    {
+        StereoSwapchain *scc = &sd->swapchains[si];
+        if (!scc->stereo_active || !scc->stereo_images)
+            continue;
+        for (uint32_t ii = 0; ii < scc->image_count; ii++)
+        {
+            if (scc->stereo_images[ii] == pCreateInfo->image)
+            {
+                STEREO_LOG(
+                    "IV_SWAPCHAIN_IMAGE sc=%p index=%u image=%p",
+                    (void *)scc,
+                    ii,
+                    (void *)(uintptr_t)pCreateInfo->image);
+            }
+        }
+    }
     /*
      * Cube and cube-array images use array layers for faces.
      * They are not stereo render targets and must never be converted
@@ -1555,6 +1572,14 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         {
             if (scc->stereo_images[ii] == pCreateInfo->image)
             {
+                STEREO_LOG(
+                    "STEREO_IMAGE_VIEW_FOUND sc=%p index=%u image=%p viewType=%u layers=%u aspect=0x%X",
+                    (void *)scc,
+                    ii,
+                    (void *)(uintptr_t)pCreateInfo->image,
+                    pCreateInfo->viewType,
+                    pCreateInfo->subresourceRange.layerCount,
+                    pCreateInfo->subresourceRange.aspectMask);
                 needs_upgrade = true;
                 swapchain_match = true;
                 stereo_sc = si;
