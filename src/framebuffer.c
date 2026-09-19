@@ -2341,11 +2341,22 @@ stereo_CmdBlitImage(
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdBlitImage)
         return;
-    STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u",
-        (void*)commandBuffer,
-        (void*)srcImage,
-        (void*)dstImage,
-        regionCount);
+    for (uint32_t i = 0; i < regionCount; i++)
+    {
+        const VkImageBlit *r = &pRegions[i];
+        STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u region=%u srcMip=%u srcBaseLayer=%u srcLayers=%u dstMip=%u dstBaseLayer=%u dstLayers=%u",
+            (void*)commandBuffer,
+            (void*)srcImage,
+            (void*)dstImage,
+            regionCount,
+            i,
+            r->srcSubresource.mipLevel,
+            r->srcSubresource.baseArrayLayer,
+            r->srcSubresource.layerCount,
+            r->dstSubresource.mipLevel,
+            r->dstSubresource.baseArrayLayer,
+            r->dstSubresource.layerCount);
+    }
     sd->real.CmdBlitImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions,filter);
 }
 VKAPI_ATTR void VKAPI_CALL
