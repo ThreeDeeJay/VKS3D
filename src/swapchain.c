@@ -1362,6 +1362,19 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
             "IMG_EXIT passthrough result=%d image=%p",
             r,
             (r == VK_SUCCESS) ? (void *)(uintptr_t)*pImage : NULL);
+        if (r == VK_SUCCESS)
+        {
+            STEREO_LOG("IMAGE_CREATED image=%p type=%u format=%u extent=%ux%ux%u layers=%u usage=0x%X flags=0x%X",
+                (void *)(uintptr_t)*pImage,
+                pCreateInfo->imageType,
+                pCreateInfo->format,
+                pCreateInfo->extent.width,
+                pCreateInfo->extent.height,
+                pCreateInfo->extent.depth,
+                pCreateInfo->arrayLayers,
+                pCreateInfo->usage,
+                pCreateInfo->flags);
+        }
         return r;
     }
     STEREO_LOG(
@@ -1791,28 +1804,6 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
             sd->intercepted_color_count,
             sd->upgraded_image_count,
             sd->upgraded_view_count);
-    }
-    if (_r == VK_SUCCESS)
-    {
-        uint32_t upgraded_view_index = UINT32_MAX;
-        for (uint32_t ui = 0; ui < sd->upgraded_view_count; ui++)
-        {
-            if (sd->upgraded_views[ui] == *pView)
-            {
-                upgraded_view_index = ui;
-                break;
-            }
-        }
-        STEREO_LOG(
-            "VIEW_CREATED view=%p image=%p type=%u layers=%u stereo=%u sc=%u image_index=%u upgraded_index=%u",
-            (void *)(uintptr_t)*pView,
-            (void *)(uintptr_t)upgraded.image,
-            upgraded.viewType,
-            upgraded.subresourceRange.layerCount,
-            stereo_sc != UINT32_MAX,
-            stereo_sc,
-            stereo_img,
-            upgraded_view_index);
     }
     return _r;
 }
