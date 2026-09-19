@@ -1214,6 +1214,18 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         uint32_t           wcount = (i == 0) ? pPresentInfo->waitSemaphoreCount : 0;
         const VkSemaphore *wsems  = (i == 0) ? pPresentInfo->pWaitSemaphores    : NULL;
 
+        uint32_t present_img_idx = pPresentInfo->pImageIndices[i];
+        VkImage present_img = VK_NULL_HANDLE;
+        if (present_img_idx < sc_i->image_count && sc_i->stereo_images)
+            present_img = sc_i->stereo_images[present_img_idx];
+        STEREO_LOG(
+            "QUEUE_PRESENT_MAP sc=%p mode=%d index=%u image=%p image_count=%u",
+            (void *)sc_i,
+            (int)sc_i->present_mode,
+            present_img_idx,
+            (void *)(uintptr_t)present_img,
+            sc_i->image_count);
+
         VkResult pr;
         switch (sc_i->present_mode) {
         case STEREO_PRESENT_DXGI:
@@ -1231,12 +1243,12 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
                 wsems);
             break;
         case STEREO_PRESENT_SBS:
-            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems, pPresentInfo->pImageIndices[i]);
+            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems, present_img_idx);
             break;
         case STEREO_PRESENT_TAB:
         case STEREO_PRESENT_INTERLACED:
             /* GPU blit compose — no CPU readback, no GDI */
-            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems, pPresentInfo->pImageIndices[i]);
+            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems, present_img_idx);
             break;
         default:
             pr = VK_SUCCESS;
