@@ -2341,10 +2341,19 @@ stereo_CmdBlitImage(
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdBlitImage)
         return;
+    bool src_upgraded = false;
+    bool dst_upgraded = false;
+    for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
+    {
+        if (sd->upgraded_images[i] == srcImage)
+            src_upgraded = true;
+        if (sd->upgraded_images[i] == dstImage)
+            dst_upgraded = true;
+    }
     for (uint32_t i = 0; i < regionCount; i++)
     {
         const VkImageBlit *r = &pRegions[i];
-        STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u region=%u srcMip=%u srcBaseLayer=%u srcLayers=%u dstMip=%u dstBaseLayer=%u dstLayers=%u",
+        STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u region=%u srcMip=%u srcBaseLayer=%u srcLayers=%u dstMip=%u dstBaseLayer=%u dstLayers=%u srcUpgraded=%u dstUpgraded=%u",
             (void*)commandBuffer,
             (void*)srcImage,
             (void*)dstImage,
