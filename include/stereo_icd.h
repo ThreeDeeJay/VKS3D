@@ -531,6 +531,17 @@ typedef struct StereoRenderPassInfo {
     uint8_t       _pad[2];
 } StereoRenderPassInfo;
 
+typedef struct StereoFramebufferTrack {
+    VkFramebuffer fb;
+    VkRenderPass  rp;      /* original RP */
+    VkRenderPass  rp_used_at_create;
+    VkRenderPass  mv_rp;   /* multiview RP */
+    bool          has_mv;
+    uint32_t      attachment_count;
+    VkImageView   attachment_views[MAX_UPGRADED_VIEWS];
+    VkImage       attachment_images[MAX_UPGRADED_VIEWS];
+} StereoFramebufferTrack;
+
 typedef struct StereoPipelineInfo
 {
     VkPipeline pipeline;
@@ -663,17 +674,6 @@ typedef struct StereoDevice {
     VkImage upgraded_images[MAX_UPGRADED_VIEWS];
     uint32_t upgraded_image_count;
 } StereoDevice;
-
-typedef struct StereoFramebufferTrack {
-    VkFramebuffer fb;
-    VkRenderPass  rp;      /* original RP */
-    VkRenderPass  rp_used_at_create;
-    VkRenderPass  mv_rp;   /* multiview RP */
-    bool          has_mv;
-    uint32_t      attachment_count;
-    VkImageView   attachment_views[MAX_UPGRADED_VIEWS];
-    VkImage       attachment_images[MAX_UPGRADED_VIEWS];
-} StereoFramebufferTrack;
 
 void stereo_write_ubo(StereoDevice *sd);
 /* -- Stereo UBO layout ----------------------------------------------------- */
