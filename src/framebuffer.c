@@ -2341,14 +2341,14 @@ stereo_CmdBlitImage(
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdBlitImage)
         return;
-    bool src_upgraded = false;
-    bool dst_upgraded = false;
+    uint32_t src_upgraded = UINT32_MAX;
+    uint32_t dst_upgraded = UINT32_MAX;
     for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
     {
         if (sd->upgraded_images[i] == srcImage)
-            src_upgraded = true;
+            src_upgraded = i;
         if (sd->upgraded_images[i] == dstImage)
-            dst_upgraded = true;
+            dst_upgraded = i;
     }
     for (uint32_t i = 0; i < regionCount; i++)
     {
