@@ -2881,6 +2881,24 @@ bool spirv_patch_stereo_vertex(
     bool have_view =
         m.view_var ||
         will_inj_vi;
+    STEREO_LOG(
+        "VIEWINDEX_PATCH "
+        "hash=%016llx "
+        "inj_vi=%u "
+        "existing_view=%u "
+        "view_var=%u "
+        "it=%u "
+        "will_inj=%u "
+        "inj_view=%u "
+        "have_view=%u",
+        (unsigned long long)spv_hash,
+        (unsigned)inj_vi,
+        (unsigned)(m.view_var != 0),
+        m.view_var,
+        m.it,
+        (unsigned)will_inj_vi,
+        id_inj_view,
+        (unsigned)have_view);
     uint32_t id_new_bt = 0;
     if (!m.bt &&
         !m.bt_type &&
@@ -3495,6 +3513,20 @@ bool spirv_patch_stereo_vertex(
                     ob.w[j + 2],
                     ob.w[j + 1],
                     ob.w[j + 3]);
+                STEREO_LOG(
+                    "VIEWINDEX_LOAD "
+                    "hash=%016llx "
+                    "view_var=%u "
+                    "result=%u "
+                    "type=%u "
+                    "ptr=%u "
+                    "injected=%u",
+                    (unsigned long long)spv_hash,
+                    m.view_var,
+                    ob.w[j + 2],
+                    ob.w[j + 1],
+                    ob.w[j + 3],
+                    (unsigned)(m.view_var == id_inj_view));
             }
         }
         if (op == SpvOpStore && wc >= 3)
