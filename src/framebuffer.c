@@ -2363,6 +2363,18 @@ stereo_CmdBlitImage(
             break;
     }
     bool stereo_blit = src_upgraded != UINT32_MAX && dst_upgraded != UINT32_MAX;
+    STEREO_LOG(
+        "BLIT_ROUTE "
+        "src=%p "
+        "dst=%p "
+        "srcColor=%u "
+        "dstStereo=%u "
+        "stereo=%u",
+        (void*)srcImage,
+        (void*)dstImage,
+        src_upgraded,
+        dst_upgraded,
+        (unsigned)stereo_blit);
     VkImageBlit *stereo_regions = NULL;
     if (stereo_blit && regionCount)
     {
@@ -2400,6 +2412,26 @@ stereo_CmdBlitImage(
             dst_upgraded,
             stereo_blit);
     }
+    STEREO_LOG(
+        "BLIT_EXEC "
+        "src=%p "
+        "dst=%p "
+        "regions=%u "
+        "srcLayout=%u "
+        "dstLayout=%u "
+        "srcLayers=%u "
+        "dstLayers=%u "
+        "srcBase=%u "
+        "dstBase=%u",
+        (void*)srcImage,
+        (void*)dstImage,
+        regionCount,
+        srcImageLayout,
+        dstImageLayout,
+        regionCount ? use_regions[0].srcSubresource.layerCount : 0,
+        regionCount ? use_regions[0].dstSubresource.layerCount : 0,
+        regionCount ? use_regions[0].srcSubresource.baseArrayLayer : 0,
+        regionCount ? use_regions[0].dstSubresource.baseArrayLayer : 0);
     sd->real.CmdBlitImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions,filter);
     free(stereo_regions);
 }
