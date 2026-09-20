@@ -1322,6 +1322,7 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         && pCreateInfo->extent.width  > 1
         && pCreateInfo->extent.height > 1
         && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT);
+    bool intercept = intercept_depth || intercept_color || intercept_storage;
     STEREO_LOG("IMAGE_DECIDE extent=%ux%u layers=%u mip=%u usage=0x%llX base=%d depth=%d color=%d storage=%d intercept=%d",
         pCreateInfo->extent.width,
         pCreateInfo->extent.height,
@@ -1333,6 +1334,11 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         intercept_color,
         intercept_storage,
         intercept);
+    if (!intercept)
+    {
+        *image = real_CreateImage(device, pCreateInfo, pAllocator);
+        return r;
+    }
     STEREO_LOG(
         "IMAGE_CREATE imageType=%d fmt=%d samples=%d usage=0x%x layers=%u extent=%ux%u flags=0x%x cube=%d array=%d upgrade=%d",
         pCreateInfo->imageType,
