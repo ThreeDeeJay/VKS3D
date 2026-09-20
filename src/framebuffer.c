@@ -2350,23 +2350,46 @@ stereo_CmdBlitImage(
         if (sd->upgraded_images[i] == dstImage)
             dst_upgraded = i;
     }
+    bool stereo_blit = src_upgraded != UINT32_MAX && dst_upgraded != UINT32_MAX;
+    VkImageBlit *stereo_regions = NULL;
+    if (stereo_blit && regionCount)
+    {
+        stereo_regions = malloc(sizeof(VkImageBlit) * regionCount);
+        if (stereo_regions)
+        {
+            memcpy(stereo_regions, pRegions, sizeof(VkImageBlit) * regionCount);
+            for (uint32_t i = 0; i < regionCount; i++)
+            {
+                if (stereo_regions[i].srcSubresource.layerCount == 1 &&
+                    stereo_regions[i].dstSubresource.layerCount == 1)
+                {
+                    stereo_regions[i].srcSubresource.layerCount = 2;
+                    stereo_regions[i].dstSubresource.layerCount = 2;
+                }
+            }
+            pRegions = stereo_regions;
+        }
+    }
     for (uint32_t i = 0; i < regionCount; i++)
     {
-        const VkImageBlit *r = &pRegions[i];
-        STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u region=%u srcMip=%u srcBaseLayer=%u srcLayers=%u dstMip=%u dstBaseLayer=%u dstLayers=%u srcUpgraded=%u dstUpgraded=%u",
+        STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u region=%u srcMip=%u srcBaseLayer=%u srcLayers=%u dstMip=%u dstBaseLayer=%u dstLayers=%u srcUpgraded=%u dstUpgraded=%u stereo=%d",
             (void*)commandBuffer,
-            (void*)srcImage,
-            (void*)dstImage,
+            (void*)(uintptr_t)srcImage,
+            (void*)(uintptr_t)dstImage,
             regionCount,
             i,
-            r->srcSubresource.mipLevel,
-            r->srcSubresource.baseArrayLayer,
-            r->srcSubresource.layerCount,
-            r->dstSubresource.mipLevel,
-            r->dstSubresource.baseArrayLayer,
-            r->dstSubresource.layerCount);
+            pRegions[i].srcSubresource.mipLevel,
+            pRegions[i].srcSubresource.baseArrayLayer,
+            pRegions[i].srcSubresource.layerCount,
+            pRegions[i].dstSubresource.mipLevel,
+            pRegions[i].dstSubresource.baseArrayLayer,
+            pRegions[i].dstSubresource.layerCount,
+            src_upgraded,
+            dst_upgraded,
+            stereo_blit);
     }
     sd->real.CmdBlitImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions,filter);
+    free(stereo_regions);
 }
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdResolveImage(
