@@ -388,6 +388,29 @@ stereo_CreateFramebuffer(
         t->mv_rp = use_mv;
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
         sd->stereo.multiview;
+        t->attachment_count = pCreateInfo->attachmentCount;
+        if (t->attachment_count > MAX_UPGRADED_VIEWS)
+            t->attachment_count = MAX_UPGRADED_VIEWS;
+        for (uint32_t ai = 0; ai < t->attachment_count; ai++)
+        {
+            t->attachment_views[ai] = pCreateInfo->pAttachments[ai];
+            t->attachment_images[ai] = VK_NULL_HANDLE;
+            for (uint32_t vi = 0; vi < sd->upgraded_view_count; vi++)
+            {
+                if (sd->upgraded_views[vi] == pCreateInfo->pAttachments[ai])
+                {
+                    if (vi < sd->upgraded_image_count)
+                        t->attachment_images[ai] = sd->upgraded_images[vi];
+                    break;
+                }
+            }
+            STEREO_LOG(
+                "FB_TRACK_ATTACHMENT fb=%p att=%u view=%p image=%p",
+                (void*)t->fb,
+                ai,
+                (void*)t->attachment_views[ai],
+                (void*)(uintptr_t)t->attachment_images[ai]);
+        }
         STEREO_LOG(
             "FB_FIELDS rp=%p rp_used=%p mv_rp=%p has_mv=%u",
             (void*)t->rp,
@@ -765,13 +788,24 @@ stereo_CmdBeginRenderPass(
     {
         StereoFramebufferTrack *t = &sd->fb_tracks[fb_track_index];
         STEREO_LOG(
-            "FB_BEGIN_TRACK fb=%p track=%u rp=%p rp_used=%p mv_rp=%p has_mv=%u",
+            "FB_BEGIN_TRACK fb=%p track=%u rp=%p rp_used=%p mv_rp=%p has_mv=%u attachments=%u",
             (void*)t->fb,
             fb_track_index,
             (void*)t->rp,
             (void*)t->rp_used_at_create,
             (void*)t->mv_rp,
-            (unsigned)t->has_mv);
+            (unsigned)t->has_mv,
+            t->attachment_count);
+        for (uint32_t ai = 0; ai < t->attachment_count; ai++)
+        {
+            STEREO_LOG(
+                "FB_BEGIN_ATTACHMENT fb=%p track=%u att=%u view=%p image=%p",
+                (void*)t->fb,
+                fb_track_index,
+                ai,
+                (void*)t->attachment_views[ai],
+                (void*)(uintptr_t)t->attachment_images[ai]);
+        }
     }
     if (mv_rp)
     {
@@ -2396,6 +2430,23 @@ stereo_CmdBlitImage(
             break;
     }
     bool stereo_blit = src_upgraded != UINT32_MAX && dst_upgraded != UINT32_MAX;
+    uint32_t src_view_index = UINT32_MAX;
+    for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
+    {
+        if (sd->upgraded_images[i] == srcImage)
+        {
+            src_view_index = i;
+            break;
+        }
+    }
+    STEREO_LOG(
+        "BLIT_SOURCE_MAP src=%p color_index=%u view_index=%u view=%p",
+        (void*)srcImage,
+        src_upgraded,
+        src_view_index,
+        src_view_index != UINT32_MAX &&
+        src_view_index < sd->upgraded_view_count ?
+        (void *)(uintptr_t)sd->upgraded_views[src_view_index] : NULL);
     STEREO_LOG(
         "BLIT_ROUTE "
         "src=%p "

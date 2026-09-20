@@ -537,6 +537,9 @@ typedef struct StereoFramebufferTrack {
     VkRenderPass  rp_used_at_create;
     VkRenderPass  mv_rp;   /* multiview RP */
     bool          has_mv;
+    uint32_t      attachment_count;
+    VkImageView   attachment_views[MAX_UPGRADED_VIEWS];
+    VkImage       attachment_images[MAX_UPGRADED_VIEWS];
 } StereoFramebufferTrack;
 
 typedef struct StereoPipelineInfo
