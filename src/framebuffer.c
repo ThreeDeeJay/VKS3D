@@ -2343,10 +2343,13 @@ stereo_CmdBlitImage(
         return;
     uint32_t src_upgraded = UINT32_MAX;
     uint32_t dst_upgraded = UINT32_MAX;
+    for (uint32_t i = 0; i < sd->intercepted_color_count; i++)
+    {
+        if (sd->intercepted_color[i] == srcImage)
+            src_upgraded = i;
+    }
     for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
     {
-        if (sd->upgraded_images[i] == srcImage)
-            src_upgraded = i;
         if (sd->upgraded_images[i] == dstImage)
             dst_upgraded = i;
     }
