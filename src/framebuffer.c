@@ -2444,9 +2444,26 @@ stereo_CmdBlitImage(
     }
     bool stereo_blit = src_upgraded != UINT32_MAX && dst_upgraded != UINT32_MAX;
     uint32_t src_view_index = UINT32_MAX;
-    for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
+    VkImageView src_view = VK_NULL_HANDLE;
+    for (uint32_t fi = 0; fi < MAX_FB_TRACK; fi++)
     {
-        if (sd->upgraded_images[i] == srcImage)
+        StereoFramebufferTrack *t = &sd->fb_tracks[fi];
+        if (t->fb == VK_NULL_HANDLE || !t->has_mv)
+            continue;
+        for (uint32_t ai = 0; ai < t->attachment_count; ai++)
+        {
+            if (t->attachment_images[ai] == srcImage)
+            {
+                src_view = t->attachment_views[ai];
+                break;
+            }
+        }
+        if (src_view != VK_NULL_HANDLE)
+            break;
+    }
+    for (uint32_t i = 0; i < sd->upgraded_view_count; i++)
+    {
+        if (sd->upgraded_views[i] == src_view)
         {
             src_view_index = i;
             break;
@@ -2457,9 +2474,7 @@ stereo_CmdBlitImage(
         (void*)srcImage,
         src_upgraded,
         src_view_index,
-        src_view_index != UINT32_MAX &&
-        src_view_index < sd->upgraded_view_count ?
-        (void *)(uintptr_t)sd->upgraded_views[src_view_index] : NULL);
+        (void*)src_view);
     STEREO_LOG(
         "BLIT_ROUTE "
         "src=%p "
@@ -2474,9 +2489,7 @@ stereo_CmdBlitImage(
         src_upgraded,
         dst_upgraded,
         src_view_index,
-        src_view_index != UINT32_MAX &&
-        src_view_index < sd->upgraded_view_count ?
-        (void *)(uintptr_t)sd->upgraded_views[src_view_index] : NULL,
+        (void*)src_view,
         (unsigned)stereo_blit);
     VkImageBlit *stereo_regions = NULL;
     if (stereo_blit && regionCount)
