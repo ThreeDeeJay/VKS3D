@@ -2428,10 +2428,10 @@ stereo_CmdBlitImage(
         regionCount,
         srcImageLayout,
         dstImageLayout,
-        regionCount ? use_regions[0].srcSubresource.layerCount : 0,
-        regionCount ? use_regions[0].dstSubresource.layerCount : 0,
-        regionCount ? use_regions[0].srcSubresource.baseArrayLayer : 0,
-        regionCount ? use_regions[0].dstSubresource.baseArrayLayer : 0);
+        regionCount ? pRegions[0].srcSubresource.layerCount : 0,
+        regionCount ? pRegions[0].dstSubresource.layerCount : 0,
+        regionCount ? pRegions[0].srcSubresource.baseArrayLayer : 0,
+        regionCount ? pRegions[0].dstSubresource.baseArrayLayer : 0);
     sd->real.CmdBlitImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions,filter);
     free(stereo_regions);
 }
