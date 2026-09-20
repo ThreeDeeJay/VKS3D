@@ -1336,8 +1336,8 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         intercept);
     if (!intercept)
     {
-        *image = real_CreateImage(device, pCreateInfo, pAllocator);
-        return r;
+        *pImage = sd->real.CreateImage(sd->real_device, pCreateInfo, pAllocator, pImage);
+        return res;
     }
     STEREO_LOG(
         "IMAGE_CREATE imageType=%d fmt=%d samples=%d usage=0x%x layers=%u extent=%ux%u flags=0x%x cube=%d array=%d upgrade=%d",
