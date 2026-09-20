@@ -798,13 +798,26 @@ stereo_CmdBeginRenderPass(
             t->attachment_count);
         for (uint32_t ai = 0; ai < t->attachment_count; ai++)
         {
+            VkImage image = VK_NULL_HANDLE;
+            uint32_t view_index = UINT32_MAX;
+            for (uint32_t vi = 0; vi < sd->upgraded_view_count; vi++)
+            {
+                if (sd->upgraded_views[vi] == t->attachment_views[ai])
+                {
+                    view_index = vi;
+                    if (vi < sd->upgraded_image_count)
+                        image = sd->upgraded_images[vi];
+                    break;
+                }
+            }
             STEREO_LOG(
-                "FB_BEGIN_ATTACHMENT fb=%p track=%u att=%u view=%p image=%p",
+                "FB_BEGIN_ATTACHMENT fb=%p track=%u att=%u view=%p view_index=%u image=%p",
                 (void*)t->fb,
                 fb_track_index,
                 ai,
                 (void*)t->attachment_views[ai],
-                (void*)(uintptr_t)t->attachment_images[ai]);
+                view_index,
+                (void*)(uintptr_t)image);
         }
     }
     if (mv_rp)
@@ -2453,15 +2466,17 @@ stereo_CmdBlitImage(
         "dst=%p "
         "srcColor=%u "
         "dstStereo=%u "
+        "srcViewIndex=%u "
         "srcView=%p "
         "stereo=%u",
         (void*)srcImage,
         (void*)dstImage,
         src_upgraded,
         dst_upgraded,
-        src_upgraded != UINT32_MAX &&
-        src_upgraded < sd->upgraded_view_count ?
-        (void *)(uintptr_t)sd->upgraded_views[src_upgraded] : NULL,
+        src_view_index,
+        src_view_index != UINT32_MAX &&
+        src_view_index < sd->upgraded_view_count ?
+        (void *)(uintptr_t)sd->upgraded_views[src_view_index] : NULL,
         (unsigned)stereo_blit);
     VkImageBlit *stereo_regions = NULL;
     if (stereo_blit && regionCount)
