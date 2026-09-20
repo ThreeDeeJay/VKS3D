@@ -154,21 +154,23 @@ stereo_CreateFramebuffer(
                 }
             }
             STEREO_LOG(
-                "FB_ATTACHMENT_CLASSIFY att=%u view=%p class=UPGRADED upgraded_index=%u "
+                "FB_ATTACHMENT_CLASSIFY att=%u view=%p class=%s upgraded_index=%u "
                 "shading_rate=%u",
                 i,
-                (void *)(uintptr_t)view,
-                upgraded_index,
-                is_shading_rate);
-            if (upgraded_index != UINT32_MAX &&
-                upgraded_index < sd->upgraded_image_count)
+                (void*)view,
+                found ? "UPGRADED" : "NORMAL",
+                found ? found_index : UINT32_MAX,
+                (has_shading_rate_attachment &&
+                    shading_rate_attachment == i) ? 1u : 0u);
+            if (found &&
+                found_index < sd->upgraded_image_count)
             {
                 STEREO_LOG(
                     "FB_ATTACHMENT_IMAGE att=%u view=%p image=%p upgraded_index=%u",
                     i,
-                    (void *)(uintptr_t)view,
-                    (void *)(uintptr_t)sd->upgraded_images[upgraded_index],
-                    upgraded_index);
+                    (void*)view,
+                    (void *)(uintptr_t)sd->upgraded_images[found_index],
+                    found_index);
             }
         }
         STEREO_LOG(
