@@ -531,6 +531,8 @@ typedef struct StereoRenderPassInfo {
     uint8_t       _pad[2];
 } StereoRenderPassInfo;
 
+#define MAX_UPGRADED_VIEWS 4096
+#define MAX_FB_ATTACHMENTS 16
 typedef struct StereoFramebufferTrack {
     VkFramebuffer fb;
     VkRenderPass  rp;      /* original RP */
@@ -538,8 +540,8 @@ typedef struct StereoFramebufferTrack {
     VkRenderPass  mv_rp;   /* multiview RP */
     bool          has_mv;
     uint32_t      attachment_count;
-    VkImageView   attachment_views[MAX_UPGRADED_VIEWS];
-    VkImage       attachment_images[MAX_UPGRADED_VIEWS];
+    VkImageView   attachment_views[MAX_FB_ATTACHMENTS];
+    VkImage       attachment_images[MAX_FB_ATTACHMENTS];
 } StereoFramebufferTrack;
 
 typedef struct StereoPipelineInfo
@@ -595,7 +597,6 @@ typedef struct StereoDevice {
     uint32_t               intercepted_storage_count;
     uint32_t               stereo_w, stereo_h;
     /* Upgraded image-view tracking for per-framebuffer multiview decision */
-#define MAX_UPGRADED_VIEWS     4096
     VkImageView            upgraded_views[MAX_UPGRADED_VIEWS];
     uint32_t               upgraded_view_count;
     /* Per-framebuffer: which render pass (multiview version) was used */

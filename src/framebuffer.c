@@ -389,8 +389,8 @@ stereo_CreateFramebuffer(
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
         sd->stereo.multiview;
         t->attachment_count = pCreateInfo->attachmentCount;
-        if (t->attachment_count > MAX_UPGRADED_VIEWS)
-            t->attachment_count = MAX_UPGRADED_VIEWS;
+        if (t->attachment_count > MAX_FB_ATTACHMENTS)
+            t->attachment_count = MAX_FB_ATTACHMENTS;
         for (uint32_t ai = 0; ai < t->attachment_count; ai++)
         {
             t->attachment_views[ai] = pCreateInfo->pAttachments[ai];
