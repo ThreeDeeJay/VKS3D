@@ -165,12 +165,35 @@ stereo_CreateFramebuffer(
             if (found &&
                 found_index < sd->upgraded_image_count)
             {
+                VkImage tracked_image = sd->upgraded_images[found_index];
+                bool color_image = false;
+                uint32_t color_index = UINT32_MAX;
+                for (uint32_t ci = 0; ci < sd->intercepted_color_count; ci++)
+                {
+                    if (sd->intercepted_color[ci] == tracked_image)
+                    {
+                        color_image = true;
+                        color_index = ci;
+                        break;
+                    }
+                }
                 STEREO_LOG(
-                    "FB_ATTACHMENT_IMAGE att=%u view=%p image=%p upgraded_index=%u",
+                    "FB_ATTACHMENT_IMAGE att=%u view=%p image=%p upgraded_index=%u color=%u color_index=%u",
                     i,
                     (void*)view,
-                    (void *)(uintptr_t)sd->upgraded_images[found_index],
-                    found_index);
+                    (void *)(uintptr_t)tracked_image,
+                    found_index,
+                    (unsigned)color_image,
+                    color_index);
+                if (color_image)
+                {
+                    STEREO_LOG(
+                        "FB_COLOR_SOURCE_CANDIDATE att=%u view=%p image=%p color_index=%u",
+                        i,
+                        (void*)view,
+                        (void *)(uintptr_t)tracked_image,
+                        color_index);
+                }
             }
         }
         STEREO_LOG(
@@ -2379,11 +2402,15 @@ stereo_CmdBlitImage(
         "dst=%p "
         "srcColor=%u "
         "dstStereo=%u "
+        "srcView=%p "
         "stereo=%u",
         (void*)srcImage,
         (void*)dstImage,
         src_upgraded,
         dst_upgraded,
+        src_upgraded != UINT32_MAX &&
+        src_upgraded < sd->upgraded_view_count ?
+        (void *)(uintptr_t)sd->upgraded_views[src_upgraded] : NULL,
         (unsigned)stereo_blit);
     VkImageBlit *stereo_regions = NULL;
     if (stereo_blit && regionCount)
