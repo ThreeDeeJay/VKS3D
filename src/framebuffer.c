@@ -2348,10 +2348,19 @@ stereo_CmdBlitImage(
         if (sd->intercepted_color[i] == srcImage)
             src_upgraded = i;
     }
-    for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
+    for (uint32_t s = 0; s < sd->swapchain_count; s++)
     {
-        if (sd->upgraded_images[i] == dstImage)
-            dst_upgraded = i;
+        StereoSwapchain *sc = &sd->swapchains[s];
+        for (uint32_t i = 0; i < sc->image_count; i++)
+        {
+            if (sc->stereo_images && sc->stereo_images[i] == dstImage)
+            {
+                dst_upgraded = i;
+                break;
+            }
+        }
+        if (dst_upgraded != UINT32_MAX)
+            break;
     }
     bool stereo_blit = src_upgraded != UINT32_MAX && dst_upgraded != UINT32_MAX;
     VkImageBlit *stereo_regions = NULL;
