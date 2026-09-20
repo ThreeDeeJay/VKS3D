@@ -2445,23 +2445,6 @@ stereo_CmdBlitImage(
     bool stereo_blit = src_upgraded != UINT32_MAX && dst_upgraded != UINT32_MAX;
     uint32_t src_view_index = UINT32_MAX;
     VkImageView src_view = VK_NULL_HANDLE;
-    for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
-    {
-        if (sd->upgraded_images[i] == srcImage)
-        {
-            STEREO_LOG(
-                "BLIT_SOURCE_IMAGE_MATCH src=%p image_index=%u view=%p",
-                (void*)srcImage,
-                i,
-                i < sd->upgraded_view_count ?
-                (void*)sd->upgraded_views[i] : NULL);
-            if (src_view == VK_NULL_HANDLE && i < sd->upgraded_view_count)
-            {
-                src_view_index = i;
-                src_view = sd->upgraded_views[i];
-            }
-        }
-    }
     for (uint32_t fi = 0; fi < MAX_FB_TRACK; fi++)
     {
         StereoFramebufferTrack *t = &sd->fb_tracks[fi];
@@ -2471,14 +2454,26 @@ stereo_CmdBlitImage(
         {
             if (t->attachment_images[ai] == srcImage)
             {
+                src_view = t->attachment_views[ai];
                 STEREO_LOG(
                     "BLIT_SOURCE_FB_MATCH src=%p fb=%p track=%u att=%u view=%p",
                     (void*)srcImage,
                     (void*)t->fb,
                     fi,
                     ai,
-                    (void*)t->attachment_views[ai]);
+                    (void*)src_view);
+                break;
             }
+        }
+        if (src_view != VK_NULL_HANDLE)
+            break;
+    }
+    for (uint32_t i = 0; i < sd->upgraded_view_count; i++)
+    {
+        if (sd->upgraded_views[i] == src_view)
+        {
+            src_view_index = i;
+            break;
         }
     }
     STEREO_LOG(
