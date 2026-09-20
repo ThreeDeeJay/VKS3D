@@ -1804,6 +1804,11 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
             (void*)(uintptr_t)*pView,
             track_index);
         STEREO_LOG(
+            "VIEW_IMAGE_MAP view=%p image=%p index=%u",
+            (void*)(uintptr_t)*pView,
+            (void*)(uintptr_t)pCreateInfo->image,
+            track_index);
+        STEREO_LOG(
             "IMAGE_TRACK count=%u image=%p index=%u",
             sd->upgraded_image_count,
             (void *)(uintptr_t)pCreateInfo->image,
