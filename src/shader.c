@@ -3961,7 +3961,31 @@ fs_should_patch_sample(
         descriptor_var,
         set,
         binding);
-    return fs_binding_is_stereo_attachment(s, descriptor_var);
+    bool stereo = fs_binding_is_stereo_attachment(s, descriptor_var);
+    for (uint32_t img = 0; img < s->n_img; img++)
+    {
+        if (s->images[img].owner_var != descriptor_var)
+            continue;
+        STEREO_LOG(
+            "FS_PATCH_IMAGE "
+            "hash=%016llx "
+            "descriptor=%u "
+            "image=%u "
+            "dim=%u "
+            "arrayed=%u "
+            "stereo=%u "
+            "sampledType=%u "
+            "pointerType=%u",
+            (unsigned long long)spv_hash,
+            descriptor_var,
+            s->images[img].id,
+            s->images[img].dim,
+            s->images[img].arrayed,
+            s->images[img].stereo,
+            s->images[img].sampled_type,
+            s->images[img].pointer_type);
+    }
+    return stereo;
 }
 
 /*
