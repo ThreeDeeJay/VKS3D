@@ -3857,22 +3857,29 @@ uint32_t var)
         return true;
     }
     /*
-     * Descriptor bindings are not sufficient to identify stereo render targets.
-     * Material/UI textures can legitimately use bindings 0-4.
+     * Deferred rendering attachments:
+     *
+     * binding 0 = depth/position
+     * binding 1 = normal
+     * binding 2 = albedo
+     * binding 3 = specular
+     * binding 4 = SSAO/deferred intermediate
      */
+    bool stereo =
+        (v->binding <= 4);
     STEREO_LOG(
         "FS_BINDING_RESULT "
         "var=%u "
         "storage=%u "
         "set=%u "
         "binding=%u "
-        "stereo=0 "
-        "reason=UNKNOWN_DESCRIPTOR",
+        "stereo=%u",
         var,
         v->storage,
         v->set,
-        v->binding);
-    return false;
+        v->binding,
+        stereo);
+    return stereo;
 }
 
 static uint32_t fs_result_type_of(FsScan *s,
