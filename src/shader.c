@@ -3810,6 +3810,11 @@ fs_dec_index(
     return -1;
 }
 
+/*
+ * Returns true only for descriptors backed by upgraded stereo render
+ * targets. Material textures, lookup tables and other resources remain
+ * regular sampler2D objects.
+ */
 static bool
 fs_binding_is_stereo_attachment(
 const FsScan *s,
@@ -3831,58 +3836,50 @@ uint32_t var)
         v->storage,
         v->set,
         v->binding);
-    for (uint32_t img = 0; img < s->n_img; img++)
+    STEREO_LOG(
+        "FS_BINDING_TYPE var=%u "
+        "storage=%u "
+        "type=%u "
+        "sampledImage=%u "
+        "n_img=%u",
+        v->id,
+        v->storage,
+        v->type,
+        s->n_img);
+    /*
+     * Input attachments are framebuffer attachments.
+     */
+    if (v->storage == SpvStorageClassInput)
     {
-        const FsImageInfo *image = &s->images[img];
-        if (image->owner_var != var)
-            continue;
         STEREO_LOG(
-            "FS_BINDING_IMAGE "
-            "var=%u "
-            "image=%u "
-            "dim=%u "
-            "depth=%u "
-            "arrayed=%u "
-            "ms=%u "
-            "sampled=%u "
-            "format=%u",
-            var,
-            image->id,
-            image->dim,
-            image->depth,
-            image->arrayed,
-            image->ms,
-            image->sampled,
-            image->format);
-        if (image->dim == SpvDimSubpassData)
-        {
-            STEREO_LOG(
-                "FS_BINDING_SUBPASS_ATTACHMENT "
-                "var=%u "
-                "image=%u "
-                "set=%u "
-                "binding=%u "
-                "stereo=1",
-                var,
-                image->id,
-                v->set,
-                v->binding);
-            return true;
-        }
+            "FS_BINDING_INPUT_ATTACHMENT var=%u stereo=1",
+            var);
+        return true;
     }
+    /*
+     * Deferred rendering attachments:
+     *
+     * binding 0 = depth/position
+     * binding 1 = normal
+     * binding 2 = albedo
+     * binding 3 = specular
+     * binding 4 = SSAO/deferred intermediate
+     */
+    bool stereo =
+        (v->binding <= 4);
     STEREO_LOG(
         "FS_BINDING_RESULT "
         "var=%u "
         "storage=%u "
         "set=%u "
         "binding=%u "
-        "stereo=0 "
-        "reason=NOT_SUBPASS_ATTACHMENT",
+        "stereo=%u",
         var,
         v->storage,
         v->set,
-        v->binding);
-    return false;
+        v->binding,
+        stereo);
+    return stereo;
 }
 
 static uint32_t fs_result_type_of(FsScan *s,
@@ -3923,23 +3920,9 @@ fs_should_patch_sample(
     uint64_t spv_hash,
     uint32_t descriptor_var)
 {
-    STEREO_LOG(
-        "FS_SHOULD_PATCH_ENTER "
-        "hash=%016llx "
-        "descriptor=%u",
-        (unsigned long long)spv_hash,
-        descriptor_var);
     int vi = fs_var_index(s, descriptor_var);
     if (vi < 0)
-    {
-        STEREO_LOG(
-            "FS_SHOULD_PATCH_LOOKUP_FAIL "
-            "hash=%016llx "
-            "descriptor=%u",
-            (unsigned long long)spv_hash,
-            descriptor_var);
         return false;
-    }
     uint32_t binding = s->vars[vi].binding;
     uint32_t set     = s->vars[vi].set;
     ///*
@@ -3985,31 +3968,7 @@ fs_should_patch_sample(
         descriptor_var,
         set,
         binding);
-    bool stereo = fs_binding_is_stereo_attachment(s, descriptor_var);
-    for (uint32_t img = 0; img < s->n_img; img++)
-    {
-        if (s->images[img].owner_var != descriptor_var)
-            continue;
-        STEREO_LOG(
-            "FS_PATCH_IMAGE "
-            "hash=%016llx "
-            "descriptor=%u "
-            "image=%u "
-            "dim=%u "
-            "arrayed=%u "
-            "stereo=%u "
-            "sampledType=%u "
-            "pointerType=%u",
-            (unsigned long long)spv_hash,
-            descriptor_var,
-            s->images[img].id,
-            s->images[img].dim,
-            s->images[img].arrayed,
-            s->images[img].stereo,
-            s->images[img].sampled_type,
-            s->images[img].pointer_type);
-    }
-    return stereo;
+    return fs_binding_is_stereo_attachment(s, descriptor_var);
 }
 
 /*
@@ -10902,7 +10861,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        if (((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
+        if (((vs_fullscreen && !vs_screen_space) || (is_quad && !vs_screen_space) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
