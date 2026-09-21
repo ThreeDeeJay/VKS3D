@@ -820,6 +820,25 @@ stereo_CmdBeginRenderPass(
                 (void*)(uintptr_t)image);
         }
     }
+    if (fb_found)
+    {
+        uint32_t ci = UINT32_MAX;
+        for (uint32_t i = 0; i < sd->cmd_fb_track_count; i++)
+        {
+            if (sd->cmd_fb_tracks[i].cmd == commandBuffer)
+            {
+                ci = i;
+                break;
+            }
+        }
+        if (ci == UINT32_MAX && sd->cmd_fb_track_count < MAX_CMD_FB_TRACK)
+        {
+            ci = sd->cmd_fb_track_count++;
+            sd->cmd_fb_tracks[ci].cmd = commandBuffer;
+        }
+        if (ci != UINT32_MAX)
+            sd->cmd_fb_tracks[ci].fb_track = fb_track_index;
+    }
     if (mv_rp)
     {
         VkRenderPassBeginInfo modified = *pRenderPassBegin;
@@ -2445,19 +2464,25 @@ stereo_CmdBlitImage(
     bool stereo_blit = src_upgraded != UINT32_MAX && dst_upgraded != UINT32_MAX;
     uint32_t src_view_index = UINT32_MAX;
     VkImageView src_view = VK_NULL_HANDLE;
-    for (uint32_t fi = 0; fi < MAX_FB_TRACK; fi++)
+    for (uint32_t ci = 0; ci < sd->cmd_fb_track_count; ci++)
     {
-        StereoFramebufferTrack *t = &sd->fb_tracks[fi];
-        if (t->fb == VK_NULL_HANDLE || !t->has_mv)
+        if (sd->cmd_fb_tracks[ci].cmd != commandBuffer)
             continue;
+        uint32_t fi = sd->cmd_fb_tracks[ci].fb_track;
+        if (fi >= MAX_FB_TRACK)
+            continue;
+        StereoFramebufferTrack *t = &sd->fb_tracks[fi];
+        if (!t->has_mv)
+            break;
         for (uint32_t ai = 0; ai < t->attachment_count; ai++)
         {
             if (t->attachment_images[ai] == srcImage)
             {
                 src_view = t->attachment_views[ai];
                 STEREO_LOG(
-                    "BLIT_SOURCE_FB_MATCH src=%p fb=%p track=%u att=%u view=%p",
+                    "BLIT_SOURCE_CMD_FB_MATCH src=%p cmd=%p fb=%p track=%u att=%u view=%p",
                     (void*)srcImage,
+                    (void*)commandBuffer,
                     (void*)t->fb,
                     fi,
                     ai,
@@ -2465,8 +2490,7 @@ stereo_CmdBlitImage(
                 break;
             }
         }
-        if (src_view != VK_NULL_HANDLE)
-            break;
+        break;
     }
     for (uint32_t i = 0; i < sd->upgraded_view_count; i++)
     {

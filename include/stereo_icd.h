@@ -602,6 +602,12 @@ typedef struct StereoDevice {
     /* Per-framebuffer: which render pass (multiview version) was used */
 #define MAX_FB_TRACK           512
     StereoFramebufferTrack fb_tracks[MAX_FB_TRACK];
+#define MAX_CMD_FB_TRACK       1024
+    struct {
+        VkCommandBuffer cmd;
+        uint32_t fb_track;
+    } cmd_fb_tracks[MAX_CMD_FB_TRACK];
+    uint32_t cmd_fb_track_count;
     uint32_t               fb_track_count;
     stereo_mutex_t         lock;
     /* -- Multiview render pass tracking ----------------------------------- *
