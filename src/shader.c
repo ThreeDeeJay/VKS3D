@@ -3923,9 +3923,23 @@ fs_should_patch_sample(
     uint64_t spv_hash,
     uint32_t descriptor_var)
 {
+    STEREO_LOG(
+        "FS_SHOULD_PATCH_ENTER "
+        "hash=%016llx "
+        "descriptor=%u",
+        (unsigned long long)spv_hash,
+        descriptor_var);
     int vi = fs_var_index(s, descriptor_var);
     if (vi < 0)
+    {
+        STEREO_LOG(
+            "FS_SHOULD_PATCH_LOOKUP_FAIL "
+            "hash=%016llx "
+            "descriptor=%u",
+            (unsigned long long)spv_hash,
+            descriptor_var);
         return false;
+    }
     uint32_t binding = s->vars[vi].binding;
     uint32_t set     = s->vars[vi].set;
     ///*
