@@ -837,7 +837,16 @@ stereo_CmdBeginRenderPass(
             sd->cmd_fb_tracks[ci].cmd = commandBuffer;
         }
         if (ci != UINT32_MAX)
+        {
             sd->cmd_fb_tracks[ci].fb_track = fb_track_index;
+            STEREO_LOG(
+                "CMD_FB_BIND cmd=%p ci=%u fb=%p track=%u has_mv=%u",
+                (void*)commandBuffer,
+                ci,
+                (void*)sd->fb_tracks[fb_track_index].fb,
+                fb_track_index,
+                (unsigned)sd->fb_tracks[fb_track_index].has_mv);
+        }
     }
     if (mv_rp)
     {
@@ -2472,10 +2481,23 @@ stereo_CmdBlitImage(
         if (fi >= MAX_FB_TRACK)
             continue;
         StereoFramebufferTrack *t = &sd->fb_tracks[fi];
-        if (!t->has_mv)
-            break;
+        STEREO_LOG(
+            "BLIT_CMD_FB cmd=%p ci=%u fb=%p track=%u has_mv=%u attachments=%u",
+            (void*)commandBuffer,
+            ci,
+            (void*)t->fb,
+            fi,
+            (unsigned)t->has_mv,
+            t->attachment_count);
         for (uint32_t ai = 0; ai < t->attachment_count; ai++)
         {
+            STEREO_LOG(
+                "BLIT_CMD_FB_ATT cmd=%p track=%u att=%u view=%p image=%p",
+                (void*)commandBuffer,
+                fi,
+                ai,
+                (void*)t->attachment_views[ai],
+                (void*)(uintptr_t)t->attachment_images[ai]);
             if (t->attachment_images[ai] == srcImage)
             {
                 src_view = t->attachment_views[ai];
@@ -2487,7 +2509,6 @@ stereo_CmdBlitImage(
                     fi,
                     ai,
                     (void*)src_view);
-                break;
             }
         }
         break;
