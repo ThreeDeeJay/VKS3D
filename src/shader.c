@@ -4009,6 +4009,18 @@ fs_should_patch_sample(
             s->images[img].sampled_type,
             s->images[img].pointer_type);
     }
+    STEREO_LOG(
+        "FS_PATCH_RESULT "
+        "hash=%016llx "
+        "descriptor=%u "
+        "set=%u "
+        "binding=%u "
+        "stereo=%u",
+        (unsigned long long)spv_hash,
+        descriptor_var,
+        set,
+        binding,
+        stereo);
     return stereo;
 }
 
