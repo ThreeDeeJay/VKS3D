@@ -10918,14 +10918,56 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        if (((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
-            !has_ms &&
-            !has_gs &&
-            !has_tes &&
-            !has_tcs &&
-            in_mv_rp &&
-            ci->stageCount > 0 &&
-            fs_stage != ~0u)
+        bool fs_route_shape =
+        (vs_fullscreen && !vs_screen_space) ||
+        (is_quad && vs_quad_fs) ||
+        (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0);
+        bool fs_route_stages =
+        !has_ms &&
+        !has_gs &&
+        !has_tes &&
+        !has_tcs;
+        bool fs_route =
+        fs_route_shape &&
+        fs_route_stages &&
+        in_mv_rp &&
+        ci->stageCount > 0 &&
+        fs_stage != ~0u;
+        STEREO_LOG(
+            "FS_ROUTE_GATE "
+            "p=%u "
+            "shape=%u "
+            "fullscreen=%u "
+            "screen_space=%u "
+            "quad=%u "
+            "quad_fs=%u "
+            "no_vs_gpl_fs=%u "
+            "stages=%u "
+            "ms=%u "
+            "gs=%u "
+            "tes=%u "
+            "tcs=%u "
+            "in_mv=%u "
+            "stageCount=%u "
+            "fs_stage=%u "
+            "pass=%u",
+            p,
+            fs_route_shape,
+            vs_fullscreen,
+            vs_screen_space,
+            is_quad,
+            vs_quad_fs,
+            (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0),
+            fs_route_stages,
+            has_ms,
+            has_gs,
+            has_tes,
+            has_tcs,
+            in_mv_rp,
+            ci->stageCount,
+            fs_stage,
+            fs_route);
+        if (fs_route)
         {
             /* Find FS stage */
             uint32_t fs_s = ~0u;
