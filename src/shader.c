@@ -11115,14 +11115,22 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
                 free_spv_provenance(&fm);
             }
+            STEREO_LOG(
+                "FS_SKIP_CHECK p=%u hash=%016llx",
+                p,
+                (unsigned long long)spv_hash);
             if (stereo_skip_shader_patch(spv_hash))
             {
                 STEREO_LOG(
-                    "MESH_PATCH_SKIPPED p=%u hash=%016llx reason=skip_list",
+                    "FS_PATCH_SKIPPED p=%u hash=%016llx reason=skip_list",
                     p,
                     (unsigned long long)spv_hash);
                 continue;
             }
+            STEREO_LOG(
+                "FS_SKIP_ALLOW p=%u hash=%016llx",
+                p,
+                (unsigned long long)spv_hash);
             STEREO_LOG(
                 "FS_PATCH_BEGIN hash=%016llx pipe=%u",
                 (unsigned long long)spv_hash,
