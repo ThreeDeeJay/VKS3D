@@ -6728,6 +6728,12 @@ bool spirv_patch_stereo_fs(
     uint32_t **out, size_t *out_c)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_fs");
+    STEREO_LOG(
+        "FS_PATCH_ENTER "
+        "words=%zu "
+        "inj_vi=%u",
+        in_c,
+        inj_vi);
     if (!in || in_c < 5 || in[0] != SPIRV_MAGIC) return false;
     STEREO_LOG(
         "FS_PATCH_ENTER hash=%016llx words=%zu",
