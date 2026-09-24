@@ -1846,14 +1846,18 @@ stereo_UpdateDescriptorSets(
                 }
             }
             STEREO_LOG(
-                "DESC_WRITE binding=%u view=%p layout=%u type=%u",
+                "DESC_WRITE set=%p binding=%u array=%u view=%p layout=%u type=%u",
+                (void *)(uintptr_t)w->dstSet,
                 w->dstBinding,
+                w->dstArrayElement + j,
                 (void *)(uintptr_t)view,
                 w->pImageInfo[j].imageLayout,
                 w->descriptorType);
             STEREO_LOG(
-                "DESC_IMAGE_MAP binding=%u view=%p upgraded=%u view_index=%u image=%p stereo=%u color=%u depth=%u storage=%u",
+                "DESC_IMAGE_MAP set=%p binding=%u array=%u view=%p upgraded=%u view_index=%u image=%p stereo=%u color=%u depth=%u storage=%u",
+                (void *)(uintptr_t)w->dstSet,
                 w->dstBinding,
+                w->dstArrayElement + j,
                 (void *)(uintptr_t)view,
                 upgraded ? 1u : 0u,
                 view_index,
@@ -1865,8 +1869,10 @@ stereo_UpdateDescriptorSets(
             if (upgraded)
             {
                 STEREO_LOG(
-                    "DESC_IMAGE_UPGRADED binding=%u view=%p view_index=%u image=%p descriptorType=%u layout=%u",
+                    "DESC_IMAGE_UPGRADED set=%p binding=%u array=%u view=%p view_index=%u image=%p descriptorType=%u layout=%u",
+                    (void *)(uintptr_t)w->dstSet,
                     w->dstBinding,
+                    w->dstArrayElement + j,
                     (void *)(uintptr_t)view,
                     view_index,
                     (void *)(uintptr_t)image,
