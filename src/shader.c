@@ -3874,6 +3874,7 @@ uint32_t var)
             image->ms,
             image->sampled);
         bool subpass = image->dim == SpvDimSubpassData;
+        bool old_binding = v->binding <= 4;
         STEREO_LOG(
             "FS_BINDING_COMPARE "
             "var=%u "
