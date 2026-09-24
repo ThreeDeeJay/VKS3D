@@ -1778,6 +1778,12 @@ stereo_UpdateDescriptorSets(
         {
             VkImageView view = w->pImageInfo[j].imageView;
             bool upgraded = false;
+            uint32_t view_index = UINT32_MAX;
+            VkImage image = VK_NULL_HANDLE;
+            bool stereo_image = false;
+            bool color_image = false;
+            bool depth_image = false;
+            bool storage_image = false;
             for (uint32_t k = 0;
                  k < sd->upgraded_view_count;
                  k++)
@@ -1785,7 +1791,58 @@ stereo_UpdateDescriptorSets(
                 if (sd->upgraded_views[k] == view)
                 {
                     upgraded = true;
+                    view_index = k;
+                    if (k < sd->upgraded_image_count)
+                        image = sd->upgraded_images[k];
                     break;
+                }
+            }
+            if (image != VK_NULL_HANDLE)
+            {
+                for (uint32_t k = 0;
+                    k < sd->swapchain_count;
+                    k++)
+                {
+                    StereoSwapchain *sc = &sd->swapchains[k];
+                    if (!sc->stereo_images)
+                        continue;
+                    for (uint32_t n = 0; n < sc->image_count; n++)
+                    {
+                        if (sc->stereo_images[n] == image)
+                        {
+                            stereo_image = true;
+                            break;
+                        }
+                    }
+                    if (stereo_image)
+                        break;
+                }
+                for (uint32_t k = 0;
+                    k < sd->intercepted_color_count; k++)
+                {
+                    if (sd->intercepted_color[k] == image)
+                    {
+                        color_image = true;
+                        break;
+                    }
+                }
+                for (uint32_t k = 0;
+                    k < sd->intercepted_depth_count; k++)
+                {
+                    if (sd->intercepted_depth[k] == image)
+                    {
+                        depth_image = true;
+                        break;
+                    }
+                }
+                for (uint32_t k = 0;
+                    k < sd->intercepted_storage_count; k++)
+                {
+                    if (sd->intercepted_storage[k] == image)
+                    {
+                        storage_image = true;
+                        break;
+                    }
                 }
             }
             STEREO_LOG(
@@ -1795,16 +1852,24 @@ stereo_UpdateDescriptorSets(
                 w->pImageInfo[j].imageLayout,
                 w->descriptorType);
             STEREO_LOG(
-                "DESC_IMAGE_WRITE binding=%u view=%p upgraded=%d",
+                "DESC_IMAGE_MAP binding=%u view=%p upgraded=%u view_index=%u image=%p stereo=%u color=%u depth=%u storage=%u",
                 w->dstBinding,
                 (void *)(uintptr_t)view,
-                upgraded);
+                upgraded ? 1u : 0u,
+                view_index,
+                (void *)(uintptr_t)image,
+                stereo_image ? 1u : 0u,
+                color_image ? 1u : 0u,
+                depth_image ? 1u : 0u,
+                storage_image ? 1u : 0u);
             if (upgraded)
             {
                 STEREO_LOG(
-                    "DESC_IMAGE_UPGRADED binding=%u view=%p descriptorType=%u layout=%u",
+                    "DESC_IMAGE_UPGRADED binding=%u view=%p view_index=%u image=%p descriptorType=%u layout=%u",
                     w->dstBinding,
                     (void *)(uintptr_t)view,
+                    view_index,
+                    (void *)(uintptr_t)image,
                     w->descriptorType,
                     w->pImageInfo[j].imageLayout);
             }
