@@ -1878,6 +1878,28 @@ stereo_UpdateDescriptorSets(
                     (void *)(uintptr_t)image,
                     w->descriptorType,
                     w->pImageInfo[j].imageLayout);
+                bool tracked_set = false;
+                for (uint32_t k = 0; k < sd->upgraded_descriptor_count; k++)
+                {
+                    if (sd->upgraded_descriptor_sets[k] == w->dstSet)
+                    {
+                        tracked_set = true;
+                        break;
+                    }
+                }
+                if (!tracked_set &&
+                    sd->upgraded_descriptor_count < MAX_UPGRADED_DESCRIPTOR_SETS)
+                {
+                    sd->upgraded_descriptor_sets[sd->upgraded_descriptor_count++] = w->dstSet;
+                    STEREO_LOG(
+                        "DESC_SET_STEREO_TRACK "
+                        "set=%p "
+                        "binding=%u "
+                        "array=%u",
+                        w->dstSet,
+                        w->dstBinding,
+                        w->dstArrayElement + j);
+                }
             }
         }
     }
@@ -1911,11 +1933,29 @@ stereo_CmdBindDescriptorSets(
         dynamicOffsetCount);
     for (uint32_t i = 0; i < descriptorSetCount; i++)
     {
-        STEREO_LOG(
-            "RT_DESC_SET cb=%p set_index=%u set=%p",
-            (void*)commandBuffer,
-            firstSet + i,
-            (void*)(uintptr_t)pDescriptorSets[i]);
+        if (firstSet + i == 1)
+        {
+            bool has_upgraded = false;
+            for (uint32_t w = 0; w < sd->upgraded_descriptor_count; w++)
+            {
+                if (sd->upgraded_descriptor_sets[w] == pDescriptorSets[i])
+                {
+                    has_upgraded = true;
+                    break;
+                }
+            }
+            if (has_upgraded)
+            {
+                STEREO_LOG(
+                    "RT_DESC_SET_STEREO "
+                    "cb=%p "
+                    "set_index=%u "
+                    "set=%p",
+                    (void*)commandBuffer,
+                    firstSet + i,
+                    (void*)(uintptr_t)pDescriptorSets[i]);
+            }
+        }
     }
     StereoDevice *sd = find_any_device();
     if (!sd)
