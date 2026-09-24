@@ -10768,7 +10768,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         }
                     }
                     STEREO_LOG("VS_OUTPUT_RESULT location=%u has_user=%u has_v3=%u",vs_location_id,vs_has_user_output,vs_has_v3_user_output);
-                    STEREO_LOG("VS_POSITION_CLASS hash=%016llx direct_pos=%u pos_ptr=%u pos_value=%u pos_type=%u component_type=%u one_const=%u z_one=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vm.has_direct_position_write,vs_position_ptr,vs_position_value,vs_position_type,vs_position_component_type,vs_one_const,vs_z_one_position);
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     STEREO_LOG("VS_QUAD_GATE hash=%016llx quad=%u matrix=%u direct_pos=%u result=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),is_quad,vm.has_matrix_ops,vm.has_direct_position_write,vs_quad_fs);
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
@@ -10918,6 +10917,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 free_spv_provenance(&vm);
             }
         }
+        STEREO_LOG("VS_POSITION_CLASS hash=%016llx direct_pos=%u pos_ptr=%u pos_value=%u pos_type=%u component_type=%u one_const=%u z_one=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vm.has_direct_position_write,vs_position_ptr,vs_position_value,vs_position_type,vs_position_component_type,vs_one_const,vs_z_one_position);
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
         if (((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
