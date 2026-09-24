@@ -1931,6 +1931,7 @@ stereo_CmdBindDescriptorSets(
         firstSet,
         descriptorSetCount,
         dynamicOffsetCount);
+    StereoDevice *sd = stereo_device_from_handle(device);
     for (uint32_t i = 0; i < descriptorSetCount; i++)
     {
         if (firstSet + i == 1)
