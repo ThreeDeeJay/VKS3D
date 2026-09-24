@@ -10768,6 +10768,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         }
                     }
                     STEREO_LOG("VS_OUTPUT_RESULT location=%u has_user=%u has_v3=%u",vs_location_id,vs_has_user_output,vs_has_v3_user_output);
+                    STEREO_LOG("VS_POSITION_CLASS hash=%016llx direct_pos=%u pos_ptr=%u pos_value=%u pos_type=%u component_type=%u one_const=%u z_one=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vm.has_direct_position_write,vs_position_ptr,vs_position_value,vs_position_type,vs_position_component_type,vs_one_const,vs_z_one_position);
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
                     STEREO_LOG("VS_QUAD_GATE hash=%016llx quad=%u matrix=%u direct_pos=%u result=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),is_quad,vm.has_matrix_ops,vm.has_direct_position_write,vs_quad_fs);
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
