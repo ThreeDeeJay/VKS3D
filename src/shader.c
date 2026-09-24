@@ -967,6 +967,7 @@ static void do_scan(SpvMod *m, bool p2)
                     if (source >= m->value_capacity ||
                         !MAT(source))
                     {
+                        STEREO_LOG("DIRECT_POS_STORE pos_var=%u source=%u source_in_range=%u source_mat=%u function=%u",m->pos_var,source,source < m->value_capacity,source < m->value_capacity ? MAT(source) : 0,current_function);
                         m->has_direct_position_write = true;
                     }
                 }
