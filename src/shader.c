@@ -10769,6 +10769,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     }
                     STEREO_LOG("VS_OUTPUT_RESULT location=%u has_user=%u has_v3=%u",vs_location_id,vs_has_user_output,vs_has_v3_user_output);
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
+                    STEREO_LOG("VS_QUAD_GATE hash=%016llx quad=%u matrix=%u direct_pos=%u result=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),is_quad,vm.has_matrix_ops,vm.has_direct_position_write,vs_quad_fs);
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
                     bool vs_z_one_position = false;
