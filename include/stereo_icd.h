@@ -683,6 +683,15 @@ typedef struct StereoDevice {
 #define MAX_UPGRADED_DESCRIPTOR_SETS 4096
     VkDescriptorSet upgraded_descriptor_sets[MAX_UPGRADED_DESCRIPTOR_SETS];
     uint32_t upgraded_descriptor_count;
+#define MAX_DESCRIPTOR_SET_IMAGES 16384
+    struct {
+        VkDescriptorSet set;
+        uint32_t binding;
+        uint32_t array;
+        VkImageView view;
+        bool upgraded;
+    } descriptor_set_images[MAX_DESCRIPTOR_SET_IMAGES];
+    uint32_t descriptor_set_image_count;
 } StereoDevice;
 
 void stereo_write_ubo(StereoDevice *sd);

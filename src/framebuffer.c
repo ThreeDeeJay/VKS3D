@@ -1866,6 +1866,15 @@ stereo_UpdateDescriptorSets(
                 color_image ? 1u : 0u,
                 depth_image ? 1u : 0u,
                 storage_image ? 1u : 0u);
+            if (sd->descriptor_set_image_count < MAX_DESCRIPTOR_SET_IMAGES)
+            {
+                uint32_t di = sd->descriptor_set_image_count++;
+                sd->descriptor_set_images[di].set = w->dstSet;
+                sd->descriptor_set_images[di].binding = w->dstBinding;
+                sd->descriptor_set_images[di].array = w->dstArrayElement + j;
+                sd->descriptor_set_images[di].view = view;
+                sd->descriptor_set_images[di].upgraded = upgraded;
+            }
             if (upgraded)
             {
                 STEREO_LOG(
@@ -1938,26 +1947,41 @@ stereo_CmdBindDescriptorSets(
     {
         if (firstSet + i == 1)
         {
-            bool has_upgraded = false;
-            for (uint32_t w = 0; w < sd->upgraded_descriptor_count; w++)
+            VkDescriptorSet ds = pDescriptorSets[i];
+            uint32_t image_count = 0;
+            uint32_t upgraded_count = 0;
+            for (uint32_t w = 0; w < sd->descriptor_set_image_count; w++)
             {
-                if (sd->upgraded_descriptor_sets[w] == pDescriptorSets[i])
-                {
-                    has_upgraded = true;
-                    break;
-                }
-            }
-            if (has_upgraded)
-            {
+                if (sd->descriptor_set_images[w].set != ds)
+                    continue;
+                image_count++;
+                if (sd->descriptor_set_images[w].upgraded)
+                    upgraded_count++;
                 STEREO_LOG(
-                    "RT_DESC_SET_STEREO "
+                    "RT_DESC_SET1_IMAGE "
                     "cb=%p "
-                    "set_index=%u "
-                    "set=%p",
+                    "set=%p "
+                    "binding=%u "
+                    "array=%u "
+                    "view=%p "
+                    "upgraded=%u",
                     (void*)commandBuffer,
-                    firstSet + i,
-                    (void*)(uintptr_t)pDescriptorSets[i]);
+                    (void*)(uintptr_t)ds,
+                    sd->descriptor_set_images[w].binding,
+                    sd->descriptor_set_images[w].array,
+                    (void*)(uintptr_t)sd->descriptor_set_images[w].view,
+                    sd->descriptor_set_images[w].upgraded ? 1u : 0u);
             }
+            STEREO_LOG(
+                "RT_DESC_SET1_SUMMARY "
+                "cb=%p "
+                "set=%p "
+                "images=%u "
+                "upgraded=%u",
+                (void*)commandBuffer,
+                (void*)(uintptr_t)ds,
+                image_count,
+                upgraded_count);
         }
     }
     if (sd->stereo.enabled &&
