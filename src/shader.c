@@ -3855,7 +3855,42 @@ uint32_t var)
             image->ms,
             image->sampled,
             image->format);
-        if (image->dim == SpvDimSubpassData)
+        STEREO_LOG(
+            "FS_BINDING_CLASSIFY "
+            "var=%u "
+            "image=%u "
+            "set=%u "
+            "binding=%u "
+            "dim=%u "
+            "arrayed=%u "
+            "ms=%u "
+            "sampled=%u",
+            var,
+            image->id,
+            v->set,
+            v->binding,
+            image->dim,
+            image->arrayed,
+            image->ms,
+            image->sampled);
+        bool subpass = image->dim == SpvDimSubpassData;
+        STEREO_LOG(
+            "FS_BINDING_COMPARE "
+            "var=%u "
+            "image=%u "
+            "set=%u "
+            "binding=%u "
+            "dim=%u "
+            "subpass=%u "
+            "old_binding=%u",
+            var,
+            image->id,
+            v->set,
+            v->binding,
+            image->dim,
+            subpass,
+            old_binding);
+        if (subpass)
         {
             STEREO_LOG(
                 "FS_BINDING_SUBPASS_ATTACHMENT "
