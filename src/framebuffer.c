@@ -1923,6 +1923,9 @@ stereo_CmdBindDescriptorSets(
     const uint32_t *pDynamicOffsets)
 {
     STEREO_LOG("CALLED stereo_CmdBindDescriptorSets");
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
     STEREO_LOG(
         "RT_DESC_BIND cb=%p bind_point=%u layout=%p first_set=%u count=%u dynamic_count=%u",
         (void*)commandBuffer,
@@ -1931,7 +1934,6 @@ stereo_CmdBindDescriptorSets(
         firstSet,
         descriptorSetCount,
         dynamicOffsetCount);
-    StereoDevice *sd = stereo_device_from_handle(device);
     for (uint32_t i = 0; i < descriptorSetCount; i++)
     {
         if (firstSet + i == 1)
@@ -1958,9 +1960,6 @@ stereo_CmdBindDescriptorSets(
             }
         }
     }
-    StereoDevice *sd = find_any_device();
-    if (!sd)
-        return;
     if (sd->stereo.enabled &&
         pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS &&
         pDescriptorSets &&
