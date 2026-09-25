@@ -12065,12 +12065,15 @@ stereo_CreateRayTracingPipelinesKHR(
     for (uint32_t p = 0; p < createInfoCount; p++)
     {
         const VkRayTracingPipelineCreateInfoKHR *ci = &pCreateInfos[p];
+        VkBool32 rt_raygen = VK_FALSE;
+        VkBool32 patched_rt_raygen = VK_FALSE;
         patched_ci[p] = *ci;
         for (uint32_t s = 0; s < ci->stageCount; s++)
         {
             const VkPipelineShaderStageCreateInfo *st = &ci->pStages[s];
             if (st->stage != VK_SHADER_STAGE_RAYGEN_BIT_KHR)
                 continue;
+            rt_raygen = VK_TRUE;
             StereoShaderCache *cache = cache_find(sd, st->module);
             if (!cache)
             {
@@ -12202,6 +12205,7 @@ stereo_CreateRayTracingPipelinesKHR(
             patched_stages[p][s].pNext=NULL;
             patched_ci[p].pStages = patched_stages[p];
             tmp_raygen_modules[p] = tmp_module;
+            patched_rt_raygen = VK_TRUE;
             STEREO_LOG(
                 "RT_PATCH_SUCCESS p=%u stage=%u original=%p patched=%p words=%zu",
                 p,
@@ -12212,14 +12216,15 @@ stereo_CreateRayTracingPipelinesKHR(
             break;
         }
         STEREO_LOG(
-            "RT_PIPE p=%u stages=%u groups=%u recursion=%u layout=%p base=%p patched_raygen=%u",
+            "RT_PIPE p=%u stages=%u groups=%u recursion=%u layout=%p base=%p rt_raygen=%u patched_raygen=%u",
             p,
             ci->stageCount,
             ci->groupCount,
             ci->maxPipelineRayRecursionDepth,
             (void *)ci->layout,
             (void *)ci->basePipelineHandle,
-            tmp_raygen_modules[p] != VK_NULL_HANDLE);
+            rt_raygen,
+            patched_rt_raygen);
         for (uint32_t s = 0; s < ci->stageCount; s++)
         {
             const VkPipelineShaderStageCreateInfo *st =
