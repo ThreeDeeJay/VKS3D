@@ -9418,6 +9418,7 @@ spirv_patch_stereo_raygen(
     uint32_t remix_trace_tmin = 0;
     uint32_t remix_trace_tmax = 0;
     uint32_t remix_direction_producer = 0;
+    uint32_t remix_origin_producer = 0;
     uint32_t remix_binding_31 = 0;
     uint32_t remix_descriptor_set_0 = 0;
     for (size_t i = 5; i < in_c;)
@@ -9645,11 +9646,16 @@ spirv_patch_stereo_raygen(
                 uint16_t dop = (uint16_t)(in[d] & 0xffffu);
                 if (!dwc || d + dwc > in_c)
                     break;
-                if (dwc >= 3 && in[d + 2] == remix_trace_direction)
+                if (dwc >= 4 && in[d + 2] == remix_trace_direction)
                 {
                     remix_direction_producer = (uint32_t)d;
-                    STEREO_LOG("RT_PATCH_REMIX_DIRECTION_DEF i=%zu op=%u wc=%u id=%u", d, dop, dwc, remix_trace_direction);
+                    STEREO_LOG("RT_PATCH_REMIX_DIRECTION_DEF i=%zu op=%u wc=%u id=%u ptr=%u", d, dop, dwc, remix_trace_direction, in[d + 3]);
                     break;
+                }
+                if (dwc >= 4 && in[d + 2] == remix_trace_origin)
+                {
+                    remix_origin_producer = (uint32_t)d;
+                    STEREO_LOG("RT_PATCH_REMIX_ORIGIN_DEF i=%zu op=%u wc=%u id=%u ptr=%u", d, dop, dwc, remix_trace_origin, in[d + 3]);
                 }
                 d += dwc;
             }
