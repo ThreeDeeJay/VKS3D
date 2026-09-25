@@ -1750,6 +1750,22 @@ stereo_UpdateDescriptorSets(
     for (uint32_t i = 0; i < descriptorWriteCount; i++)
     {
         const VkWriteDescriptorSet *w = &pDescriptorWrites[i];
+        STEREO_LOG(
+            "DESC_WRITE_ANY "
+            "set=%p "
+            "binding=%u "
+            "array=%u "
+            "count=%u "
+            "type=%u "
+            "pImageInfo=%p "
+            "pBufferInfo=%p",
+            (void *)(uintptr_t)w->dstSet,
+            w->dstBinding,
+            w->dstArrayElement,
+            w->descriptorCount,
+            w->descriptorType,
+            (void *)w->pImageInfo,
+            (void *)w->pBufferInfo);
         if (w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
             w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
         {
@@ -1911,6 +1927,26 @@ stereo_UpdateDescriptorSets(
                 }
             }
         }
+    }
+    for (uint32_t i = 0; i < descriptorCopyCount; i++)
+    {
+        const VkCopyDescriptorSet *c = &pDescriptorCopies[i];
+        STEREO_LOG(
+            "DESC_COPY "
+            "srcSet=%p "
+            "srcBinding=%u "
+            "srcArray=%u "
+            "dstSet=%p "
+            "dstBinding=%u "
+            "dstArray=%u "
+            "count=%u",
+            (void *)(uintptr_t)c->srcSet,
+            c->srcBinding,
+            c->srcArrayElement,
+            (void *)(uintptr_t)c->dstSet,
+            c->dstBinding,
+            c->dstArrayElement,
+            c->descriptorCount);
     }
     sd->real.UpdateDescriptorSets(
         sd->real_device,
