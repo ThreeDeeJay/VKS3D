@@ -1665,14 +1665,31 @@ stereo_UpdateDescriptorSets(
                 w->dstBinding,
                 (void *)(uintptr_t)view,
                 upgraded);
+            VkImage descriptor_image = VK_NULL_HANDLE;
+            for (uint32_t k = 0; k < sd->tracked_image_view_count; k++)
+            {
+                if (sd->tracked_image_views[k] == view)
+                {
+                    descriptor_image = sd->tracked_image_view_images[k];
+                    break;
+                }
+            }
+            STEREO_LOG(
+                "DESC_IMAGE_RESOLVE binding=%u view=%p image=%p type=%u layout=%u",
+                w->dstBinding,
+                (void *)(uintptr_t)view,
+                (void *)(uintptr_t)descriptor_image,
+                w->descriptorType,
+                w->pImageInfo[j].imageLayout);
             if (upgraded)
             {
                 STEREO_LOG(
-                    "DESC_IMAGE_UPGRADED binding=%u view=%p descriptorType=%u layout=%u",
+                    "DESC_IMAGE_UPGRADED binding=%u view=%p descriptorType=%u layout=%u image=%p",
                     w->dstBinding,
                     (void *)(uintptr_t)view,
                     w->descriptorType,
-                    w->pImageInfo[j].imageLayout);
+                    w->pImageInfo[j].imageLayout,
+                    (void *)(uintptr_t)descriptor_image);
             }
         }
     }
