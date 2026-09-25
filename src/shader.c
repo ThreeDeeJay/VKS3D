@@ -9665,6 +9665,24 @@ spirv_patch_stereo_raygen(
         }
         i += wc;
         }
+        STEREO_LOG("RT_PATCH_INTERFACE launch_id=%u", launch_id_var);
+        for (size_t d = 5; d < in_c;)
+        {
+            uint32_t dop = in[d] & 0xffffu;
+            uint32_t dwc = in[d] >> 16;
+            if (!dwc || d + dwc > in_c)
+                break;
+            if (dop == SpvOpDecorate &&
+                dwc >= 4 &&
+                in[d + 2] == SpvDecorationBuiltIn)
+            {
+                STEREO_LOG(
+                    "RT_PATCH_BUILTIN target=%u builtin=%u",
+                    in[d + 1],
+                    in[d + 3]);
+            }
+            d += dwc;
+        }
         STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
         if (!launch_id_var ||
         !launch_id_load ||
@@ -9755,8 +9773,27 @@ spirv_patch_stereo_raygen(
         uint32_t dwc = in[d] >> 16;
         if (!dwc || d + dwc > in_c)
             break;
-        if (dop == SpvOpTraceRayKHR || dop == SpvOpImageWrite || dop == SpvOpMatrixTimesVector)
+        if (dop == SpvOpTraceRayKHR ||
+            dop == SpvOpImageWrite ||
+            dop == SpvOpImageRead ||
+            dop == SpvOpMatrixTimesVector ||
+            dop == SpvOpVectorTimesMatrix ||
+            dop == SpvOpLoad ||
+            dop == SpvOpStore ||
+            dop == SpvOpAccessChain ||
+            dop == SpvOpInBoundsAccessChain ||
+            dop == SpvOpCompositeExtract ||
+            dop == SpvOpCompositeConstruct ||
+            dop == SpvOpConvertSToF ||
+            dop == SpvOpConvertUToF ||
+            dop == SpvOpBitcast ||
+            dop == SpvOpFAdd ||
+            dop == SpvOpFSub ||
+            dop == SpvOpFMul ||
+            dop == SpvOpFDiv)
+        {
             STEREO_LOG("RT_PATCH_INSTR i=%zu op=%u wc=%u", d, dop, dwc);
+        }
         d += dwc;
     }
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
