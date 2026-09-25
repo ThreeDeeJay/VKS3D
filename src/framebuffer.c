@@ -1127,6 +1127,22 @@ stereo_CmdTraceRaysKHR(
             break;
         }
     }
+    if (rt_set0 != VK_NULL_HANDLE)
+    {
+        for (uint32_t i = 0; i < sd->rt_desc_tracked_set_count; i++)
+        {
+            if (sd->rt_desc_tracked_sets[i] == rt_set0)
+            {
+                STEREO_LOG(
+                    "RT_TRACE_BIND15 set=%p view=%p image=%p slot=%u",
+                    (void*)(uintptr_t)rt_set0,
+                    (void*)(uintptr_t)sd->rt_desc_binding15_views[i],
+                    (void*)(uintptr_t)sd->rt_desc_binding15_images[i],
+                    i);
+                break;
+            }
+        }
+    }
     STEREO_LOG(
         "RT_TRACE_STEREO width=%u height=%u depth_in=%u depth_out=%u enabled=%u launch_layers=%u",
         width,
@@ -1793,6 +1809,24 @@ stereo_UpdateDescriptorSets(
                     w->descriptorType,
                     w->pImageInfo[j].imageLayout,
                     upgraded ? 1u : 0u);
+            }
+            if (w->dstBinding == 15 && j == 0)
+            {
+                for (uint32_t k = 0; k < sd->rt_desc_tracked_set_count; k++)
+                {
+                    if (sd->rt_desc_tracked_sets[k] == w->dstSet)
+                    {
+                        sd->rt_desc_binding15_views[k] = view;
+                        sd->rt_desc_binding15_images[k] = descriptor_image;
+                        STEREO_LOG(
+                            "RT_BIND15_TRACK set=%p view=%p image=%p slot=%u",
+                            (void *)(uintptr_t)w->dstSet,
+                            (void *)(uintptr_t)view,
+                            (void *)(uintptr_t)descriptor_image,
+                            k);
+                        break;
+                    }
+                }
             }
             if (upgraded)
             {
