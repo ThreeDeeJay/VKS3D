@@ -12082,6 +12082,16 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 info->pipeline = pP[p];
                 info->layout =
                     pCI[p].layout;
+                STEREO_LOG(
+                    "PIPELINE_LAYOUT "
+                    "pipeline=%p "
+                    "layout=%p "
+                    "renderpass=%p "
+                    "mv_renderpass=%p",
+                    (void *)(uintptr_t)pP[p],
+                    (void *)(uintptr_t)pCI[p].layout,
+                    (void *)(uintptr_t)pCI[p].renderPass,
+                    (void *)(uintptr_t)infos[p].renderPass);
                 info->original_renderpass =
                     pCI[p].renderPass;
                 info->mv_renderpass =

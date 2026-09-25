@@ -1156,10 +1156,11 @@ stereo_CmdBindPipeline(
     if (info)
     {
         STEREO_LOG(
-            "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
+            "PIPE_BIND pipe=%p layout=%p fb=%p rp=%p mv_rp=%p "
             "orig_rp=%p patched_vs=%u patched_fs=%u "
             "quad=%u bindings=%u",
             (void*)pipeline,
+            (void*)info->layout,
             (void*)active_fb,
             (void*)active_rp,
             (void*)info->mv_renderpass,
