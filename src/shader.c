@@ -10140,16 +10140,6 @@ spirv_patch_stereo_raygen(
         lo,
         ro,
         conv);
-        image_write_coord,
-        new_coord,
-        launch_id_load,
-        origin_vec,
-        ray_ndc_vec,
-        camera_stereo,
-        projection_mode,
-        lo,
-        ro,
-        conv);
     return true;
 }
 
