@@ -9607,6 +9607,27 @@ spirv_patch_stereo_raygen(
             ray_ndc_vec,
             ray_ndc_mat,
             matrix_times_vector_count);
+        STEREO_LOG(
+            "RT_PATCH_REQUIRED launch=%u launch_load=%u image_type=%u image_coord=%u function=%u label=%u int=%u uint=%u float=%u v2int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mtv=%u",
+            launch_id_var != 0,
+            launch_id_load != 0,
+            image_type != 0,
+            (image_read_coord || image_write_coord) != 0,
+            first_function != 0,
+            first_label != 0,
+            int_type != 0,
+            uint_type != 0,
+            float_type != 0,
+            v2int_type != 0,
+            v3uint_type != 0,
+            v4float_type != 0,
+            image_texel_type != 0,
+            float_zero != 0,
+            origin_vec != 0,
+            origin_mtv != 0,
+            origin_var != 0,
+            ray_ndc_vec != 0,
+            ray_ndc_mtv != 0);
         return false;
     }
     STEREO_LOG(
