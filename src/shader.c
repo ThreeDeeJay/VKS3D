@@ -9385,6 +9385,7 @@ spirv_patch_stereo_raygen(
     uint32_t launch_id_var = 0;
     uint32_t launch_id_load = 0;
     uint32_t image_type = 0;
+    uint32_t image_write_image = 0;
     uint32_t image_read_coord = 0;
     uint32_t image_write_coord = 0;
     uint32_t float_zero = 0;
@@ -9488,6 +9489,8 @@ spirv_patch_stereo_raygen(
         }
         else if (op == SpvOpImageWrite && wc >= 4)
         {
+            if (!image_write_image)
+                image_write_image = in[i + 1];
             if (!image_write_coord)
                 image_write_coord = in[i + 2];
         }
@@ -9538,9 +9541,55 @@ spirv_patch_stereo_raygen(
             first_label = (uint32_t)i;
         }
         i += wc;
+    }
+    if (image_write_image)
+    {
+        for (size_t d = 5; d < in_c;)
+        {
+            uint32_t dop = in[d] & 0xffffu;
+            uint32_t dwc = in[d] >> 16;
+            if (!dwc || d + dwc > in_c)
+                break;
+            if (dop == SpvOpLoad &&
+                dwc >= 4 &&
+                in[d + 2] == image_write_image)
+            {
+                image_type = in[d + 1];
+                STEREO_LOG(
+                    "RT_PATCH_OUTPUT_IMAGE image=%u type=%u load_i=%zu",
+                    image_write_image,
+                    image_type,
+                    d);
+                break;
+            }
+            d += dwc;
         }
-        STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
-        if (!launch_id_var ||
+    }
+    if (image_type)
+    {
+        for (size_t d = 5; d < in_c;)
+        {
+            uint32_t dop = in[d] & 0xffffu;
+            uint32_t dwc = in[d] >> 16;
+            if (!dwc || d + dwc > in_c)
+                break;
+            if (dop == SpvOpTypeImage &&
+                dwc >= 9 &&
+                in[d + 1] == image_type)
+            {
+                image_texel_type = in[d + 2];
+                STEREO_LOG(
+                    "RT_PATCH_OUTPUT_TYPE image_type=%u texel_type=%u type_i=%zu",
+                    image_type,
+                    image_texel_type,
+                    d);
+                break;
+            }
+            d += dwc;
+        }
+    }
+    STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
+    if (!launch_id_var ||
         !launch_id_load ||
         !image_type ||
         (!image_read_coord && !image_write_coord) ||
