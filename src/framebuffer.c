@@ -1118,6 +1118,15 @@ stereo_CmdTraceRaysKHR(
     uint32_t rt_depth = depth;
     if (sd->stereo.enabled && depth == 1)
         rt_depth = 2;
+    VkDescriptorSet rt_set0 = VK_NULL_HANDLE;
+    for (uint32_t i = 0; i < sd->rt_desc_cmd_count; i++)
+    {
+        if (sd->rt_desc_cmds[i] == commandBuffer)
+        {
+            rt_set0 = sd->rt_desc_sets[i];
+            break;
+        }
+    }
     STEREO_LOG(
         "RT_TRACE_STEREO width=%u height=%u depth_in=%u depth_out=%u enabled=%u launch_layers=%u",
         width,
@@ -1126,6 +1135,10 @@ stereo_CmdTraceRaysKHR(
         rt_depth,
         sd->stereo.enabled ? 1u : 0u,
         rt_depth);
+    STEREO_LOG(
+        "RT_TRACE_SET0 cb=%p set=%p",
+        (void*)commandBuffer,
+        (void*)(uintptr_t)rt_set0);
     STEREO_LOG(
         "RT_TRACE_FORWARD real=%p width=%u height=%u depth=%u",
         (void*)sd->real.CmdTraceRaysKHR,
@@ -1875,6 +1888,35 @@ stereo_CmdBindDescriptorSets(
         descriptorSetCount && pDescriptorSets
             ? (void*)(uintptr_t)pDescriptorSets[0]
             : NULL);
+    if (pDescriptorSets &&
+        firstSet == 0 &&
+        descriptorSetCount > 0)
+    {
+        uint32_t slot = UINT32_MAX;
+        for (uint32_t i = 0; i < sd->rt_desc_cmd_count; i++)
+        {
+            if (sd->rt_desc_cmds[i] == commandBuffer)
+            {
+                slot = i;
+                break;
+            }
+        }
+        if (slot == UINT32_MAX &&
+            sd->rt_desc_cmd_count < MAX_RT_CMD_DESC_SETS)
+        {
+            slot = sd->rt_desc_cmd_count++;
+            sd->rt_desc_cmds[slot] = commandBuffer;
+        }
+        if (slot != UINT32_MAX)
+        {
+            sd->rt_desc_sets[slot] = pDescriptorSets[0];
+            STEREO_LOG(
+                "RT_DESC_SET0_TRACK cb=%p set=%p slot=%u",
+                (void*)commandBuffer,
+                (void*)(uintptr_t)pDescriptorSets[0],
+                slot);
+        }
+    }
     sd->real.CmdBindDescriptorSets(
         commandBuffer,
         pipelineBindPoint,
