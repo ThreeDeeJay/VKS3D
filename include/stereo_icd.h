@@ -569,6 +569,14 @@ typedef struct StereoPipelineInfo
     uint32_t proj_var;
 } StereoPipelineInfo;
 
+#define MAX_RT_DESC_TEMPLATES 256
+typedef struct RtDescTemplateTrack {
+    VkDescriptorUpdateTemplate update_template;
+    VkDescriptorSetLayout layout;
+    uint32_t entry_count;
+    VkDescriptorUpdateTemplateEntry entries[64];
+} RtDescTemplateTrack;
+
 typedef struct StereoDevice {
     /* MUST be first: loader reads *(void**)device for dispatch table. */
     VK_LOADER_DATA         loader_data;
@@ -691,13 +699,6 @@ typedef struct StereoDevice {
     uint32_t rt_desc_layout_binding15[MAX_RT_LAYOUT_TRACK];
     uint32_t rt_desc_layout_binding15_type[MAX_RT_LAYOUT_TRACK];
     uint32_t rt_desc_layout_count;
-    #define MAX_RT_DESC_TEMPLATES 256
-    typedef struct RtDescTemplateTrack {
-    VkDescriptorUpdateTemplate update_template;
-    VkDescriptorSetLayout layout;
-    uint32_t entry_count;
-    VkDescriptorUpdateTemplateEntry entries[64];
-    } RtDescTemplateTrack;
     RtDescTemplateTrack rt_desc_templates[MAX_RT_DESC_TEMPLATES];
     uint32_t rt_desc_template_count;
 } StereoDevice;
