@@ -1700,6 +1700,19 @@ stereo_UpdateDescriptorSets(
                 (void *)(uintptr_t)descriptor_image,
                 w->descriptorType,
                 w->pImageInfo[j].imageLayout);
+            if (w->dstBinding == 15)
+            {
+                STEREO_LOG(
+                    "RT_OUTPUT_DESC set=%p binding=%u array=%u view=%p image=%p type=%u layout=%u upgraded=%u",
+                    (void *)(uintptr_t)w->dstSet,
+                    w->dstBinding,
+                    j,
+                    (void *)(uintptr_t)view,
+                    (void *)(uintptr_t)descriptor_image,
+                    w->descriptorType,
+                    w->pImageInfo[j].imageLayout,
+                    upgraded ? 1u : 0u);
+            }
             if (upgraded)
             {
                 STEREO_LOG(
