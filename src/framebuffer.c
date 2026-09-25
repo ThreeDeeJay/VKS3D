@@ -1840,6 +1840,56 @@ stereo_UpdateDescriptorSets(
             }
         }
     }
+    for (uint32_t i = 0; i < descriptorCopyCount; i++)
+    {
+        const VkCopyDescriptorSet *c = &pDescriptorCopies[i];
+        if (c->srcBinding != 15 && c->dstBinding != 15)
+            continue;
+        STEREO_LOG(
+            "RT_DESC_COPY srcSet=%p srcBinding=%u srcArray=%u dstSet=%p dstBinding=%u dstArray=%u count=%u",
+            (void*)(uintptr_t)c->srcSet,
+            c->srcBinding,
+            c->srcArrayElement,
+            (void*)(uintptr_t)c->dstSet,
+            c->dstBinding,
+            c->dstArrayElement,
+            c->descriptorCount);
+        if (c->srcBinding != 15 ||
+            c->dstBinding != 15 ||
+            c->srcArrayElement != 0 ||
+            c->dstArrayElement != 0 ||
+            c->descriptorCount == 0)
+            continue;
+        uint32_t src_slot = UINT32_MAX;
+        uint32_t dst_slot = UINT32_MAX;
+        for (uint32_t k = 0; k < sd->rt_desc_tracked_set_count; k++)
+        {
+            if (sd->rt_desc_tracked_sets[k] == c->srcSet)
+                src_slot = k;
+            if (sd->rt_desc_tracked_sets[k] == c->dstSet)
+                dst_slot = k;
+        }
+        STEREO_LOG(
+            "RT_DESC_COPY_SLOTS src=%p slot=%u dst=%p slot=%u",
+            (void*)(uintptr_t)c->srcSet,
+            src_slot,
+            (void*)(uintptr_t)c->dstSet,
+            dst_slot);
+        if (src_slot != UINT32_MAX &&
+            dst_slot != UINT32_MAX)
+        {
+            sd->rt_desc_binding15_views[dst_slot] =
+            sd->rt_desc_binding15_views[src_slot];
+            sd->rt_desc_binding15_images[dst_slot] =
+            sd->rt_desc_binding15_images[src_slot];
+            STEREO_LOG(
+                "RT_BIND15_COPY_TRACK dst=%p view=%p image=%p slot=%u",
+                (void*)(uintptr_t)c->dstSet,
+                (void*)(uintptr_t)sd->rt_desc_binding15_views[dst_slot],
+                (void*)(uintptr_t)sd->rt_desc_binding15_images[dst_slot],
+                dst_slot);
+        }
+    }
     sd->real.UpdateDescriptorSets(
         sd->real_device,
         descriptorWriteCount,
