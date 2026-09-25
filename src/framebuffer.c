@@ -1985,11 +1985,15 @@ stereo_CmdBindDescriptorSets(
         STEREO_LOG(
             "DESC_BIND_SET "
             "cb=%p "
+            "layout=%p "
+            "bindPoint=%u "
             "firstSet=%u "
             "index=%u "
             "setNumber=%u "
             "set=%p",
             (void*)commandBuffer,
+            (void*)(uintptr_t)layout,
+            pipelineBindPoint,
             firstSet,
             i,
             firstSet + i,
