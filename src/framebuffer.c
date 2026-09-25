@@ -1981,9 +1981,21 @@ stereo_CmdBindDescriptorSets(
         dynamicOffsetCount);
     for (uint32_t i = 0; i < descriptorSetCount; i++)
     {
+        VkDescriptorSet ds = pDescriptorSets[i];
+        STEREO_LOG(
+            "DESC_BIND_SET "
+            "cb=%p "
+            "firstSet=%u "
+            "index=%u "
+            "setNumber=%u "
+            "set=%p",
+            (void*)commandBuffer,
+            firstSet,
+            i,
+            firstSet + i,
+            (void*)(uintptr_t)ds);
         if (firstSet + i == 1)
         {
-            VkDescriptorSet ds = pDescriptorSets[i];
             uint32_t image_count = 0;
             uint32_t upgraded_count = 0;
             for (uint32_t w = 0; w < sd->descriptor_set_image_count; w++)
