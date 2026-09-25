@@ -1471,6 +1471,20 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                     sd->intercepted_storage_count,
                     (void *)(uintptr_t)*pImage,
                     pCreateInfo->usage);
+                STEREO_LOG(
+                    "STORAGE_IMAGE_INFO image=%p format=%u extent=%ux%ux%u mip=%u layers=%u samples=%u tiling=%u flags=0x%08X usage=0x%08X type=%u",
+                    (void *)(uintptr_t)*pImage,
+                    pCreateInfo->format,
+                    pCreateInfo->extent.width,
+                    pCreateInfo->extent.height,
+                    pCreateInfo->extent.depth,
+                    pCreateInfo->mipLevels,
+                    pCreateInfo->arrayLayers,
+                    pCreateInfo->samples,
+                    pCreateInfo->tiling,
+                    pCreateInfo->flags,
+                    pCreateInfo->usage,
+                    pCreateInfo->imageType);
             }
         }
     }
