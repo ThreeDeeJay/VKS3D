@@ -9767,35 +9767,31 @@ spirv_patch_stereo_raygen(
         lo,
         ro,
         conv);
-    for (size_t d = 5; d < in_c;)
+    size_t rt_instr_count = 0;
+    for (size_t d = first_label; d < in_c && rt_instr_count < 150;)
     {
         uint32_t dop = in[d] & 0xffffu;
         uint32_t dwc = in[d] >> 16;
         if (!dwc || d + dwc > in_c)
             break;
-        if (dop == SpvOpTraceRayKHR ||
-            dop == SpvOpImageWrite ||
-            dop == SpvOpImageRead ||
-            dop == SpvOpMatrixTimesVector ||
-            dop == SpvOpVectorTimesMatrix ||
-            dop == SpvOpLoad ||
-            dop == SpvOpStore ||
-            dop == SpvOpAccessChain ||
-            dop == SpvOpInBoundsAccessChain ||
-            dop == SpvOpCompositeExtract ||
-            dop == SpvOpCompositeConstruct ||
-            dop == SpvOpConvertSToF ||
-            dop == SpvOpConvertUToF ||
-            dop == SpvOpBitcast ||
-            dop == SpvOpFAdd ||
-            dop == SpvOpFSub ||
-            dop == SpvOpFMul ||
-            dop == SpvOpFDiv)
-        {
-            STEREO_LOG("RT_PATCH_INSTR i=%zu op=%u wc=%u", d, dop, dwc);
-        }
+        if (dop == SpvOpFunctionEnd)
+            break;
+        STEREO_LOG(
+            "RT_PATCH_INSTR i=%zu op=%u wc=%u a1=%u a2=%u a3=%u a4=%u",
+            d,
+            dop,
+            dwc,
+            dwc > 1 ? in[d + 1] : 0,
+            dwc > 2 ? in[d + 2] : 0,
+            dwc > 3 ? in[d + 3] : 0,
+            dwc > 4 ? in[d + 4] : 0);
+        rt_instr_count++;
         d += dwc;
     }
+    STEREO_LOG(
+        "RT_PATCH_INSTR_END count=%zu next=%zu",
+        rt_instr_count,
+        first_label);
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
     uint32_t generated_id_base = bound;
     uint32_t generated_id = generated_id_base;
