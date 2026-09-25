@@ -9947,14 +9947,14 @@ spirv_patch_stereo_raygen(
             };
             uint32_t trace_inst[12];
             memcpy(trace_inst, &in[i], sizeof(trace_inst));
-            trace_inst[7] = remix_origin_shifted;
+            trace_inst[7] = remix_trace_origin;
             sb_push_n(&ob, origin_x, 5);
             sb_push_n(&ob, origin_y, 5);
             sb_push_n(&ob, origin_z, 5);
             sb_push_n(&ob, origin_shift, 5);
             sb_push_n(&ob, new_origin, 6);
             sb_push_n(&ob, trace_inst, 12);
-            STEREO_LOG("RT_PATCH_REMIX_STEREO trace=%zu old_origin=%u new_origin=%u direction=%u offset=%u", i, remix_trace_origin, remix_origin_shifted, remix_trace_direction, selected_offset);
+            STEREO_LOG("RT_PATCH_REMIX_STEREO trace=%zu old_origin=%u test_origin=%u direction=%u offset=%u", i, remix_trace_origin, remix_trace_origin, remix_trace_direction, selected_offset);
             i += wc;
             continue;
         }
@@ -10129,7 +10129,7 @@ spirv_patch_stereo_raygen(
     *out_c = ob.n;
     if (remix_raygen)
     {
-        STEREO_LOG("RT_PATCH_SUCCESS remix trace=%u origin=%u new_origin=%u direction=%u tmin=%u tmax=%u selected_offset=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=origin_x_shift",
+        STEREO_LOG("RT_PATCH_SUCCESS remix trace=%u origin=%u test_origin=%u direction=%u tmin=%u tmax=%u selected_offset=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=origin_x_noop",
             remix_ray_trace,
             remix_trace_origin,
             remix_origin_shifted,
