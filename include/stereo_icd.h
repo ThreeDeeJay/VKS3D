@@ -669,6 +669,10 @@ typedef struct StereoDevice {
     } cb_track[MAX_CB_TRACK];
     uint32_t cb_track_count;
     VkImage upgraded_images[MAX_UPGRADED_VIEWS];
+    #define MAX_IMAGE_VIEW_TRACK 4096
+    VkImageView tracked_image_views[MAX_IMAGE_VIEW_TRACK];
+    VkImage tracked_image_view_images[MAX_IMAGE_VIEW_TRACK];
+    uint32_t tracked_image_view_count;
     uint32_t upgraded_image_count;
 } StereoDevice;
 

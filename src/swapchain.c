@@ -1667,6 +1667,17 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
             (void *)(uintptr_t)upgraded.image,
             upgraded.viewType,
             upgraded.subresourceRange.layerCount);
+        if (sd->tracked_image_view_count < MAX_IMAGE_VIEW_TRACK)
+        {
+            sd->tracked_image_views[sd->tracked_image_view_count] = *pView;
+            sd->tracked_image_view_images[sd->tracked_image_view_count] = pCreateInfo->image;
+            sd->tracked_image_view_count++;
+            STEREO_LOG(
+                "IMAGE_VIEW_TRACK count=%u view=%p image=%p",
+                sd->tracked_image_view_count,
+                (void *)(uintptr_t)*pView,
+                (void *)(uintptr_t)pCreateInfo->image);
+        }
     }
     /* Track upgraded views for framebuffer multiview detection */
     if (_r == VK_SUCCESS &&
