@@ -1259,15 +1259,7 @@ stereo_CmdTraceRaysKHR(
         .extent = { width, height, 1 }
     };
     STEREO_LOG("RT_TRACE_COPY_IMAGE_BEGIN");
-    sd->real.CmdCopyImage(
-        commandBuffer,
-        rt_image,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        dst_image,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1,
-        &copy);
-    STEREO_LOG("RT_TRACE_COPY_IMAGE_END");
+    STEREO_LOG("RT_TRACE_COPY_IMAGE_SKIP");
     VkImageMemoryBarrier src_restore = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
