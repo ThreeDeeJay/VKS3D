@@ -9589,6 +9589,12 @@ spirv_patch_stereo_raygen(
         }
     }
     STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
+    bool camera_stereo =
+        origin_mtv &&
+        origin_vec &&
+        origin_var &&
+        ray_ndc_mtv &&
+        ray_ndc_vec;
     if (!launch_id_var ||
         !launch_id_load ||
         !image_type ||
@@ -9602,15 +9608,10 @@ spirv_patch_stereo_raygen(
         !v3uint_type ||
         !v4float_type ||
         !image_texel_type ||
-        !float_zero ||
-        !origin_mtv ||
-        !origin_vec ||
-        !origin_var ||
-        !ray_ndc_mtv ||
-        !ray_ndc_vec)
+        !float_zero)
     {
         STEREO_LOG(
-            "RT_PATCH_REJECT_FLAGS launch=%u launch_load=%u image_type=%u image_read_coord=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u bool=%u v2int=%u v3int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mtv=%u mtv_count=%u",
+            "RT_PATCH_REJECT_FLAGS launch=%u launch_load=%u image_type=%u image_read_coord=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u bool=%u v2int=%u v3int=%u v3uint=%u v4float=%u texel=%u float_zero=%u camera_stereo=%u",
             !launch_id_var,
             !launch_id_load,
             !image_type,
@@ -9627,37 +9628,9 @@ spirv_patch_stereo_raygen(
             !v4float_type,
             !image_texel_type,
             !float_zero,
-            !origin_vec,
-            !origin_mtv,
-            !origin_var,
-            !ray_ndc_vec,
-            !ray_ndc_mtv,
-            matrix_times_vector_count);
+            camera_stereo);
         STEREO_LOG(
-            "RT_PATCH_REJECT_VALUES launch=%u launch_load=%u image_type=%u image_write_coord=%u first_function=%u first_label=%u int=%u uint=%u float=%u bool=%u v2int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mat=%u mtv_count=%u",
-            launch_id_var,
-            launch_id_load,
-            image_type,
-            image_write_coord,
-            first_function,
-            first_label,
-            int_type,
-            uint_type,
-            float_type,
-            bool_type,
-            v2int_type,
-            v3uint_type,
-            v4float_type,
-            image_texel_type,
-            float_zero,
-            origin_vec,
-            origin_mtv,
-            origin_var,
-            ray_ndc_vec,
-            ray_ndc_mat,
-            matrix_times_vector_count);
-        STEREO_LOG(
-            "RT_PATCH_REQUIRED launch=%u launch_load=%u image_type=%u image_coord=%u function=%u label=%u int=%u uint=%u float=%u v2int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mtv=%u",
+            "RT_PATCH_REQUIRED launch=%u launch_load=%u image_type=%u image_coord=%u function=%u label=%u int=%u uint=%u float=%u v2int=%u v3uint=%u v4float=%u texel=%u float_zero=%u camera_stereo=%u",
             launch_id_var != 0,
             launch_id_load != 0,
             image_type != 0,
@@ -9672,15 +9645,11 @@ spirv_patch_stereo_raygen(
             v4float_type != 0,
             image_texel_type != 0,
             float_zero != 0,
-            origin_vec != 0,
-            origin_mtv != 0,
-            origin_var != 0,
-            ray_ndc_vec != 0,
-            ray_ndc_mtv != 0);
+            camera_stereo);
         return false;
     }
     STEREO_LOG(
-        "RT_PATCH_LAYOUT trace=%u trace_wc=%u image_write_coord=%u launch_load=%u origin_vec=%u origin_mat=%u ray_ndc_vec=%u ray_ndc_mat=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f",
+        "RT_PATCH_LAYOUT trace=%u trace_wc=%u image_write_coord=%u launch_load=%u origin_vec=%u origin_mat=%u ray_ndc_vec=%u ray_ndc_mat=%u camera_stereo=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f",
         0u,
         0u,
         image_write_coord,
@@ -9689,6 +9658,7 @@ spirv_patch_stereo_raygen(
         origin_mat,
         ray_ndc_vec,
         ray_ndc_mat,
+        camera_stereo,
         projection_mode,
         lo,
         ro,
@@ -9936,6 +9906,7 @@ spirv_patch_stereo_raygen(
             continue;
         }
         if (op == SpvOpMatrixTimesVector &&
+            camera_stereo &&
             i == ray_ndc_mtv)
         {
             uint32_t result_id = in[i + 2];
@@ -10088,7 +10059,7 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z_eye_camera",
+        "RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u camera_stereo=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z",
         image_type,
         image_texel_type,
         image_read_coord,
@@ -10097,6 +10068,7 @@ spirv_patch_stereo_raygen(
         launch_id_load,
         origin_vec,
         ray_ndc_vec,
+        camera_stereo,
         projection_mode,
         lo,
         ro,
