@@ -1713,6 +1713,49 @@ stereo_AllocateDescriptorSets(
 }
 
 VKAPI_ATTR void VKAPI_CALL
+stereo_UpdateDescriptorSetWithTemplate(
+    VkDevice device,
+    VkDescriptorSet descriptorSet,
+    VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+    const void *pData)
+{
+    STEREO_LOG("CALLED stereo_UpdateDescriptorSetWithTemplate");
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd)
+        return;
+    uint32_t slot = UINT32_MAX;
+    for (uint32_t i = 0; i < sd->rt_desc_tracked_set_count; i++)
+    {
+        if (sd->rt_desc_tracked_sets[i] == descriptorSet)
+        {
+            slot = i;
+            break;
+        }
+    }
+    STEREO_LOG(
+        "RT_TEMPLATE_UPDATE set=%p template=%p slot=%u data=%p",
+        (void*)(uintptr_t)descriptorSet,
+        (void*)(uintptr_t)descriptorUpdateTemplate,
+        slot,
+        pData);
+    if (slot != UINT32_MAX)
+    {
+        STEREO_LOG(
+            "RT_TEMPLATE_LAYOUT set=%p layout=%p slot=%u",
+            (void*)(uintptr_t)descriptorSet,
+            (void*)(uintptr_t)sd->rt_desc_tracked_layouts[slot],
+            slot);
+    }
+    if (!sd->real.UpdateDescriptorSetWithTemplate)
+        return;
+    sd->real.UpdateDescriptorSetWithTemplate(
+        sd->real_device,
+        descriptorSet,
+        descriptorUpdateTemplate,
+        pData);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 stereo_UpdateDescriptorSets(
     VkDevice device,
     uint32_t descriptorWriteCount,

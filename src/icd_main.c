@@ -327,6 +327,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_AllocateDescriptorSets);
     GDPA_WRAP("vkUpdateDescriptorSets",
               stereo_UpdateDescriptorSets);
+    GDPA_WRAP("vkUpdateDescriptorSetWithTemplate",
+              stereo_UpdateDescriptorSetWithTemplate);
     GDPA_WRAP("vkCmdBindDescriptorSets",
               stereo_CmdBindDescriptorSets);
     GDPA_WRAP("vkCreateRenderPass",

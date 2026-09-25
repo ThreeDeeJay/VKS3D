@@ -378,6 +378,7 @@ typedef struct RealDeviceDispatch {
     PFN_vkAllocateDescriptorSets     AllocateDescriptorSets;
     PFN_vkFreeDescriptorSets         FreeDescriptorSets;
     PFN_vkUpdateDescriptorSets       UpdateDescriptorSets;
+    PFN_vkUpdateDescriptorSetWithTemplate UpdateDescriptorSetWithTemplate;
     PFN_vkCreateFramebuffer          CreateFramebuffer;
     PFN_vkDestroyFramebuffer         DestroyFramebuffer;
     PFN_vkCreateRenderPass           CreateRenderPass;
@@ -854,6 +855,7 @@ VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, 
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies);
+VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSetWithTemplate(VkDevice device,VkDescriptorSet descriptorSet,VkDescriptorUpdateTemplate descriptorUpdateTemplate,const void *pData);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo, VkDescriptorSet *pDescriptorSets);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDescriptorSetLayout *pSetLayout);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
