@@ -9526,10 +9526,10 @@ spirv_patch_stereo_raygen(
         else if (op == SpvOpTraceRayKHR && wc >= 12 && !remix_ray_trace)
         {
             remix_ray_trace = (uint32_t)i;
-            remix_trace_origin = in[i + 8];
-            remix_trace_tmin = in[i + 9];
-            remix_trace_direction = in[i + 10];
-            remix_trace_tmax = in[i + 11];
+            remix_trace_origin = in[i + 7];
+            remix_trace_tmin = in[i + 8];
+            remix_trace_direction = in[i + 9];
+            remix_trace_tmax = in[i + 10];
             STEREO_LOG("RT_PATCH_REMIX_TRACE i=%zu origin=%u tmin=%u direction=%u tmax=%u", i, remix_trace_origin, remix_trace_tmin, remix_trace_direction, remix_trace_tmax);
         }
         else if (op == SpvOpMatrixTimesVector && wc >= 5)
@@ -9654,31 +9654,6 @@ spirv_patch_stereo_raygen(
         lo,
         ro,
         conv);
-    size_t rt_instr_count = 0;
-    for (size_t d = first_label; d < in_c && rt_instr_count < 150;)
-    {
-        uint32_t dop = in[d] & 0xffffu;
-        uint32_t dwc = in[d] >> 16;
-        if (!dwc || d + dwc > in_c)
-            break;
-        if (dop == SpvOpFunctionEnd)
-            break;
-        STEREO_LOG(
-            "RT_PATCH_INSTR i=%zu op=%u wc=%u a1=%u a2=%u a3=%u a4=%u",
-            d,
-            dop,
-            dwc,
-            dwc > 1 ? in[d + 1] : 0,
-            dwc > 2 ? in[d + 2] : 0,
-            dwc > 3 ? in[d + 3] : 0,
-            dwc > 4 ? in[d + 4] : 0);
-        rt_instr_count++;
-        d += dwc;
-    }
-    STEREO_LOG(
-        "RT_PATCH_INSTR_END count=%zu next=%zu",
-        rt_instr_count,
-        first_label);
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
     uint32_t generated_id_base = bound;
     uint32_t generated_id = generated_id_base;
@@ -9947,14 +9922,11 @@ spirv_patch_stereo_raygen(
             };
             uint32_t trace_inst[12];
             memcpy(trace_inst, &in[i], sizeof(trace_inst));
-            trace_inst[8] = remix_origin_shifted;
+            trace_inst[7] = remix_origin_shifted;
             sb_push_n(&ob, origin_x, 5);
             sb_push_n(&ob, origin_y, 5);
             sb_push_n(&ob, origin_z, 5);
             sb_push_n(&ob, origin_shift, 5);
-            new_origin[1] = (6u << 16) | SpvOpCompositeConstruct;
-            new_origin[1] = (6u << 16) | SpvOpCompositeConstruct;
-            new_origin[2] = v3float_type;
             sb_push_n(&ob, new_origin, 6);
             sb_push_n(&ob, trace_inst, 12);
             STEREO_LOG("RT_PATCH_REMIX_STEREO trace=%zu old_origin=%u new_origin=%u direction=%u offset=%u", i, remix_trace_origin, remix_origin_shifted, remix_trace_direction, selected_offset);
@@ -10130,20 +10102,37 @@ spirv_patch_stereo_raygen(
     ob.w[3] = bound;
     *out = ob.w;
     *out_c = ob.n;
-    STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z_eye_camera",
-        image_type,
-        image_texel_type,
-        image_read_coord,
-        image_write_coord,
-        new_coord,
-        launch_id_load,
-        origin_vec,
-        ray_ndc_vec,
-        projection_mode,
-        lo,
-        ro,
-        conv);
+    if (remix_raygen)
+    {
+        STEREO_LOG("RT_PATCH_SUCCESS remix trace=%u origin=%u new_origin=%u direction=%u tmin=%u tmax=%u selected_offset=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=origin_x_shift",
+            remix_ray_trace,
+            remix_trace_origin,
+            remix_origin_shifted,
+            remix_trace_direction,
+            remix_trace_tmin,
+            remix_trace_tmax,
+            selected_offset,
+            projection_mode,
+            lo,
+            ro,
+            conv);
+    }
+    else
+    {
+        STEREO_LOG("RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z_eye_camera",
+            image_type,
+            image_texel_type,
+            image_read_coord,
+            image_write_coord,
+            new_coord,
+            launch_id_load,
+            origin_vec,
+            ray_ndc_vec,
+            projection_mode,
+            lo,
+            ro,
+            conv);
+    }
     return true;
 }
 
