@@ -9396,6 +9396,7 @@ spirv_patch_stereo_raygen(
     uint32_t v3uint_type = 0;
     uint32_t v4float_type = 0;
     uint32_t v3int_type = 0;
+    uint32_t v3float_type = 0;
     uint32_t first_function = 0;
     uint32_t image_texel_type = 0;
     uint32_t origin_vec = 0;
@@ -9408,6 +9409,18 @@ spirv_patch_stereo_raygen(
     uint32_t ray_ndc_mtv = 0;
     uint32_t matrix_times_vector_count = 0;
     uint32_t first_label = 0;
+    uint32_t remix_ray_origin_direction_var = 0;
+    uint32_t remix_ray_origin_direction_image = 0;
+    uint32_t remix_ray_origin_direction_fetch = 0;
+    uint32_t remix_ray_trace = 0;
+    uint32_t remix_trace_origin = 0;
+    uint32_t remix_trace_direction = 0;
+    uint32_t remix_trace_tmin = 0;
+    uint32_t remix_trace_tmax = 0;
+    uint32_t remix_direction_producer = 0;
+    uint32_t remix_origin_producer = 0;
+    uint32_t remix_binding_31 = 0;
+    uint32_t remix_descriptor_set_0 = 0;
     for (size_t i = 5; i < in_c;)
     {
         uint32_t op = in[i] & 0xffffu;
@@ -9427,6 +9440,16 @@ spirv_patch_stereo_raygen(
             in[i + 3] == SpvBuiltInLaunchIdKHR)
         {
             launch_id_var = in[i + 1];
+        }
+        else if (op == SpvOpDecorate && wc >= 4 && in[i + 2] == SpvDecorationBinding && in[i + 3] == 31)
+        {
+            remix_ray_origin_direction_var = in[i + 1];
+            remix_binding_31 = 1;
+        }
+        else if (op == SpvOpDecorate && wc >= 4 && in[i + 2] == SpvDecorationDescriptorSet && in[i + 3] == 0)
+        {
+            if (in[i + 1] == remix_ray_origin_direction_var)
+                remix_descriptor_set_0 = 1;
         }
         else if (op == SpvOpTypeInt && wc >= 4)
         {
@@ -9452,6 +9475,8 @@ spirv_patch_stereo_raygen(
                 v3int_type = in[i + 1];
             if (in[i + 2] == uint_type && in[i + 3] == 3)
                 v3uint_type = in[i + 1];
+            if (in[i + 2] == float_type && in[i + 3] == 3)
+                v3float_type = in[i + 1];
             if (in[i + 2] == float_type && in[i + 3] == 4)
                 v4float_type = in[i + 1];
         }
@@ -9481,6 +9506,19 @@ spirv_patch_stereo_raygen(
         {
             launch_id_load = in[i + 2];
         }
+        else if (op == SpvOpLoad && wc >= 4 && remix_ray_origin_direction_var && in[i + 3] == remix_ray_origin_direction_var)
+        {
+            remix_ray_origin_direction_image = in[i + 2];
+        }
+        else if (op == SpvOpLoad && wc >= 4 && remix_trace_direction && in[i + 2] == remix_trace_direction)
+        {
+            remix_direction_producer = in[i + 3];
+        }
+        else if (op == SpvOpImageFetch && wc >= 5 && remix_ray_origin_direction_image && in[i + 3] == remix_ray_origin_direction_image)
+        {
+            if (!remix_ray_origin_direction_fetch)
+                remix_ray_origin_direction_fetch = in[i + 2];
+        }
         else if (op == SpvOpImageRead && wc >= 5)
         {
             if (!image_read_coord)
@@ -9490,6 +9528,15 @@ spirv_patch_stereo_raygen(
         {
             if (!image_write_coord)
                 image_write_coord = in[i + 2];
+        }
+        else if (op == SpvOpTraceRayKHR && wc >= 12 && !remix_ray_trace)
+        {
+            remix_ray_trace = (uint32_t)i;
+            remix_trace_origin = in[i + 7];
+            remix_trace_tmin = in[i + 8];
+            remix_trace_direction = in[i + 9];
+            remix_trace_tmax = in[i + 10];
+            STEREO_LOG("RT_PATCH_REMIX_TRACE i=%zu origin=%u tmin=%u direction=%u tmax=%u", i, remix_trace_origin, remix_trace_tmin, remix_trace_direction, remix_trace_tmax);
         }
         else if (op == SpvOpMatrixTimesVector && wc >= 5)
         {
@@ -9539,76 +9586,85 @@ spirv_patch_stereo_raygen(
         }
         i += wc;
         }
+        bool remix_raygen = remix_binding_31 &&
+        remix_descriptor_set_0 &&
+        remix_ray_origin_direction_image &&
+        remix_ray_origin_direction_fetch &&
+        remix_ray_trace &&
+        remix_trace_origin &&
+        remix_trace_direction;
+        STEREO_LOG("RT_PATCH_REMIX_DETECT binding31=%u set0=%u image=%u fetch=%u trace=%u origin=%u direction=%u", remix_binding_31, remix_descriptor_set_0, remix_ray_origin_direction_image, remix_ray_origin_direction_fetch, remix_ray_trace, remix_trace_origin, remix_trace_direction);
+        STEREO_LOG("RT_PATCH_INTERFACE launch_id=%u", launch_id_var);
+        for (size_t d = 5; d < in_c;)
+        {
+            uint32_t dop = in[d] & 0xffffu;
+            uint32_t dwc = in[d] >> 16;
+            if (!dwc || d + dwc > in_c)
+                break;
+            if (dop == SpvOpDecorate &&
+                dwc >= 4 &&
+                in[d + 2] == SpvDecorationBuiltIn)
+            {
+                STEREO_LOG(
+                    "RT_PATCH_BUILTIN target=%u builtin=%u",
+                    in[d + 1],
+                    in[d + 3]);
+            }
+            d += dwc;
+        }
         STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
-        if (!launch_id_var ||
-        !launch_id_load ||
-        !image_type ||
-        (!image_read_coord && !image_write_coord) ||
-        !first_function ||
-        !first_label ||
-        !int_type ||
-        !uint_type ||
-        !float_type ||
-        !v2int_type ||
-        !v3uint_type ||
-        !v4float_type ||
-        !image_texel_type ||
-        !float_zero ||
-        !origin_mtv ||
-        !origin_vec ||
-        !origin_var ||
-        !ray_ndc_mtv ||
-        !ray_ndc_vec)
-    {
-        STEREO_LOG(
-            "RT_PATCH_REJECT_FLAGS launch=%u launch_load=%u image_type=%u image_read_coord=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u bool=%u v2int=%u v3int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mtv=%u mtv_count=%u",
-            !launch_id_var,
-            !launch_id_load,
-            !image_type,
-            !image_read_coord,
-            !image_write_coord,
-            !first_function,
-            !int_type,
-            !uint_type,
-            !float_type,
-            !bool_type,
-            !v2int_type,
-            !v3int_type,
-            !v3uint_type,
-            !v4float_type,
-            !image_texel_type,
-            !float_zero,
-            !origin_vec,
-            !origin_mtv,
-            !origin_var,
-            !ray_ndc_vec,
-            !ray_ndc_mtv,
-            matrix_times_vector_count);
-        STEREO_LOG(
-            "RT_PATCH_REJECT_VALUES launch=%u launch_load=%u image_type=%u image_write_coord=%u first_function=%u first_label=%u int=%u uint=%u float=%u bool=%u v2int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mat=%u mtv_count=%u",
-            launch_id_var,
-            launch_id_load,
-            image_type,
-            image_write_coord,
-            first_function,
-            first_label,
-            int_type,
-            uint_type,
-            float_type,
-            bool_type,
-            v2int_type,
-            v3uint_type,
-            v4float_type,
-            image_texel_type,
-            float_zero,
-            origin_vec,
-            origin_mtv,
-            origin_var,
-            ray_ndc_vec,
-            ray_ndc_mat,
-            matrix_times_vector_count);
-        return false;
-    }
+        bool legacy_raygen =
+        launch_id_var &&
+        launch_id_load &&
+        image_type &&
+        (image_read_coord || image_write_coord) &&
+        first_function &&
+        first_label &&
+        int_type &&
+        uint_type &&
+        float_type &&
+        v2int_type &&
+        v3uint_type &&
+        v4float_type &&
+        image_texel_type &&
+        float_zero &&
+        origin_mtv &&
+        origin_vec &&
+        origin_var &&
+        ray_ndc_mtv &&
+        ray_ndc_vec;
+        if (!legacy_raygen && !remix_raygen)
+        {
+            STEREO_LOG("RT_PATCH_REJECT_FLAGS legacy=%u remix=%u launch=%u launch_load=%u image_type=%u image_read_coord=%u image_write_coord=%u first_function=%u int=%u uint=%u float=%u v2int=%u v3uint=%u v4float=%u texel=%u float_zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_ndc_vec=%u ray_ndc_mtv=%u remix_image=%u remix_fetch=%u remix_trace=%u remix_origin=%u remix_direction=%u", legacy_raygen, remix_raygen, !launch_id_var, !launch_id_load, !image_type, !image_read_coord, !image_write_coord, !first_function, !int_type, !uint_type, !float_type, !v2int_type, !v3uint_type, !v4float_type, !image_texel_type, !float_zero, !origin_vec, !origin_mtv, !origin_var, !ray_ndc_vec, !ray_ndc_mtv, !remix_ray_origin_direction_image, !remix_ray_origin_direction_fetch, !remix_ray_trace, !remix_trace_origin, !remix_trace_direction);
+            return false;
+        }
+        if (remix_raygen)
+        {
+            for (size_t d = 5; d < in_c;)
+            {
+                uint32_t dwc = in[d] >> 16;
+                uint16_t dop = (uint16_t)(in[d] & 0xffffu);
+                if (!dwc || d + dwc > in_c)
+                    break;
+                if (dwc >= 4 && in[d + 2] == remix_trace_direction)
+                {
+                    remix_direction_producer = (uint32_t)d;
+                    STEREO_LOG("RT_PATCH_REMIX_DIRECTION_DEF i=%zu op=%u wc=%u id=%u ptr=%u", d, dop, dwc, remix_trace_direction, in[d + 3]);
+                    break;
+                }
+                if (dwc >= 4 && in[d + 2] == remix_trace_origin)
+                {
+                    remix_origin_producer = (uint32_t)d;
+                    STEREO_LOG("RT_PATCH_REMIX_ORIGIN_DEF i=%zu op=%u wc=%u id=%u ptr=%u", d, dop, dwc, remix_trace_origin, in[d + 3]);
+                }
+                d += dwc;
+            }
+            STEREO_LOG("RT_PATCH_LAYOUT remix trace=%u origin=%u direction=%u direction_def=%u fetch=%u", remix_ray_trace, remix_trace_origin, remix_trace_direction, remix_direction_producer, remix_ray_origin_direction_fetch);
+        }
+        else
+        {
+            STEREO_LOG("RT_PATCH_LAYOUT legacy trace=%u trace_wc=%u image_write_coord=%u launch_load=%u origin_vec=%u origin_mat=%u ray_ndc_vec=%u ray_ndc_mat=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f", 0u, 0u, image_write_coord, launch_id_load, origin_vec, origin_mat, ray_ndc_vec, ray_ndc_mat, projection_mode, lo, ro, conv);
+        }
     STEREO_LOG(
         "RT_PATCH_LAYOUT trace=%u trace_wc=%u image_write_coord=%u launch_load=%u origin_vec=%u origin_mat=%u ray_ndc_vec=%u ray_ndc_mat=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f",
         0u,
@@ -9623,20 +9679,15 @@ spirv_patch_stereo_raygen(
         lo,
         ro,
         conv);
-    for (size_t d = 5; d < in_c;)
-    {
-        uint32_t dop = in[d] & 0xffffu;
-        uint32_t dwc = in[d] >> 16;
-        if (!dwc || d + dwc > in_c)
-            break;
-        if (dop == SpvOpTraceRayKHR || dop == SpvOpImageWrite || dop == SpvOpMatrixTimesVector)
-            STEREO_LOG("RT_PATCH_INSTR i=%zu op=%u wc=%u", d, dop, dwc);
-        d += dwc;
-    }
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u", bound);
     uint32_t generated_id_base = bound;
     uint32_t generated_id = generated_id_base;
     uint32_t stereo_launch_load = generated_id++;
+    uint32_t remix_origin_x = 0;
+    uint32_t remix_origin_shifted_x = 0;
+    uint32_t remix_origin_y = 0;
+    uint32_t remix_origin_z = 0;
+    uint32_t remix_origin_shifted = 0;
     if (!v3int_type)
         v3int_type = generated_id++;
     uint32_t new_bool_type = bool_type;
@@ -9667,6 +9718,14 @@ spirv_patch_stereo_raygen(
     uint32_t ray_new_x = generated_id++;
     uint32_t coord_x_int = generated_id++;
     uint32_t coord_y_int = generated_id++;
+    if (remix_raygen)
+    {
+        remix_origin_x = generated_id++;
+        remix_origin_shifted_x = generated_id++;
+        remix_origin_y = generated_id++;
+        remix_origin_z = generated_id++;
+        remix_origin_shifted = generated_id++;
+    }
     bound = generated_id;
     STEREO_LOG("RT_PATCH_ID_ALLOC header_bound=%u v3int=%u bool=%u reused_v3int=%u reused_bool=%u", bound, v3int_type, new_bool_type, v3int_type < generated_id_base, bool_type != 0);
     STEREO_LOG("RT_PATCH_ID_RANGE base=%u end=%u", generated_id_base, bound - 1);
@@ -9848,6 +9907,57 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, coord_z_cast, 4);
             sb_push_n(&ob, coord_construct, 6);
         }
+        if (remix_raygen && i == remix_ray_trace)
+        {
+            uint32_t origin_x[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                remix_origin_x,
+                remix_trace_origin,
+                0
+            };
+            uint32_t origin_y[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                remix_origin_y,
+                remix_trace_origin,
+                1
+            };
+            uint32_t origin_z[] = {
+                (5u << 16) | SpvOpCompositeExtract,
+                float_type,
+                remix_origin_z,
+                remix_trace_origin,
+                2
+            };
+            uint32_t origin_shift[] = {
+                (5u << 16) | SpvOpFAdd,
+                float_type,
+                remix_origin_shifted_x,
+                remix_origin_x,
+                selected_offset
+            };
+            uint32_t new_origin[] = {
+                (6u << 16) | SpvOpCompositeConstruct,
+                v3float_type,
+                remix_origin_shifted,
+                remix_origin_shifted_x,
+                remix_origin_y,
+                remix_origin_z
+            };
+            uint32_t trace_inst[12];
+            memcpy(trace_inst, &in[i], sizeof(trace_inst));
+            trace_inst[7] = remix_trace_origin;
+            sb_push_n(&ob, origin_x, 5);
+            sb_push_n(&ob, origin_y, 5);
+            sb_push_n(&ob, origin_z, 5);
+            sb_push_n(&ob, origin_shift, 5);
+            sb_push_n(&ob, new_origin, 6);
+            sb_push_n(&ob, trace_inst, 12);
+            STEREO_LOG("RT_PATCH_REMIX_STEREO trace=%zu old_origin=%u test_origin=%u direction=%u offset=%u", i, remix_trace_origin, remix_trace_origin, remix_trace_direction, selected_offset);
+            i += wc;
+            continue;
+        }
         if (op == SpvOpTypeImage &&
             wc >= 9 &&
             in[i + 1] == image_type &&
@@ -10017,20 +10127,37 @@ spirv_patch_stereo_raygen(
     ob.w[3] = bound;
     *out = ob.w;
     *out_c = ob.n;
-    STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z_eye_camera",
-        image_type,
-        image_texel_type,
-        image_read_coord,
-        image_write_coord,
-        new_coord,
-        launch_id_load,
-        origin_vec,
-        ray_ndc_vec,
-        projection_mode,
-        lo,
-        ro,
-        conv);
+    if (remix_raygen)
+    {
+        STEREO_LOG("RT_PATCH_SUCCESS remix trace=%u origin=%u test_origin=%u direction=%u tmin=%u tmax=%u selected_offset=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=origin_x_noop",
+            remix_ray_trace,
+            remix_trace_origin,
+            remix_origin_shifted,
+            remix_trace_direction,
+            remix_trace_tmin,
+            remix_trace_tmax,
+            selected_offset,
+            projection_mode,
+            lo,
+            ro,
+            conv);
+    }
+    else
+    {
+        STEREO_LOG("RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z_eye_camera",
+            image_type,
+            image_texel_type,
+            image_read_coord,
+            image_write_coord,
+            new_coord,
+            launch_id_load,
+            origin_vec,
+            ray_ndc_vec,
+            projection_mode,
+            lo,
+            ro,
+            conv);
+    }
     return true;
 }
 
