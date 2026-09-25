@@ -1198,6 +1198,7 @@ stereo_CmdTraceRaysKHR(
             .layerCount = 2
         }
     };
+    STEREO_LOG("RT_TRACE_COPY_SRC_BARRIER_BEGIN");
     sd->real.CmdPipelineBarrier(
         commandBuffer,
         VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
@@ -1209,6 +1210,7 @@ stereo_CmdTraceRaysKHR(
         NULL,
         1,
         &src_barrier);
+    STEREO_LOG("RT_TRACE_COPY_SRC_BARRIER_END");
     VkImageMemoryBarrier dst_barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -1226,6 +1228,7 @@ stereo_CmdTraceRaysKHR(
             .layerCount = 2
         }
     };
+    STEREO_LOG("RT_TRACE_COPY_DST_BARRIER_BEGIN");
     sd->real.CmdPipelineBarrier(
         commandBuffer,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -1237,6 +1240,7 @@ stereo_CmdTraceRaysKHR(
         NULL,
         1,
         &dst_barrier);
+    STEREO_LOG("RT_TRACE_COPY_DST_BARRIER_END");
     VkImageCopy copy = {
         .srcSubresource = {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1254,6 +1258,7 @@ stereo_CmdTraceRaysKHR(
         .dstOffset = { 0, 0, 0 },
         .extent = { width, height, 1 }
     };
+    STEREO_LOG("RT_TRACE_COPY_IMAGE_BEGIN");
     sd->real.CmdCopyImage(
         commandBuffer,
         rt_image,
@@ -1262,6 +1267,7 @@ stereo_CmdTraceRaysKHR(
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1,
         &copy);
+    STEREO_LOG("RT_TRACE_COPY_IMAGE_END");
     VkImageMemoryBarrier src_restore = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
@@ -1279,6 +1285,7 @@ stereo_CmdTraceRaysKHR(
             .layerCount = 2
         }
     };
+    STEREO_LOG("RT_TRACE_SRC_RESTORE_BEGIN");
     sd->real.CmdPipelineBarrier(
         commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -1290,6 +1297,7 @@ stereo_CmdTraceRaysKHR(
         NULL,
         1,
         &src_restore);
+    STEREO_LOG("RT_TRACE_SRC_RESTORE_END");
     VkImageMemoryBarrier dst_restore = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1307,6 +1315,7 @@ stereo_CmdTraceRaysKHR(
             .layerCount = 2
         }
     };
+    STEREO_LOG("RT_TRACE_DST_RESTORE_BEGIN");
     sd->real.CmdPipelineBarrier(
         commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -1318,6 +1327,7 @@ stereo_CmdTraceRaysKHR(
         NULL,
         1,
         &dst_restore);
+    STEREO_LOG("RT_TRACE_DST_RESTORE_END");
     STEREO_LOG(
         "RT_TRACE_COPY_END src=%p dst=%p",
         (void *)(uintptr_t)rt_image,
