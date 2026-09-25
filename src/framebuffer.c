@@ -1712,6 +1712,62 @@ stereo_AllocateDescriptorSets(
     return res;
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateDescriptorUpdateTemplate(
+    VkDevice device,
+    const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator,
+    VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd || !sd->real.CreateDescriptorUpdateTemplate)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    VkResult res = sd->real.CreateDescriptorUpdateTemplate(
+        sd->real_device,
+        pCreateInfo,
+        pAllocator,
+        pDescriptorUpdateTemplate);
+    if (res == VK_SUCCESS &&
+        pCreateInfo &&
+        pDescriptorUpdateTemplate &&
+        pCreateInfo->pDescriptorUpdateEntries)
+    {
+        if (sd->rt_desc_template_count < MAX_RT_DESC_TEMPLATES)
+        {
+            uint32_t slot = sd->rt_desc_template_count++;
+            RtDescTemplateTrack *t = &sd->rt_desc_templates[slot];
+            t->update_template = *pDescriptorUpdateTemplate;
+            t->layout = pCreateInfo->descriptorSetLayout;
+            t->entry_count = pCreateInfo->descriptorUpdateEntryCount;
+            if (t->entry_count > 64)
+                t->entry_count = 64;
+            for (uint32_t i = 0; i < t->entry_count; i++)
+            {
+                t->entries[i] = pCreateInfo->pDescriptorUpdateEntries[i];
+                STEREO_LOG(
+                    "RT_TEMPLATE_ENTRY template=%p slot=%u entry=%u binding=%u array=%u count=%u type=%u offset=%llu stride=%llu layout=%p",
+                    (void*)(uintptr_t)*pDescriptorUpdateTemplate,
+                    slot,
+                    i,
+                    t->entries[i].dstBinding,
+                    t->entries[i].dstArrayElement,
+                    t->entries[i].descriptorCount,
+                    t->entries[i].descriptorType,
+                    (unsigned long long)t->entries[i].offset,
+                    (unsigned long long)t->entries[i].stride,
+                    (void*)(uintptr_t)pCreateInfo->descriptorSetLayout);
+            }
+            STEREO_LOG(
+                "RT_TEMPLATE_CREATE template=%p slot=%u layout=%p entries=%u",
+                (void*)(uintptr_t)*pDescriptorUpdateTemplate,
+                slot,
+                (void*)(uintptr_t)pCreateInfo->descriptorSetLayout,
+                pCreateInfo->descriptorUpdateEntryCount);
+        }
+    }
+    return res;
+}
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_UpdateDescriptorSetWithTemplate(
     VkDevice device,
