@@ -1667,11 +1667,12 @@ stereo_CreateDescriptorSetLayout(
             if (pCreateInfo->pBindings[i].binding == 15)
             {
                 STEREO_LOG(
-                    "RT_LAYOUT_BIND15 layout=%p binding=15 type=%u count=%u stageFlags=0x%08X",
+                    "RT_LAYOUT_BIND15 layout=%p binding=15 type=%u count=%u stageFlags=0x%08X flags=0x%08X",
                     (void*)(uintptr_t)*pSetLayout,
                     pCreateInfo->pBindings[i].descriptorType,
                     pCreateInfo->pBindings[i].descriptorCount,
-                    pCreateInfo->pBindings[i].stageFlags);
+                    pCreateInfo->pBindings[i].stageFlags,
+                    pCreateInfo->flags);
                 break;
             }
         }
@@ -1726,6 +1727,21 @@ stereo_UpdateDescriptorSets(
     for (uint32_t i = 0; i < descriptorWriteCount; i++)
     {
         const VkWriteDescriptorSet *w = &pDescriptorWrites[i];
+        for (uint32_t k = 0; k < sd->rt_desc_tracked_set_count; k++)
+        {
+            if (sd->rt_desc_tracked_sets[k] == w->dstSet)
+            {
+                STEREO_LOG(
+                    "RT_SET_WRITE set=%p slot=%u binding=%u array=%u count=%u type=%u",
+                    (void*)(uintptr_t)w->dstSet,
+                    k,
+                    w->dstBinding,
+                    w->dstArrayElement,
+                    w->descriptorCount,
+                    w->descriptorType);
+                break;
+            }
+        }
         if (w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
             w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
         {
