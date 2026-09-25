@@ -378,7 +378,7 @@ typedef struct RealDeviceDispatch {
     PFN_vkAllocateDescriptorSets     AllocateDescriptorSets;
     PFN_vkFreeDescriptorSets         FreeDescriptorSets;
     PFN_vkUpdateDescriptorSets       UpdateDescriptorSets;
-    PFN_vkCreateDescriptorUpdateTemplate CreateDescriptorUpdateTemplate
+    PFN_vkCreateDescriptorUpdateTemplate CreateDescriptorUpdateTemplate;
     PFN_vkUpdateDescriptorSetWithTemplate UpdateDescriptorSetWithTemplate;
     PFN_vkCreateFramebuffer          CreateFramebuffer;
     PFN_vkDestroyFramebuffer         DestroyFramebuffer;
