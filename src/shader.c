@@ -9660,8 +9660,6 @@ spirv_patch_stereo_raygen(
                 d += dwc;
             }
             STEREO_LOG("RT_PATCH_LAYOUT remix trace=%u origin=%u direction=%u direction_def=%u fetch=%u", remix_ray_trace, remix_trace_origin, remix_trace_direction, remix_direction_producer, remix_ray_origin_direction_fetch);
-            STEREO_LOG("RT_PATCH_REMIX_BYPASS");
-            return false;
         }
         else
         {
