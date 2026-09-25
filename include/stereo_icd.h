@@ -669,6 +669,7 @@ typedef struct StereoDevice {
     } cb_track[MAX_CB_TRACK];
     uint32_t cb_track_count;
     VkImage upgraded_images[MAX_UPGRADED_VIEWS];
+    uint32_t upgraded_image_count;
     #define MAX_IMAGE_VIEW_TRACK 4096
     VkImageView tracked_image_views[MAX_IMAGE_VIEW_TRACK];
     VkImage tracked_image_view_images[MAX_IMAGE_VIEW_TRACK];
@@ -681,7 +682,11 @@ typedef struct StereoDevice {
     VkDescriptorSet rt_desc_tracked_sets[MAX_RT_DESC_SET_TRACK];
     VkDescriptorSetLayout rt_desc_tracked_layouts[MAX_RT_DESC_SET_TRACK];
     uint32_t rt_desc_tracked_set_count;
-    uint32_t upgraded_image_count;
+    #define MAX_RT_LAYOUT_TRACK 256
+    VkDescriptorSetLayout rt_desc_layouts[MAX_RT_LAYOUT_TRACK];
+    uint32_t rt_desc_layout_binding15[MAX_RT_LAYOUT_TRACK];
+    uint32_t rt_desc_layout_binding15_type[MAX_RT_LAYOUT_TRACK];
+    uint32_t rt_desc_layout_count;
 } StereoDevice;
 
 void stereo_write_ubo(StereoDevice *sd);
@@ -848,6 +853,7 @@ VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer,
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo, VkDescriptorSet *pDescriptorSets);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDescriptorSetLayout *pSetLayout);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
 
 /* shader.c */

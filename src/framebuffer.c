@@ -1630,6 +1630,40 @@ static void stereo_overwrite_projection_binding(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateDescriptorSetLayout(
+    VkDevice device,
+    const VkDescriptorSetLayoutCreateInfo *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator,
+    VkDescriptorSetLayout *pSetLayout)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd || !sd->real.CreateDescriptorSetLayout)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    VkResult res = sd->real.CreateDescriptorSetLayout(
+        sd->real_device,
+        pCreateInfo,
+        pAllocator,
+        pSetLayout);
+    if (res == VK_SUCCESS && pCreateInfo && pSetLayout)
+    {
+        for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++)
+        {
+            if (pCreateInfo->pBindings[i].binding == 15)
+            {
+                STEREO_LOG(
+                    "RT_LAYOUT_BIND15 layout=%p binding=15 type=%u count=%u stageFlags=0x%08X",
+                    (void*)(uintptr_t)*pSetLayout,
+                    pCreateInfo->pBindings[i].descriptorType,
+                    pCreateInfo->pBindings[i].descriptorCount,
+                    pCreateInfo->pBindings[i].stageFlags);
+                break;
+            }
+        }
+    }
+    return res;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
 stereo_AllocateDescriptorSets(
     VkDevice device,
     const VkDescriptorSetAllocateInfo *pAllocateInfo,
