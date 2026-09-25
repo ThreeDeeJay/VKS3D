@@ -547,6 +547,7 @@ typedef struct StereoFramebufferTrack {
 typedef struct StereoPipelineInfo
 {
     VkPipeline pipeline;
+    VkPipelineLayout layout;
     VkRenderPass original_renderpass;
     VkRenderPass mv_renderpass;
     uint32_t stage_count;

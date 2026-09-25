@@ -12080,6 +12080,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (info)
             {
                 info->pipeline = pP[p];
+                info->layout =
+                    pCI[p].layout;
                 info->original_renderpass =
                     pCI[p].renderPass;
                 info->mv_renderpass =
