@@ -9386,6 +9386,10 @@ spirv_patch_stereo_raygen(
     uint32_t launch_id_load = 0;
     uint32_t image_type = 0;
     uint32_t image_write_image = 0;
+    uint32_t image_write_pointer = 0;
+    uint32_t image_write_var = 0;
+    uint32_t image_write_binding = UINT32_MAX;
+    uint32_t image_write_set = UINT32_MAX;
     uint32_t image_read_coord = 0;
     uint32_t image_write_coord = 0;
     uint32_t float_zero = 0;
@@ -9555,12 +9559,72 @@ spirv_patch_stereo_raygen(
                 in[d + 2] == image_write_image)
             {
                 image_type = in[d + 1];
+                image_write_pointer = in[d + 3];
                 STEREO_LOG(
-                    "RT_PATCH_OUTPUT_IMAGE image=%u type=%u load_i=%zu",
+                    "RT_PATCH_OUTPUT_IMAGE image=%u type=%u pointer=%u load_i=%zu",
                     image_write_image,
                     image_type,
+                    image_write_pointer,
                     d);
                 break;
+            }
+            d += dwc;
+        }
+    }
+    if (image_write_pointer)
+    {
+        for (size_t d = 5; d < in_c;)
+        {
+            uint32_t dop = in[d] & 0xffffu;
+            uint32_t dwc = in[d] >> 16;
+            if (!dwc || d + dwc > in_c)
+                break;
+            if (dop == SpvOpVariable &&
+                dwc >= 4 &&
+                in[d + 2] == image_write_pointer)
+            {
+                image_write_var = in[d + 2];
+                STEREO_LOG(
+                    "RT_PATCH_OUTPUT_VAR pointer=%u var=%u storage=%u i=%zu",
+                    image_write_pointer,
+                    image_write_var,
+                    in[d + 3],
+                    d);
+                break;
+            }
+            d += dwc;
+        }
+    }
+    if (image_write_var)
+    {
+        for (size_t d = 5; d < in_c;)
+        {
+            uint32_t dop = in[d] & 0xffffu;
+            uint32_t dwc = in[d] >> 16;
+            if (!dwc || d + dwc > in_c)
+                break;
+            if (dop == SpvOpDecorate &&
+                dwc >= 4 &&
+                in[d + 1] == image_write_var)
+            {
+                if (in[d + 2] == SpvDecorationBinding &&
+                    dwc >= 4)
+                {
+                    image_write_binding = in[d + 3];
+                    STEREO_LOG(
+                        "RT_PATCH_OUTPUT_BINDING var=%u binding=%u",
+                        image_write_var,
+                        image_write_binding);
+                }
+                else if (in[d + 2] == SpvDecorationDescriptorSet &&
+                    dwc >= 4)
+                {
+                    image_write_set = in[d + 3];
+                    STEREO_LOG(
+                        "RT_PATCH_OUTPUT_SET var=%u set=%u",
+                        image_write_var,
+                        image_write_set);
+                }
             }
             d += dwc;
         }
@@ -10059,10 +10123,23 @@ spirv_patch_stereo_raygen(
     *out = ob.w;
     *out_c = ob.n;
     STEREO_LOG(
-        "RT_PATCH_SUCCESS image_type=%u texel_type=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u camera_stereo=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z",
+        "RT_PATCH_SUCCESS image_type=%u texel_type=%u output_var=%u set=%u binding=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u camera_stereo=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z",
         image_type,
         image_texel_type,
+        image_write_var,
+        image_write_set,
+        image_write_binding,
         image_read_coord,
+        image_write_coord,
+        new_coord,
+        launch_id_load,
+        origin_vec,
+        ray_ndc_vec,
+        camera_stereo,
+        projection_mode,
+        lo,
+        ro,
+        conv);
         image_write_coord,
         new_coord,
         launch_id_load,
