@@ -677,6 +677,10 @@ typedef struct StereoDevice {
     VkCommandBuffer rt_desc_cmds[MAX_RT_CMD_DESC_SETS];
     VkDescriptorSet rt_desc_sets[MAX_RT_CMD_DESC_SETS];
     uint32_t rt_desc_cmd_count;
+    #define MAX_RT_DESC_SET_TRACK 1024
+    VkDescriptorSet rt_desc_tracked_sets[MAX_RT_DESC_SET_TRACK];
+    VkDescriptorSetLayout rt_desc_tracked_layouts[MAX_RT_DESC_SET_TRACK];
+    uint32_t rt_desc_tracked_set_count;
     uint32_t upgraded_image_count;
 } StereoDevice;
 
@@ -843,6 +847,7 @@ VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, 
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo, VkDescriptorSet *pDescriptorSets);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
 
 /* shader.c */

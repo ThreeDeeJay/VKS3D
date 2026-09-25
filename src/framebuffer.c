@@ -1139,6 +1139,21 @@ stereo_CmdTraceRaysKHR(
         "RT_TRACE_SET0 cb=%p set=%p",
         (void*)commandBuffer,
         (void*)(uintptr_t)rt_set0);
+    if (rt_set0 != VK_NULL_HANDLE)
+    {
+        for (uint32_t i = 0; i < sd->rt_desc_tracked_set_count; i++)
+        {
+            if (sd->rt_desc_tracked_sets[i] == rt_set0)
+            {
+                STEREO_LOG(
+                    "RT_TRACE_SET0_LAYOUT set=%p layout=%p slot=%u",
+                    (void*)(uintptr_t)rt_set0,
+                    (void*)(uintptr_t)sd->rt_desc_tracked_layouts[i],
+                    i);
+                break;
+            }
+        }
+    }
     STEREO_LOG(
         "RT_TRACE_FORWARD real=%p width=%u height=%u depth=%u",
         (void*)sd->real.CmdTraceRaysKHR,
@@ -1612,6 +1627,38 @@ static void stereo_overwrite_projection_binding(
         (void *)(uintptr_t)set,
         binding,
         (void *)(uintptr_t)sd->stereo_ubo);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_AllocateDescriptorSets(
+    VkDevice device,
+    const VkDescriptorSetAllocateInfo *pAllocateInfo,
+    VkDescriptorSet *pDescriptorSets)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd || !sd->real.AllocateDescriptorSets)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    VkResult res = sd->real.AllocateDescriptorSets(
+        sd->real_device,
+        pAllocateInfo,
+        pDescriptorSets);
+    if (res == VK_SUCCESS && pAllocateInfo && pDescriptorSets)
+    {
+        for (uint32_t i = 0; i < pAllocateInfo->descriptorSetCount; i++)
+        {
+            if (sd->rt_desc_tracked_set_count >= MAX_RT_DESC_SET_TRACK)
+                break;
+            uint32_t slot = sd->rt_desc_tracked_set_count++;
+            sd->rt_desc_tracked_sets[slot] = pDescriptorSets[i];
+            sd->rt_desc_tracked_layouts[slot] = pAllocateInfo->pSetLayouts[i];
+            STEREO_LOG(
+                "RT_DESC_ALLOC set=%p layout=%p slot=%u",
+                (void*)(uintptr_t)pDescriptorSets[i],
+                (void*)(uintptr_t)pAllocateInfo->pSetLayouts[i],
+                slot);
+        }
+    }
+    return res;
 }
 
 VKAPI_ATTR void VKAPI_CALL
