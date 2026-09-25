@@ -1655,14 +1655,18 @@ stereo_UpdateDescriptorSets(
                 }
             }
             STEREO_LOG(
-                "DESC_WRITE binding=%u view=%p layout=%u type=%u",
+                "DESC_WRITE set=%p binding=%u array=%u view=%p layout=%u type=%u",
+                (void *)(uintptr_t)w->dstSet,
                 w->dstBinding,
+                j,
                 (void *)(uintptr_t)view,
                 w->pImageInfo[j].imageLayout,
                 w->descriptorType);
             STEREO_LOG(
-                "DESC_IMAGE_WRITE binding=%u view=%p upgraded=%d",
+                "DESC_IMAGE_WRITE set=%p binding=%u array=%u view=%p upgraded=%d",
+                (void *)(uintptr_t)w->dstSet,
                 w->dstBinding,
+                j,
                 (void *)(uintptr_t)view,
                 upgraded);
             VkImage descriptor_image = VK_NULL_HANDLE;
@@ -1675,8 +1679,10 @@ stereo_UpdateDescriptorSets(
                 }
             }
             STEREO_LOG(
-                "DESC_IMAGE_RESOLVE binding=%u view=%p image=%p type=%u layout=%u",
+                "DESC_IMAGE_RESOLVE set=%p binding=%u array=%u view=%p image=%p type=%u layout=%u",
+                (void *)(uintptr_t)w->dstSet,
                 w->dstBinding,
+                j,
                 (void *)(uintptr_t)view,
                 (void *)(uintptr_t)descriptor_image,
                 w->descriptorType,
