@@ -1913,8 +1913,9 @@ stereo_UpdateDescriptorSetWithTemplate(
                 sd->rt_desc_binding15_views[slot] = view;
                 sd->rt_desc_binding15_images[slot] = image;
                 STEREO_LOG(
-                    "RT_TEMPLATE_BIND15_TRACK set=%p view=%p image=%p slot=%u type=%u",
+                    "RT_TEMPLATE_BIND15_TRACK set=%p layout=%p view=%p image=%p slot=%u type=%u",
                     (void*)(uintptr_t)descriptorSet,
+                    (void*)(uintptr_t)sd->rt_desc_tracked_layouts[slot],
                     (void*)(uintptr_t)view,
                     (void*)(uintptr_t)image,
                     slot,
@@ -2314,6 +2315,21 @@ stereo_CmdBindDescriptorSets(
     if (pDescriptorSets &&
         descriptorSetCount > 0)
     {
+        STEREO_LOG(
+            "RT_DESC_BIND cb=%p bindPoint=%u layout=%p firstSet=%u count=%u",
+            (void*)commandBuffer,
+            pipelineBindPoint,
+            (void*)(uintptr_t)layout,
+            firstSet,
+            descriptorSetCount);
+        for (uint32_t bi = 0; bi < descriptorSetCount; bi++)
+        {
+            STEREO_LOG(
+                "RT_DESC_BIND_SET cb=%p index=%u set=%p",
+                (void*)commandBuffer,
+                firstSet + bi,
+                (void*)(uintptr_t)pDescriptorSets[bi]);
+        }
         uint32_t slot = UINT32_MAX;
         for (uint32_t i = 0; i < sd->rt_desc_cmd_count; i++)
         {
@@ -2329,10 +2345,9 @@ stereo_CmdBindDescriptorSets(
             slot = sd->rt_desc_cmd_count++;
             sd->rt_desc_cmds[slot] = commandBuffer;
         }
-        if (slot != UINT32_MAX)
+        if (slot != UINT32_MAX &&
+            firstSet == 0)
         {
-            if (firstSet == 0)
-            {
             sd->rt_desc_sets[slot] = pDescriptorSets[0];
             sd->rt_desc_cmd_first_set[slot] = 0;
             STEREO_LOG(
@@ -2340,7 +2355,6 @@ stereo_CmdBindDescriptorSets(
                 (void*)commandBuffer,
                 (void*)(uintptr_t)pDescriptorSets[0],
                 slot);
-            }
         }
     sd->real.CmdBindDescriptorSets(
         commandBuffer,
