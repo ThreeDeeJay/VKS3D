@@ -1139,6 +1139,16 @@ stereo_CmdTraceRaysKHR(
                     (void*)(uintptr_t)sd->rt_desc_binding15_views[i],
                     (void*)(uintptr_t)sd->rt_desc_binding15_images[i],
                     i);
+                if (sd->rt_desc_binding15_images[i] != VK_NULL_HANDLE)
+                {
+                    VkImage rt_bound_image = sd->rt_desc_binding15_images[i];
+                    STEREO_LOG(
+                        "RT_TRACE_OUTPUT_IMAGE set=%p image=%p view=%p slot=%u",
+                        (void*)(uintptr_t)rt_set0,
+                        (void*)(uintptr_t)rt_bound_image,
+                        (void*)(uintptr_t)sd->rt_desc_binding15_views[i],
+                        i);
+                }
                 break;
             }
         }
@@ -1831,6 +1841,21 @@ stereo_UpdateDescriptorSetWithTemplate(
                 (void*)(uintptr_t)view,
                 (void*)(uintptr_t)image,
                 ii->imageLayout);
+            if (view != VK_NULL_HANDLE && image != VK_NULL_HANDLE &&
+                e->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+            {
+                if (slot != UINT32_MAX)
+                {
+                    sd->rt_desc_binding15_views[slot] = view;
+                    sd->rt_desc_binding15_images[slot] = image;
+                    STEREO_LOG(
+                        "RT_TEMPLATE_BIND15_TRACK set=%p view=%p image=%p slot=%u",
+                        (void*)(uintptr_t)descriptorSet,
+                        (void*)(uintptr_t)view,
+                        (void*)(uintptr_t)image,
+                        slot);
+                }
+            }
             break;
         }
         break;
