@@ -1880,10 +1880,13 @@ stereo_UpdateDescriptorSetWithTemplate(
         }
     }
     STEREO_LOG(
-        "RT_TEMPLATE_UPDATE set=%p template=%p slot=%u data=%p",
+        "RT_TEMPLATE_UPDATE set=%p template=%p slot=%u layout=%p old_view=%p old_image=%p data=%p",
         (void*)(uintptr_t)descriptorSet,
         (void*)(uintptr_t)descriptorUpdateTemplate,
         slot,
+        slot != UINT32_MAX ? (void*)(uintptr_t)sd->rt_desc_tracked_layouts[slot] : NULL,
+        slot != UINT32_MAX ? (void*)(uintptr_t)sd->rt_desc_binding15_views[slot] : NULL,
+        slot != UINT32_MAX ? (void*)(uintptr_t)sd->rt_desc_binding15_images[slot] : NULL,
         pData);
     for (uint32_t ti = 0; ti < sd->rt_desc_template_count; ti++)
     {
