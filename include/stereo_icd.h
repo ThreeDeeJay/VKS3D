@@ -693,6 +693,10 @@ typedef struct StereoDevice {
     VkPipelineLayout rt_desc_pipeline_layouts[MAX_RT_CMD_DESC_SETS];
     uint32_t rt_desc_cmd_first_set[MAX_RT_CMD_DESC_SETS];
     uint32_t rt_desc_cmd_count;
+    #define MAX_RT_PIPELINE_LAYOUT_TRACK 256
+    VkPipelineLayout rt_pipeline_layouts[MAX_RT_PIPELINE_LAYOUT_TRACK];
+    VkDescriptorSetLayout rt_pipeline_set0_layouts[MAX_RT_PIPELINE_LAYOUT_TRACK];
+    uint32_t rt_pipeline_layout_count;
     #define MAX_RT_DESC_SET_TRACK 1024
     VkDescriptorSet rt_desc_tracked_sets[MAX_RT_DESC_SET_TRACK];
     VkDescriptorSetLayout rt_desc_tracked_layouts[MAX_RT_DESC_SET_TRACK];
@@ -831,6 +835,7 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(VkDevice, const VkRenderP
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass2KHR(VkDevice, const VkRenderPassCreateInfo2*, const VkAllocationCallbacks*, VkRenderPass*);
 #endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateGraphicsPipelines(VkDevice, VkPipelineCache, uint32_t, const VkGraphicsPipelineCreateInfo*, const VkAllocationCallbacks*, VkPipeline*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreatePipelineLayout(VkDevice, const VkPipelineLayoutCreateInfo*, const VkAllocationCallbacks*, VkPipelineLayout*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyShaderModule(VkDevice, VkShaderModule, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShadersEXT(VkDevice, uint32_t, const VkShaderCreateInfoEXT*, const VkAllocationCallbacks*, VkShaderEXT*);

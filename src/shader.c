@@ -10422,6 +10422,28 @@ static const VkShaderModuleCreateInfo *stereo_stage_inline_spv(const VkPipelineS
     return NULL;
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreatePipelineLayout(VkDevice device,const VkPipelineLayoutCreateInfo *pCI,const VkAllocationCallbacks *pAlloc,VkPipelineLayout *pLayout)
+{
+    StereoDevice *sd=stereo_device_from_handle(device);
+    if (!sd || !sd->real.CreatePipelineLayout)
+        return VK_ERROR_DEVICE_LOST;
+    VkResult res=sd->real.CreatePipelineLayout(sd->real_device,pCI,pAlloc,pLayout);
+    if (res!=VK_SUCCESS || !pCI || !pLayout || !*pLayout)
+        return res;
+    if (pCI->setLayoutCount>0 && pCI->pSetLayouts)
+    {
+        if (sd->rt_pipeline_layout_count<MAX_RT_PIPELINE_LAYOUT_TRACK)
+        {
+            uint32_t slot=sd->rt_pipeline_layout_count++;
+            sd->rt_pipeline_layouts[slot]=*pLayout;
+            sd->rt_pipeline_set0_layouts[slot]=pCI->pSetLayouts[0];
+            STEREO_LOG("RT_PIPELINE_LAYOUT layout=%p set0_layout=%p set_count=%u slot=%u",(void*)(uintptr_t)*pLayout,(void*)(uintptr_t)pCI->pSetLayouts[0],pCI->setLayoutCount,slot);
+        }
+    }
+    return res;
+}
+
 /* ── vkCreateGraphicsPipelines ───────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
