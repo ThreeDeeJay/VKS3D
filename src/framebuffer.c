@@ -2287,6 +2287,7 @@ stereo_CmdBindDescriptorSets(
         pDescriptorSets,
         dynamicOffsetCount,
         pDynamicOffsets);
+    }
 }
 
 VKAPI_ATTR void VKAPI_CALL
