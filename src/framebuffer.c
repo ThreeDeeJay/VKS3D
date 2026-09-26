@@ -1794,6 +1794,47 @@ stereo_UpdateDescriptorSetWithTemplate(
         (void*)(uintptr_t)descriptorUpdateTemplate,
         slot,
         pData);
+    for (uint32_t ti = 0; ti < sd->rt_desc_template_count; ti++)
+    {
+        RtDescTemplateTrack *t = &sd->rt_desc_templates[ti];
+        if (t->update_template != descriptorUpdateTemplate)
+            continue;
+        for (uint32_t ei = 0; ei < t->entry_count; ei++)
+        {
+            VkDescriptorUpdateTemplateEntry *e = &t->entries[ei];
+            if (e->dstBinding != 15 || e->dstArrayElement != 0 || e->descriptorCount == 0)
+                continue;
+            if (e->descriptorType != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE &&
+                e->descriptorType != VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
+                e->descriptorType != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                continue;
+            const uint8_t *base = (const uint8_t *)pData;
+            const VkDescriptorImageInfo *ii =
+            (const VkDescriptorImageInfo *)(base + e->offset);
+            VkImageView view = ii->imageView;
+            VkImage image = VK_NULL_HANDLE;
+            for (uint32_t vi = 0; vi < sd->tracked_image_view_count; vi++)
+            {
+                if (sd->tracked_image_views[vi] == view)
+                {
+                    image = sd->tracked_image_view_images[vi];
+                    break;
+                }
+            }
+            STEREO_LOG(
+                "RT_TEMPLATE_BIND15 template=%p set=%p entry=%u type=%u offset=%llu view=%p image=%p layout=%u",
+                (void*)(uintptr_t)descriptorUpdateTemplate,
+                (void*)(uintptr_t)descriptorSet,
+                ei,
+                e->descriptorType,
+                (unsigned long long)e->offset,
+                (void*)(uintptr_t)view,
+                (void*)(uintptr_t)image,
+                ii->imageLayout);
+            break;
+        }
+        break;
+    }
     if (slot != UINT32_MAX)
     {
         STEREO_LOG(
