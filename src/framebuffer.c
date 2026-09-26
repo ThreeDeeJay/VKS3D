@@ -1226,10 +1226,24 @@ stereo_CmdTraceRaysKHR(
         rt_depth,
         sd->stereo.enabled ? 1u : 0u,
         rt_depth);
+    VkPipelineLayout rt_pipeline_layout = VK_NULL_HANDLE;
+    if (rt_set0 != VK_NULL_HANDLE)
+    {
+        for (uint32_t i = 0; i < sd->rt_desc_cmd_count; i++)
+        {
+            if (sd->rt_desc_cmds[i] == commandBuffer &&
+                sd->rt_desc_sets[i] == rt_set0)
+            {
+                rt_pipeline_layout = sd->rt_desc_pipeline_layouts[i];
+                break;
+            }
+        }
+    }
     STEREO_LOG(
-        "RT_TRACE_SET0 cb=%p set=%p",
+        "RT_TRACE_SET0 cb=%p set=%p pipeline_layout=%p",
         (void*)commandBuffer,
-        (void*)(uintptr_t)rt_set0);
+        (void*)(uintptr_t)rt_set0,
+        (void*)(uintptr_t)rt_pipeline_layout);
     if (rt_set0 != VK_NULL_HANDLE)
     {
         for (uint32_t i = 0; i < sd->rt_desc_tracked_set_count; i++)
@@ -2349,11 +2363,13 @@ stereo_CmdBindDescriptorSets(
             firstSet == 0)
         {
             sd->rt_desc_sets[slot] = pDescriptorSets[0];
+            sd->rt_desc_pipeline_layouts[slot] = layout;
             sd->rt_desc_cmd_first_set[slot] = 0;
             STEREO_LOG(
-                "RT_DESC_SET0_TRACK cb=%p set=%p slot=%u",
+                "RT_DESC_SET0_TRACK cb=%p set=%p pipeline_layout=%p slot=%u",
                 (void*)commandBuffer,
                 (void*)(uintptr_t)pDescriptorSets[0],
+                (void*)(uintptr_t)layout,
                 slot);
         }
     sd->real.CmdBindDescriptorSets(
