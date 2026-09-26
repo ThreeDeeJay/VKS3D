@@ -1237,10 +1237,12 @@ stereo_CmdTraceRaysKHR(
             if (sd->rt_desc_tracked_sets[i] == rt_set0)
             {
                 STEREO_LOG(
-                    "RT_TRACE_SET0_LAYOUT set=%p layout=%p slot=%u",
+                    "RT_TRACE_SET0_LAYOUT set=%p layout=%p slot=%u bind15_view=%p bind15_image=%p",
                     (void*)(uintptr_t)rt_set0,
                     (void*)(uintptr_t)sd->rt_desc_tracked_layouts[i],
-                    i);
+                    i,
+                    (void*)(uintptr_t)sd->rt_desc_binding15_views[i],
+                    (void*)(uintptr_t)sd->rt_desc_binding15_images[i]);
                 break;
             }
         }
@@ -1906,20 +1908,17 @@ stereo_UpdateDescriptorSetWithTemplate(
                 (void*)(uintptr_t)view,
                 (void*)(uintptr_t)image,
                 ii->imageLayout);
-            if (view != VK_NULL_HANDLE && image != VK_NULL_HANDLE &&
-                e->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+            if (slot != UINT32_MAX)
             {
-                if (slot != UINT32_MAX)
-                {
-                    sd->rt_desc_binding15_views[slot] = view;
-                    sd->rt_desc_binding15_images[slot] = image;
-                    STEREO_LOG(
-                        "RT_TEMPLATE_BIND15_TRACK set=%p view=%p image=%p slot=%u",
-                        (void*)(uintptr_t)descriptorSet,
-                        (void*)(uintptr_t)view,
-                        (void*)(uintptr_t)image,
-                        slot);
-                }
+                sd->rt_desc_binding15_views[slot] = view;
+                sd->rt_desc_binding15_images[slot] = image;
+                STEREO_LOG(
+                    "RT_TEMPLATE_BIND15_TRACK set=%p view=%p image=%p slot=%u type=%u",
+                    (void*)(uintptr_t)descriptorSet,
+                    (void*)(uintptr_t)view,
+                    (void*)(uintptr_t)image,
+                    slot,
+                    e->descriptorType);
             }
             break;
         }
