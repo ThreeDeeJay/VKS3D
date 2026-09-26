@@ -1902,36 +1902,62 @@ stereo_UpdateDescriptorSetWithTemplate(
             const uint8_t *base = (const uint8_t *)pData;
             const VkDescriptorImageInfo *ii =
             (const VkDescriptorImageInfo *)(base + e->offset);
-            VkImageView view = ii->imageView;
-            VkImage image = VK_NULL_HANDLE;
-            for (uint32_t vi = 0; vi < sd->tracked_image_view_count; vi++)
-            {
-                if (sd->tracked_image_views[vi] == view)
-                {
-                    image = sd->tracked_image_view_images[vi];
-                    break;
-                }
-            }
             STEREO_LOG(
-                "RT_TEMPLATE_BIND15 template=%p set=%p entry=%u type=%u offset=%llu view=%p image=%p layout=%u",
+                "RT_TEMPLATE_ENTRY template=%p set=%p entry=%u binding=%u array=%u count=%u stride=%llu type=%u offset=%llu data=%p",
                 (void*)(uintptr_t)descriptorUpdateTemplate,
                 (void*)(uintptr_t)descriptorSet,
                 ei,
+                e->dstBinding,
+                e->dstArrayElement,
+                e->descriptorCount,
+                (unsigned long long)e->stride,
                 e->descriptorType,
                 (unsigned long long)e->offset,
-                (void*)(uintptr_t)view,
-                (void*)(uintptr_t)image,
-                ii->imageLayout);
+                (void*)(base + e->offset));
+            for (uint32_t di = 0; di < e->descriptorCount && di < 4; di++)
+            {
+                const VkDescriptorImageInfo *ddi =
+                (const VkDescriptorImageInfo *)(base + e->offset + (size_t)e->stride * di);
+                VkImageView view = ddi->imageView;
+                VkImage image = VK_NULL_HANDLE;
+                for (uint32_t vi = 0; vi < sd->tracked_image_view_count; vi++)
+                {
+                    if (sd->tracked_image_views[vi] == view)
+                    {
+                        image = sd->tracked_image_view_images[vi];
+                        break;
+                    }
+                }
+                STEREO_LOG(
+                    "RT_TEMPLATE_IMAGE template=%p set=%p entry=%u index=%u view=%p image=%p sampler=%p layout=%u",
+                    (void*)(uintptr_t)descriptorUpdateTemplate,
+                    (void*)(uintptr_t)descriptorSet,
+                    ei,
+                    di,
+                    (void*)(uintptr_t)view,
+                    (void*)(uintptr_t)image,
+                    (void*)(uintptr_t)ddi->sampler,
+                    ddi->imageLayout);
+            }
             if (slot != UINT32_MAX)
             {
-                sd->rt_desc_binding15_views[slot] = view;
-                sd->rt_desc_binding15_images[slot] = image;
+                sd->rt_desc_binding15_views[slot] = ii->imageView;
+                sd->rt_desc_binding15_images[slot] = VK_NULL_HANDLE;
+                for (uint32_t vi = 0; vi < sd->tracked_image_view_count; vi++)
+                {
+                    if (sd->tracked_image_views[vi] == ii->imageView)
+                    {
+                        sd->rt_desc_binding15_images[slot] =
+                        sd->tracked_image_view_images[vi];
+                        break;
+                    }
+                }
                 STEREO_LOG(
                     "RT_TEMPLATE_BIND15_TRACK set=%p layout=%p view=%p image=%p slot=%u type=%u",
                     (void*)(uintptr_t)descriptorSet,
                     (void*)(uintptr_t)sd->rt_desc_tracked_layouts[slot],
-                    (void*)(uintptr_t)view,
-                    (void*)(uintptr_t)image,
+                    (void*)(uintptr_t)ii->imageView,
+                    (void*)(uintptr_t)sd->rt_desc_binding15_images[slot],
                     slot,
                     e->descriptorType);
             }
