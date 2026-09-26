@@ -1047,6 +1047,71 @@ stereo_CmdBindPipeline(
         pipeline);
 }
 
+#ifdef VK_KHR_maintenance6
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBindDescriptorSets2KHR(
+    VkCommandBuffer commandBuffer,
+    const VkBindDescriptorSetsInfoKHR *pBindDescriptorSetsInfo)
+{
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+    StereoDevice *sd = NULL;
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real_device)
+        {
+            sd = &g_devices[i];
+            break;
+        }
+    }
+    if (pBindDescriptorSetsInfo)
+    {
+        STEREO_LOG(
+            "RT_DESC_BIND2KHR cb=%p firstSet=%u count=%u stageFlags=0x%08X",
+            (void*)commandBuffer,
+            pBindDescriptorSetsInfo->firstSet,
+            pBindDescriptorSetsInfo->descriptorSetCount,
+            pBindDescriptorSetsInfo->stageFlags);
+        if (pBindDescriptorSetsInfo->pDescriptorSets &&
+            pBindDescriptorSetsInfo->firstSet == 0 &&
+            pBindDescriptorSetsInfo->descriptorSetCount > 0 &&
+            sd)
+        {
+            uint32_t slot = UINT32_MAX;
+            for (uint32_t i = 0; i < sd->rt_desc_cmd_count; i++)
+            {
+                if (sd->rt_desc_cmds[i] == commandBuffer)
+                {
+                    slot = i;
+                    break;
+                }
+            }
+            if (slot == UINT32_MAX &&
+                sd->rt_desc_cmd_count < MAX_RT_CMD_DESC_SETS)
+            {
+                slot = sd->rt_desc_cmd_count++;
+                sd->rt_desc_cmds[slot] = commandBuffer;
+            }
+            if (slot != UINT32_MAX)
+            {
+                sd->rt_desc_sets[slot] = pBindDescriptorSetsInfo->pDescriptorSets[0];
+                sd->rt_desc_cmd_first_set[slot] = 0;
+                STEREO_LOG(
+                    "RT_DESC_SET0_TRACK2KHR cb=%p set=%p slot=%u",
+                    (void*)commandBuffer,
+                    (void*)(uintptr_t)pBindDescriptorSetsInfo->pDescriptorSets[0],
+                    slot);
+            }
+        }
+    }
+    if (!sd || !sd->real.CmdBindDescriptorSets2KHR)
+        return;
+    sd->real.CmdBindDescriptorSets2KHR(
+        commandBuffer,
+        pBindDescriptorSetsInfo);
+}
+#endif
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdTraceRaysKHR(
     VkCommandBuffer commandBuffer,

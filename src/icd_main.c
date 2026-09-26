@@ -333,6 +333,10 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_UpdateDescriptorSetWithTemplate);
     GDPA_WRAP("vkCmdBindDescriptorSets",
               stereo_CmdBindDescriptorSets);
+#ifdef VK_KHR_maintenance6
+    GDPA_WRAP("vkCmdBindDescriptorSets2KHR",
+              stereo_CmdBindDescriptorSets2KHR);
+#endif
     GDPA_WRAP("vkCreateRenderPass",
               stereo_CreateRenderPass);
 #ifdef VK_KHR_create_renderpass2
