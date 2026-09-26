@@ -403,7 +403,6 @@ typedef struct RealDeviceDispatch {
     PFN_vkCmdSetStencilWriteMask     CmdSetStencilWriteMask;
     PFN_vkCmdSetStencilReference     CmdSetStencilReference;
     PFN_vkCmdBindDescriptorSets      CmdBindDescriptorSets;
-    PFN_vkCmdBindDescriptorSets2     CmdBindDescriptorSets2;
     PFN_vkCmdBindIndexBuffer         CmdBindIndexBuffer;
     PFN_vkCmdBindVertexBuffers       CmdBindVertexBuffers;
     PFN_vkCmdDraw                    CmdDraw;
@@ -873,7 +872,6 @@ VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSetWithTemplate(VkDevice d
 VKAPI_ATTR VkResult VKAPI_CALL stereo_AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo, VkDescriptorSet *pDescriptorSets);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDescriptorSetLayout *pSetLayout);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
-VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets2(VkCommandBuffer commandBuffer, const VkBindDescriptorSetsInfo *pBindDescriptorSetsInfo);
 
 /* shader.c */
 StereoPipelineInfo *
