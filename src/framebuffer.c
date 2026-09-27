@@ -2421,7 +2421,7 @@ stereo_UpdateDescriptorSets(
                     }
                 }
                 STEREO_LOG(
-                    "RT_UPDATE_BIND15_VALUE set=%p slot=%u tracked=%u layout=%p layout_slot=%u rt_set0=%u pipeline_slot=%u bind15_count=%u bind15_type=%u array=%u view=%p image=%p type=%u layout_state=%u upgraded=%u",
+                    "RT_UPDATE_BIND15_VALUE set=%p slot=%u tracked=%u layout=%p layout_slot=%u rt_set0=%u pipeline_slot=%u bind15_count=%u bind15_type=%u array=%u view=%p image=%p type=%u layout_state=%u upgraded=%u nonnull=%u",
                     (void *)(uintptr_t)w->dstSet,
                     tracked_slot,
                     tracked_slot != UINT32_MAX ? 1u : 0u,
@@ -2436,9 +2436,10 @@ stereo_UpdateDescriptorSets(
                     (void *)(uintptr_t)descriptor_image,
                     w->descriptorType,
                     w->pImageInfo[j].imageLayout,
-                    upgraded ? 1u : 0u);
+                    upgraded ? 1u : 0u,
+                    view != VK_NULL_HANDLE && descriptor_image != VK_NULL_HANDLE ? 1u : 0u);
                 STEREO_LOG(
-                    "RT_OUTPUT_DESC set=%p binding=%u array=%u view=%p image=%p type=%u layout=%u upgraded=%u",
+                    "RT_OUTPUT_DESC set=%p binding=%u array=%u view=%p image=%p type=%u layout=%u upgraded=%u nonnull=%u",
                     (void *)(uintptr_t)w->dstSet,
                     w->dstBinding,
                     j,
@@ -2446,7 +2447,8 @@ stereo_UpdateDescriptorSets(
                     (void *)(uintptr_t)descriptor_image,
                     w->descriptorType,
                     w->pImageInfo[j].imageLayout,
-                    upgraded ? 1u : 0u);
+                    upgraded ? 1u : 0u,
+                    view != VK_NULL_HANDLE && descriptor_image != VK_NULL_HANDLE ? 1u : 0u);
             }
             if (w->dstBinding == 15 && j == 0)
             {
