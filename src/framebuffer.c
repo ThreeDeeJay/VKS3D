@@ -1812,19 +1812,36 @@ stereo_CreateDescriptorSetLayout(
         pSetLayout);
     if (res == VK_SUCCESS && pCreateInfo && pSetLayout)
     {
-        for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++)
+        if (sd->rt_desc_layout_count < MAX_RT_LAYOUT_TRACK)
         {
-            if (pCreateInfo->pBindings[i].binding == 15)
+            uint32_t slot = sd->rt_desc_layout_count++;
+            sd->rt_desc_layouts[slot] = *pSetLayout;
+            sd->rt_desc_layout_binding15[slot] = UINT32_MAX;
+            sd->rt_desc_layout_binding15_type[slot] = UINT32_MAX;
+            for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++)
             {
-                STEREO_LOG(
-                    "RT_LAYOUT_BIND15 layout=%p binding=15 type=%u count=%u stageFlags=0x%08X flags=0x%08X",
-                    (void*)(uintptr_t)*pSetLayout,
-                    pCreateInfo->pBindings[i].descriptorType,
-                    pCreateInfo->pBindings[i].descriptorCount,
-                    pCreateInfo->pBindings[i].stageFlags,
-                    pCreateInfo->flags);
-                break;
+                const VkDescriptorSetLayoutBinding *b = &pCreateInfo->pBindings[i];
+                if (b->binding == 15)
+                {
+                    sd->rt_desc_layout_binding15[slot] = b->descriptorCount;
+                    sd->rt_desc_layout_binding15_type[slot] = b->descriptorType;
+                    STEREO_LOG(
+                        "RT_LAYOUT_BIND15 layout=%p slot=%u binding=15 type=%u count=%u stageFlags=0x%08X layoutFlags=0x%08X",
+                        (void*)(uintptr_t)*pSetLayout,
+                        slot,
+                        b->descriptorType,
+                        b->descriptorCount,
+                        b->stageFlags,
+                        pCreateInfo->flags);
+                    break;
+                }
             }
+            STEREO_LOG(
+                "RT_LAYOUT_TRACK layout=%p slot=%u bind15_count=%u bind15_type=%u",
+                (void*)(uintptr_t)*pSetLayout,
+                slot,
+                sd->rt_desc_layout_binding15[slot],
+                sd->rt_desc_layout_binding15_type[slot]);
         }
     }
     return res;
