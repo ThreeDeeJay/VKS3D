@@ -725,6 +725,12 @@ typedef struct StereoDevice {
     VkShaderModule rt_pipeline_raygen_modules[MAX_RT_PIPELINE_TRACK];
     VkBool32 rt_pipeline_patched_raygen[MAX_RT_PIPELINE_TRACK];
     uint32_t rt_pipeline_track_count;
+    #define MAX_RT_DEFERRED_PIPELINE_TRACK 256
+    VkDeferredOperationKHR rt_deferred_pipeline_ops[MAX_RT_DEFERRED_PIPELINE_TRACK];
+    VkPipelineLayout rt_deferred_pipeline_layouts[MAX_RT_DEFERRED_PIPELINE_TRACK];
+    VkShaderModule rt_deferred_pipeline_raygen_modules[MAX_RT_DEFERRED_PIPELINE_TRACK];
+    VkBool32 rt_deferred_pipeline_patched_raygen[MAX_RT_DEFERRED_PIPELINE_TRACK];
+    uint32_t rt_deferred_pipeline_count;
     #define MAX_RT_DESC_SET_TRACK 8192
     VkDescriptorSet rt_desc_tracked_sets[MAX_RT_DESC_SET_TRACK];
     VkDescriptorSetLayout rt_desc_tracked_layouts[MAX_RT_DESC_SET_TRACK];

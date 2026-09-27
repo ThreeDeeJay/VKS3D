@@ -12425,34 +12425,12 @@ stereo_CreateRayTracingPipelinesKHR(
         createInfoCount,
         (res == VK_SUCCESS && pPipelines && createInfoCount > 0) ?
         (void*)pPipelines[0] : NULL);
-    if (pPipelines)
-    {
-        for (uint32_t p = 0; p < createInfoCount; p++)
-        {
-            for (uint32_t ti = 0; ti < sd->rt_pipeline_track_count; ti++)
-            {
-                if (sd->rt_pipeline_handle_layouts[ti] ==
-                    pCreateInfos[p].layout &&
-                    sd->rt_pipeline_handles[ti] == VK_NULL_HANDLE)
-                {
-                    sd->rt_pipeline_handles[ti] = pPipelines[p];
-                    STEREO_LOG(
-                        "RT_PIPELINE_CREATE_RESULT p=%u track_slot=%u pipeline=%p layout=%p raygen=%p patched=%u",
-                        p,
-                        ti,
-                        (void*)pPipelines[p],
-                        (void*)sd->rt_pipeline_handle_layouts[ti],
-                        (void*)sd->rt_pipeline_raygen_modules[ti],
-                        sd->rt_pipeline_patched_raygen[ti]);
-                    break;
-                }
-            }
-        }
-    }
     if (res == VK_SUCCESS && pPipelines)
     {
         for (uint32_t p = 0; p < createInfoCount; p++)
         {
+            if (pPipelines[p] == VK_NULL_HANDLE)
+                continue;
             if (sd->rt_pipeline_track_count >= MAX_RT_PIPELINE_TRACK)
                 break;
             uint32_t slot = sd->rt_pipeline_track_count++;
@@ -12469,6 +12447,33 @@ stereo_CreateRayTracingPipelinesKHR(
                 (void*)pCreateInfos[p].layout,
                 (void*)raygen_modules[p],
                 tmp_raygen_modules[p] != VK_NULL_HANDLE ? 1u : 0u);
+        }
+    }
+    if (res == VK_OPERATION_DEFERRED_KHR &&
+        deferredOperation != VK_NULL_HANDLE)
+    {
+        if (sd->rt_deferred_pipeline_count < MAX_RT_DEFERRED_PIPELINE_TRACK)
+        {
+            for (uint32_t p = 0; p < createInfoCount; p++)
+            {
+                uint32_t slot = sd->rt_deferred_pipeline_count++;
+                sd->rt_deferred_pipeline_ops[slot] = deferredOperation;
+                sd->rt_deferred_pipeline_layouts[slot] =
+                pCreateInfos[p].layout;
+                sd->rt_deferred_pipeline_raygen_modules[slot] =
+                raygen_modules[p];
+                sd->rt_deferred_pipeline_patched_raygen[slot] =
+                tmp_raygen_modules[p] != VK_NULL_HANDLE ?
+                VK_TRUE : VK_FALSE;
+                STEREO_LOG(
+                    "RT_DEFERRED_TRACK p=%u slot=%u deferred=%p layout=%p raygen=%p patched=%u",
+                    p,
+                    slot,
+                    (void*)(uintptr_t)deferredOperation,
+                    (void*)pCreateInfos[p].layout,
+                    (void*)raygen_modules[p],
+                    tmp_raygen_modules[p] != VK_NULL_HANDLE ? 1u : 0u);
+            }
         }
     }
     STEREO_LOG(
