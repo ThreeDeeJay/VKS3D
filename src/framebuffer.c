@@ -2345,19 +2345,51 @@ stereo_UpdateDescriptorSets(
             if (w->dstBinding == 15)
             {
                 uint32_t tracked_slot = UINT32_MAX;
+                VkDescriptorSetLayout actual_layout = VK_NULL_HANDLE;
                 for (uint32_t k = 0; k < sd->rt_desc_tracked_set_count; k++)
                 {
                     if (sd->rt_desc_tracked_sets[k] == w->dstSet)
                     {
                         tracked_slot = k;
+                        actual_layout = sd->rt_desc_tracked_layouts[k];
+                        break;
+                    }
+                }
+                uint32_t actual_layout_slot = UINT32_MAX;
+                uint32_t actual_bind15_count = UINT32_MAX;
+                uint32_t actual_bind15_type = UINT32_MAX;
+                for (uint32_t li = 0; li < sd->rt_desc_layout_count; li++)
+                {
+                    if (sd->rt_desc_layouts[li] == actual_layout)
+                    {
+                        actual_layout_slot = li;
+                        actual_bind15_count = sd->rt_desc_layout_binding15[li];
+                        actual_bind15_type = sd->rt_desc_layout_binding15_type[li];
+                        break;
+                    }
+                }
+                uint32_t pipeline_slot = UINT32_MAX;
+                bool rt_set0_match = false;
+                for (uint32_t pi = 0; pi < sd->rt_pipeline_layout_count; pi++)
+                {
+                    if (sd->rt_pipeline_set0_layouts[pi] == actual_layout)
+                    {
+                        pipeline_slot = pi;
+                        rt_set0_match = true;
                         break;
                     }
                 }
                 STEREO_LOG(
-                    "RT_UPDATE_BIND15_VALUE set=%p slot=%u tracked=%u array=%u view=%p image=%p type=%u layout=%u upgraded=%u",
+                    "RT_UPDATE_BIND15_VALUE set=%p slot=%u tracked=%u layout=%p layout_slot=%u rt_set0=%u pipeline_slot=%u bind15_count=%u bind15_type=%u array=%u view=%p image=%p type=%u layout_state=%u upgraded=%u",
                     (void *)(uintptr_t)w->dstSet,
                     tracked_slot,
                     tracked_slot != UINT32_MAX ? 1u : 0u,
+                    (void *)(uintptr_t)actual_layout,
+                    actual_layout_slot,
+                    rt_set0_match ? 1u : 0u,
+                    pipeline_slot,
+                    actual_bind15_count,
+                    actual_bind15_type,
                     j,
                     (void *)(uintptr_t)view,
                     (void *)(uintptr_t)descriptor_image,
