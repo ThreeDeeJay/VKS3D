@@ -1294,32 +1294,53 @@ stereo_CmdTraceRaysKHR(
             VkDescriptorSet bound_set = sd->rt_desc_bound_sets[slot][si];
             if (bound_set == VK_NULL_HANDLE)
                 continue;
+            uint32_t tracked_slot = UINT32_MAX;
             for (uint32_t ti = 0; ti < sd->rt_desc_tracked_set_count; ti++)
             {
-                if (sd->rt_desc_tracked_sets[ti] != bound_set)
-                    continue;
-                if (sd->rt_desc_binding15_images[ti] == VK_NULL_HANDLE)
-                    continue;
-                rt_image = sd->rt_desc_binding15_images[ti];
-                rt_output_set = bound_set;
-                rt_output_slot = ti;
+                if (sd->rt_desc_tracked_sets[ti] == bound_set)
+                {
+                    tracked_slot = ti;
+                    break;
+                }
+            }
+            if (tracked_slot == UINT32_MAX)
+            {
                 STEREO_LOG(
-                    "RT_TRACE_OUTPUT_RESOLVED set=%p image=%p view=%p slot=%u bound_index=%u cmd_slot=%u",
+                    "RT_TRACE_BOUND_SET_UNTRACKED set=%p bound_index=%u cmd_slot=%u",
                     (void*)(uintptr_t)bound_set,
-                    (void*)(uintptr_t)rt_image,
-                    (void*)(uintptr_t)sd->rt_desc_binding15_views[ti],
-                    ti,
                     si,
                     slot);
-                break;
+                continue;
             }
-            if (rt_image != VK_NULL_HANDLE)
-                break;
+            STEREO_LOG(
+                "RT_TRACE_BOUND_SET_TRACKED set=%p bound_index=%u tracked_slot=%u bind15_image=%p bind15_view=%p",
+                (void*)(uintptr_t)bound_set,
+                si,
+                tracked_slot,
+                (void*)(uintptr_t)sd->rt_desc_binding15_images[tracked_slot],
+                (void*)(uintptr_t)sd->rt_desc_binding15_views[tracked_slot]);
+            if (sd->rt_desc_binding15_images[tracked_slot] == VK_NULL_HANDLE)
+                continue;
+            rt_image = sd->rt_desc_binding15_images[tracked_slot];
+            rt_output_set = bound_set;
+            rt_output_slot = tracked_slot;
+            STEREO_LOG(
+                "RT_TRACE_OUTPUT_RESOLVED set=%p image=%p view=%p slot=%u bound_index=%u cmd_slot=%u",
+                (void*)(uintptr_t)bound_set,
+                (void*)(uintptr_t)rt_image,
+                (void*)(uintptr_t)sd->rt_desc_binding15_views[tracked_slot],
+                tracked_slot,
+                si,
+                slot);
+            break;
         }
     }
     if (rt_image == VK_NULL_HANDLE)
     {
-        STEREO_LOG("RT_TRACE_COPY_SKIP reason=no_bound_descriptor_output_image cmd_slot=%u", slot);
+        STEREO_LOG("RT_TRACE_COPY_SKIP reason=no_bound_descriptor_output_image cmd_slot=%u bound_count=%u tracked_count=%u",
+            slot,
+            slot != UINT32_MAX ? sd->rt_desc_bound_set_count[slot] : 0,
+            sd->rt_desc_tracked_set_count);
         STEREO_LOG("RT_TRACE_END");
         return;
     }
@@ -2564,15 +2585,33 @@ stereo_CmdBindDescriptorSets(
                 uint32_t set_index = firstSet + bi;
                 if (set_index < MAX_RT_CMD_BOUND_SETS)
                 {
-                    sd->rt_desc_bound_sets[slot][set_index] = pDescriptorSets[bi];
+                    VkDescriptorSet bound_set = pDescriptorSets[bi];
+                    sd->rt_desc_bound_sets[slot][set_index] = bound_set;
                     if (sd->rt_desc_bound_set_count[slot] <= set_index)
                         sd->rt_desc_bound_set_count[slot] = set_index + 1;
+                    uint32_t tracked_slot = UINT32_MAX;
+                    VkImage binding15_image = VK_NULL_HANDLE;
+                    VkImageView binding15_view = VK_NULL_HANDLE;
+                    for (uint32_t ti = 0; ti < sd->rt_desc_tracked_set_count; ti++)
+                    {
+                        if (sd->rt_desc_tracked_sets[ti] == bound_set)
+                        {
+                            tracked_slot = ti;
+                            binding15_image = sd->rt_desc_binding15_images[ti];
+                            binding15_view = sd->rt_desc_binding15_views[ti];
+                            break;
+                        }
+                    }
                     STEREO_LOG(
-                        "RT_DESC_BOUND_TRACK cb=%p set_index=%u set=%p slot=%u",
+                        "RT_DESC_BOUND_TRACK cb=%p set_index=%u set=%p slot=%u tracked=%u tracked_slot=%u bind15_image=%p bind15_view=%p",
                         (void*)commandBuffer,
                         set_index,
-                        (void*)(uintptr_t)pDescriptorSets[bi],
-                        slot);
+                        (void*)(uintptr_t)bound_set,
+                        slot,
+                        tracked_slot != UINT32_MAX ? 1u : 0u,
+                        tracked_slot,
+                        (void*)(uintptr_t)binding15_image,
+                        (void*)(uintptr_t)binding15_view);
                 }
             }
             if (firstSet == 0)
