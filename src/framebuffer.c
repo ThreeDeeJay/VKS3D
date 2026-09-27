@@ -1979,6 +1979,19 @@ stereo_UpdateDescriptorSetWithTemplate(
                             break;
                         }
                     }
+                    if (slot != UINT32_MAX)
+                    {
+                        sd->rt_desc_binding15_views[slot] = ii15->imageView;
+                        sd->rt_desc_binding15_images[slot] = image15;
+                        STEREO_LOG(
+                            "RT_TEMPLATE_BIND15_TRACK set=%p layout=%p view=%p image=%p slot=%u type=%u",
+                            (void*)(uintptr_t)descriptorSet,
+                            (void*)(uintptr_t)sd->rt_desc_tracked_layouts[slot],
+                            (void*)(uintptr_t)ii15->imageView,
+                            (void*)(uintptr_t)image15,
+                            slot,
+                            e15->descriptorType);
+                    }
                 }
                 else
                 {
@@ -2063,44 +2076,12 @@ stereo_UpdateDescriptorSetWithTemplate(
                         ii->imageLayout);
                     if (e->dstBinding == 15 && di == 0)
                     {
-                        for (uint32_t mi = 0; mi < sd->tracked_image_info_count; mi++)
-                        {
-                            if (sd->tracked_images[mi] == image)
-                            {
-                                STEREO_LOG(
-                                    "RT_BIND15_IMAGE_INFO set=%p template=%p view=%p image=%p format=%u extent=%ux%ux%u mip=%u layers=%u samples=%u tiling=%u flags=0x%08X usage=0x%08X type=%u slot=%u",
-                                    (void*)(uintptr_t)descriptorSet,
-                                    (void*)(uintptr_t)descriptorUpdateTemplate,
-                                    (void*)(uintptr_t)ii->imageView,
-                                    (void*)(uintptr_t)image,
-                                    sd->tracked_image_formats[mi],
-                                    sd->tracked_image_extents[mi].width,
-                                    sd->tracked_image_extents[mi].height,
-                                    sd->tracked_image_extents[mi].depth,
-                                    sd->tracked_image_mips[mi],
-                                    sd->tracked_image_layers[mi],
-                                    sd->tracked_image_samples[mi],
-                                    sd->tracked_image_tiling[mi],
-                                    sd->tracked_image_flags[mi],
-                                    sd->tracked_image_usage[mi],
-                                    sd->tracked_image_types[mi],
-                                    mi);
-                                break;
-                            }
-                        }
-                        if (slot != UINT32_MAX)
-                        {
-                            sd->rt_desc_binding15_views[slot] = ii->imageView;
-                            sd->rt_desc_binding15_images[slot] = image;
-                            STEREO_LOG(
-                                "RT_TEMPLATE_BIND15_TRACK set=%p layout=%p view=%p image=%p slot=%u type=%u",
-                                (void*)(uintptr_t)descriptorSet,
-                                (void*)(uintptr_t)sd->rt_desc_tracked_layouts[slot],
-                                (void*)(uintptr_t)ii->imageView,
-                                (void*)(uintptr_t)image,
-                                slot,
-                                e->descriptorType);
-                        }
+                        STEREO_LOG(
+                            "RT_TEMPLATE_BIND15_ALREADY_TRACKED set=%p template=%p slot=%u image=%p",
+                            (void*)(uintptr_t)descriptorSet,
+                            (void*)(uintptr_t)descriptorUpdateTemplate,
+                            slot,
+                            (void*)(uintptr_t)image);
                     }
                 }
                 else if (e->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
