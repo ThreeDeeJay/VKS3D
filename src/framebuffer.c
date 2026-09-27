@@ -1190,9 +1190,27 @@ stereo_CmdTraceRaysKHR(
         if (sd->rt_desc_cmds[i] == commandBuffer)
         {
             slot = i;
-            rt_set0 = sd->rt_desc_sets[i];
             break;
         }
+    }
+    if (slot != UINT32_MAX &&
+        sd->rt_desc_bound_set_count[slot] > 0)
+    {
+        rt_set0 = sd->rt_desc_bound_sets[slot][0];
+        STEREO_LOG(
+            "RT_TRACE_BOUND_SET0 cb=%p cmd_slot=%u set=%p",
+            (void*)commandBuffer,
+            slot,
+            (void*)(uintptr_t)rt_set0);
+    }
+    else
+    {
+        STEREO_LOG(
+            "RT_TRACE_BOUND_SET0 cb=%p cmd_slot=%u set=%p bound_count=%u",
+            (void*)commandBuffer,
+            slot,
+            (void*)(uintptr_t)rt_set0,
+            slot != UINT32_MAX ? sd->rt_desc_bound_set_count[slot] : 0);
     }
     if (rt_set0 != VK_NULL_HANDLE)
     {
@@ -1201,11 +1219,12 @@ stereo_CmdTraceRaysKHR(
             if (sd->rt_desc_tracked_sets[i] == rt_set0)
             {
                 STEREO_LOG(
-                    "RT_TRACE_BIND15 set=%p view=%p image=%p slot=%u",
+                    "RT_TRACE_BIND15 set=%p view=%p image=%p slot=%u layout=%p",
                     (void*)(uintptr_t)rt_set0,
                     (void*)(uintptr_t)sd->rt_desc_binding15_views[i],
                     (void*)(uintptr_t)sd->rt_desc_binding15_images[i],
-                    i);
+                    i,
+                    (void*)(uintptr_t)sd->rt_desc_tracked_layouts[i]);
                 if (sd->rt_desc_binding15_images[i] != VK_NULL_HANDLE)
                 {
                     VkImage rt_bound_image = sd->rt_desc_binding15_images[i];
