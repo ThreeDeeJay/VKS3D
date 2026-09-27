@@ -2163,6 +2163,46 @@ stereo_UpdateDescriptorSetWithTemplate(
                 }
                 break;
             }
+            for (uint32_t ei = 0; ei < t->entry_count; ei++)
+            {
+                VkDescriptorUpdateTemplateEntry *e = &t->entries[ei];
+                if (e->descriptorCount == 0)
+                    continue;
+                if (e->descriptorType != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE &&
+                    e->descriptorType != VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
+                    e->descriptorType != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    continue;
+                const uint8_t *entry_data = (const uint8_t *)pData + e->offset;
+                for (uint32_t di = 0; di < e->descriptorCount; di++)
+                {
+                    const VkDescriptorImageInfo *ii =
+                    (const VkDescriptorImageInfo *)(entry_data + (uint64_t)di * e->stride);
+                    VkImage image = VK_NULL_HANDLE;
+                    for (uint32_t vi = 0; vi < sd->tracked_image_view_count; vi++)
+                    {
+                        if (sd->tracked_image_views[vi] == ii->imageView)
+                        {
+                            image = sd->tracked_image_view_images[vi];
+                            break;
+                        }
+                    }
+                    if (ii->imageView == VK_NULL_HANDLE && ii->sampler == VK_NULL_HANDLE)
+                        continue;
+                    STEREO_LOG(
+                        "RT_SET0_TEMPLATE_IMAGE set=%p template=%p pipeline_slot=%u layout=%p binding=%u array=%u type=%u view=%p image=%p sampler=%p imageLayout=%u",
+                        (void*)(uintptr_t)descriptorSet,
+                        (void*)(uintptr_t)descriptorUpdateTemplate,
+                        rt_pipeline_slot,
+                        (void*)(uintptr_t)t->layout,
+                        e->dstBinding,
+                        e->dstArrayElement + di,
+                        e->descriptorType,
+                        (void*)(uintptr_t)ii->imageView,
+                        (void*)(uintptr_t)image,
+                        (void*)(uintptr_t)ii->sampler,
+                        ii->imageLayout);
+                }
+            }
             STEREO_LOG(
                 "RT_TEMPLATE_RT_SET set=%p layout=%p template=%p pipeline_slot=%u bind15_view=%p bind15_image=%p",
                 (void*)(uintptr_t)descriptorSet,
