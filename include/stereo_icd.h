@@ -699,7 +699,7 @@ typedef struct StereoDevice {
     VkImageView tracked_image_views[MAX_IMAGE_VIEW_TRACK];
     VkImage tracked_image_view_images[MAX_IMAGE_VIEW_TRACK];
     uint32_t tracked_image_view_count;
-    #define MAX_RT_CMD_DESC_SETS 8192
+    #define MAX_RT_CMD_DESC_SETS 256
     #define MAX_RT_CMD_BOUND_SETS 32
     VkCommandBuffer rt_desc_cmds[MAX_RT_CMD_DESC_SETS];
     VkDescriptorSet rt_desc_sets[MAX_RT_CMD_DESC_SETS];
