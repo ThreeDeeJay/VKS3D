@@ -1283,11 +1283,26 @@ stereo_CmdTraceRaysKHR(
         return;
     }
     VkImage rt_image = VK_NULL_HANDLE;
-    if (sd->intercepted_storage_count > 0)
-        rt_image = sd->intercepted_storage[sd->intercepted_storage_count - 1];
+    if (rt_set0 != VK_NULL_HANDLE)
+    {
+        for (uint32_t i = 0; i < sd->rt_desc_tracked_set_count; i++)
+        {
+            if (sd->rt_desc_tracked_sets[i] == rt_set0)
+            {
+                rt_image = sd->rt_desc_binding15_images[i];
+                STEREO_LOG(
+                    "RT_TRACE_OUTPUT_RESOLVED set=%p image=%p view=%p slot=%u",
+                    (void*)(uintptr_t)rt_set0,
+                    (void*)(uintptr_t)rt_image,
+                    (void*)(uintptr_t)sd->rt_desc_binding15_views[i],
+                    i);
+                break;
+            }
+        }
+    }
     if (rt_image == VK_NULL_HANDLE)
     {
-        STEREO_LOG("RT_TRACE_COPY_SKIP reason=no_storage_image");
+        STEREO_LOG("RT_TRACE_COPY_SKIP reason=no_descriptor_output_image");
         STEREO_LOG("RT_TRACE_END");
         return;
     }
