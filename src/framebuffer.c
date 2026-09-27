@@ -1893,6 +1893,22 @@ stereo_UpdateDescriptorSetWithTemplate(
         RtDescTemplateTrack *t = &sd->rt_desc_templates[ti];
         if (t->update_template != descriptorUpdateTemplate)
             continue;
+        bool rt_layout = false;
+        for (uint32_t pi = 0; pi < sd->rt_pipeline_layout_count; pi++)
+        {
+            if (sd->rt_pipeline_set0_layouts[pi] == t->layout)
+            {
+                rt_layout = true;
+                break;
+            }
+        }
+        if (!rt_layout)
+            continue;
+        STEREO_LOG(
+            "RT_TEMPLATE_RT_LAYOUT set=%p template=%p layout=%p",
+            (void*)(uintptr_t)descriptorSet,
+            (void*)(uintptr_t)descriptorUpdateTemplate,
+            (void*)(uintptr_t)t->layout);
         for (uint32_t ei = 0; ei < t->entry_count; ei++)
         {
             VkDescriptorUpdateTemplateEntry *e = &t->entries[ei];
