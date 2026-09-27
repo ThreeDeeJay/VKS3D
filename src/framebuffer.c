@@ -2798,6 +2798,23 @@ stereo_CmdBindDescriptorSets(
                                 break;
                             }
                         }
+                        for (uint32_t ti = 0; ti < sd->rt_desc_template_count; ti++)
+                        {
+                            RtDescTemplateTrack *t = &sd->rt_desc_templates[ti];
+                            if (t->layout != actual_set_layout)
+                                continue;
+                            STEREO_LOG(
+                                "RT_DESC_BOUND_TEMPLATE_MATCH cb=%p set_index=%u set=%p pipeline_slot=%u template_slot=%u template=%p layout=%p bind15_image=%p bind15_view=%p",
+                                (void*)commandBuffer,
+                                set_index,
+                                (void*)(uintptr_t)bound_set,
+                                pipeline_slot,
+                                ti,
+                                (void*)(uintptr_t)t->update_template,
+                                (void*)(uintptr_t)actual_set_layout,
+                                (void*)(uintptr_t)binding15_image,
+                                (void*)(uintptr_t)binding15_view);
+                        }
                         STEREO_LOG(
                             "RT_DESC_BOUND_LAYOUT cb=%p set_index=%u set=%p pipeline_slot=%u expected_layout=%p actual_layout=%p handle_match=%u expected_layout_slot=%u expected_bind15_count=%u expected_bind15_type=%u actual_layout_slot=%u actual_bind15_count=%u actual_bind15_type=%u bind15_image=%p bind15_view=%p",
                             (void*)commandBuffer,
