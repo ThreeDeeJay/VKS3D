@@ -2247,9 +2247,7 @@ stereo_UpdateDescriptorSetWithTemplate(
                         (void*)(uintptr_t)*as);
                 }
             }
-            break;
         }
-        break;
     }
     if (slot != UINT32_MAX)
     {
