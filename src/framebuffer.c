@@ -2803,8 +2803,23 @@ stereo_CmdBindDescriptorSets(
                             RtDescTemplateTrack *t = &sd->rt_desc_templates[ti];
                             if (t->layout != actual_set_layout)
                                 continue;
+                            uint32_t template_bind15_type = UINT32_MAX;
+                            uint32_t template_bind15_count = 0;
+                            uint64_t template_bind15_offset = 0;
+                            uint64_t template_bind15_stride = 0;
+                            for (uint32_t ei = 0; ei < t->entry_count; ei++)
+                            {
+                                if (t->entries[ei].dstBinding == 15)
+                                {
+                                    template_bind15_type = t->entries[ei].descriptorType;
+                                    template_bind15_count = t->entries[ei].descriptorCount;
+                                    template_bind15_offset = t->entries[ei].offset;
+                                    template_bind15_stride = t->entries[ei].stride;
+                                    break;
+                                }
+                            }
                             STEREO_LOG(
-                                "RT_DESC_BOUND_TEMPLATE_MATCH cb=%p set_index=%u set=%p pipeline_slot=%u template_slot=%u template=%p layout=%p bind15_image=%p bind15_view=%p",
+                                "RT_DESC_BOUND_TEMPLATE_MATCH cb=%p set_index=%u set=%p pipeline_slot=%u template_slot=%u template=%p layout=%p bind15_type=%u bind15_count=%u bind15_offset=%llu bind15_stride=%llu bind15_image=%p bind15_view=%p",
                                 (void*)commandBuffer,
                                 set_index,
                                 (void*)(uintptr_t)bound_set,
@@ -2812,6 +2827,10 @@ stereo_CmdBindDescriptorSets(
                                 ti,
                                 (void*)(uintptr_t)t->update_template,
                                 (void*)(uintptr_t)actual_set_layout,
+                                template_bind15_type,
+                                template_bind15_count,
+                                (unsigned long long)template_bind15_offset,
+                                (unsigned long long)template_bind15_stride,
                                 (void*)(uintptr_t)binding15_image,
                                 (void*)(uintptr_t)binding15_view);
                         }
