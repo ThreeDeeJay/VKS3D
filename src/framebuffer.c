@@ -2128,6 +2128,41 @@ stereo_UpdateDescriptorSetWithTemplate(
             rt_pipeline_slot);
         if (rt_layout)
         {
+            for (uint32_t ei = 0; ei < t->entry_count; ei++)
+            {
+                VkDescriptorUpdateTemplateEntry *e = &t->entries[ei];
+                if (e->dstBinding != 15 || e->descriptorCount == 0)
+                    continue;
+                const uint8_t *entry_data = (const uint8_t *)pData + e->offset;
+                if (e->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
+                    e->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+                    e->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                {
+                    const VkDescriptorImageInfo *ii = (const VkDescriptorImageInfo *)entry_data;
+                    VkImage image = VK_NULL_HANDLE;
+                    for (uint32_t vi = 0; vi < sd->tracked_image_view_count; vi++)
+                    {
+                        if (sd->tracked_image_views[vi] == ii->imageView)
+                        {
+                            image = sd->tracked_image_view_images[vi];
+                            break;
+                        }
+                    }
+                    STEREO_LOG(
+                        "RT_SET0_TEMPLATE_BIND15 set=%p template=%p pipeline_slot=%u layout=%p type=%u view=%p image=%p sampler=%p imageLayout=%u tracked_slot=%u",
+                        (void*)(uintptr_t)descriptorSet,
+                        (void*)(uintptr_t)descriptorUpdateTemplate,
+                        rt_pipeline_slot,
+                        (void*)(uintptr_t)t->layout,
+                        e->descriptorType,
+                        (void*)(uintptr_t)ii->imageView,
+                        (void*)(uintptr_t)image,
+                        (void*)(uintptr_t)ii->sampler,
+                        ii->imageLayout,
+                        slot);
+                }
+                break;
+            }
             STEREO_LOG(
                 "RT_TEMPLATE_RT_SET set=%p layout=%p template=%p pipeline_slot=%u bind15_view=%p bind15_image=%p",
                 (void*)(uintptr_t)descriptorSet,
