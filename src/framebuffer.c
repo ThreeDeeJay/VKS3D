@@ -2109,6 +2109,35 @@ stereo_UpdateDescriptorSetWithTemplate(
                 rt_pipeline_slot,
                 (void*)(uintptr_t)sd->rt_desc_binding15_views[slot],
                 (void*)(uintptr_t)sd->rt_desc_binding15_images[slot]);
+            bool bound_set0 = false;
+            for (uint32_t ci = 0; ci < sd->rt_desc_cmd_count; ci++)
+            {
+                if (sd->rt_desc_cmd_first_set[ci] != 0)
+                    continue;
+                if (sd->rt_desc_bound_set_count[ci] == 0)
+                    continue;
+                if (sd->rt_desc_bound_sets[ci][0] == descriptorSet)
+                {
+                    bound_set0 = true;
+                    STEREO_LOG(
+                        "RT_TEMPLATE_BOUND_SET0 set=%p cmd_slot=%u pipeline_layout=%p pipeline_slot=%u bind15_view=%p bind15_image=%p",
+                        (void*)(uintptr_t)descriptorSet,
+                        ci,
+                        (void*)(uintptr_t)sd->rt_desc_pipeline_layouts[ci],
+                        rt_pipeline_slot,
+                        (void*)(uintptr_t)sd->rt_desc_binding15_views[slot],
+                        (void*)(uintptr_t)sd->rt_desc_binding15_images[slot]);
+                }
+            }
+            if (!bound_set0)
+            {
+                STEREO_LOG(
+                    "RT_TEMPLATE_NOT_BOUND_SET0 set=%p pipeline_slot=%u bind15_view=%p bind15_image=%p",
+                    (void*)(uintptr_t)descriptorSet,
+                    rt_pipeline_slot,
+                    (void*)(uintptr_t)sd->rt_desc_binding15_views[slot],
+                    (void*)(uintptr_t)sd->rt_desc_binding15_images[slot]);
+            }
         }
         if (!rt_layout)
             continue;
