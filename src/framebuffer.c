@@ -2020,7 +2020,7 @@ stereo_UpdateDescriptorSetWithTemplate(
                         }
                     }
                     STEREO_LOG(
-                        "RT_TEMPLATE_VALUE15 set=%p template=%p template_slot=%u layout=%p entry=%u type=%u offset=%llu stride=%llu view=%p image=%p sampler=%p imageLayout=%u",
+                        "RT_TEMPLATE_VALUE15 set=%p template=%p template_slot=%u layout=%p entry=%u type=%u offset=%llu stride=%llu pData=%p value=%p raw=%016llX:%016llX:%016llX view=%p image=%p sampler=%p imageLayout=%u",
                         (void*)(uintptr_t)descriptorSet,
                         (void*)(uintptr_t)descriptorUpdateTemplate,
                         ti,
@@ -2029,6 +2029,11 @@ stereo_UpdateDescriptorSetWithTemplate(
                         e15->descriptorType,
                         (unsigned long long)e15->offset,
                         (unsigned long long)e15->stride,
+                        pData,
+                        (void*)ii15,
+                        (unsigned long long)((const uint64_t*)ii15)[0],
+                        (unsigned long long)((const uint64_t*)ii15)[1],
+                        (unsigned long long)((const uint64_t*)ii15)[2],
                         (void*)(uintptr_t)ii15->imageView,
                         (void*)(uintptr_t)image15,
                         (void*)(uintptr_t)ii15->sampler,
