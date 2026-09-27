@@ -2829,7 +2829,8 @@ stereo_CmdBindDescriptorSets(
                         (void*)(uintptr_t)pDescriptorSets[0],
                         (void*)(uintptr_t)layout,
                         slot);
-                    for (uint32_t hi = 0; hi < sd->rt_desc_set0_history_count; hi++)
+                    uint32_t hi = 0;
+                    for (; hi < sd->rt_desc_set0_history_count; hi++)
                     {
                         if (sd->rt_desc_set0_history[hi] == pDescriptorSets[0])
                             break;
