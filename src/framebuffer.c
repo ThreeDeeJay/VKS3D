@@ -1908,6 +1908,20 @@ stereo_UpdateDescriptorSetWithTemplate(
         RtDescTemplateTrack *t = &sd->rt_desc_templates[ti];
         if (t->update_template != descriptorUpdateTemplate)
             continue;
+        if (slot == UINT32_MAX &&
+            sd->rt_desc_tracked_set_count < MAX_RT_DESC_SET_TRACK)
+        {
+            slot = sd->rt_desc_tracked_set_count++;
+            sd->rt_desc_tracked_sets[slot] = descriptorSet;
+            sd->rt_desc_tracked_layouts[slot] = t->layout;
+            sd->rt_desc_binding15_views[slot] = VK_NULL_HANDLE;
+            sd->rt_desc_binding15_images[slot] = VK_NULL_HANDLE;
+            STEREO_LOG(
+                "RT_TEMPLATE_SET_TRACK set=%p layout=%p slot=%u",
+                (void*)(uintptr_t)descriptorSet,
+                (void*)(uintptr_t)t->layout,
+                slot);
+        }
         for (uint32_t ei = 0; ei < t->entry_count; ei++)
         {
             if (t->entries[ei].dstBinding == 15)
