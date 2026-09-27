@@ -2191,11 +2191,17 @@ stereo_UpdateDescriptorSetWithTemplate(
                         }
                     }
                     STEREO_LOG(
-                        "RT_TEMPLATE_VALUE set=%p entry=%u binding=%u index=%u view=%p image=%p sampler=%p layout=%u",
+                        "RT_TEMPLATE_VALUE set=%p template_slot=%u entry=%u binding=%u index=%u offset=%llu stride=%llu raw=%016llX:%016llX:%016llX view=%p image=%p sampler=%p layout=%u",
                         (void*)(uintptr_t)descriptorSet,
+                        ti,
                         ei,
                         e->dstBinding,
                         di,
+                        (unsigned long long)e->offset,
+                        (unsigned long long)e->stride,
+                        (unsigned long long)((const uint64_t *)ii)[0],
+                        (unsigned long long)((const uint64_t *)ii)[1],
+                        (unsigned long long)((const uint64_t *)ii)[2],
                         (void*)(uintptr_t)ii->imageView,
                         (void*)(uintptr_t)image,
                         (void*)(uintptr_t)ii->sampler,
@@ -2218,8 +2224,9 @@ stereo_UpdateDescriptorSetWithTemplate(
                     const VkDescriptorBufferInfo *bi =
                     (const VkDescriptorBufferInfo *)entry_data;
                     STEREO_LOG(
-                        "RT_TEMPLATE_VALUE set=%p entry=%u binding=%u index=%u buffer=%p offset=%llu range=%llu",
+                        "RT_TEMPLATE_VALUE set=%p template_slot=%u entry=%u binding=%u index=%u buffer=%p offset=%llu range=%llu",
                         (void*)(uintptr_t)descriptorSet,
+                        ti,
                         ei,
                         e->dstBinding,
                         di,
