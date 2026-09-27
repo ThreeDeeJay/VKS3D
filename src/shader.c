@@ -12337,6 +12337,7 @@ stereo_CreateRayTracingPipelinesKHR(
                 free(patched_ci);
                 free(patched_stages);
                 free(tmp_raygen_modules);
+                free(raygen_modules);
                 return VK_ERROR_OUT_OF_HOST_MEMORY;
             }
             memcpy(
@@ -12408,38 +12409,6 @@ stereo_CreateRayTracingPipelinesKHR(
                 grp->intersectionShader);
         }
     }
-    for (uint32_t p = 0; p < createInfoCount; p++)
-    {
-        VkShaderModule raygen_module = VK_NULL_HANDLE;
-        for (uint32_t s = 0; s < pCreateInfos[p].stageCount; s++)
-        {
-            const VkPipelineShaderStageCreateInfo *st =
-            patched_stages[p] ?
-            &patched_stages[p][s] :
-            &pCreateInfos[p].pStages[s];
-            if (st->stage == VK_SHADER_STAGE_RAYGEN_BIT_KHR)
-            {
-                raygen_module = st->module;
-                break;
-            }
-        }
-        if (sd->rt_pipeline_track_count < MAX_RT_PIPELINE_TRACK)
-        {
-            uint32_t slot = sd->rt_pipeline_track_count++;
-            sd->rt_pipeline_handles[slot] = VK_NULL_HANDLE;
-            sd->rt_pipeline_handle_layouts[slot] = pCreateInfos[p].layout;
-            sd->rt_pipeline_raygen_modules[slot] = raygen_module;
-            sd->rt_pipeline_patched_raygen[slot] =
-            patched_rt_raygen;
-            STEREO_LOG(
-                "RT_PIPELINE_CREATE_TRACK p=%u track_slot=%u layout=%p raygen=%p patched=%u",
-                p,
-                slot,
-                (void*)pCreateInfos[p].layout,
-                (void*)raygen_module,
-                patched_rt_raygen);
-        }
-    }
     VkResult res = sd->real.CreateRayTracingPipelinesKHR(
         sd->real_device,
         deferredOperation,
@@ -12483,7 +12452,7 @@ stereo_CreateRayTracingPipelinesKHR(
             sd->rt_pipeline_handle_layouts[slot] = pCreateInfos[p].layout;
             sd->rt_pipeline_raygen_modules[slot] = raygen_modules[p];
             sd->rt_pipeline_patched_raygen[slot] =
-            patched_rt_raygen;
+            tmp_raygen_modules[p] != VK_NULL_HANDLE ? VK_TRUE : VK_FALSE;
             STEREO_LOG(
                 "RT_PIPELINE_CREATE_RESULT p=%u track_slot=%u pipeline=%p layout=%p raygen=%p patched=%u",
                 p,
@@ -12491,7 +12460,7 @@ stereo_CreateRayTracingPipelinesKHR(
                 (void*)pPipelines[p],
                 (void*)pCreateInfos[p].layout,
                 (void*)raygen_modules[p],
-                patched_rt_raygen);
+                tmp_raygen_modules[p] != VK_NULL_HANDLE ? 1u : 0u);
         }
     }
     STEREO_LOG(
