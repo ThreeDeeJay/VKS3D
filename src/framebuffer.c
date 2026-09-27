@@ -2712,8 +2712,34 @@ stereo_CmdBindDescriptorSets(
                         if (pipeline_slot != UINT32_MAX &&
                             set_index < sd->rt_pipeline_set_counts[pipeline_slot])
                             expected_set_layout = sd->rt_pipeline_set_layouts[pipeline_slot][set_index];
+                        uint32_t actual_layout_slot = UINT32_MAX;
+                        uint32_t actual_bind15_count = UINT32_MAX;
+                        uint32_t actual_bind15_type = UINT32_MAX;
+                        for (uint32_t li = 0; li < sd->rt_desc_layout_count; li++)
+                        {
+                            if (sd->rt_desc_layouts[li] == actual_set_layout)
+                            {
+                                actual_layout_slot = li;
+                                actual_bind15_count = sd->rt_desc_layout_binding15[li];
+                                actual_bind15_type = sd->rt_desc_layout_binding15_type[li];
+                                break;
+                            }
+                        }
+                        uint32_t expected_layout_slot = UINT32_MAX;
+                        uint32_t expected_bind15_count = UINT32_MAX;
+                        uint32_t expected_bind15_type = UINT32_MAX;
+                        for (uint32_t li = 0; li < sd->rt_desc_layout_count; li++)
+                        {
+                            if (sd->rt_desc_layouts[li] == expected_set_layout)
+                            {
+                                expected_layout_slot = li;
+                                expected_bind15_count = sd->rt_desc_layout_binding15[li];
+                                expected_bind15_type = sd->rt_desc_layout_binding15_type[li];
+                                break;
+                            }
+                        }
                         STEREO_LOG(
-                            "RT_DESC_BOUND_LAYOUT cb=%p set_index=%u set=%p pipeline_slot=%u expected_layout=%p actual_layout=%p layout_match=%u bind15_image=%p bind15_view=%p",
+                            "RT_DESC_BOUND_LAYOUT cb=%p set_index=%u set=%p pipeline_slot=%u expected_layout=%p actual_layout=%p handle_match=%u expected_layout_slot=%u expected_bind15_count=%u expected_bind15_type=%u actual_layout_slot=%u actual_bind15_count=%u actual_bind15_type=%u bind15_image=%p bind15_view=%p",
                             (void*)commandBuffer,
                             set_index,
                             (void*)(uintptr_t)bound_set,
@@ -2722,6 +2748,12 @@ stereo_CmdBindDescriptorSets(
                             (void*)(uintptr_t)actual_set_layout,
                             expected_set_layout != VK_NULL_HANDLE &&
                             actual_set_layout == expected_set_layout ? 1u : 0u,
+                            expected_layout_slot,
+                            expected_bind15_count,
+                            expected_bind15_type,
+                            actual_layout_slot,
+                            actual_bind15_count,
+                            actual_bind15_type,
                             (void*)(uintptr_t)binding15_image,
                             (void*)(uintptr_t)binding15_view);
                     }
