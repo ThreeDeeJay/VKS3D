@@ -2066,19 +2066,33 @@ stereo_UpdateDescriptorSetWithTemplate(
             }
         }
         bool rt_layout = false;
+        uint32_t rt_pipeline_slot = UINT32_MAX;
         for (uint32_t pi = 0; pi < sd->rt_pipeline_layout_count; pi++)
         {
             if (sd->rt_pipeline_set0_layouts[pi] == t->layout)
             {
                 rt_layout = true;
+                rt_pipeline_slot = pi;
                 break;
             }
         }
         STEREO_LOG(
-            "RT_TEMPLATE_RT_LAYOUT_CHECK template=%p layout=%p rt_layout=%u",
+            "RT_TEMPLATE_RT_LAYOUT_CHECK template=%p layout=%p rt_layout=%u pipeline_slot=%u",
             (void*)(uintptr_t)descriptorUpdateTemplate,
             (void*)(uintptr_t)t->layout,
-            rt_layout ? 1u : 0u);
+            rt_layout ? 1u : 0u,
+            rt_pipeline_slot);
+        if (rt_layout)
+        {
+            STEREO_LOG(
+                "RT_TEMPLATE_RT_SET set=%p layout=%p template=%p pipeline_slot=%u bind15_view=%p bind15_image=%p",
+                (void*)(uintptr_t)descriptorSet,
+                (void*)(uintptr_t)t->layout,
+                (void*)(uintptr_t)descriptorUpdateTemplate,
+                rt_pipeline_slot,
+                (void*)(uintptr_t)sd->rt_desc_binding15_views[slot],
+                (void*)(uintptr_t)sd->rt_desc_binding15_images[slot]);
+        }
         if (!rt_layout)
             continue;
         STEREO_LOG(
