@@ -12417,7 +12417,15 @@ stereo_CreateRayTracingPipelinesKHR(
         patched_ci,
         pAllocator,
         pPipelines);
-    if (res == VK_SUCCESS && pPipelines)
+    STEREO_LOG(
+        "RT_PIPE_CREATE_RETURN result=%d deferred=%p pipelines=%p count=%u first=%p",
+        res,
+        (void*)(uintptr_t)deferredOperation,
+        (void*)pPipelines,
+        createInfoCount,
+        (res == VK_SUCCESS && pPipelines && createInfoCount > 0) ?
+        (void*)pPipelines[0] : NULL);
+    if (pPipelines)
     {
         for (uint32_t p = 0; p < createInfoCount; p++)
         {
