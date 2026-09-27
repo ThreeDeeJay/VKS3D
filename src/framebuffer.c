@@ -2009,6 +2009,31 @@ stereo_UpdateDescriptorSetWithTemplate(
                         ii->imageLayout);
                     if (e->dstBinding == 15 && di == 0)
                     {
+                        for (uint32_t mi = 0; mi < sd->tracked_image_info_count; mi++)
+                        {
+                            if (sd->tracked_images[mi] == image)
+                            {
+                                STEREO_LOG(
+                                    "RT_BIND15_IMAGE_INFO set=%p template=%p view=%p image=%p format=%u extent=%ux%ux%u mip=%u layers=%u samples=%u tiling=%u flags=0x%08X usage=0x%08X type=%u slot=%u",
+                                    (void*)(uintptr_t)descriptorSet,
+                                    (void*)(uintptr_t)descriptorUpdateTemplate,
+                                    (void*)(uintptr_t)ii->imageView,
+                                    (void*)(uintptr_t)image,
+                                    sd->tracked_image_formats[mi],
+                                    sd->tracked_image_extents[mi].width,
+                                    sd->tracked_image_extents[mi].height,
+                                    sd->tracked_image_extents[mi].depth,
+                                    sd->tracked_image_mips[mi],
+                                    sd->tracked_image_layers[mi],
+                                    sd->tracked_image_samples[mi],
+                                    sd->tracked_image_tiling[mi],
+                                    sd->tracked_image_flags[mi],
+                                    sd->tracked_image_usage[mi],
+                                    sd->tracked_image_types[mi],
+                                    mi);
+                                break;
+                            }
+                        }
                         if (slot != UINT32_MAX)
                         {
                             sd->rt_desc_binding15_views[slot] = ii->imageView;
