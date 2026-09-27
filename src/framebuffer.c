@@ -2194,20 +2194,36 @@ stereo_UpdateDescriptorSets(
     for (uint32_t i = 0; i < descriptorWriteCount; i++)
     {
         const VkWriteDescriptorSet *w = &pDescriptorWrites[i];
+        uint32_t tracked_slot = UINT32_MAX;
         for (uint32_t k = 0; k < sd->rt_desc_tracked_set_count; k++)
         {
             if (sd->rt_desc_tracked_sets[k] == w->dstSet)
             {
-                STEREO_LOG(
-                    "RT_SET_WRITE set=%p slot=%u binding=%u array=%u count=%u type=%u",
-                    (void*)(uintptr_t)w->dstSet,
-                    k,
-                    w->dstBinding,
-                    w->dstArrayElement,
-                    w->descriptorCount,
-                    w->descriptorType);
+                tracked_slot = k;
                 break;
             }
+        }
+        if (w->dstBinding == 15)
+        {
+            STEREO_LOG(
+                "RT_UPDATE_BIND15 set=%p tracked=%u slot=%u array=%u count=%u type=%u",
+                (void*)(uintptr_t)w->dstSet,
+                tracked_slot != UINT32_MAX ? 1u : 0u,
+                tracked_slot,
+                w->dstArrayElement,
+                w->descriptorCount,
+                w->descriptorType);
+        }
+        if (tracked_slot != UINT32_MAX)
+        {
+            STEREO_LOG(
+                "RT_SET_WRITE set=%p slot=%u binding=%u array=%u count=%u type=%u",
+                (void*)(uintptr_t)w->dstSet,
+                tracked_slot,
+                w->dstBinding,
+                w->dstArrayElement,
+                w->descriptorCount,
+                w->descriptorType);
         }
         if (w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
             w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
@@ -2282,6 +2298,26 @@ stereo_UpdateDescriptorSets(
                 w->pImageInfo[j].imageLayout);
             if (w->dstBinding == 15)
             {
+                uint32_t tracked_slot = UINT32_MAX;
+                for (uint32_t k = 0; k < sd->rt_desc_tracked_set_count; k++)
+                {
+                    if (sd->rt_desc_tracked_sets[k] == w->dstSet)
+                    {
+                        tracked_slot = k;
+                        break;
+                    }
+                }
+                STEREO_LOG(
+                    "RT_UPDATE_BIND15_VALUE set=%p slot=%u tracked=%u array=%u view=%p image=%p type=%u layout=%u upgraded=%u",
+                    (void *)(uintptr_t)w->dstSet,
+                    tracked_slot,
+                    tracked_slot != UINT32_MAX ? 1u : 0u,
+                    j,
+                    (void *)(uintptr_t)view,
+                    (void *)(uintptr_t)descriptor_image,
+                    w->descriptorType,
+                    w->pImageInfo[j].imageLayout,
+                    upgraded ? 1u : 0u);
                 STEREO_LOG(
                     "RT_OUTPUT_DESC set=%p binding=%u array=%u view=%p image=%p type=%u layout=%u upgraded=%u",
                     (void *)(uintptr_t)w->dstSet,
