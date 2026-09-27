@@ -700,10 +700,13 @@ typedef struct StereoDevice {
     VkImage tracked_image_view_images[MAX_IMAGE_VIEW_TRACK];
     uint32_t tracked_image_view_count;
     #define MAX_RT_CMD_DESC_SETS 256
+    #define MAX_RT_CMD_BOUND_SETS 32
     VkCommandBuffer rt_desc_cmds[MAX_RT_CMD_DESC_SETS];
     VkDescriptorSet rt_desc_sets[MAX_RT_CMD_DESC_SETS];
     VkPipelineLayout rt_desc_pipeline_layouts[MAX_RT_CMD_DESC_SETS];
     uint32_t rt_desc_cmd_first_set[MAX_RT_CMD_DESC_SETS];
+    VkDescriptorSet rt_desc_bound_sets[MAX_RT_CMD_DESC_SETS][MAX_RT_CMD_BOUND_SETS];
+    uint32_t rt_desc_bound_set_count[MAX_RT_CMD_DESC_SETS];
     uint32_t rt_desc_cmd_count;
     #define MAX_RT_PIPELINE_LAYOUT_TRACK 256
     VkPipelineLayout rt_pipeline_layouts[MAX_RT_PIPELINE_LAYOUT_TRACK];
