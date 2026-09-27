@@ -1011,6 +1011,33 @@ stereo_CmdBindPipeline(
         sd,
         commandBuffer,
         pipeline);
+    if (pipelineBindPoint == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR)
+    {
+        uint32_t slot = UINT32_MAX;
+        for (uint32_t i = 0; i < sd->rt_desc_cmd_count; i++)
+        {
+            if (sd->rt_desc_cmds[i] == commandBuffer)
+            {
+                slot = i;
+                break;
+            }
+        }
+        if (slot == UINT32_MAX &&
+            sd->rt_desc_cmd_count < MAX_RT_CMD_DESC_SETS)
+        {
+            slot = sd->rt_desc_cmd_count++;
+            sd->rt_desc_cmds[slot] = commandBuffer;
+        }
+        if (slot != UINT32_MAX)
+        {
+            sd->rt_desc_pipelines[slot] = pipeline;
+            STEREO_LOG(
+                "RT_PIPELINE_BIND cb=%p cmd_slot=%u pipeline=%p",
+                (void*)commandBuffer,
+                slot,
+                (void*)(uintptr_t)pipeline);
+        }
+    }
     STEREO_LOG(
         "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
         (void *)pipeline,
