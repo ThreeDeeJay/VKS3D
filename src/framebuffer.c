@@ -1893,6 +1893,24 @@ stereo_UpdateDescriptorSetWithTemplate(
         RtDescTemplateTrack *t = &sd->rt_desc_templates[ti];
         if (t->update_template != descriptorUpdateTemplate)
             continue;
+        for (uint32_t ei = 0; ei < t->entry_count; ei++)
+        {
+            if (t->entries[ei].dstBinding == 15)
+            {
+                STEREO_LOG(
+                    "RT_TEMPLATE_MATCH15 set=%p template=%p layout=%p entry=%u binding=%u offset=%llu stride=%llu type=%u data=%p",
+                    (void*)(uintptr_t)descriptorSet,
+                    (void*)(uintptr_t)descriptorUpdateTemplate,
+                    (void*)(uintptr_t)t->layout,
+                    ei,
+                    t->entries[ei].dstBinding,
+                    (unsigned long long)t->entries[ei].offset,
+                    (unsigned long long)t->entries[ei].stride,
+                    t->entries[ei].descriptorType,
+                    pData);
+                break;
+            }
+        }
         bool rt_layout = false;
         for (uint32_t pi = 0; pi < sd->rt_pipeline_layout_count; pi++)
         {
