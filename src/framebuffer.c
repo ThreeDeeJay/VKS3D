@@ -1930,6 +1930,21 @@ stereo_UpdateDescriptorSetWithTemplate(
     if (!sd)
         return;
     uint32_t slot = UINT32_MAX;
+    for (uint32_t ci = 0; ci < sd->rt_desc_cmd_count; ci++)
+    {
+        for (uint32_t si = 0; si < sd->rt_desc_bound_set_count[ci]; si++)
+        {
+            if (sd->rt_desc_bound_sets[ci][si] == descriptorSet)
+            {
+                STEREO_LOG(
+                    "RT_TEMPLATE_RTBOUND set=%p cmd_slot=%u bound_index=%u template=%p",
+                    (void*)(uintptr_t)descriptorSet,
+                    ci,
+                    si,
+                    (void*)(uintptr_t)descriptorUpdateTemplate);
+            }
+        }
+    }
     for (uint32_t i = 0; i < sd->rt_desc_tracked_set_count; i++)
     {
         if (sd->rt_desc_tracked_sets[i] == descriptorSet)
