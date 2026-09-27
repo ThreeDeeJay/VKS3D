@@ -12194,11 +12194,14 @@ stereo_CreateRayTracingPipelinesKHR(
     calloc(createInfoCount, sizeof(*patched_stages));
     VkShaderModule *tmp_raygen_modules =
     calloc(createInfoCount, sizeof(*tmp_raygen_modules));
-    if (!patched_ci || !patched_stages || !tmp_raygen_modules)
+    VkShaderModule *raygen_modules =
+    calloc(createInfoCount, sizeof(*raygen_modules));
+    if (!patched_ci || !patched_stages || !tmp_raygen_modules || !raygen_modules)
     {
         free(patched_ci);
         free(patched_stages);
         free(tmp_raygen_modules);
+        free(raygen_modules);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     for (uint32_t p = 0; p < createInfoCount; p++)
@@ -12354,6 +12357,18 @@ stereo_CreateRayTracingPipelinesKHR(
                 patched_words);
             break;
         }
+        for (uint32_t rs = 0; rs < ci->stageCount; rs++)
+        {
+            const VkPipelineShaderStageCreateInfo *rst =
+            patched_stages[p] ?
+            &patched_stages[p][rs] :
+            &ci->pStages[rs];
+            if (rst->stage == VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+            {
+                raygen_modules[p] = rst->module;
+                break;
+            }
+        }
         STEREO_LOG(
             "RT_PIPE p=%u stages=%u groups=%u recursion=%u layout=%p base=%p rt_raygen=%u patched_raygen=%u",
             p,
@@ -12393,6 +12408,38 @@ stereo_CreateRayTracingPipelinesKHR(
                 grp->intersectionShader);
         }
     }
+    for (uint32_t p = 0; p < createInfoCount; p++)
+    {
+        VkShaderModule raygen_module = VK_NULL_HANDLE;
+        for (uint32_t s = 0; s < pCreateInfos[p].stageCount; s++)
+        {
+            const VkPipelineShaderStageCreateInfo *st =
+            patched_stages[p] ?
+            &patched_stages[p][s] :
+            &pCreateInfos[p].pStages[s];
+            if (st->stage == VK_SHADER_STAGE_RAYGEN_BIT_KHR)
+            {
+                raygen_module = st->module;
+                break;
+            }
+        }
+        if (sd->rt_pipeline_track_count < MAX_RT_PIPELINE_TRACK)
+        {
+            uint32_t slot = sd->rt_pipeline_track_count++;
+            sd->rt_pipeline_handles[slot] = VK_NULL_HANDLE;
+            sd->rt_pipeline_handle_layouts[slot] = pCreateInfos[p].layout;
+            sd->rt_pipeline_raygen_modules[slot] = raygen_module;
+            sd->rt_pipeline_patched_raygen[slot] =
+            patched_rt_raygen;
+            STEREO_LOG(
+                "RT_PIPELINE_CREATE_TRACK p=%u track_slot=%u layout=%p raygen=%p patched=%u",
+                p,
+                slot,
+                (void*)pCreateInfos[p].layout,
+                (void*)raygen_module,
+                patched_rt_raygen);
+        }
+    }
     VkResult res = sd->real.CreateRayTracingPipelinesKHR(
         sd->real_device,
         deferredOperation,
@@ -12401,6 +12448,52 @@ stereo_CreateRayTracingPipelinesKHR(
         patched_ci,
         pAllocator,
         pPipelines);
+    if (res == VK_SUCCESS && pPipelines)
+    {
+        for (uint32_t p = 0; p < createInfoCount; p++)
+        {
+            for (uint32_t ti = 0; ti < sd->rt_pipeline_track_count; ti++)
+            {
+                if (sd->rt_pipeline_handle_layouts[ti] ==
+                    pCreateInfos[p].layout &&
+                    sd->rt_pipeline_handles[ti] == VK_NULL_HANDLE)
+                {
+                    sd->rt_pipeline_handles[ti] = pPipelines[p];
+                    STEREO_LOG(
+                        "RT_PIPELINE_CREATE_RESULT p=%u track_slot=%u pipeline=%p layout=%p raygen=%p patched=%u",
+                        p,
+                        ti,
+                        (void*)pPipelines[p],
+                        (void*)sd->rt_pipeline_handle_layouts[ti],
+                        (void*)sd->rt_pipeline_raygen_modules[ti],
+                        sd->rt_pipeline_patched_raygen[ti]);
+                    break;
+                }
+            }
+        }
+    }
+    if (res == VK_SUCCESS && pPipelines)
+    {
+        for (uint32_t p = 0; p < createInfoCount; p++)
+        {
+            if (sd->rt_pipeline_track_count >= MAX_RT_PIPELINE_TRACK)
+                break;
+            uint32_t slot = sd->rt_pipeline_track_count++;
+            sd->rt_pipeline_handles[slot] = pPipelines[p];
+            sd->rt_pipeline_handle_layouts[slot] = pCreateInfos[p].layout;
+            sd->rt_pipeline_raygen_modules[slot] = raygen_modules[p];
+            sd->rt_pipeline_patched_raygen[slot] =
+            patched_rt_raygen;
+            STEREO_LOG(
+                "RT_PIPELINE_CREATE_RESULT p=%u track_slot=%u pipeline=%p layout=%p raygen=%p patched=%u",
+                p,
+                slot,
+                (void*)pPipelines[p],
+                (void*)pCreateInfos[p].layout,
+                (void*)raygen_modules[p],
+                patched_rt_raygen);
+        }
+    }
     STEREO_LOG(
         "RT_PIPE_CREATE_END result=%d first_pipeline=%p",
         res,
@@ -12425,6 +12518,7 @@ stereo_CreateRayTracingPipelinesKHR(
         }
         free(patched_stages[p]);
     }
+    free(raygen_modules);
     free(tmp_raygen_modules);
     free(patched_stages);
     free(patched_ci);
