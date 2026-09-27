@@ -2401,6 +2401,33 @@ stereo_UpdateDescriptorSets(
                 break;
             }
         }
+        uint32_t rt_pipeline_slot = UINT32_MAX;
+        if (tracked_slot != UINT32_MAX)
+        {
+            VkDescriptorSetLayout actual_layout =
+            sd->rt_desc_tracked_layouts[tracked_slot];
+            for (uint32_t pi = 0; pi < sd->rt_pipeline_layout_count; pi++)
+            {
+                if (sd->rt_pipeline_set0_layouts[pi] == actual_layout)
+                {
+                    rt_pipeline_slot = pi;
+                    break;
+                }
+            }
+        }
+        if (rt_pipeline_slot != UINT32_MAX)
+        {
+            STEREO_LOG(
+                "RT_SET0_UPDATE set=%p tracked_slot=%u pipeline_slot=%u layout=%p binding=%u array=%u count=%u type=%u",
+                (void*)(uintptr_t)w->dstSet,
+                tracked_slot,
+                rt_pipeline_slot,
+                (void*)(uintptr_t)sd->rt_desc_tracked_layouts[tracked_slot],
+                w->dstBinding,
+                w->dstArrayElement,
+                w->descriptorCount,
+                w->descriptorType);
+        }
         if (w->dstBinding == 15)
         {
             STEREO_LOG(
