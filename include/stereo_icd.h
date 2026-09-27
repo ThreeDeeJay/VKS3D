@@ -709,8 +709,11 @@ typedef struct StereoDevice {
     uint32_t rt_desc_bound_set_count[MAX_RT_CMD_DESC_SETS];
     uint32_t rt_desc_cmd_count;
     #define MAX_RT_PIPELINE_LAYOUT_TRACK 256
+    #define MAX_RT_PIPELINE_SET_TRACK 8
     VkPipelineLayout rt_pipeline_layouts[MAX_RT_PIPELINE_LAYOUT_TRACK];
     VkDescriptorSetLayout rt_pipeline_set0_layouts[MAX_RT_PIPELINE_LAYOUT_TRACK];
+    VkDescriptorSetLayout rt_pipeline_set_layouts[MAX_RT_PIPELINE_LAYOUT_TRACK][MAX_RT_PIPELINE_SET_TRACK];
+    uint32_t rt_pipeline_set_counts[MAX_RT_PIPELINE_LAYOUT_TRACK];
     uint32_t rt_pipeline_layout_count;
     #define MAX_RT_DESC_SET_TRACK 8192
     VkDescriptorSet rt_desc_tracked_sets[MAX_RT_DESC_SET_TRACK];

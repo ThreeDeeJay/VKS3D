@@ -10438,7 +10438,15 @@ stereo_CreatePipelineLayout(VkDevice device,const VkPipelineLayoutCreateInfo *pC
             uint32_t slot=sd->rt_pipeline_layout_count++;
             sd->rt_pipeline_layouts[slot]=*pLayout;
             sd->rt_pipeline_set0_layouts[slot]=pCI->pSetLayouts[0];
+            uint32_t set_count=pCI->setLayoutCount;
+            if (set_count>MAX_RT_PIPELINE_SET_TRACK)
+                set_count=MAX_RT_PIPELINE_SET_TRACK;
+            sd->rt_pipeline_set_counts[slot]=set_count;
+            for (uint32_t i=0;i<set_count;i++)
+                sd->rt_pipeline_set_layouts[slot][i]=pCI->pSetLayouts[i];
             STEREO_LOG("RT_PIPELINE_LAYOUT layout=%p set0_layout=%p set_count=%u slot=%u",(void*)(uintptr_t)*pLayout,(void*)(uintptr_t)pCI->pSetLayouts[0],pCI->setLayoutCount,slot);
+            for (uint32_t i=0;i<set_count;i++)
+                STEREO_LOG("RT_PIPELINE_SET_LAYOUT layout=%p slot=%u set_index=%u set_layout=%p",(void*)(uintptr_t)*pLayout,slot,i,(void*)(uintptr_t)pCI->pSetLayouts[i]);
         }
     }
     return res;
