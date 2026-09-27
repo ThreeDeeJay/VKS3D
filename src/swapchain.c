@@ -1329,6 +1329,35 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
             pAllocator,
             pImage);
         STEREO_LOG("RETURN real CreateImage result=%d", r);
+        if (r == VK_SUCCESS && sd->tracked_image_info_count < MAX_IMAGE_INFO_TRACK)
+        {
+            uint32_t ti = sd->tracked_image_info_count++;
+            sd->tracked_images[ti] = *pImage;
+            sd->tracked_image_formats[ti] = pCreateInfo->format;
+            sd->tracked_image_extents[ti] = pCreateInfo->extent;
+            sd->tracked_image_mips[ti] = pCreateInfo->mipLevels;
+            sd->tracked_image_layers[ti] = pCreateInfo->arrayLayers;
+            sd->tracked_image_samples[ti] = pCreateInfo->samples;
+            sd->tracked_image_tiling[ti] = pCreateInfo->tiling;
+            sd->tracked_image_usage[ti] = pCreateInfo->usage;
+            sd->tracked_image_flags[ti] = pCreateInfo->flags;
+            sd->tracked_image_types[ti] = pCreateInfo->imageType;
+            STEREO_LOG(
+                "IMAGE_INFO_TRACK image=%p format=%u extent=%ux%ux%u mip=%u layers=%u samples=%u tiling=%u flags=0x%08X usage=0x%08X type=%u slot=%u",
+                (void *)(uintptr_t)*pImage,
+                pCreateInfo->format,
+                pCreateInfo->extent.width,
+                pCreateInfo->extent.height,
+                pCreateInfo->extent.depth,
+                pCreateInfo->mipLevels,
+                pCreateInfo->arrayLayers,
+                pCreateInfo->samples,
+                pCreateInfo->tiling,
+                pCreateInfo->flags,
+                pCreateInfo->usage,
+                pCreateInfo->imageType,
+                ti);
+        }
         STEREO_LOG(
             "IMG_EXIT passthrough result=%d image=%p",
             r,
@@ -1349,7 +1378,36 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
     modified.arrayLayers = 2;
     STEREO_LOG("CALL real CreateImage");
     VkResult res = sd->real.CreateImage(sd->real_device, &modified, pAllocator, pImage);
-    STEREO_LOG("RETURN real CreateImageView result=%d", res);
+    STEREO_LOG("RETURN real CreateImage result=%d", res);
+    if (res == VK_SUCCESS && sd->tracked_image_info_count < MAX_IMAGE_INFO_TRACK)
+    {
+        uint32_t ti = sd->tracked_image_info_count++;
+        sd->tracked_images[ti] = *pImage;
+        sd->tracked_image_formats[ti] = modified.format;
+        sd->tracked_image_extents[ti] = modified.extent;
+        sd->tracked_image_mips[ti] = modified.mipLevels;
+        sd->tracked_image_layers[ti] = modified.arrayLayers;
+        sd->tracked_image_samples[ti] = modified.samples;
+        sd->tracked_image_tiling[ti] = modified.tiling;
+        sd->tracked_image_usage[ti] = modified.usage;
+        sd->tracked_image_flags[ti] = modified.flags;
+        sd->tracked_image_types[ti] = modified.imageType;
+        STEREO_LOG(
+            "IMAGE_INFO_TRACK image=%p format=%u extent=%ux%ux%u mip=%u layers=%u samples=%u tiling=%u flags=0x%08X usage=0x%08X type=%u slot=%u",
+            (void *)(uintptr_t)*pImage,
+            modified.format,
+            modified.extent.width,
+            modified.extent.height,
+            modified.extent.depth,
+            modified.mipLevels,
+            modified.arrayLayers,
+            modified.samples,
+            modified.tiling,
+            modified.flags,
+            modified.usage,
+            modified.imageType,
+            ti);
+    }
     STEREO_LOG(
         "IMG_EXIT upgraded result=%d image=%p",
         res,

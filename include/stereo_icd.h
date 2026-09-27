@@ -603,6 +603,18 @@ typedef struct StereoDevice {
     uint32_t               intercepted_color_count;
     VkImage                intercepted_storage[MAX_COLOR_IMAGES];
     uint32_t               intercepted_storage_count;
+#define MAX_IMAGE_INFO_TRACK    4096
+    VkImage                tracked_images[MAX_IMAGE_INFO_TRACK];
+    VkFormat               tracked_image_formats[MAX_IMAGE_INFO_TRACK];
+    VkExtent3D             tracked_image_extents[MAX_IMAGE_INFO_TRACK];
+    uint32_t               tracked_image_mips[MAX_IMAGE_INFO_TRACK];
+    uint32_t               tracked_image_layers[MAX_IMAGE_INFO_TRACK];
+    VkSampleCountFlagBits  tracked_image_samples[MAX_IMAGE_INFO_TRACK];
+    VkImageTiling          tracked_image_tiling[MAX_IMAGE_INFO_TRACK];
+    VkImageUsageFlags      tracked_image_usage[MAX_IMAGE_INFO_TRACK];
+    VkImageCreateFlags     tracked_image_flags[MAX_IMAGE_INFO_TRACK];
+    VkImageType            tracked_image_types[MAX_IMAGE_INFO_TRACK];
+    uint32_t               tracked_image_info_count;
     uint32_t               stereo_w, stereo_h;
     /* Upgraded image-view tracking for per-framebuffer multiview decision */
 #define MAX_UPGRADED_VIEWS     4096
