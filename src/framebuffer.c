@@ -2225,6 +2225,23 @@ stereo_UpdateDescriptorSetWithTemplate(
                         (void*)(uintptr_t)image,
                         (void*)(uintptr_t)ii->sampler,
                         ii->imageLayout);
+                    if (image != VK_NULL_HANDLE ||
+                        ii->imageView != VK_NULL_HANDLE ||
+                        ii->sampler != VK_NULL_HANDLE)
+                    {
+                        STEREO_LOG(
+                            "RT_TEMPLATE_IMAGE_POPULATED set=%p template=%p layout=%p binding=%u index=%u type=%u view=%p image=%p sampler=%p imageLayout=%u",
+                            (void*)(uintptr_t)descriptorSet,
+                            (void*)(uintptr_t)descriptorUpdateTemplate,
+                            (void*)(uintptr_t)t->layout,
+                            e->dstBinding,
+                            di,
+                            e->descriptorType,
+                            (void*)(uintptr_t)ii->imageView,
+                            (void*)(uintptr_t)image,
+                            (void*)(uintptr_t)ii->sampler,
+                            ii->imageLayout);
+                    }
                     if (e->dstBinding == 15 && di == 0)
                     {
                         STEREO_LOG(
