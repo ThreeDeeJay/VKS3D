@@ -704,6 +704,7 @@ typedef struct StereoDevice {
     VkCommandBuffer rt_desc_cmds[MAX_RT_CMD_DESC_SETS];
     VkDescriptorSet rt_desc_sets[MAX_RT_CMD_DESC_SETS];
     VkPipelineLayout rt_desc_pipeline_layouts[MAX_RT_CMD_DESC_SETS];
+    VkPipeline rt_desc_pipelines[MAX_RT_CMD_DESC_SETS];
     uint32_t rt_desc_cmd_first_set[MAX_RT_CMD_DESC_SETS];
     VkDescriptorSet rt_desc_bound_sets[MAX_RT_CMD_DESC_SETS][MAX_RT_CMD_BOUND_SETS];
     uint32_t rt_desc_bound_set_count[MAX_RT_CMD_DESC_SETS];
