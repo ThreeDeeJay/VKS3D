@@ -2494,39 +2494,59 @@ stereo_UpdateDescriptorSets(
             c->dstBinding,
             c->dstArrayElement,
             c->descriptorCount);
-        if (c->srcBinding != 15 ||
-            c->dstBinding != 15 ||
-            c->srcArrayElement != 0 ||
-            c->dstArrayElement != 0 ||
-            c->descriptorCount == 0)
+        if (c->srcBinding != 15)
             continue;
         uint32_t src_slot = UINT32_MAX;
         uint32_t dst_slot = UINT32_MAX;
+        VkImageView src_bind15_view = VK_NULL_HANDLE;
+        VkImage src_bind15_image = VK_NULL_HANDLE;
+        VkImageView dst_bind15_view = VK_NULL_HANDLE;
+        VkImage dst_bind15_image = VK_NULL_HANDLE;
         for (uint32_t k = 0; k < sd->rt_desc_tracked_set_count; k++)
         {
             if (sd->rt_desc_tracked_sets[k] == c->srcSet)
+            {
                 src_slot = k;
+                src_bind15_view = sd->rt_desc_binding15_views[k];
+                src_bind15_image = sd->rt_desc_binding15_images[k];
+            }
             if (sd->rt_desc_tracked_sets[k] == c->dstSet)
+            {
                 dst_slot = k;
+                dst_bind15_view = sd->rt_desc_binding15_views[k];
+                dst_bind15_image = sd->rt_desc_binding15_images[k];
+            }
         }
         STEREO_LOG(
-            "RT_DESC_COPY_SLOTS src=%p slot=%u dst=%p slot=%u",
+            "RT_DESC_COPY_STATE src=%p src_binding=%u src_array=%u src_slot=%u src_bind15_view=%p src_bind15_image=%p dst=%p dst_binding=%u dst_array=%u dst_slot=%u dst_bind15_view=%p dst_bind15_image=%p count=%u",
             (void*)(uintptr_t)c->srcSet,
+            c->srcBinding,
+            c->srcArrayElement,
             src_slot,
+            (void*)(uintptr_t)src_bind15_view,
+            (void*)(uintptr_t)src_bind15_image,
             (void*)(uintptr_t)c->dstSet,
-            dst_slot);
-        if (src_slot != UINT32_MAX &&
+            c->dstBinding,
+            c->dstArrayElement,
+            dst_slot,
+            (void*)(uintptr_t)dst_bind15_view,
+            (void*)(uintptr_t)dst_bind15_image,
+            c->descriptorCount);
+        if (c->srcBinding == 15 &&
+            c->dstBinding == 15 &&
+            c->srcArrayElement == 0 &&
+            c->dstArrayElement == 0 &&
+            c->descriptorCount != 0 &&
+            src_slot != UINT32_MAX &&
             dst_slot != UINT32_MAX)
         {
-            sd->rt_desc_binding15_views[dst_slot] =
-            sd->rt_desc_binding15_views[src_slot];
-            sd->rt_desc_binding15_images[dst_slot] =
-            sd->rt_desc_binding15_images[src_slot];
+            sd->rt_desc_binding15_views[dst_slot] = src_bind15_view;
+            sd->rt_desc_binding15_images[dst_slot] = src_bind15_image;
             STEREO_LOG(
                 "RT_BIND15_COPY_TRACK dst=%p view=%p image=%p slot=%u",
                 (void*)(uintptr_t)c->dstSet,
-                (void*)(uintptr_t)sd->rt_desc_binding15_views[dst_slot],
-                (void*)(uintptr_t)sd->rt_desc_binding15_images[dst_slot],
+                (void*)(uintptr_t)src_bind15_view,
+                (void*)(uintptr_t)src_bind15_image,
                 dst_slot);
         }
     }
