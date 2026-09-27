@@ -2110,26 +2110,27 @@ stereo_UpdateDescriptorSetWithTemplate(
                 (void*)(uintptr_t)sd->rt_desc_binding15_views[slot],
                 (void*)(uintptr_t)sd->rt_desc_binding15_images[slot]);
             bool bound_set0 = false;
-            for (uint32_t ci = 0; ci < sd->rt_desc_cmd_count; ci++)
+            uint32_t history_slot = UINT32_MAX;
+            for (uint32_t hi = 0; hi < sd->rt_desc_set0_history_count; hi++)
             {
-                if (sd->rt_desc_cmd_first_set[ci] != 0)
-                    continue;
-                if (sd->rt_desc_bound_set_count[ci] == 0)
-                    continue;
-                if (sd->rt_desc_bound_sets[ci][0] == descriptorSet)
+                if (sd->rt_desc_set0_history[hi] == descriptorSet)
                 {
                     bound_set0 = true;
-                    STEREO_LOG(
-                        "RT_TEMPLATE_BOUND_SET0 set=%p cmd_slot=%u pipeline_layout=%p pipeline_slot=%u bind15_view=%p bind15_image=%p",
-                        (void*)(uintptr_t)descriptorSet,
-                        ci,
-                        (void*)(uintptr_t)sd->rt_desc_pipeline_layouts[ci],
-                        rt_pipeline_slot,
-                        (void*)(uintptr_t)sd->rt_desc_binding15_views[slot],
-                        (void*)(uintptr_t)sd->rt_desc_binding15_images[slot]);
+                    history_slot = hi;
+                    break;
                 }
             }
-            if (!bound_set0)
+            if (bound_set0)
+            {
+                STEREO_LOG(
+                    "RT_TEMPLATE_BOUND_SET0 set=%p history_slot=%u pipeline_slot=%u bind15_view=%p bind15_image=%p",
+                    (void*)(uintptr_t)descriptorSet,
+                    history_slot,
+                    rt_pipeline_slot,
+                    (void*)(uintptr_t)sd->rt_desc_binding15_views[slot],
+                    (void*)(uintptr_t)sd->rt_desc_binding15_images[slot]);
+            }
+            else
             {
                 STEREO_LOG(
                     "RT_TEMPLATE_NOT_BOUND_SET0 set=%p pipeline_slot=%u bind15_view=%p bind15_image=%p",
@@ -2828,6 +2829,22 @@ stereo_CmdBindDescriptorSets(
                         (void*)(uintptr_t)pDescriptorSets[0],
                         (void*)(uintptr_t)layout,
                         slot);
+                    for (uint32_t hi = 0; hi < sd->rt_desc_set0_history_count; hi++)
+                    {
+                        if (sd->rt_desc_set0_history[hi] == pDescriptorSets[0])
+                            break;
+                    }
+                    if (hi == sd->rt_desc_set0_history_count &&
+                        sd->rt_desc_set0_history_count < MAX_RT_SET0_HISTORY)
+                    {
+                        uint32_t hs = sd->rt_desc_set0_history_count++;
+                        sd->rt_desc_set0_history[hs] = pDescriptorSets[0];
+                        STEREO_LOG(
+                            "RT_DESC_SET0_HISTORY set=%p pipeline_layout=%p history_slot=%u",
+                            (void*)(uintptr_t)pDescriptorSets[0],
+                            (void*)(uintptr_t)layout,
+                            hs);
+                    }
                 }
             }
         }
