@@ -2555,6 +2555,14 @@ stereo_CmdBindDescriptorSets(
             slot = sd->rt_desc_cmd_count++;
             sd->rt_desc_cmds[slot] = commandBuffer;
         }
+        if (slot == UINT32_MAX)
+        {
+            STEREO_LOG(
+                "RT_DESC_CMD_TRACK_FULL cb=%p count=%u max=%u",
+                (void*)commandBuffer,
+                sd->rt_desc_cmd_count,
+                MAX_RT_CMD_DESC_SETS);
+        }
         if (slot != UINT32_MAX)
         {
             sd->rt_desc_pipeline_layouts[slot] = layout;
