@@ -1897,17 +1897,45 @@ stereo_UpdateDescriptorSetWithTemplate(
         {
             if (t->entries[ei].dstBinding == 15)
             {
-                STEREO_LOG(
-                    "RT_TEMPLATE_MATCH15 set=%p template=%p layout=%p entry=%u binding=%u offset=%llu stride=%llu type=%u data=%p",
-                    (void*)(uintptr_t)descriptorSet,
-                    (void*)(uintptr_t)descriptorUpdateTemplate,
-                    (void*)(uintptr_t)t->layout,
-                    ei,
-                    t->entries[ei].dstBinding,
-                    (unsigned long long)t->entries[ei].offset,
-                    (unsigned long long)t->entries[ei].stride,
-                    t->entries[ei].descriptorType,
-                    pData);
+                VkDescriptorUpdateTemplateEntry *e15 = &t->entries[ei];
+                const uint8_t *base15 = (const uint8_t *)pData;
+                const uint8_t *entry_data15 = base15 + e15->offset;
+                if (e15->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
+                    e15->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+                    e15->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                {
+                    const VkDescriptorImageInfo *ii15 = (const VkDescriptorImageInfo *)entry_data15;
+                    VkImage image15 = VK_NULL_HANDLE;
+                    for (uint32_t vi = 0; vi < sd->tracked_image_view_count; vi++)
+                    {
+                        if (sd->tracked_image_views[vi] == ii15->imageView)
+                        {
+                            image15 = sd->tracked_image_view_images[vi];
+                            break;
+                        }
+                    }
+                    STEREO_LOG(
+                        "RT_TEMPLATE_VALUE15 set=%p template=%p layout=%p entry=%u type=%u view=%p image=%p sampler=%p imageLayout=%u",
+                        (void*)(uintptr_t)descriptorSet,
+                        (void*)(uintptr_t)descriptorUpdateTemplate,
+                        (void*)(uintptr_t)t->layout,
+                        ei,
+                        e15->descriptorType,
+                        (void*)(uintptr_t)ii15->imageView,
+                        (void*)(uintptr_t)image15,
+                        (void*)(uintptr_t)ii15->sampler,
+                        ii15->imageLayout);
+                }
+                else
+                {
+                    STEREO_LOG(
+                        "RT_TEMPLATE_VALUE15 set=%p template=%p layout=%p entry=%u type=%u unsupported=1",
+                        (void*)(uintptr_t)descriptorSet,
+                        (void*)(uintptr_t)descriptorUpdateTemplate,
+                        (void*)(uintptr_t)t->layout,
+                        ei,
+                        e15->descriptorType);
+                }
                 break;
             }
         }
@@ -1920,6 +1948,11 @@ stereo_UpdateDescriptorSetWithTemplate(
                 break;
             }
         }
+        STEREO_LOG(
+            "RT_TEMPLATE_RT_LAYOUT_CHECK template=%p layout=%p rt_layout=%u",
+            (void*)(uintptr_t)descriptorUpdateTemplate,
+            (void*)(uintptr_t)t->layout,
+            rt_layout ? 1u : 0u);
         if (!rt_layout)
             continue;
         STEREO_LOG(
