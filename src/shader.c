@@ -9689,6 +9689,76 @@ spirv_patch_stereo_raygen(
                 }
                 t += twc;
             }
+            uint32_t write_pred_count = 0;
+            uint32_t write_pred1 = 0;
+            uint32_t write_pred2 = 0;
+            uint32_t write_pred3 = 0;
+            for (size_t p = 5; p < in_c;)
+            {
+                uint32_t pop = in[p] & 0xffffu;
+                uint32_t pwc = in[p] >> 16;
+                if (!pwc || p + pwc > in_c)
+                    break;
+                if (pop == SpvOpLabel && pwc >= 2)
+                {
+                    uint32_t plabel = in[p + 1];
+                    for (size_t q = p + pwc; q < in_c;)
+                    {
+                        uint32_t qop = in[q] & 0xffffu;
+                        uint32_t qwc = in[q] >> 16;
+                        if (!qwc || q + qwc > in_c)
+                            break;
+                        if (qop == SpvOpLabel)
+                            break;
+                        if (qop == SpvOpBranch && qwc >= 2 && in[q + 1] == write_label)
+                        {
+                            if (write_pred_count == 0)
+                                write_pred1 = plabel;
+                            else if (write_pred_count == 1)
+                                write_pred2 = plabel;
+                            else if (write_pred_count == 2)
+                                write_pred3 = plabel;
+                            write_pred_count++;
+                            break;
+                        }
+                        if (qop == SpvOpBranchConditional && qwc >= 4)
+                        {
+                            if (in[q + 2] == write_label || in[q + 3] == write_label)
+                            {
+                                if (write_pred_count == 0)
+                                    write_pred1 = plabel;
+                                else if (write_pred_count == 1)
+                                    write_pred2 = plabel;
+                                else if (write_pred_count == 2)
+                                    write_pred3 = plabel;
+                                write_pred_count++;
+                                break;
+                            }
+                        }
+                        if (qop == SpvOpSwitch && qwc >= 3)
+                        {
+                            bool switch_match = in[q + 2] == write_label;
+                            for (uint32_t s = 3; !switch_match && s + 1 < qwc; s += 2)
+                                switch_match = in[q + s + 1] == write_label;
+                            if (switch_match)
+                            {
+                                if (write_pred_count == 0)
+                                    write_pred1 = plabel;
+                                else if (write_pred_count == 1)
+                                    write_pred2 = plabel;
+                                else if (write_pred_count == 2)
+                                    write_pred3 = plabel;
+                                write_pred_count++;
+                                break;
+                            }
+                        }
+                        if (qop == SpvOpReturn || qop == SpvOpReturnValue || qop == SpvOpKill || qop == SpvOpTerminateInvocation)
+                            break;
+                        q += qwc;
+                    }
+                }
+                p += pwc;
+            }
             uint32_t write_binding = UINT32_MAX;
             uint32_t write_set = UINT32_MAX;
             for (size_t l = 5; l < in_c;)
@@ -9740,7 +9810,7 @@ spirv_patch_stereo_raygen(
                 }
             }
             STEREO_LOG(
-                "RT_PATCH_IMAGE_WRITE_RESOURCE i=%zu function=%u label=%u image=%u coord=%u load=%u pointer=%u var=%u set=%u binding=%u term=%u cond=%u target=%u target2=%u",
+                "RT_PATCH_IMAGE_WRITE_RESOURCE i=%zu function=%u label=%u image=%u coord=%u load=%u pointer=%u var=%u set=%u binding=%u term=%u cond=%u target=%u target2=%u pred_count=%u pred1=%u pred2=%u pred3=%u",
                 w,
                 write_function,
                 write_label,
@@ -9754,7 +9824,11 @@ spirv_patch_stereo_raygen(
                 write_term_op,
                 write_term_condition,
                 write_term_target,
-                write_term_target2);
+                write_term_target2,
+                write_pred_count,
+                write_pred1,
+                write_pred2,
+                write_pred3);
         }
         w += wwc;
     }
