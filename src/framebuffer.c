@@ -2102,6 +2102,22 @@ stereo_UpdateDescriptorSetWithTemplate(
         MAX_RT_DESC_SET_TRACK,
         sd->rt_desc_template_count,
         pData);
+    uint32_t template_set_slot = UINT32_MAX;
+    VkDescriptorSetLayout template_set_layout = VK_NULL_HANDLE;
+    for (uint32_t i = 0; i < sd->rt_desc_tracked_set_count; i++)
+    {
+        if (sd->rt_desc_tracked_sets[i] == descriptorSet)
+        {
+            template_set_slot = i;
+            template_set_layout = sd->rt_desc_tracked_layouts[i];
+            break;
+        }
+    }
+    STEREO_LOG(
+        "RT_TEMPLATE_SET_ID set=%p slot=%u layout=%p",
+        (void *)(uintptr_t)descriptorSet,
+        template_set_slot,
+        (void *)(uintptr_t)template_set_layout);
     for (uint32_t ti = 0; ti < sd->rt_desc_template_count; ti++)
     {
         RtDescTemplateTrack *t = &sd->rt_desc_templates[ti];
@@ -2357,6 +2373,19 @@ stereo_UpdateDescriptorSetWithTemplate(
             VkDescriptorUpdateTemplateEntry *e = &t->entries[ei];
             if (e->descriptorCount == 0)
                 continue;
+            STEREO_LOG(
+                "RT_TEMPLATE_ENTRY set=%p slot=%u layout=%p template=%p entry=%u binding=%u array=%u count=%u type=%u offset=%llu stride=%llu",
+                (void*)(uintptr_t)descriptorSet,
+                slot,
+                (void*)(uintptr_t)t->layout,
+                (void*)(uintptr_t)descriptorUpdateTemplate,
+                ei,
+                e->dstBinding,
+                e->dstArrayElement,
+                e->descriptorCount,
+                e->descriptorType,
+                (unsigned long long)e->offset,
+                (unsigned long long)e->stride);
             const uint8_t *base = (const uint8_t *)pData;
             STEREO_LOG(
                 "RT_TEMPLATE_BINDING set=%p layout=%p template=%p entry=%u binding=%u array=%u count=%u type=%u offset=%llu stride=%llu",
