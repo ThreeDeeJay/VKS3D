@@ -9639,6 +9639,56 @@ spirv_patch_stereo_raygen(
                     write_label = in[f + 1];
                 f += fwc;
             }
+            uint32_t write_term_op = 0;
+            uint32_t write_term_target = 0;
+            uint32_t write_term_target2 = 0;
+            uint32_t write_term_condition = 0;
+            for (size_t t = 5; t < w;)
+            {
+                uint32_t top = in[t] & 0xffffu;
+                uint32_t twc = in[t] >> 16;
+                if (!twc || t + twc > in_c)
+                    break;
+                if (top == SpvOpLabel && twc >= 2 && in[t + 1] == write_label)
+                {
+                    for (size_t k = t + twc; k < w;)
+                    {
+                        uint32_t kop = in[k] & 0xffffu;
+                        uint32_t kwc = in[k] >> 16;
+                        if (!kwc || k + kwc > in_c)
+                            break;
+                        if (kop == SpvOpLabel)
+                            break;
+                        if (kop == SpvOpBranch && kwc >= 2)
+                        {
+                            write_term_op = kop;
+                            write_term_target = in[k + 1];
+                        }
+                        else if (kop == SpvOpBranchConditional && kwc >= 4)
+                        {
+                            write_term_op = kop;
+                            write_term_condition = in[k + 1];
+                            write_term_target = in[k + 2];
+                            write_term_target2 = in[k + 3];
+                        }
+                        else if (kop == SpvOpSwitch && kwc >= 3)
+                        {
+                            write_term_op = kop;
+                            write_term_condition = in[k + 1];
+                            write_term_target = in[k + 2];
+                        }
+                        else if (kop == SpvOpReturn || kop == SpvOpReturnValue || kop == SpvOpKill || kop == SpvOpTerminateInvocation)
+                        {
+                            write_term_op = kop;
+                        }
+                        if (kop == SpvOpBranch || kop == SpvOpBranchConditional || kop == SpvOpSwitch || kop == SpvOpReturn || kop == SpvOpReturnValue || kop == SpvOpKill || kop == SpvOpTerminateInvocation)
+                            break;
+                        k += kwc;
+                    }
+                    break;
+                }
+                t += twc;
+            }
             uint32_t write_binding = UINT32_MAX;
             uint32_t write_set = UINT32_MAX;
             for (size_t l = 5; l < in_c;)
@@ -9690,7 +9740,7 @@ spirv_patch_stereo_raygen(
                 }
             }
             STEREO_LOG(
-                "RT_PATCH_IMAGE_WRITE_RESOURCE i=%zu function=%u label=%u image=%u coord=%u load=%u pointer=%u var=%u set=%u binding=%u",
+                "RT_PATCH_IMAGE_WRITE_RESOURCE i=%zu function=%u label=%u image=%u coord=%u load=%u pointer=%u var=%u set=%u binding=%u term=%u cond=%u target=%u target2=%u",
                 w,
                 write_function,
                 write_label,
@@ -9700,7 +9750,11 @@ spirv_patch_stereo_raygen(
                 write_pointer,
                 write_var,
                 write_set,
-                write_binding);
+                write_binding,
+                write_term_op,
+                write_term_condition,
+                write_term_target,
+                write_term_target2);
         }
         w += wwc;
     }
