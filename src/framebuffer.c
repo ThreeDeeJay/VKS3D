@@ -1309,6 +1309,43 @@ stereo_CmdTraceRaysKHR(
             }
         }
     }
+    uint32_t rt_pipeline_slot = UINT32_MAX;
+    VkDescriptorSetLayout rt_expected_set0_layout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout rt_bound_set0_layout = VK_NULL_HANDLE;
+    uint32_t rt_set0_tracked_slot = UINT32_MAX;
+    if (rt_set0 != VK_NULL_HANDLE)
+    {
+        for (uint32_t i = 0; i < sd->rt_desc_tracked_set_count; i++)
+        {
+            if (sd->rt_desc_tracked_sets[i] == rt_set0)
+            {
+                rt_set0_tracked_slot = i;
+                rt_bound_set0_layout = sd->rt_desc_tracked_layouts[i];
+                break;
+            }
+        }
+    }
+    if (rt_pipeline_layout != VK_NULL_HANDLE)
+    {
+        for (uint32_t i = 0; i < sd->rt_pipeline_layout_count; i++)
+        {
+            if (sd->rt_pipeline_layouts[i] == rt_pipeline_layout)
+            {
+                rt_pipeline_slot = i;
+                rt_expected_set0_layout = sd->rt_pipeline_set0_layouts[i];
+                break;
+            }
+        }
+    }
+    STEREO_LOG(
+        "RT_TRACE_PIPELINE_LAYOUT cb=%p pipeline_slot=%u pipeline_layout=%p expected_set0_layout=%p bound_set0=%p bound_set0_slot=%u bound_set0_layout=%p",
+        (void*)commandBuffer,
+        rt_pipeline_slot,
+        (void*)(uintptr_t)rt_pipeline_layout,
+        (void*)(uintptr_t)rt_expected_set0_layout,
+        (void*)(uintptr_t)rt_set0,
+        rt_set0_tracked_slot,
+        (void*)(uintptr_t)rt_bound_set0_layout);
     STEREO_LOG(
         "RT_TRACE_FORWARD real=%p width=%u height=%u depth=%u",
         (void*)sd->real.CmdTraceRaysKHR,
@@ -1335,15 +1372,6 @@ stereo_CmdTraceRaysKHR(
     uint32_t rt_output_slot = UINT32_MAX;
     if (slot != UINT32_MAX)
     {
-
-        STEREO_LOG(
-            "RT_TRACE_PIPELINE_LAYOUT cmd=%p pipeline_slot=%u pipeline_layout=%p expected_set0_layout=%p bound_set0=%p bound_set0_layout=%p",
-            (void*)(uintptr_t)commandBuffer,
-            pipeline_slot,
-            (void*)(uintptr_t)sd->rt_pipeline_layouts[pipeline_slot],
-            (void*)(uintptr_t)sd->rt_pipeline_set0_layouts[pipeline_slot],
-            (void*)(uintptr_t)rt_set0,
-            rt_set0_tracked_slot != UINT32_MAX ? (void*)(uintptr_t)sd->rt_desc_tracked_layouts[rt_set0_tracked_slot] : NULL);
         for (uint32_t si = 0; si < sd->rt_desc_bound_set_count[slot]; si++)
         {
             VkDescriptorSet bound_set = sd->rt_desc_bound_sets[slot][si];
@@ -1369,7 +1397,7 @@ stereo_CmdTraceRaysKHR(
             }
             STEREO_LOG(
                 "RT_TRACE_BOUND_SET_TRACKED set=%p bound_index=%u tracked_slot=%u bind15_image=%p bind15_view=%p set_layout=%p",
-                (void*)(uintptr_t)set,
+                (void*)(uintptr_t)bound_set,
                 si,
                 tracked_slot,
                 (void*)(uintptr_t)sd->rt_desc_binding15_images[tracked_slot],
