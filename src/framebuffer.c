@@ -2386,6 +2386,20 @@ stereo_UpdateDescriptorSetWithTemplate(
                 e->descriptorType,
                 (unsigned long long)e->offset,
                 (unsigned long long)e->stride);
+            if (e->dstBinding == 15)
+            {
+                STEREO_LOG(
+                    "RT_TEMPLATE_ENTRY15 set=%p slot=%u layout=%p template=%p entry=%u type=%u offset=%llu stride=%llu count=%u",
+                    (void*)(uintptr_t)descriptorSet,
+                    slot,
+                    (void*)(uintptr_t)t->layout,
+                    (void*)(uintptr_t)descriptorUpdateTemplate,
+                    ei,
+                    e->descriptorType,
+                    (unsigned long long)e->offset,
+                    (unsigned long long)e->stride,
+                    e->descriptorCount);
+            }
             const uint8_t *base = (const uint8_t *)pData;
             STEREO_LOG(
                 "RT_TEMPLATE_BINDING set=%p layout=%p template=%p entry=%u binding=%u array=%u count=%u type=%u offset=%llu stride=%llu",
