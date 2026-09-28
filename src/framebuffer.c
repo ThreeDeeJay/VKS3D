@@ -1335,6 +1335,15 @@ stereo_CmdTraceRaysKHR(
     uint32_t rt_output_slot = UINT32_MAX;
     if (slot != UINT32_MAX)
     {
+
+        STEREO_LOG(
+            "RT_TRACE_PIPELINE_LAYOUT cmd=%p pipeline_slot=%u pipeline_layout=%p expected_set0_layout=%p bound_set0=%p bound_set0_layout=%p",
+            (void*)(uintptr_t)commandBuffer,
+            pipeline_slot,
+            (void*)(uintptr_t)sd->rt_pipeline_layouts[pipeline_slot],
+            (void*)(uintptr_t)sd->rt_pipeline_set0_layouts[pipeline_slot],
+            (void*)(uintptr_t)rt_set0,
+            rt_set0_tracked_slot != UINT32_MAX ? (void*)(uintptr_t)sd->rt_desc_tracked_layouts[rt_set0_tracked_slot] : NULL);
         for (uint32_t si = 0; si < sd->rt_desc_bound_set_count[slot]; si++)
         {
             VkDescriptorSet bound_set = sd->rt_desc_bound_sets[slot][si];
@@ -1359,12 +1368,13 @@ stereo_CmdTraceRaysKHR(
                 continue;
             }
             STEREO_LOG(
-                "RT_TRACE_BOUND_SET_TRACKED set=%p bound_index=%u tracked_slot=%u bind15_image=%p bind15_view=%p",
-                (void*)(uintptr_t)bound_set,
+                "RT_TRACE_BOUND_SET_TRACKED set=%p bound_index=%u tracked_slot=%u bind15_image=%p bind15_view=%p set_layout=%p",
+                (void*)(uintptr_t)set,
                 si,
                 tracked_slot,
                 (void*)(uintptr_t)sd->rt_desc_binding15_images[tracked_slot],
-                (void*)(uintptr_t)sd->rt_desc_binding15_views[tracked_slot]);
+                (void*)(uintptr_t)sd->rt_desc_binding15_views[tracked_slot],
+                (void*)(uintptr_t)sd->rt_desc_tracked_layouts[tracked_slot]);
             if (sd->rt_desc_binding15_images[tracked_slot] == VK_NULL_HANDLE)
                 continue;
             rt_image = sd->rt_desc_binding15_images[tracked_slot];
