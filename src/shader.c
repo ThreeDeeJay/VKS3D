@@ -9392,6 +9392,7 @@ spirv_patch_stereo_raygen(
     uint32_t image_write_set = UINT32_MAX;
     uint32_t image_read_coord = 0;
     uint32_t image_write_coord = 0;
+    uint32_t image_write_count = 0;
     uint32_t float_zero = 0;
     uint32_t int_type = 0;
     uint32_t uint_type = 0;
@@ -9493,6 +9494,13 @@ spirv_patch_stereo_raygen(
         }
         else if (op == SpvOpImageWrite && wc >= 4)
         {
+            image_write_count++;
+            STEREO_LOG(
+                "RT_PATCH_IMAGE_WRITE index=%u i=%zu image=%u coord=%u",
+                image_write_count,
+                i,
+                in[i + 1],
+                in[i + 2]);
             if (!image_write_image)
                 image_write_image = in[i + 1];
             if (!image_write_coord)
@@ -9594,6 +9602,82 @@ spirv_patch_stereo_raygen(
             }
             d += dwc;
         }
+    }
+    for (size_t w = 5; w < in_c;)
+    {
+        uint32_t wop = in[w] & 0xffffu;
+        uint32_t wwc = in[w] >> 16;
+        if (!wwc || w + wwc > in_c)
+            break;
+        if (wop == SpvOpImageWrite && wwc >= 4)
+        {
+            uint32_t write_image_id = in[w + 1];
+            uint32_t write_coord_id = in[w + 2];
+            uint32_t write_load_result = 0;
+            uint32_t write_pointer = 0;
+            uint32_t write_var = 0;
+            uint32_t write_binding = UINT32_MAX;
+            uint32_t write_set = UINT32_MAX;
+            for (size_t l = 5; l < in_c;)
+            {
+                uint32_t lop = in[l] & 0xffffu;
+                uint32_t lwc = in[l] >> 16;
+                if (!lwc || l + lwc > in_c)
+                    break;
+                if (lop == SpvOpLoad && lwc >= 4 && in[l + 2] == write_image_id)
+                {
+                    write_load_result = in[l + 2];
+                    write_pointer = in[l + 3];
+                    break;
+                }
+                l += lwc;
+            }
+            if (write_pointer)
+            {
+                for (size_t v = 5; v < in_c;)
+                {
+                    uint32_t vop = in[v] & 0xffffu;
+                    uint32_t vwc = in[v] >> 16;
+                    if (!vwc || v + vwc > in_c)
+                        break;
+                    if (vop == SpvOpVariable && vwc >= 4 && in[v + 2] == write_pointer)
+                    {
+                        write_var = in[v + 2];
+                        break;
+                    }
+                    v += vwc;
+                }
+            }
+            if (write_var)
+            {
+                for (size_t dec = 5; dec < in_c;)
+                {
+                    uint32_t dop = in[dec] & 0xffffu;
+                    uint32_t dwc = in[dec] >> 16;
+                    if (!dwc || dec + dwc > in_c)
+                        break;
+                    if (dop == SpvOpDecorate && dwc >= 4 && in[dec + 1] == write_var)
+                    {
+                        if (in[dec + 2] == SpvDecorationBinding)
+                            write_binding = in[dec + 3];
+                        else if (in[dec + 2] == SpvDecorationDescriptorSet)
+                            write_set = in[dec + 3];
+                    }
+                    dec += dwc;
+                }
+            }
+            STEREO_LOG(
+                "RT_PATCH_IMAGE_WRITE_RESOURCE i=%zu image=%u coord=%u load=%u pointer=%u var=%u set=%u binding=%u",
+                w,
+                write_image_id,
+                write_coord_id,
+                write_load_result,
+                write_pointer,
+                write_var,
+                write_set,
+                write_binding);
+        }
+        w += wwc;
     }
     if (image_write_var)
     {
