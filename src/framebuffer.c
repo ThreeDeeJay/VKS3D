@@ -2677,6 +2677,47 @@ stereo_UpdateDescriptorSets(
                 (void *)(uintptr_t)descriptor_image,
                 w->descriptorType,
                 w->pImageInfo[j].imageLayout);
+            for (uint32_t ti = 0; ti < sd->rt_desc_image_count; ti++)
+            {
+                if (sd->rt_desc_images[ti].set == w->dstSet &&
+                    sd->rt_desc_images[ti].binding == w->dstBinding &&
+                    sd->rt_desc_images[ti].array_element == w->dstArrayElement + j)
+                {
+                    sd->rt_desc_images[ti].view = view;
+                    sd->rt_desc_images[ti].image = descriptor_image;
+                    sd->rt_desc_images[ti].type = w->descriptorType;
+                    sd->rt_desc_images[ti].layout = w->pImageInfo[j].imageLayout;
+                    goto rt_desc_image_tracked;
+                }
+            }
+            if (sd->rt_desc_image_count < MAX_RT_DESC_IMAGE_TRACK)
+            {
+                uint32_t ti = sd->rt_desc_image_count++;
+                sd->rt_desc_images[ti].set = w->dstSet;
+                sd->rt_desc_images[ti].binding = w->dstBinding;
+                sd->rt_desc_images[ti].array_element = w->dstArrayElement + j;
+                sd->rt_desc_images[ti].view = view;
+                sd->rt_desc_images[ti].image = descriptor_image;
+                sd->rt_desc_images[ti].type = w->descriptorType;
+                sd->rt_desc_images[ti].layout = w->pImageInfo[j].imageLayout;
+            }
+            else
+            {
+                STEREO_LOG("RT_DESC_IMAGE_TRACK_FULL set=%p binding=%u array=%u",
+                    (void *)(uintptr_t)w->dstSet,
+                    w->dstBinding,
+                    w->dstArrayElement + j);
+            }
+            rt_desc_image_tracked:
+            STEREO_LOG(
+                "RT_IMAGE_TRACK set=%p binding=%u array=%u view=%p image=%p type=%u layout=%u",
+                (void *)(uintptr_t)w->dstSet,
+                w->dstBinding,
+                w->dstArrayElement + j,
+                (void *)(uintptr_t)view,
+                (void *)(uintptr_t)descriptor_image,
+                w->descriptorType,
+                w->pImageInfo[j].imageLayout);
             if (tracked_slot != UINT32_MAX)
             {
                 STEREO_LOG(

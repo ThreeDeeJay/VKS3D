@@ -579,6 +579,16 @@ typedef struct RtDescTemplateTrack {
     uint32_t entry_count;
     VkDescriptorUpdateTemplateEntry entries[64];
 } RtDescTemplateTrack;
+#define MAX_RT_DESC_IMAGE_TRACK 32768
+typedef struct RtDescImageTrack {
+    VkDescriptorSet set;
+    uint32_t binding;
+    uint32_t array_element;
+    VkImageView view;
+    VkImage image;
+    VkDescriptorType type;
+    VkImageLayout layout;
+} RtDescImageTrack;
 
 typedef struct StereoDevice {
     /* MUST be first: loader reads *(void**)device for dispatch table. */
@@ -736,6 +746,8 @@ typedef struct StereoDevice {
     VkDescriptorSetLayout rt_desc_tracked_layouts[MAX_RT_DESC_SET_TRACK];
     VkImageView rt_desc_binding15_views[MAX_RT_DESC_SET_TRACK];
     VkImage rt_desc_binding15_images[MAX_RT_DESC_SET_TRACK];
+    RtDescImageTrack rt_desc_images[MAX_RT_DESC_IMAGE_TRACK];
+    uint32_t rt_desc_image_count;
     uint32_t rt_desc_tracked_set_count;
     #define MAX_RT_LAYOUT_TRACK 256
     VkDescriptorSetLayout rt_desc_layouts[MAX_RT_LAYOUT_TRACK];
