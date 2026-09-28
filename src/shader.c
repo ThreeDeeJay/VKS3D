@@ -9651,7 +9651,7 @@ spirv_patch_stereo_raygen(
                     break;
                 if (top == SpvOpLabel && twc >= 2 && in[t + 1] == write_label)
                 {
-                    for (size_t k = t + twc; k < w;)
+                    for (size_t k = t + twc; k < in_c;)
                     {
                         uint32_t kop = in[k] & 0xffffu;
                         uint32_t kwc = in[k] >> 16;
