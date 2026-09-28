@@ -8174,11 +8174,13 @@ bool spirv_patch_stereo_fs(
             (op == SpvOpImageSampleImplicitLod ||
              op == SpvOpImageSampleExplicitLod ||
              op == SpvOpImageSampleDrefImplicitLod ||
-             op == SpvOpImageSampleDrefExplicitLod) &&
+             op == SpvOpImageSampleDrefExplicitLod ||
+             op == SpvOpImageGather ||
+             op == SpvOpImageDrefGather) &&
             fs_find_load(&s, in[i+3]) >= 0)
         {
             STEREO_LOG(
-                "FS extending sample: op=%u sampledImage=%u coord=%u result=%u",
+                "FS extending sample/gather: op=%u sampledImage=%u coord=%u result=%u",
                 op,
                 in[i+3],
                 in[i+4],
