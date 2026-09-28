@@ -1414,13 +1414,44 @@ stereo_CmdTraceRaysKHR(
         return;
     }
     VkImage dst_image = sc->stereo_images[0];
+    uint32_t src_width = 0;
+    uint32_t src_height = 0;
+    uint32_t src_layers = 0;
+    uint32_t dst_width = sc->app_width;
+    uint32_t dst_height = sc->app_height;
+    uint32_t dst_layers = 0;
+    for (uint32_t ti = 0; ti < sd->tracked_image_info_count; ti++)
+    {
+        if (sd->tracked_images[ti] == rt_image)
+        {
+            src_width = sd->tracked_image_extents[ti].width;
+            src_height = sd->tracked_image_extents[ti].height;
+            src_layers = sd->tracked_image_layers[ti];
+            break;
+        }
+    }
+    for (uint32_t ti = 0; ti < sd->tracked_image_info_count; ti++)
+    {
+        if (sd->tracked_images[ti] == dst_image)
+        {
+            dst_width = sd->tracked_image_extents[ti].width;
+            dst_height = sd->tracked_image_extents[ti].height;
+            dst_layers = sd->tracked_image_layers[ti];
+            break;
+        }
+    }
     STEREO_LOG(
-        "RT_TRACE_COPY_BEGIN src=%p dst=%p width=%u height=%u layers=%u",
+        "RT_TRACE_COPY_IMAGES src=%p extent=%ux%u layers=%u dst=%p extent=%ux%u layers=%u trace=%ux%u",
         (void *)(uintptr_t)rt_image,
+        src_width,
+        src_height,
+        src_layers,
         (void *)(uintptr_t)dst_image,
+        dst_width,
+        dst_height,
+        dst_layers,
         width,
-        height,
-        rt_depth);
+        height);
     VkImageMemoryBarrier src_barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
