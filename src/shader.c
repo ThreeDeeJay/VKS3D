@@ -9394,6 +9394,7 @@ spirv_patch_stereo_raygen(
     uint32_t image_write_coord = 0;
     uint32_t image_write_count = 0;
     uint32_t current_function = 0;
+    uint32_t current_label = 0;
     uint32_t float_zero = 0;
     uint32_t int_type = 0;
     uint32_t uint_type = 0;
@@ -9497,10 +9498,11 @@ spirv_patch_stereo_raygen(
         {
             image_write_count++;
             STEREO_LOG(
-                "RT_PATCH_IMAGE_WRITE index=%u i=%zu function=%u image=%u coord=%u",
+                "RT_PATCH_IMAGE_WRITE index=%u i=%zu function=%u label=%u image=%u coord=%u",
                 image_write_count,
                 i,
                 current_function,
+                current_label,
                 in[i + 1],
                 in[i + 2]);
             if (!image_write_image)
@@ -9551,10 +9553,13 @@ spirv_patch_stereo_raygen(
             if (!first_function)
                 first_function = (uint32_t)i;
             current_function = in[i + 2];
+            current_label = 0;
         }
-        else if (op == SpvOpLabel && first_function && !first_label)
+        else if (op == SpvOpLabel)
         {
-            first_label = (uint32_t)i;
+            current_label = in[i + 1];
+            if (first_function && !first_label)
+                first_label = (uint32_t)i;
         }
         i += wc;
     }
@@ -9620,6 +9625,7 @@ spirv_patch_stereo_raygen(
             uint32_t write_function = 0;
             uint32_t write_load_result = 0;
             uint32_t write_pointer = 0;
+            uint32_t write_label = 0;
             uint32_t write_var = 0;
             for (size_t f = 5; f < w;)
             {
@@ -9629,6 +9635,8 @@ spirv_patch_stereo_raygen(
                     break;
                 if (fop == SpvOpFunction && fwc >= 3)
                     write_function = in[f + 2];
+                else if (fop == SpvOpLabel && fwc >= 2)
+                    write_label = in[f + 1];
                 f += fwc;
             }
             uint32_t write_binding = UINT32_MAX;
@@ -9682,9 +9690,10 @@ spirv_patch_stereo_raygen(
                 }
             }
             STEREO_LOG(
-                "RT_PATCH_IMAGE_WRITE_RESOURCE i=%zu function=%u image=%u coord=%u load=%u pointer=%u var=%u set=%u binding=%u",
+                "RT_PATCH_IMAGE_WRITE_RESOURCE i=%zu function=%u label=%u image=%u coord=%u load=%u pointer=%u var=%u set=%u binding=%u",
                 w,
                 write_function,
+                write_label,
                 write_image_id,
                 write_coord_id,
                 write_load_result,
