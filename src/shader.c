@@ -3191,14 +3191,14 @@ bool spirv_patch_stereo_vertex(
         }
         if (opx == SpvOpFunction)
         {
+            if (!ins_t)
+                ins_t = i;
             in_entry_function =
                 (wcx >= 4 &&
                  in[i + 2] ==
                  (m.position_function ?
                   m.position_function :
                   m.entry_function));
-            if (in_entry_function)
-                ins_t = i;
         }
         if (in_entry_function &&
             opx == SpvOpReturn)
