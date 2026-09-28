@@ -2508,6 +2508,14 @@ stereo_UpdateDescriptorSets(
         if (tracked_slot != UINT32_MAX)
         {
             STEREO_LOG(
+                "RT_DESC_BINDING set=%p slot=%u binding=%u array=%u count=%u type=%u",
+                (void*)(uintptr_t)w->dstSet,
+                tracked_slot,
+                w->dstBinding,
+                w->dstArrayElement,
+                w->descriptorCount,
+                w->descriptorType);
+            STEREO_LOG(
                 "RT_SET_WRITE set=%p slot=%u binding=%u array=%u count=%u type=%u",
                 (void*)(uintptr_t)w->dstSet,
                 tracked_slot,
@@ -2587,6 +2595,19 @@ stereo_UpdateDescriptorSets(
                 (void *)(uintptr_t)descriptor_image,
                 w->descriptorType,
                 w->pImageInfo[j].imageLayout);
+            if (tracked_slot != UINT32_MAX)
+            {
+                STEREO_LOG(
+                    "RT_DESC_BINDING set=%p slot=%u binding=%u array=%u view=%p image=%p type=%u layout=%u",
+                    (void *)(uintptr_t)w->dstSet,
+                    tracked_slot,
+                    w->dstBinding,
+                    j,
+                    (void *)(uintptr_t)view,
+                    (void *)(uintptr_t)descriptor_image,
+                    w->descriptorType,
+                    w->pImageInfo[j].imageLayout);
+            }
             if (w->dstBinding == 15)
             {
                 uint32_t tracked_slot = UINT32_MAX;
