@@ -1431,6 +1431,28 @@ stereo_CmdTraceRaysKHR(
             slot,
             slot != UINT32_MAX ? sd->rt_desc_bound_set_count[slot] : 0,
             sd->rt_desc_tracked_set_count);
+        for (uint32_t bi = 0; bi < sd->rt_desc_image_count; bi++)
+        {
+            for (uint32_t ci = 0; ci < sd->rt_desc_cmd_count; ci++)
+            {
+                for (uint32_t si = 0; si < sd->rt_desc_bound_set_count[ci]; si++)
+                {
+                    if (sd->rt_desc_bound_sets[ci][si] != sd->rt_desc_images[bi].set)
+                        continue;
+                    STEREO_LOG(
+                        "RT_TRACE_BOUND_IMAGE cmd_slot=%u set_index=%u set=%p binding=%u array=%u view=%p image=%p type=%u layout=%u",
+                        ci,
+                        si,
+                        (void *)(uintptr_t)sd->rt_desc_images[bi].set,
+                        sd->rt_desc_images[bi].binding,
+                        sd->rt_desc_images[bi].array_element,
+                        (void *)(uintptr_t)sd->rt_desc_images[bi].view,
+                        (void *)(uintptr_t)sd->rt_desc_images[bi].image,
+                        sd->rt_desc_images[bi].type,
+                        sd->rt_desc_images[bi].layout);
+                }
+            }
+        }
         STEREO_LOG("RT_TRACE_END");
         return;
     }
@@ -2308,6 +2330,39 @@ stereo_UpdateDescriptorSetWithTemplate(
                     }
                     if (ii->imageView == VK_NULL_HANDLE && ii->sampler == VK_NULL_HANDLE)
                         continue;
+                    uint32_t image_array = e->dstArrayElement + di;
+                    for (uint32_t ti2 = 0; ti2 < sd->rt_desc_image_count; ti2++)
+                    {
+                        if (sd->rt_desc_images[ti2].set == descriptorSet &&
+                            sd->rt_desc_images[ti2].binding == e->dstBinding &&
+                            sd->rt_desc_images[ti2].array_element == image_array)
+                        {
+                            sd->rt_desc_images[ti2].view = ii->imageView;
+                            sd->rt_desc_images[ti2].image = image;
+                            sd->rt_desc_images[ti2].type = e->descriptorType;
+                            sd->rt_desc_images[ti2].layout = ii->imageLayout;
+                            goto rt_template_image_tracked;
+                        }
+                    }
+                    if (sd->rt_desc_image_count < MAX_RT_DESC_IMAGE_TRACK)
+                    {
+                        uint32_t ti2 = sd->rt_desc_image_count++;
+                        sd->rt_desc_images[ti2].set = descriptorSet;
+                        sd->rt_desc_images[ti2].binding = e->dstBinding;
+                        sd->rt_desc_images[ti2].array_element = image_array;
+                        sd->rt_desc_images[ti2].view = ii->imageView;
+                        sd->rt_desc_images[ti2].image = image;
+                        sd->rt_desc_images[ti2].type = e->descriptorType;
+                        sd->rt_desc_images[ti2].layout = ii->imageLayout;
+                    }
+                    else
+                    {
+                        STEREO_LOG("RT_DESC_IMAGE_TRACK_FULL set=%p binding=%u array=%u",
+                            (void*)(uintptr_t)descriptorSet,
+                            e->dstBinding,
+                            image_array);
+                    }
+                    rt_template_image_tracked:
                     STEREO_LOG(
                         "RT_SET0_TEMPLATE_IMAGE set=%p template=%p pipeline_slot=%u layout=%p binding=%u array=%u type=%u view=%p image=%p sampler=%p imageLayout=%u",
                         (void*)(uintptr_t)descriptorSet,
@@ -2315,7 +2370,7 @@ stereo_UpdateDescriptorSetWithTemplate(
                         rt_pipeline_slot,
                         (void*)(uintptr_t)t->layout,
                         e->dstBinding,
-                        e->dstArrayElement + di,
+                        image_array,
                         e->descriptorType,
                         (void*)(uintptr_t)ii->imageView,
                         (void*)(uintptr_t)image,
