@@ -2270,13 +2270,14 @@ stereo_UpdateDescriptorSetWithTemplate(
                 }
             }
             STEREO_LOG(
-                "RT_TEMPLATE_RT_SET set=%p layout=%p template=%p pipeline_slot=%u bind15_view=%p bind15_image=%p",
+                "RT_TEMPLATE_RT_SET set=%p layout=%p template=%p pipeline_slot=%u slot=%u bind15_view=%p bind15_image=%p",
                 (void*)(uintptr_t)descriptorSet,
                 (void*)(uintptr_t)t->layout,
                 (void*)(uintptr_t)descriptorUpdateTemplate,
                 rt_pipeline_slot,
-                (void*)(uintptr_t)sd->rt_desc_binding15_views[slot],
-                (void*)(uintptr_t)sd->rt_desc_binding15_images[slot]);
+                slot,
+                slot != UINT32_MAX ? (void*)(uintptr_t)sd->rt_desc_binding15_views[slot] : NULL,
+                slot != UINT32_MAX ? (void*)(uintptr_t)sd->rt_desc_binding15_images[slot] : NULL);
             bool bound_any = false;
             for (uint32_t ci = 0; ci < sd->rt_desc_cmd_count; ci++)
             {
