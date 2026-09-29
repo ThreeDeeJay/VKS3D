@@ -8622,6 +8622,55 @@ bool spirv_patch_stereo_fs(
                     }
                 }
             }
+            if (w[1] == in[i + 1])
+            {
+                uint32_t sampled_type = 0;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0)
+                        break;
+                    if (sop == SpvOpLoad && sw >= 4 && in[scan + 2] == in[i + 3])
+                    {
+                        sampled_type = in[scan + 1];
+                        STEREO_LOG(
+                            "FS_PATCH_IMAGE_LOADTYPE "
+                            "sampledImage=%u "
+                            "sampledType=%u "
+                            "loadOff=%zu",
+                            in[i + 3],
+                            sampled_type,
+                            scan);
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (sampled_type)
+                {
+                    for (uint32_t img = 0; img < s.n_img; ++img)
+                    {
+                        if (s.images[img].dim != SpvDim2D)
+                            continue;
+                        if (s.images[img].sampled_type_id != sampled_type)
+                            continue;
+                        if (!s.images[img].replacement_type)
+                            continue;
+                        STEREO_LOG(
+                            "FS_PATCH_IMAGE_TYPE_MATCH "
+                            "sampledImage=%u "
+                            "sampledType=%u "
+                            "imageType=%u "
+                            "replacement=%u",
+                            in[i + 3],
+                            sampled_type,
+                            s.images[img].id,
+                            s.images[img].replacement_type);
+                        w[1] = s.images[img].replacement_type;
+                        break;
+                    }
+                }
+            }
             STEREO_LOG(
                 "FS_PATCH_IMAGE_EMIT result=%u type=%u sampledImage=%u",
                 w[2],
