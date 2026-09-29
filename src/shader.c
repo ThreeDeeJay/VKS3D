@@ -8540,18 +8540,6 @@ bool spirv_patch_stereo_fs(
                     owner);
                 for (uint32_t img = 0; img < s.n_img; ++img)
                 {
-                    STEREO_LOG(
-                        "FS_PATCH_COMPARE "
-                        "idx=%u "
-                        "imageType=%u "
-                        "owner=%u "
-                        "stereo=%u "
-                        "replacement=%u",
-                        img,
-                        s.images[img].id,
-                        s.images[img].owner_var,
-                        s.images[img].stereo,
-                        s.images[img].replacement_type);
                     if (s.images[img].owner_var != owner)
                         continue;
                     if (s.images[img].dim != SpvDim2D)
@@ -8594,6 +8582,43 @@ bool spirv_patch_stereo_fs(
                             s.images[img].replacement_type);
                         w[1] = s.images[img].replacement_type;
                         break;
+                    }
+                }
+                if (w[1] == in[i + 1])
+                {
+                    int source_var = fs_var_index(&s, s.loads[load].source_id);
+                    int loaded_type = (source_var >= 0) ? s.vars[source_var].type : -1;
+                    STEREO_LOG(
+                        "FS_PATCH_TYPE_FALLBACK "
+                        "sampledImage=%u "
+                        "source=%u "
+                        "loadedType=%d",
+                        in[i + 3],
+                        s.loads[load].source_id,
+                        loaded_type);
+                    if (loaded_type >= 0)
+                    {
+                        for (uint32_t img = 0; img < s.n_img; ++img)
+                        {
+                            if (s.images[img].dim != SpvDim2D)
+                                continue;
+                            if (s.images[img].sampled_type_id != (uint32_t)loaded_type)
+                                continue;
+                            if (!s.images[img].replacement_type)
+                                continue;
+                            STEREO_LOG(
+                                "FS_PATCH_TYPE_MATCH "
+                                "sampledImage=%u "
+                                "sampledType=%d "
+                                "imageType=%u "
+                                "replacement=%u",
+                                in[i + 3],
+                                loaded_type,
+                                s.images[img].id,
+                                s.images[img].replacement_type);
+                            w[1] = s.images[img].replacement_type;
+                            break;
+                        }
                     }
                 }
             }
