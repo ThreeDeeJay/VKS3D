@@ -1349,6 +1349,23 @@ stereo_CmdTraceRaysKHR(
             break;
         }
     }
+    if (rt_pipeline_track_slot == UINT32_MAX &&
+        rt_pipeline_layout != VK_NULL_HANDLE)
+    {
+        for (uint32_t pi = 0; pi < sd->rt_pipeline_track_count; pi++)
+        {
+            if (sd->rt_pipeline_handle_layouts[pi] == rt_pipeline_layout)
+            {
+                rt_pipeline_track_slot = pi;
+                STEREO_LOG(
+                    "RT_TRACE_PIPELINE_LAYOUT_FALLBACK layout=%p track_slot=%u pipeline=%p",
+                    (void*)(uintptr_t)rt_pipeline_layout,
+                    pi,
+                    (void*)(uintptr_t)sd->rt_pipeline_handles[pi]);
+                break;
+            }
+        }
+    }
     STEREO_LOG(
         "RT_TRACE_PIPELINE_LAYOUT cb=%p pipeline_slot=%u pipeline=%p pipeline_track_slot=%u pipeline_layout=%p expected_set0_layout=%p bound_set0=%p bound_set0_slot=%u bound_set0_layout=%p",
         (void*)commandBuffer,
