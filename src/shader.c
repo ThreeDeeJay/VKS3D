@@ -8542,11 +8542,8 @@ bool spirv_patch_stereo_fs(
                         s.images[img].replacement_type);
                     if (s.images[img].owner_var != owner)
                         continue;
-                    if (!s.images[img].stereo ||
-                        s.images[img].dim != SpvDim2D)
-                    {
+                    if (s.images[img].dim != SpvDim2D)
                         continue;
-                    }
                     STEREO_LOG(
                         "FS_SAMPLE_IMAGE_DIM "
                         "idx=%u "
