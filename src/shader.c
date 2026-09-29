@@ -8272,7 +8272,19 @@ bool spirv_patch_stereo_fs(
                     s.images[img].stereo);
                 break;
             }
-            if (!fs_should_patch_sample(&s, h, descriptor_var))
+            int replacement_2d = 0;
+            for (uint32_t img = 0; img < s.n_img; ++img)
+            {
+                if (s.images[img].owner_var != descriptor_var)
+                    continue;
+                if (s.images[img].dim != SpvDim2D)
+                    continue;
+                if (!s.images[img].replacement_type)
+                    continue;
+                replacement_2d = 1;
+                break;
+            }
+            if (!fs_should_patch_sample(&s, h, descriptor_var) && !replacement_2d)
             {
                 STEREO_LOG(
                     "FS_PATCH_REJECT "
