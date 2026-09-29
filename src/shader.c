@@ -8703,40 +8703,61 @@ bool spirv_patch_stereo_fs(
          */
         if (in_func &&
             (op == SpvOpImageQuerySizeLod || op == SpvOpImageQuerySize) &&
-            wc >= 4 &&
-            fs_find_load(&s, in[i + 3]) >= 0)
+            wc >= 4)
         {
-            uint32_t descriptor_var = 0;
             uint32_t image_ssa = in[i + 3];
-            int load =
-                fs_find_load(
-                    &s,
-                    image_ssa);
-            if (load >= 0)
-                descriptor_var =
-                    s.loads[load].owner_var;
+            uint32_t sampled_type = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0)
+                    break;
+                if (sop == SpvOpLoad && sw >= 4 && in[scan + 2] == image_ssa)
+                {
+                    sampled_type = in[scan + 1];
+                    STEREO_LOG(
+                        "FS_QSIZE_LOADTYPE "
+                        "image=%u "
+                        "sampledType=%u "
+                        "loadOff=%zu",
+                        image_ssa,
+                        sampled_type,
+                        scan);
+                    break;
+                }
+                scan += sw;
+            }
             int img_idx = -1;
             for (uint32_t ii = 0; ii < s.n_img; ++ii)
             {
-                if (s.images[ii].owner_var != descriptor_var)
-                    continue;
                 if (s.images[ii].dim != SpvDim2D)
+                    continue;
+                if (s.images[ii].sampled_type_id != sampled_type)
+                    continue;
+                if (!s.images[ii].replacement_type)
                     continue;
                 img_idx = (int)ii;
                 STEREO_LOG(
-                    "FS_QSIZE_OWNER_MATCH imageType=%u owner=%u stereo=%u binding=%u",
+                    "FS_QSIZE_TYPE_MATCH "
+                    "image=%u "
+                    "sampledType=%u "
+                    "imageType=%u "
+                    "replacement=%u",
+                    image_ssa,
+                    sampled_type,
                     s.images[ii].id,
-                    descriptor_var,
-                    s.images[ii].stereo,
-                    s.images[ii].binding);
+                    s.images[ii].replacement_type);
                 break;
             }
             if (img_idx < 0)
             {
                 STEREO_LOG(
-                    "FS_QSIZE_NO_OWNER image=%u descriptor=%u",
+                    "FS_QSIZE_NO_TYPE_MATCH "
+                    "image=%u "
+                    "sampledType=%u",
                     image_ssa,
-                    descriptor_var);
+                    sampled_type);
                 sb_push_n(&ob, &in[i], wc);
                 if (in[i + 1] < id_bound)
                 {
@@ -8746,10 +8767,10 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             STEREO_LOG(
-                "FS_QSIZE_RESOLVE image=%u load=%d descriptor=%u",
-                in[i + 3],
-                load,
-                descriptor_var);
+                "FS_QSIZE_RESOLVE image=%u sampledType=%u replacement=%u",
+                image_ssa,
+                sampled_type,
+                s.images[img_idx].replacement_type);
             /*
              * The stereo image replacement changes a 2D image into a 2D-array image.
              * OpImageQuerySize* therefore needs a 3-component integer result type:
