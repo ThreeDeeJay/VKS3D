@@ -9388,8 +9388,6 @@ spirv_patch_stereo_raygen(
     #define MAX_RT_IMAGE_WRITES 64
     uint32_t image_write_image = 0;
     uint32_t image_write_pointer = 0;
-    uint32_t image_write_coord = 0;
-    uint32_t image_write_count = 0;
     uint32_t image_write_var = 0;
     uint32_t image_write_binding = UINT32_MAX;
     uint32_t image_write_set = UINT32_MAX;
