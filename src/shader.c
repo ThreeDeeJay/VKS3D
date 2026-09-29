@@ -8635,6 +8635,8 @@ bool spirv_patch_stereo_fs(
             {
                 if (s.images[ii].owner_var != descriptor_var)
                     continue;
+                if (s.images[ii].dim != SpvDim2D)
+                    continue;
                 img_idx = (int)ii;
                 STEREO_LOG(
                     "FS_QSIZE_OWNER_MATCH imageType=%u owner=%u stereo=%u binding=%u",
@@ -8663,21 +8665,6 @@ bool spirv_patch_stereo_fs(
                 in[i + 3],
                 load,
                 descriptor_var);
-            if (!s.images[img_idx].stereo)
-            {
-                STEREO_LOG(
-                    "FS_QSIZE_SKIP image=%u descriptor=%u stereo=%u",
-                    in[i + 3],
-                    descriptor_var,
-                    (img_idx >= 0) ? s.images[img_idx].stereo : 0);
-                sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                {
-                    emitted_type[in[i + 1]] = true;
-                }
-                i += wc;
-                continue;
-            }
             /*
              * The stereo image replacement changes a 2D image into a 2D-array image.
              * OpImageQuerySize* therefore needs a 3-component integer result type:
