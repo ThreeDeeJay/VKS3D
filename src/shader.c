@@ -12796,14 +12796,33 @@ stereo_CreateRayTracingPipelinesKHR(
                 sd->rt_deferred_pipeline_patched_raygen[slot] =
                 tmp_raygen_modules[p] != VK_NULL_HANDLE ?
                 VK_TRUE : VK_FALSE;
+                sd->rt_deferred_pipeline_raygen_write_count[slot] =
+                raygen_write_counts[p];
+                for (uint32_t wi = 0; wi < raygen_write_counts[p]; wi++)
+                {
+                    sd->rt_deferred_pipeline_raygen_write_sets[slot][wi] =
+                    raygen_write_sets[p][wi];
+                    sd->rt_deferred_pipeline_raygen_write_bindings[slot][wi] =
+                    raygen_write_bindings[p][wi];
+                }
                 STEREO_LOG(
-                    "RT_DEFERRED_TRACK p=%u slot=%u deferred=%p layout=%p raygen=%p patched=%u",
+                    "RT_DEFERRED_TRACK p=%u slot=%u deferred=%p layout=%p raygen=%p patched=%u writes=%u",
                     p,
                     slot,
                     (void*)(uintptr_t)deferredOperation,
                     (void*)pCreateInfos[p].layout,
                     (void*)raygen_modules[p],
-                    tmp_raygen_modules[p] != VK_NULL_HANDLE ? 1u : 0u);
+                    tmp_raygen_modules[p] != VK_NULL_HANDLE ? 1u : 0u,
+                    raygen_write_counts[p]);
+                for (uint32_t wi = 0; wi < raygen_write_counts[p]; wi++)
+                {
+                    STEREO_LOG(
+                        "RT_DEFERRED_WRITE slot=%u index=%u set=%u binding=%u",
+                        slot,
+                        wi,
+                        raygen_write_sets[p][wi],
+                        raygen_write_bindings[p][wi]);
+                }
             }
         }
     }
