@@ -8585,8 +8585,7 @@ bool spirv_patch_stereo_fs(
                         s.images[img].sampled_type_id,
                         s.images[img].replacement_sampled_type,
                         s.images[img].replacement_type);
-                    if (s.images[img].replacement_type &&
-                        s.images[img].replacement_sampled_type)
+                    if (s.images[img].replacement_type)
                     {
                         STEREO_LOG(
                             "FS_PATCH_IMAGE_REWRITE result=%u oldType=%u newType=%u",
