@@ -9375,12 +9375,17 @@ spirv_patch_stereo_raygen(
     float lo,
     float ro,
     float conv,
-    int projection_mode)
+    int projection_mode,
+    uint32_t *write_sets,
+    uint32_t *write_bindings,
+    uint32_t *write_count)
 {
     if (!in || in_c < 5 || in[0] != SPIRV_MAGIC || !out || !out_c)
         return false;
     *out = NULL;
     *out_c = 0;
+    if (write_count)
+        *write_count = 0;
     uint32_t bound = in[3];
     uint32_t launch_id_var = 0;
     uint32_t launch_id_load = 0;
@@ -10386,6 +10391,30 @@ spirv_patch_stereo_raygen(
     ob.w[3] = bound;
     *out = ob.w;
     *out_c = ob.n;
+    if (write_sets && write_bindings && write_count)
+    {
+        uint32_t n = 0;
+        for (uint32_t ri = 0; ri < image_write_resource_count && n < MAX_RT_RAYGEN_WRITES; ri++)
+        {
+            if (image_write_vars[ri] == 0 || image_write_sets[ri] == UINT32_MAX || image_write_bindings[ri] == UINT32_MAX)
+                continue;
+            bool duplicate = false;
+            for (uint32_t wi = 0; wi < n; wi++)
+            {
+                if (write_sets[wi] == image_write_sets[ri] && write_bindings[wi] == image_write_bindings[ri])
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate)
+                continue;
+            write_sets[n] = image_write_sets[ri];
+            write_bindings[n] = image_write_bindings[ri];
+            n++;
+        }
+        *write_count = n;
+    }
     STEREO_LOG(
         "RT_PATCH_SUCCESS image_type=%u texel_type=%u output_var=%u set=%u binding=%u read_coord=%u write_coord=%u new_coord=%u launch=%u origin_vec=%u ray_ndc_vec=%u camera_stereo=%u projection_mode=%d lo=%+.9f ro=%+.9f conv=%+.9f mode=launch_z",
         image_type,
@@ -12470,11 +12499,13 @@ stereo_CreateRayTracingPipelinesKHR(
     calloc(createInfoCount, sizeof(*patched_ci));
     VkPipelineShaderStageCreateInfo **patched_stages =
     calloc(createInfoCount, sizeof(*patched_stages));
-    VkShaderModule *tmp_raygen_modules =
-    calloc(createInfoCount, sizeof(*tmp_raygen_modules));
-    VkShaderModule *raygen_modules =
-    calloc(createInfoCount, sizeof(*raygen_modules));
-    if (!patched_ci || !patched_stages || !tmp_raygen_modules || !raygen_modules)
+    uint32_t *raygen_write_counts =
+    calloc(createInfoCount, sizeof(*raygen_write_counts));
+    uint32_t (*raygen_write_sets)[MAX_RT_RAYGEN_WRITES] =
+    calloc(createInfoCount, sizeof(*raygen_write_sets));
+    uint32_t (*raygen_write_bindings)[MAX_RT_RAYGEN_WRITES] =
+    calloc(createInfoCount, sizeof(*raygen_write_bindings));
+    if (!patched_ci || !patched_stages || !tmp_raygen_modules || !raygen_modules || !raygen_write_counts || !raygen_write_sets || !raygen_write_bindings)
     {
         free(patched_ci);
         free(patched_stages);
@@ -12548,7 +12579,10 @@ stereo_CreateRayTracingPipelinesKHR(
                 sd->stereo.left_eye_offset,
                 sd->stereo.right_eye_offset,
                 sd->stereo.convergence,
-                sd->stereo.projection))
+                sd->stereo.projection,
+                raygen_write_sets[p],
+                raygen_write_bindings[p],
+                &raygen_write_counts[p]))
             {
                 STEREO_LOG(
                     "RT_PATCH_FAILED p=%u stage=%u module=%p",
@@ -12557,6 +12591,9 @@ stereo_CreateRayTracingPipelinesKHR(
                     (void *)st->module);
                 continue;
             }
+            STEREO_LOG("RT_PIPE_RAYGEN_WRITES p=%u count=%u",p,raygen_write_counts[p]);
+            for (uint32_t wi = 0; wi < raygen_write_counts[p]; wi++)
+                STEREO_LOG("RT_PIPE_RAYGEN_WRITE p=%u index=%u set=%u binding=%u",p,wi,raygen_write_sets[p][wi],raygen_write_bindings[p][wi]);
             log_rt_raygen_spv(patched_spv, patched_words);
             if (dump)
             {
@@ -12717,6 +12754,12 @@ stereo_CreateRayTracingPipelinesKHR(
             sd->rt_pipeline_raygen_modules[slot] = raygen_modules[p];
             sd->rt_pipeline_patched_raygen[slot] =
             tmp_raygen_modules[p] != VK_NULL_HANDLE ? VK_TRUE : VK_FALSE;
+            sd->rt_pipeline_raygen_write_count[slot] = raygen_write_counts[p];
+            for (uint32_t wi = 0; wi < raygen_write_counts[p]; wi++)
+            {
+                sd->rt_pipeline_raygen_write_sets[slot][wi] = raygen_write_sets[p][wi];
+                sd->rt_pipeline_raygen_write_bindings[slot][wi] = raygen_write_bindings[p][wi];
+            }
             STEREO_LOG(
                 "RT_PIPELINE_CREATE_RESULT p=%u track_slot=%u pipeline=%p layout=%p raygen=%p patched=%u",
                 p,

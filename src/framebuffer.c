@@ -1337,11 +1337,29 @@ stereo_CmdTraceRaysKHR(
             }
         }
     }
+    VkPipeline rt_bound_pipeline = VK_NULL_HANDLE;
+    uint32_t rt_pipeline_track_slot = UINT32_MAX;
+    if (slot != UINT32_MAX)
+        rt_bound_pipeline = sd->rt_desc_pipelines[slot];
+    for (uint32_t pi = 0; pi < sd->rt_pipeline_track_count; pi++)
+    {
+        if (sd->rt_pipeline_handles[pi] == rt_bound_pipeline)
+        {
+            rt_pipeline_track_slot = pi;
+            break;
+        }
+    }
     STEREO_LOG(
-        "RT_TRACE_PIPELINE_LAYOUT cb=%p pipeline_slot=%u pipeline_layout=%p expected_set0_layout=%p bound_set0=%p bound_set0_slot=%u bound_set0_layout=%p",
+        "RT_TRACE_PIPELINE_LAYOUT cb=%p pipeline_slot=%u pipeline=%p pipeline_track_slot=%u pipeline_layout=%p expected_set0_layout=%p bound_set0=%p bound_set0_slot=%u bound_set0_layout=%p",
         (void*)commandBuffer,
         rt_pipeline_slot,
+        (void*)(uintptr_t)rt_bound_pipeline,
+        rt_pipeline_track_slot,
         (void*)(uintptr_t)rt_pipeline_layout,
+        (void*)(uintptr_t)rt_expected_set0_layout,
+        (void*)(uintptr_t)rt_set0,
+        rt_set0_tracked_slot,
+        (void*)(uintptr_t)rt_bound_set0_layout);
         (void*)(uintptr_t)rt_expected_set0_layout,
         (void*)(uintptr_t)rt_set0,
         rt_set0_tracked_slot,
@@ -1403,20 +1421,34 @@ stereo_CmdTraceRaysKHR(
                 (void*)(uintptr_t)sd->rt_desc_binding15_images[tracked_slot],
                 (void*)(uintptr_t)sd->rt_desc_binding15_views[tracked_slot],
                 (void*)(uintptr_t)sd->rt_desc_tracked_layouts[tracked_slot]);
-            if (sd->rt_desc_binding15_images[tracked_slot] == VK_NULL_HANDLE)
+            if (rt_pipeline_track_slot == UINT32_MAX)
                 continue;
-            rt_image = sd->rt_desc_binding15_images[tracked_slot];
-            rt_output_set = bound_set;
-            rt_output_slot = tracked_slot;
-            STEREO_LOG(
-                "RT_TRACE_OUTPUT_RESOLVED set=%p image=%p view=%p slot=%u bound_index=%u cmd_slot=%u",
-                (void*)(uintptr_t)bound_set,
-                (void*)(uintptr_t)rt_image,
-                (void*)(uintptr_t)sd->rt_desc_binding15_views[tracked_slot],
-                tracked_slot,
-                si,
-                slot);
-            break;
+            for (uint32_t wi = 0; wi < sd->rt_pipeline_raygen_write_count[rt_pipeline_track_slot]; wi++)
+            {
+                uint32_t write_set = sd->rt_pipeline_raygen_write_sets[rt_pipeline_track_slot][wi];
+                uint32_t write_binding = sd->rt_pipeline_raygen_write_bindings[rt_pipeline_track_slot][wi];
+                if (write_set != si)
+                    continue;
+                for (uint32_t di = 0; di < sd->rt_desc_image_count; di++)
+                {
+                    if (sd->rt_desc_images[di].set != bound_set)
+                        continue;
+                    if (sd->rt_desc_images[di].binding != write_binding)
+                        continue;
+                    if (sd->rt_desc_images[di].image == VK_NULL_HANDLE)
+                        continue;
+                    STEREO_LOG(
+                        "RT_TRACE_WRITE_CANDIDATE pipeline=%p set_index=%u binding=%u array=%u image=%p view=%p type=%u layout=%u",
+                        (void*)(uintptr_t)rt_bound_pipeline,
+                        write_set,
+                        write_binding,
+                        sd->rt_desc_images[di].array_element,
+                        (void*)(uintptr_t)sd->rt_desc_images[di].image,
+                        (void*)(uintptr_t)sd->rt_desc_images[di].view,
+                        sd->rt_desc_images[di].type,
+                        sd->rt_desc_images[di].layout);
+                }
+            }
         }
     }
     if (rt_image == VK_NULL_HANDLE)

@@ -730,10 +730,14 @@ typedef struct StereoDevice {
     uint32_t rt_pipeline_set_counts[MAX_RT_PIPELINE_LAYOUT_TRACK];
     uint32_t rt_pipeline_layout_count;
     #define MAX_RT_PIPELINE_TRACK 256
+    #define MAX_RT_RAYGEN_WRITES 32
     VkPipeline rt_pipeline_handles[MAX_RT_PIPELINE_TRACK];
     VkPipelineLayout rt_pipeline_handle_layouts[MAX_RT_PIPELINE_TRACK];
     VkShaderModule rt_pipeline_raygen_modules[MAX_RT_PIPELINE_TRACK];
     VkBool32 rt_pipeline_patched_raygen[MAX_RT_PIPELINE_TRACK];
+    uint32_t rt_pipeline_raygen_write_count[MAX_RT_PIPELINE_TRACK];
+    uint32_t rt_pipeline_raygen_write_sets[MAX_RT_PIPELINE_TRACK][MAX_RT_RAYGEN_WRITES];
+    uint32_t rt_pipeline_raygen_write_bindings[MAX_RT_PIPELINE_TRACK][MAX_RT_RAYGEN_WRITES];
     uint32_t rt_pipeline_track_count;
     #define MAX_RT_DEFERRED_PIPELINE_TRACK 256
     VkDeferredOperationKHR rt_deferred_pipeline_ops[MAX_RT_DEFERRED_PIPELINE_TRACK];
@@ -967,7 +971,10 @@ bool spirv_patch_stereo_raygen(
     float lo,
     float ro,
     float conv,
-    int projection_mode);
+    int projection_mode,
+    uint32_t *write_sets,
+    uint32_t *write_bindings,
+    uint32_t *write_count);
 void spirv_patched_free(uint32_t *w);
 
 StereoPipelineInfo *
