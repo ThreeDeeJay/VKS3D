@@ -8706,23 +8706,23 @@ bool spirv_patch_stereo_fs(
             wc >= 4)
         {
             uint32_t image_ssa = in[i + 3];
-            uint32_t sampled_type = 0;
+            uint32_t image_type = 0;
             for (size_t scan = 5; scan < in_c;)
             {
                 uint32_t sw = in[scan] >> 16;
                 uint32_t sop = in[scan] & 0xffffu;
                 if (sw == 0)
                     break;
-                if (sop == SpvOpLoad && sw >= 4 && in[scan + 2] == image_ssa)
+                if (sop == SpvOpImage && sw >= 4 && in[scan + 2] == image_ssa)
                 {
-                    sampled_type = in[scan + 1];
+                    image_type = in[scan + 1];
                     STEREO_LOG(
-                        "FS_QSIZE_LOADTYPE "
+                        "FS_QSIZE_IMAGETYPE "
                         "image=%u "
-                        "sampledType=%u "
-                        "loadOff=%zu",
+                        "imageType=%u "
+                        "imageOff=%zu",
                         image_ssa,
-                        sampled_type,
+                        image_type,
                         scan);
                     break;
                 }
@@ -8731,21 +8731,19 @@ bool spirv_patch_stereo_fs(
             int img_idx = -1;
             for (uint32_t ii = 0; ii < s.n_img; ++ii)
             {
-                if (s.images[ii].dim != SpvDim2D)
-                    continue;
-                if (s.images[ii].sampled_type_id != sampled_type)
-                    continue;
                 if (!s.images[ii].replacement_type)
+                    continue;
+                if (s.images[ii].replacement_type != image_type)
                     continue;
                 img_idx = (int)ii;
                 STEREO_LOG(
-                    "FS_QSIZE_TYPE_MATCH "
+                    "FS_QSIZE_IMAGE_MATCH "
                     "image=%u "
-                    "sampledType=%u "
                     "imageType=%u "
+                    "sourceImage=%u "
                     "replacement=%u",
                     image_ssa,
-                    sampled_type,
+                    image_type,
                     s.images[ii].id,
                     s.images[ii].replacement_type);
                 break;
@@ -8753,11 +8751,11 @@ bool spirv_patch_stereo_fs(
             if (img_idx < 0)
             {
                 STEREO_LOG(
-                    "FS_QSIZE_NO_TYPE_MATCH "
+                    "FS_QSIZE_NO_IMAGE_MATCH "
                     "image=%u "
-                    "sampledType=%u",
+                    "imageType=%u",
                     image_ssa,
-                    sampled_type);
+                    image_type);
                 sb_push_n(&ob, &in[i], wc);
                 if (in[i + 1] < id_bound)
                 {
@@ -8767,9 +8765,12 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             STEREO_LOG(
-                "FS_QSIZE_RESOLVE image=%u sampledType=%u replacement=%u",
+                "FS_QSIZE_RESOLVE "
+                "image=%u "
+                "imageType=%u "
+                "replacement=%u",
                 image_ssa,
-                sampled_type,
+                image_type,
                 s.images[img_idx].replacement_type);
             /*
              * The stereo image replacement changes a 2D image into a 2D-array image.
