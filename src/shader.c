@@ -12499,6 +12499,10 @@ stereo_CreateRayTracingPipelinesKHR(
     calloc(createInfoCount, sizeof(*patched_ci));
     VkPipelineShaderStageCreateInfo **patched_stages =
     calloc(createInfoCount, sizeof(*patched_stages));
+    VkShaderModule *tmp_raygen_modules =
+    calloc(createInfoCount, sizeof(*tmp_raygen_modules));
+    VkShaderModule *raygen_modules =
+    calloc(createInfoCount, sizeof(*raygen_modules));
     uint32_t *raygen_write_counts =
     calloc(createInfoCount, sizeof(*raygen_write_counts));
     uint32_t (*raygen_write_sets)[MAX_RT_RAYGEN_WRITES] =
@@ -12511,6 +12515,9 @@ stereo_CreateRayTracingPipelinesKHR(
         free(patched_stages);
         free(tmp_raygen_modules);
         free(raygen_modules);
+        free(raygen_write_counts);
+        free(raygen_write_sets);
+        free(raygen_write_bindings);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     for (uint32_t p = 0; p < createInfoCount; p++)
@@ -12653,6 +12660,9 @@ stereo_CreateRayTracingPipelinesKHR(
                 free(patched_stages);
                 free(tmp_raygen_modules);
                 free(raygen_modules);
+                free(raygen_write_counts);
+                free(raygen_write_sets);
+                free(raygen_write_bindings);
                 return VK_ERROR_OUT_OF_HOST_MEMORY;
             }
             memcpy(
@@ -12823,6 +12833,9 @@ stereo_CreateRayTracingPipelinesKHR(
     }
     free(raygen_modules);
     free(tmp_raygen_modules);
+    free(raygen_write_counts);
+    free(raygen_write_sets);
+    free(raygen_write_bindings);
     free(patched_stages);
     free(patched_ci);
     return res;

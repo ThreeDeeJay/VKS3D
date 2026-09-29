@@ -1360,10 +1360,6 @@ stereo_CmdTraceRaysKHR(
         (void*)(uintptr_t)rt_set0,
         rt_set0_tracked_slot,
         (void*)(uintptr_t)rt_bound_set0_layout);
-        (void*)(uintptr_t)rt_expected_set0_layout,
-        (void*)(uintptr_t)rt_set0,
-        rt_set0_tracked_slot,
-        (void*)(uintptr_t)rt_bound_set0_layout);
     STEREO_LOG(
         "RT_TRACE_FORWARD real=%p width=%u height=%u depth=%u",
         (void*)sd->real.CmdTraceRaysKHR,
