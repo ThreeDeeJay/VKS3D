@@ -347,6 +347,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
 #endif
     GDPA_WRAP("vkCreateRayTracingPipelinesKHR",
               stereo_CreateRayTracingPipelinesKHR);
+    GDPA_WRAP("vkGetDeferredOperationResultKHR",
+              stereo_GetDeferredOperationResultKHR);
     GDPA_WRAP("vkCmdTraceRaysKHR",
               stereo_CmdTraceRaysKHR);
     GDPA_WRAP("vkCreateShaderModule",

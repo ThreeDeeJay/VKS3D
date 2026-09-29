@@ -835,10 +835,11 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(CreatePipelineCache); L(DestroyPipelineCache);
     L(GetPipelineCacheData); L(MergePipelineCaches);
     L(CreateGraphicsPipelines); L(CreateComputePipelines); L(DestroyPipeline);
-    L(CreateRayTracingPipelinesKHR); L(CmdTraceRaysKHR);
+    L(CreateRayTracingPipelinesKHR); L(GetDeferredOperationResultKHR); L(CmdTraceRaysKHR);
     STEREO_LOG(
-        "RayTracing dispatch Create=%p Trace=%p",
+        "RayTracing dispatch Create=%p DeferredResult=%p Trace=%p",
         (void*)sd->real.CreateRayTracingPipelinesKHR,
+        (void*)sd->real.GetDeferredOperationResultKHR,
         (void*)sd->real.CmdTraceRaysKHR);
     L(CreatePipelineLayout); L(DestroyPipelineLayout);
     L(CreateSampler); L(DestroySampler);

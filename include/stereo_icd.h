@@ -365,6 +365,7 @@ typedef struct RealDeviceDispatch {
     PFN_vkCreateComputePipelines     CreateComputePipelines;
     PFN_vkDestroyPipeline            DestroyPipeline;
     PFN_vkCreateRayTracingPipelinesKHR CreateRayTracingPipelinesKHR;
+    PFN_vkGetDeferredOperationResultKHR GetDeferredOperationResultKHR;
     PFN_vkCmdTraceRaysKHR            CmdTraceRaysKHR;
     PFN_vkCreatePipelineLayout       CreatePipelineLayout;
     PFN_vkDestroyPipelineLayout      DestroyPipelineLayout;
@@ -741,6 +742,9 @@ typedef struct StereoDevice {
     uint32_t rt_pipeline_track_count;
     #define MAX_RT_DEFERRED_PIPELINE_TRACK 256
     VkDeferredOperationKHR rt_deferred_pipeline_ops[MAX_RT_DEFERRED_PIPELINE_TRACK];
+    VkPipeline *rt_deferred_pipeline_outputs[MAX_RT_DEFERRED_PIPELINE_TRACK];
+    uint32_t rt_deferred_pipeline_output_count[MAX_RT_DEFERRED_PIPELINE_TRACK];
+    uint32_t rt_deferred_pipeline_output_index[MAX_RT_DEFERRED_PIPELINE_TRACK];
     VkPipelineLayout rt_deferred_pipeline_layouts[MAX_RT_DEFERRED_PIPELINE_TRACK];
     VkShaderModule rt_deferred_pipeline_raygen_modules[MAX_RT_DEFERRED_PIPELINE_TRACK];
     VkBool32 rt_deferred_pipeline_patched_raygen[MAX_RT_DEFERRED_PIPELINE_TRACK];
@@ -923,6 +927,7 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_QueuePresentKHR(VkQueue, const VkPresentIn
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRayTracingPipelinesKHR( VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkRayTracingPipelineCreateInfoKHR *pCreateInfos, const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetDeferredOperationResultKHR(VkDevice device, VkDeferredOperationKHR operation);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdTraceRaysKHR( VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDraw(VkCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);

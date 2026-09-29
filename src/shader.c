@@ -12789,6 +12789,9 @@ stereo_CreateRayTracingPipelinesKHR(
             {
                 uint32_t slot = sd->rt_deferred_pipeline_count++;
                 sd->rt_deferred_pipeline_ops[slot] = deferredOperation;
+                sd->rt_deferred_pipeline_outputs[slot] = pPipelines;
+                sd->rt_deferred_pipeline_output_count[slot] = createInfoCount;
+                sd->rt_deferred_pipeline_output_index[slot] = p;
                 sd->rt_deferred_pipeline_layouts[slot] =
                 pCreateInfos[p].layout;
                 sd->rt_deferred_pipeline_raygen_modules[slot] =
@@ -12858,6 +12861,99 @@ stereo_CreateRayTracingPipelinesKHR(
     free(patched_stages);
     free(patched_ci);
     return res;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetDeferredOperationResultKHR(
+    VkDevice device,
+    VkDeferredOperationKHR operation)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd)
+        return VK_ERROR_DEVICE_LOST;
+    if (!sd->real.GetDeferredOperationResultKHR)
+    {
+        STEREO_ERR("RT_DEFERRED_RESULT missing real dispatch");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    STEREO_LOG(
+        "RT_DEFERRED_RESULT_BEGIN operation=%p",
+        (void*)(uintptr_t)operation);
+    VkResult res = sd->real.GetDeferredOperationResultKHR(
+        sd->real_device,
+        operation);
+    STEREO_LOG(
+        "RT_DEFERRED_RESULT_RETURN operation=%p result=%d",
+        (void*)(uintptr_t)operation,
+        res);
+    if (res != VK_SUCCESS)
+        return res;
+    for (uint32_t di = 0; di < sd->rt_deferred_pipeline_count; di++)
+    {
+        if (sd->rt_deferred_pipeline_ops[di] != operation)
+            continue;
+        VkPipeline *outputs = sd->rt_deferred_pipeline_outputs[di];
+        uint32_t output_count = sd->rt_deferred_pipeline_output_count[di];
+        uint32_t output_index = sd->rt_deferred_pipeline_output_index[di];
+        if (!outputs || output_index >= output_count)
+        {
+            STEREO_LOG(
+                "RT_DEFERRED_PROMOTE_SKIP slot=%u outputs=%p index=%u count=%u",
+                di,
+                (void*)outputs,
+                output_index,
+                output_count);
+            continue;
+        }
+        VkPipeline pipeline = outputs[output_index];
+        STEREO_LOG(
+            "RT_DEFERRED_PIPELINE slot=%u index=%u pipeline=%p layout=%p raygen=%p patched=%u writes=%u",
+            di,
+            output_index,
+            (void*)pipeline,
+            (void*)sd->rt_deferred_pipeline_layouts[di],
+            (void*)sd->rt_deferred_pipeline_raygen_modules[di],
+            sd->rt_deferred_pipeline_patched_raygen[di] ? 1u : 0u,
+            sd->rt_deferred_pipeline_raygen_write_count[di]);
+        if (pipeline == VK_NULL_HANDLE)
+            continue;
+        if (sd->rt_pipeline_track_count >= MAX_RT_PIPELINE_TRACK)
+        {
+            STEREO_LOG(
+                "RT_DEFERRED_PROMOTE_SKIP slot=%u reason=track_full",
+                di);
+            continue;
+        }
+        uint32_t slot = sd->rt_pipeline_track_count++;
+        sd->rt_pipeline_handles[slot] = pipeline;
+        sd->rt_pipeline_handle_layouts[slot] =
+        sd->rt_deferred_pipeline_layouts[di];
+        sd->rt_pipeline_raygen_modules[slot] =
+        sd->rt_deferred_pipeline_raygen_modules[di];
+        sd->rt_pipeline_patched_raygen[slot] =
+        sd->rt_deferred_pipeline_patched_raygen[di];
+        sd->rt_pipeline_raygen_write_count[slot] =
+        sd->rt_deferred_pipeline_raygen_write_count[di];
+        for (uint32_t wi = 0;
+            wi < sd->rt_deferred_pipeline_raygen_write_count[di];
+            wi++)
+        {
+            sd->rt_pipeline_raygen_write_sets[slot][wi] =
+            sd->rt_deferred_pipeline_raygen_write_sets[di][wi];
+            sd->rt_pipeline_raygen_write_bindings[slot][wi] =
+            sd->rt_deferred_pipeline_raygen_write_bindings[di][wi];
+        }
+        STEREO_LOG(
+            "RT_DEFERRED_PROMOTE slot=%u track_slot=%u pipeline=%p layout=%p raygen=%p patched=%u writes=%u",
+            di,
+            slot,
+            (void*)pipeline,
+            (void*)sd->rt_pipeline_handle_layouts[slot],
+            (void*)sd->rt_pipeline_raygen_modules[slot],
+            sd->rt_pipeline_patched_raygen[slot] ? 1u : 0u,
+            sd->rt_pipeline_raygen_write_count[slot]);
+    }
+    return VK_SUCCESS;
 }
 
 /* ── vkDestroyShaderModule ───────────────────────────────────────────────── */
