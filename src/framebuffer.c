@@ -1339,33 +1339,32 @@ stereo_CmdTraceRaysKHR(
     }
     VkPipeline rt_bound_pipeline = VK_NULL_HANDLE;
     uint32_t rt_pipeline_track_slot = UINT32_MAX;
+    uint32_t rt_pipeline_handle_matches = 0;
+    uint32_t rt_pipeline_layout_matches = 0;
     if (slot != UINT32_MAX)
         rt_bound_pipeline = sd->rt_desc_pipelines[slot];
     for (uint32_t pi = 0; pi < sd->rt_pipeline_track_count; pi++)
     {
         if (sd->rt_pipeline_handles[pi] == rt_bound_pipeline)
         {
-            rt_pipeline_track_slot = pi;
-            break;
-        }
-    }
-    if (rt_pipeline_track_slot == UINT32_MAX &&
-        rt_pipeline_layout != VK_NULL_HANDLE)
-    {
-        for (uint32_t pi = 0; pi < sd->rt_pipeline_track_count; pi++)
-        {
-            if (sd->rt_pipeline_handle_layouts[pi] == rt_pipeline_layout)
-            {
+            rt_pipeline_handle_matches++;
+            if (rt_pipeline_track_slot == UINT32_MAX)
                 rt_pipeline_track_slot = pi;
-                STEREO_LOG(
-                    "RT_TRACE_PIPELINE_LAYOUT_FALLBACK layout=%p track_slot=%u pipeline=%p",
-                    (void*)(uintptr_t)rt_pipeline_layout,
-                    pi,
-                    (void*)(uintptr_t)sd->rt_pipeline_handles[pi]);
-                break;
-            }
+        }
+        if (rt_pipeline_layout != VK_NULL_HANDLE &&
+            sd->rt_pipeline_handle_layouts[pi] == rt_pipeline_layout)
+        {
+            rt_pipeline_layout_matches++;
         }
     }
+    STEREO_LOG(
+        "RT_TRACE_PIPELINE_TRACK_STATE pipeline=%p layout=%p track_count=%u handle_matches=%u layout_matches=%u selected=%u",
+        (void*)(uintptr_t)rt_bound_pipeline,
+        (void*)(uintptr_t)rt_pipeline_layout,
+        sd->rt_pipeline_track_count,
+        rt_pipeline_handle_matches,
+        rt_pipeline_layout_matches,
+        rt_pipeline_track_slot);
     STEREO_LOG(
         "RT_TRACE_PIPELINE_LAYOUT cb=%p pipeline_slot=%u pipeline=%p pipeline_track_slot=%u pipeline_layout=%p expected_set0_layout=%p bound_set0=%p bound_set0_slot=%u bound_set0_layout=%p",
         (void*)commandBuffer,
