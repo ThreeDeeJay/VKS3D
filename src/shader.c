@@ -9385,11 +9385,20 @@ spirv_patch_stereo_raygen(
     uint32_t launch_id_var = 0;
     uint32_t launch_id_load = 0;
     uint32_t image_type = 0;
+    #define MAX_RT_IMAGE_WRITES 64
     uint32_t image_write_image = 0;
     uint32_t image_write_pointer = 0;
+    uint32_t image_write_coord = 0;
+    uint32_t image_write_count = 0;
     uint32_t image_write_var = 0;
     uint32_t image_write_binding = UINT32_MAX;
     uint32_t image_write_set = UINT32_MAX;
+    uint32_t image_write_vars[MAX_RT_IMAGE_WRITES];
+    uint32_t image_write_sets[MAX_RT_IMAGE_WRITES];
+    uint32_t image_write_bindings[MAX_RT_IMAGE_WRITES];
+    uint32_t image_write_images[MAX_RT_IMAGE_WRITES];
+    uint32_t image_write_coords[MAX_RT_IMAGE_WRITES];
+    uint32_t image_write_resource_count = 0;
     uint32_t image_read_coord = 0;
     uint32_t image_write_coord = 0;
     uint32_t image_write_count = 0;
@@ -9509,6 +9518,15 @@ spirv_patch_stereo_raygen(
                 image_write_image = in[i + 1];
             if (!image_write_coord)
                 image_write_coord = in[i + 2];
+            if (image_write_resource_count < MAX_RT_IMAGE_WRITES)
+            {
+                uint32_t ri = image_write_resource_count++;
+                image_write_images[ri] = in[i + 1];
+                image_write_coords[ri] = in[i + 2];
+                image_write_vars[ri] = 0;
+                image_write_sets[ri] = UINT32_MAX;
+                image_write_bindings[ri] = UINT32_MAX;
+            }
         }
         else if (op == SpvOpMatrixTimesVector && wc >= 5)
         {
@@ -9807,6 +9825,17 @@ spirv_patch_stereo_raygen(
                             write_set = in[dec + 3];
                     }
                     dec += dwc;
+                }
+            }
+            if (write_var != 0)
+            {
+                for (uint32_t ri = 0; ri < image_write_resource_count; ri++)
+                {
+                    if (image_write_images[ri] != write_image_id)
+                        continue;
+                    image_write_vars[ri] = write_var;
+                    image_write_sets[ri] = write_set;
+                    image_write_bindings[ri] = write_binding;
                 }
             }
             STEREO_LOG(
@@ -10377,6 +10406,20 @@ spirv_patch_stereo_raygen(
         lo,
         ro,
         conv);
+    STEREO_LOG(
+        "RT_PATCH_WRITE_RESOURCES count=%u",
+        image_write_resource_count);
+    for (uint32_t ri = 0; ri < image_write_resource_count; ri++)
+    {
+        STEREO_LOG(
+            "RT_PATCH_WRITE_RESOURCE index=%u var=%u set=%u binding=%u image=%u coord=%u",
+            ri,
+            image_write_vars[ri],
+            image_write_sets[ri],
+            image_write_bindings[ri],
+            image_write_images[ri],
+            image_write_coords[ri]);
+    }
     return true;
 }
 
