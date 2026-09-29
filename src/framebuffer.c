@@ -1459,6 +1459,21 @@ stereo_CmdTraceRaysKHR(
                         (void*)(uintptr_t)sd->rt_desc_images[di].view,
                         sd->rt_desc_images[di].type,
                         sd->rt_desc_images[di].layout);
+                    if (rt_image == VK_NULL_HANDLE)
+                    {
+                        rt_image = sd->rt_desc_images[di].image;
+                        rt_output_set = bound_set;
+                        rt_output_slot = tracked_slot;
+                        STEREO_LOG(
+                            "RT_TRACE_OUTPUT_SELECTED set=%p set_index=%u binding=%u array=%u image=%p view=%p tracked_slot=%u",
+                            (void*)(uintptr_t)bound_set,
+                            write_set,
+                            write_binding,
+                            sd->rt_desc_images[di].array_element,
+                            (void*)(uintptr_t)rt_image,
+                            (void*)(uintptr_t)sd->rt_desc_images[di].view,
+                            tracked_slot);
+                    }
                 }
             }
         }
