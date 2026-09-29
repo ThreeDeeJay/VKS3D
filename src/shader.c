@@ -8563,11 +8563,6 @@ bool spirv_patch_stereo_fs(
                         s.images[img].sampled_type_id,
                         s.images[img].owner_var,
                         s.images[img].binding);
-                    if (!s.images[img].stereo ||
-                        s.images[img].dim != SpvDim2D)
-                    {
-                        continue;
-                    }
                     STEREO_LOG(
                         "FS_PATCH_OWNER_MATCH idx=%u",
                         img);
@@ -8581,9 +8576,7 @@ bool spirv_patch_stereo_fs(
                         s.images[img].sampled_type_id,
                         s.images[img].replacement_sampled_type,
                         s.images[img].replacement_type);
-                    if (s.images[img].stereo &&
-                        s.images[img].replacement_type &&
-                        s.images[img].replacement_sampled_type &&
+                    if (s.images[img].replacement_type &&
                         s.images[img].replacement_sampled_type)
                     {
                         STEREO_LOG(
