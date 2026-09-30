@@ -1447,6 +1447,33 @@ spirv_get_pointer_pointee_type(
     return 0;
 }
 
+static bool
+spirv_is_vector_type(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t type_id,
+    uint32_t component_type,
+    uint32_t component_count)
+{
+    if (!in || !type_id || !component_type || !component_count)
+        return false;
+    for (size_t i = 5; i < in_c;)
+    {
+        uint32_t wc = in[i] >> 16;
+        uint32_t op = in[i] & 0xffff;
+        if (!wc || i + wc > in_c)
+            break;
+        if (op == SpvOpTypeVector &&
+            wc >= 4 &&
+            in[i + 1] == type_id &&
+            in[i + 2] == component_type &&
+            in[i + 3] == component_count)
+            return true;
+        i += wc;
+    }
+    return false;
+}
+
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m = c->m;
@@ -2755,7 +2782,6 @@ bool spirv_patch_stereo_mesh(
         }
         if (opx == SpvOpStore &&
             wcx >= 3 &&
-            m.v3t &&
             m.v4t)
         {
             uint32_t pointer = in[i + 1];
@@ -2775,14 +2801,15 @@ bool spirv_patch_stereo_mesh(
                 in,
                 in_c,
                 object);
-            if (pointee_type == m.v3t &&
-                object_type == m.v4t)
+            if (pointee_type &&
+                object_type == m.v4t &&
+                spirv_is_vector_type(in, in_c, pointee_type, m.ft, 3))
             {
                 uint32_t vec3 = nid++;
                 uint32_t sw[] =
                 {
                     op_(SpvOpVectorShuffle, 7),
-                    m.v3t,
+                    pointee_type,
                     vec3,
                     object,
                     object,
