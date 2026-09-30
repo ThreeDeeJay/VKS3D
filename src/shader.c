@@ -1513,6 +1513,30 @@ spirv_is_vector_type(
     return false;
 }
 
+static uint32_t spirv_find_vector_type(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t component_type,
+    uint32_t component_count)
+{
+    if (!in || in_c < 5 || !component_type || !component_count)
+        return 0;
+    for (size_t i=5; i < in_c;)
+    {
+        uint32_t wc=in[i] >> 16;
+        uint32_t op=in[i] & 0xffff;
+        if (!wc || i + wc > in_c)
+            break;
+        if (op == SpvOpTypeVector &&
+            wc >= 4 &&
+            in[i + 2] == component_type &&
+            in[i + 3] == component_count)
+            return in[i + 1];
+        i += wc;
+    }
+    return 0;
+}
+
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m = c->m;
@@ -3177,8 +3201,14 @@ bool spirv_patch_stereo_vertex(
     m.bt :
     (m.bt_type ? m.bt_type : id_new_bt);
     uint32_t id_v4bt = 0;
-    if (m.v4t && bt_for_types)
+    bool new_v4bt = false;
+    if (bt_for_types)
+        id_v4bt = spirv_find_vector_type(in,in_c,bt_for_types,4);
+    if (!id_v4bt && m.v4t && bt_for_types)
+    {
         id_v4bt = nid++;
+        new_v4bt = true;
+    }
     uint32_t id_cz = nid++;
     uint32_t id_cf0 = nid++;
     uint32_t id_cf1 = nid++;
@@ -3284,7 +3314,7 @@ bool spirv_patch_stereo_vertex(
         };
         sb_push_n(&te, w, 2);
     }
-    if (id_v4bt)
+    if (new_v4bt)
     {
         uint32_t w[] =
         {
