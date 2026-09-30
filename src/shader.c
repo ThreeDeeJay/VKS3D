@@ -1256,6 +1256,29 @@ static uint32_t spirv_get_value_type(
     return 0;
 }
 
+static uint32_t
+spirv_get_pointer_pointee_type(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t pointer_type)
+{
+    if (!in || !pointer_type)
+        return 0;
+    for (size_t i = 5; i < in_c;)
+    {
+        uint32_t wc = in[i] >> 16;
+        uint32_t op = in[i] & 0xffff;
+        if (!wc || i + wc > in_c)
+            break;
+        if (op == SpvOpTypePointer &&
+            wc >= 4 &&
+            in[i + 1] == pointer_type)
+            return in[i + 3];
+        i += wc;
+    }
+    return 0;
+}
+
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m = c->m;
@@ -3461,6 +3484,37 @@ bool spirv_patch_stereo_vertex(
                     id_v4bt);
                 i += wcx;
                 continue;
+            }
+        }
+        if (opx == SpvOpStore &&
+            wcx >= 3)
+        {
+            uint32_t ptr_id = in[i + 1];
+            uint32_t obj_id = in[i + 2];
+            uint32_t ptr_type =
+            spirv_get_pointer_pointee_type(
+                in,
+                in_c,
+                ptr_id);
+            uint32_t obj_type =
+            spirv_get_value_type(
+                in,
+                in_c,
+                obj_id);
+            if (ptr_type &&
+                obj_type &&
+                ptr_type != obj_type)
+            {
+                STEREO_LOG(
+                    "VS_PATCH_STORE_TYPE "
+                    "ptr=%u "
+                    "ptrType=%u "
+                    "obj=%u "
+                    "objType=%u",
+                    ptr_id,
+                    ptr_type,
+                    obj_id,
+                    obj_type);
             }
         }
         sb_push_n(
