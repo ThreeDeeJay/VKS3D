@@ -3770,7 +3770,7 @@ bool spirv_patch_stereo_vertex(
                     uint32_t repaired = nid++;
                     uint32_t rw[] =
                     {
-                        op_(SpvOpVectorShuffle, 7),
+                        op_(SpvOpVectorShuffle, 8),
                         ptr_type,
                         repaired,
                         obj_id,
@@ -3782,7 +3782,7 @@ bool spirv_patch_stereo_vertex(
                     sb_push_n(
                         &ob,
                         rw,
-                        7);
+                        8);
                     uint32_t sw[] =
                     {
                         op_(SpvOpStore, 3),
