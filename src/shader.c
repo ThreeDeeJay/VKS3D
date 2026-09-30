@@ -1487,6 +1487,32 @@ spirv_get_pointer_pointee_type(
     return 0;
 }
 
+static bool
+spirv_is_vector_type(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t type_id,
+    uint32_t component_type,
+    uint32_t component_count)
+{
+    if (!in || in_c < 5 || !type_id)
+        return false;
+    for (size_t i = 5; i < in_c;)
+    {
+        uint32_t opx = in[i] & 0xffff;
+        uint32_t wcx = in[i] >> 16;
+        if (!wcx || i + wcx > in_c)
+            break;
+        if (opx == SpvOpTypeVector &&
+            wcx >= 4 &&
+            in[i + 1] == type_id)
+            return in[i + 2] == component_type &&
+        in[i + 3] == component_count;
+        i += wcx;
+    }
+    return false;
+}
+
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m = c->m;
@@ -3709,41 +3735,6 @@ bool spirv_patch_stereo_vertex(
                 in,
                 in_c,
                 obj_id);
-            if (ptr_id == 528)
-            {
-                for (size_t k = 5; k < in_c;)
-                {
-                    uint32_t kop = in[k] & 0xffff;
-                    uint32_t kwc = in[k] >> 16;
-                    if (!kwc || k + kwc > in_c)
-                        break;
-                    if (kwc >= 3 &&
-                        in[k + 2] == ptr_id)
-                    {
-                        STEREO_LOG(
-                            "VS_PATCH_PTR528_DEF "
-                            "op=%u "
-                            "wc=%u "
-                            "resultType=%u "
-                            "id=%u",
-                            kop,
-                            kwc,
-                            in[k + 1],
-                            in[k + 2]);
-                    }
-                    k += kwc;
-                }
-                STEREO_LOG(
-                    "VS_PATCH_STORE_PTR528 "
-                    "ptr=%u "
-                    "ptrType=%u "
-                    "obj=%u "
-                    "objType=%u",
-                    ptr_id,
-                    ptr_type,
-                    obj_id,
-                    obj_type);
-            }
             STEREO_LOG(
                 "VS_PATCH_STORE_CHECK "
                 "ptr=%u "
@@ -3768,6 +3759,55 @@ bool spirv_patch_stereo_vertex(
                     ptr_type,
                     obj_id,
                     obj_type);
+                if (obj_type == m.v4t &&
+                    spirv_is_vector_type(
+                        in,
+                        in_c,
+                        ptr_type,
+                        m.ft,
+                        3))
+                {
+                    uint32_t repaired = nid++;
+                    uint32_t rw[] =
+                    {
+                        op_(SpvOpVectorShuffle, 7),
+                        ptr_type,
+                        repaired,
+                        obj_id,
+                        obj_id,
+                        0,
+                        1,
+                        2
+                    };
+                    sb_push_n(
+                        &ob,
+                        rw,
+                        7);
+                    uint32_t sw[] =
+                    {
+                        op_(SpvOpStore, 3),
+                        ptr_id,
+                        repaired
+                    };
+                    sb_push_n(
+                        &ob,
+                        sw,
+                        3);
+                    STEREO_LOG(
+                        "VS_PATCH_STORE_REPAIR "
+                        "ptr=%u "
+                        "ptrType=%u "
+                        "obj=%u "
+                        "objType=%u "
+                        "repaired=%u",
+                        ptr_id,
+                        ptr_type,
+                        obj_id,
+                        obj_type,
+                        repaired);
+                    i += wcx;
+                    continue;
+                }
             }
         }
         sb_push_n(
