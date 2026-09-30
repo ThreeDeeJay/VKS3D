@@ -8176,8 +8176,7 @@ bool spirv_patch_stereo_fs(
              op == SpvOpImageSampleDrefImplicitLod ||
              op == SpvOpImageSampleDrefExplicitLod ||
              op == SpvOpImageGather ||
-             op == SpvOpImageDrefGather) &&
-            fs_find_load(&s, in[i+3]) >= 0)
+             op == SpvOpImageDrefGather))
         {
             STEREO_LOG(
                 "FS extending sample/gather: op=%u sampledImage=%u coord=%u result=%u",
@@ -8206,6 +8205,41 @@ bool spirv_patch_stereo_fs(
                 fs_find_load(
                     &s,
                     in[i+3]);
+            if (load < 0)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0)
+                        break;
+                    if (sop == SpvOpLoad && sw >= 4 && in[scan + 2] == in[i + 3])
+                    {
+                        uint32_t ptr = in[scan + 3];
+                        for (uint32_t vv = 0; vv < s.n_var; ++vv)
+                        {
+                            if (s.vars[vv].id != ptr)
+                                continue;
+                            if (s.vars[vv].storage != SpvStorageClassUniformConstant)
+                                continue;
+                            descriptor_var = s.vars[vv].id;
+                            break;
+                        }
+                        STEREO_LOG(
+                            "FS_SAMPLE_LOAD_FALLBACK "
+                            "sampledImage=%u "
+                            "ptr=%u "
+                            "descriptor=%u "
+                            "off=%zu",
+                            in[i+3],
+                            ptr,
+                            descriptor_var,
+                            scan);
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
             if (load >= 0)
             {
                 descriptor_var =
@@ -8245,6 +8279,36 @@ bool spirv_patch_stereo_fs(
                     in[i+3],
                     load,
                     descriptor_var);
+            }
+            if (load < 0 && descriptor_var)
+            {
+                int vi = fs_var_index(&s, descriptor_var);
+                STEREO_LOG(
+                    "FS_SAMPLE_DESCRIPTOR_FALLBACK "
+                    "image=%u "
+                    "descriptor=%u "
+                    "set=%u "
+                    "binding=%u",
+                    in[i+3],
+                    descriptor_var,
+                    (vi >= 0) ? s.vars[vi].set : 0xffffffffu,
+                    (vi >= 0) ? s.vars[vi].binding : 0xffffffffu);
+            }
+            if (!descriptor_var)
+            {
+                STEREO_LOG(
+                    "FS_PATCH_REJECT_NO_DESCRIPTOR "
+                    "sampledImage=%u "
+                    "coord=%u",
+                    in[i+3],
+                    coord_id);
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                {
+                    emitted_type[in[i + 1]] = true;
+                }
+                i += wc;
+                continue;
             }
             STEREO_LOG(
                 "FS_SKIP_CANDIDATE "
