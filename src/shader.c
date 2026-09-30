@@ -120,6 +120,7 @@ typedef struct
     /* Common types */
     uint32_t ft;
     uint32_t v2t;
+    uint32_t v3t;
     uint32_t v4t;
     uint32_t it;
     uint32_t ut;
@@ -1229,6 +1230,173 @@ typedef struct StereoDebugCtx {
     bool has_matrix_ops;
     bool direct_position_write;
 } StereoDebugCtx;
+
+static uint32_t
+spirv_get_result_id(uint32_t op, const uint32_t *ins, uint32_t wc)
+{
+    if (!ins)
+        return 0;
+    if (op == SpvOpLabel ||
+        op == SpvOpTypeVoid ||
+        op == SpvOpTypeBool ||
+        op == SpvOpTypeInt ||
+        op == SpvOpTypeFloat ||
+        op == SpvOpTypeVector ||
+        op == SpvOpTypeMatrix ||
+        op == SpvOpTypeImage ||
+        op == SpvOpTypeSampler ||
+        op == SpvOpTypeSampledImage ||
+        op == SpvOpTypeArray ||
+        op == SpvOpTypeRuntimeArray ||
+        op == SpvOpTypeStruct ||
+        op == SpvOpTypeOpaque ||
+        op == SpvOpTypePointer ||
+        op == SpvOpTypeFunction)
+    {
+        return wc >= 2 ? ins[1] : 0;
+    }
+    if (op == SpvOpConstantTrue ||
+        op == SpvOpConstantFalse ||
+        op == SpvOpConstant ||
+        op == SpvOpConstantComposite ||
+        op == SpvOpConstantNull ||
+        op == SpvOpSpecConstantTrue ||
+        op == SpvOpSpecConstantFalse ||
+        op == SpvOpSpecConstant ||
+        op == SpvOpSpecConstantComposite ||
+        op == SpvOpVariable ||
+        op == SpvOpLoad ||
+        op == SpvOpAccessChain ||
+        op == SpvOpInBoundsAccessChain ||
+        op == SpvOpPtrAccessChain ||
+        op == SpvOpCompositeConstruct ||
+        op == SpvOpCompositeExtract ||
+        op == SpvOpCompositeInsert ||
+        op == SpvOpCopyObject ||
+        op == SpvOpTranspose ||
+        op == SpvOpVectorExtractDynamic ||
+        op == SpvOpVectorInsertDynamic ||
+        op == SpvOpVectorShuffle ||
+        op == SpvOpMatrixTimesScalar ||
+        op == SpvOpVectorTimesScalar ||
+        op == SpvOpMatrixTimesVector ||
+        op == SpvOpVectorTimesMatrix ||
+        op == SpvOpMatrixTimesMatrix ||
+        op == SpvOpIAddCarry ||
+        op == SpvOpISubBorrow ||
+        op == SpvOpUMulExtended ||
+        op == SpvOpSMulExtended ||
+        op == SpvOpSNegate ||
+        op == SpvOpFNegate ||
+        op == SpvOpIAdd ||
+        op == SpvOpFAdd ||
+        op == SpvOpISub ||
+        op == SpvOpFSub ||
+        op == SpvOpIMul ||
+        op == SpvOpFMul ||
+        op == SpvOpUDiv ||
+        op == SpvOpSDiv ||
+        op == SpvOpFDiv ||
+        op == SpvOpUMod ||
+        op == SpvOpSRem ||
+        op == SpvOpSMod ||
+        op == SpvOpFRem ||
+        op == SpvOpFMod ||
+        op == SpvOpVectorTimesScalar ||
+        op == SpvOpShiftRightLogical ||
+        op == SpvOpShiftRightArithmetic ||
+        op == SpvOpShiftLeftLogical ||
+        op == SpvOpBitwiseOr ||
+        op == SpvOpBitwiseXor ||
+        op == SpvOpBitwiseAnd ||
+        op == SpvOpNot ||
+        op == SpvOpBitFieldInsert ||
+        op == SpvOpBitFieldSExtract ||
+        op == SpvOpBitFieldUExtract ||
+        op == SpvOpBitReverse ||
+        op == SpvOpBitCount ||
+        op == SpvOpAny ||
+        op == SpvOpAll ||
+        op == SpvOpIsNan ||
+        op == SpvOpIsInf ||
+        op == SpvOpIsFinite ||
+        op == SpvOpIsNormal ||
+        op == SpvOpSignBitSet ||
+        op == SpvOpLessOrGreater ||
+        op == SpvOpOrdered ||
+        op == SpvOpUnordered ||
+        op == SpvOpLogicalEqual ||
+        op == SpvOpLogicalNotEqual ||
+        op == SpvOpLogicalOr ||
+        op == SpvOpLogicalAnd ||
+        op == SpvOpLogicalNot ||
+        op == SpvOpSelect ||
+        op == SpvOpIEqual ||
+        op == SpvOpINotEqual ||
+        op == SpvOpUGreaterThan ||
+        op == SpvOpSGreaterThan ||
+        op == SpvOpUGreaterThanEqual ||
+        op == SpvOpSGreaterThanEqual ||
+        op == SpvOpULessThan ||
+        op == SpvOpSLessThan ||
+        op == SpvOpULessThanEqual ||
+        op == SpvOpSLessThanEqual ||
+        op == SpvOpFOrdEqual ||
+        op == SpvOpFUnordEqual ||
+        op == SpvOpFOrdNotEqual ||
+        op == SpvOpFUnordNotEqual ||
+        op == SpvOpFOrdLessThan ||
+        op == SpvOpFUnordLessThan ||
+        op == SpvOpFOrdGreaterThan ||
+        op == SpvOpFUnordGreaterThan ||
+        op == SpvOpFOrdLessThanEqual ||
+        op == SpvOpFUnordLessThanEqual ||
+        op == SpvOpFOrdGreaterThanEqual ||
+        op == SpvOpFUnordGreaterThanEqual ||
+        op == SpvOpConvertSToF ||
+        op == SpvOpConvertUToF ||
+        op == SpvOpFConvert ||
+        op == SpvOpQuantizeToF16 ||
+        op == SpvOpConvertFToS ||
+        op == SpvOpConvertFToU ||
+        op == SpvOpSatConvertSToU ||
+        op == SpvOpSatConvertUToS ||
+        op == SpvOpConvertPtrToU ||
+        op == SpvOpConvertUToPtr ||
+        op == SpvOpBitcast ||
+        op == SpvOpSConvert ||
+        op == SpvOpUConvert ||
+        op == SpvOpImageSampleImplicitLod ||
+        op == SpvOpImageSampleExplicitLod ||
+        op == SpvOpImageSampleDrefImplicitLod ||
+        op == SpvOpImageSampleDrefExplicitLod ||
+        op == SpvOpImageSampleProjImplicitLod ||
+        op == SpvOpImageSampleProjExplicitLod ||
+        op == SpvOpImageSampleProjDrefImplicitLod ||
+        op == SpvOpImageSampleProjDrefExplicitLod ||
+        op == SpvOpImageFetch ||
+        op == SpvOpImageGather ||
+        op == SpvOpImageDrefGather ||
+        op == SpvOpImageRead ||
+        op == SpvOpImage ||
+        op == SpvOpImageQueryFormat ||
+        op == SpvOpImageQueryOrder ||
+        op == SpvOpImageQuerySizeLod ||
+        op == SpvOpImageQuerySize ||
+        op == SpvOpImageQueryLod ||
+        op == SpvOpImageQueryLevels ||
+        op == SpvOpImageQuerySamples ||
+        op == SpvOpSampledImage ||
+        op == SpvOpFunction ||
+        op == SpvOpFunctionParameter ||
+        op == SpvOpFunctionCall ||
+        op == SpvOpExtInst ||
+        op == SpvOpPhi)
+{
+    return wc >= 3 ? ins[2] : 0;
+}
+return 0;
+}
 
 static uint32_t spirv_get_value_type(
     const uint32_t *in,
@@ -9541,173 +9709,6 @@ bool spirv_patch_stereo_fs(
         qsize_nid);
     STEREO_LOG("FS_PATCH_DONE");
     return true;
-}
-
-static uint32_t
-spirv_get_result_id(uint32_t op, const uint32_t *ins, uint32_t wc)
-{
-    if (!ins)
-        return 0;
-    if (op == SpvOpLabel ||
-        op == SpvOpTypeVoid ||
-        op == SpvOpTypeBool ||
-        op == SpvOpTypeInt ||
-        op == SpvOpTypeFloat ||
-        op == SpvOpTypeVector ||
-        op == SpvOpTypeMatrix ||
-        op == SpvOpTypeImage ||
-        op == SpvOpTypeSampler ||
-        op == SpvOpTypeSampledImage ||
-        op == SpvOpTypeArray ||
-        op == SpvOpTypeRuntimeArray ||
-        op == SpvOpTypeStruct ||
-        op == SpvOpTypeOpaque ||
-        op == SpvOpTypePointer ||
-        op == SpvOpTypeFunction)
-    {
-        return wc >= 2 ? ins[1] : 0;
-    }
-    if (op == SpvOpConstantTrue ||
-        op == SpvOpConstantFalse ||
-        op == SpvOpConstant ||
-        op == SpvOpConstantComposite ||
-        op == SpvOpConstantNull ||
-        op == SpvOpSpecConstantTrue ||
-        op == SpvOpSpecConstantFalse ||
-        op == SpvOpSpecConstant ||
-        op == SpvOpSpecConstantComposite ||
-        op == SpvOpVariable ||
-        op == SpvOpLoad ||
-        op == SpvOpAccessChain ||
-        op == SpvOpInBoundsAccessChain ||
-        op == SpvOpPtrAccessChain ||
-        op == SpvOpCompositeConstruct ||
-        op == SpvOpCompositeExtract ||
-        op == SpvOpCompositeInsert ||
-        op == SpvOpCopyObject ||
-        op == SpvOpTranspose ||
-        op == SpvOpVectorExtractDynamic ||
-        op == SpvOpVectorInsertDynamic ||
-        op == SpvOpVectorShuffle ||
-        op == SpvOpMatrixTimesScalar ||
-        op == SpvOpVectorTimesScalar ||
-        op == SpvOpMatrixTimesVector ||
-        op == SpvOpVectorTimesMatrix ||
-        op == SpvOpMatrixTimesMatrix ||
-        op == SpvOpIAddCarry ||
-        op == SpvOpISubBorrow ||
-        op == SpvOpUMulExtended ||
-        op == SpvOpSMulExtended ||
-        op == SpvOpSNegate ||
-        op == SpvOpFNegate ||
-        op == SpvOpIAdd ||
-        op == SpvOpFAdd ||
-        op == SpvOpISub ||
-        op == SpvOpFSub ||
-        op == SpvOpIMul ||
-        op == SpvOpFMul ||
-        op == SpvOpUDiv ||
-        op == SpvOpSDiv ||
-        op == SpvOpFDiv ||
-        op == SpvOpUMod ||
-        op == SpvOpSRem ||
-        op == SpvOpSMod ||
-        op == SpvOpFRem ||
-        op == SpvOpFMod ||
-        op == SpvOpVectorTimesScalar ||
-        op == SpvOpShiftRightLogical ||
-        op == SpvOpShiftRightArithmetic ||
-        op == SpvOpShiftLeftLogical ||
-        op == SpvOpBitwiseOr ||
-        op == SpvOpBitwiseXor ||
-        op == SpvOpBitwiseAnd ||
-        op == SpvOpNot ||
-        op == SpvOpBitFieldInsert ||
-        op == SpvOpBitFieldSExtract ||
-        op == SpvOpBitFieldUExtract ||
-        op == SpvOpBitReverse ||
-        op == SpvOpBitCount ||
-        op == SpvOpAny ||
-        op == SpvOpAll ||
-        op == SpvOpIsNan ||
-        op == SpvOpIsInf ||
-        op == SpvOpIsFinite ||
-        op == SpvOpIsNormal ||
-        op == SpvOpSignBitSet ||
-        op == SpvOpLessOrGreater ||
-        op == SpvOpOrdered ||
-        op == SpvOpUnordered ||
-        op == SpvOpLogicalEqual ||
-        op == SpvOpLogicalNotEqual ||
-        op == SpvOpLogicalOr ||
-        op == SpvOpLogicalAnd ||
-        op == SpvOpLogicalNot ||
-        op == SpvOpSelect ||
-        op == SpvOpIEqual ||
-        op == SpvOpINotEqual ||
-        op == SpvOpUGreaterThan ||
-        op == SpvOpSGreaterThan ||
-        op == SpvOpUGreaterThanEqual ||
-        op == SpvOpSGreaterThanEqual ||
-        op == SpvOpULessThan ||
-        op == SpvOpSLessThan ||
-        op == SpvOpULessThanEqual ||
-        op == SpvOpSLessThanEqual ||
-        op == SpvOpFOrdEqual ||
-        op == SpvOpFUnordEqual ||
-        op == SpvOpFOrdNotEqual ||
-        op == SpvOpFUnordNotEqual ||
-        op == SpvOpFOrdLessThan ||
-        op == SpvOpFUnordLessThan ||
-        op == SpvOpFOrdGreaterThan ||
-        op == SpvOpFUnordGreaterThan ||
-        op == SpvOpFOrdLessThanEqual ||
-        op == SpvOpFUnordLessThanEqual ||
-        op == SpvOpFOrdGreaterThanEqual ||
-        op == SpvOpFUnordGreaterThanEqual ||
-        op == SpvOpConvertSToF ||
-        op == SpvOpConvertUToF ||
-        op == SpvOpFConvert ||
-        op == SpvOpQuantizeToF16 ||
-        op == SpvOpConvertFToS ||
-        op == SpvOpConvertFToU ||
-        op == SpvOpSatConvertSToU ||
-        op == SpvOpSatConvertUToS ||
-        op == SpvOpConvertPtrToU ||
-        op == SpvOpConvertUToPtr ||
-        op == SpvOpBitcast ||
-        op == SpvOpSConvert ||
-        op == SpvOpUConvert ||
-        op == SpvOpImageSampleImplicitLod ||
-        op == SpvOpImageSampleExplicitLod ||
-        op == SpvOpImageSampleDrefImplicitLod ||
-        op == SpvOpImageSampleDrefExplicitLod ||
-        op == SpvOpImageSampleProjImplicitLod ||
-        op == SpvOpImageSampleProjExplicitLod ||
-        op == SpvOpImageSampleProjDrefImplicitLod ||
-        op == SpvOpImageSampleProjDrefExplicitLod ||
-        op == SpvOpImageFetch ||
-        op == SpvOpImageGather ||
-        op == SpvOpImageDrefGather ||
-        op == SpvOpImageRead ||
-        op == SpvOpImage ||
-        op == SpvOpImageQueryFormat ||
-        op == SpvOpImageQueryOrder ||
-        op == SpvOpImageQuerySizeLod ||
-        op == SpvOpImageQuerySize ||
-        op == SpvOpImageQueryLod ||
-        op == SpvOpImageQueryLevels ||
-        op == SpvOpImageQuerySamples ||
-        op == SpvOpSampledImage ||
-        op == SpvOpFunction ||
-        op == SpvOpFunctionParameter ||
-        op == SpvOpFunctionCall ||
-        op == SpvOpExtInst ||
-        op == SpvOpPhi)
-{
-    return wc >= 3 ? ins[2] : 0;
-}
-return 0;
 }
 
 static bool
