@@ -1260,21 +1260,42 @@ static uint32_t
 spirv_get_pointer_pointee_type(
     const uint32_t *in,
     size_t in_c,
-    uint32_t pointer_type)
+    uint32_t id)
 {
-    if (!in || !pointer_type)
+    if (!in || in_c < 5 || !id)
         return 0;
     for (size_t i = 5; i < in_c;)
     {
-        uint32_t wc = in[i] >> 16;
-        uint32_t op = in[i] & 0xffff;
-        if (!wc || i + wc > in_c)
+        uint32_t opx = in[i] & 0xffff;
+        uint32_t wcx = in[i] >> 16;
+        if (!wcx || i + wcx > in_c)
             break;
-        if (op == SpvOpTypePointer &&
-            wc >= 4 &&
-            in[i + 1] == pointer_type)
-            return in[i + 3];
-        i += wc;
+        if (wcx >= 3 &&
+            in[i + 2] == id)
+        {
+            uint32_t result_type = in[i + 1];
+            if (opx == SpvOpVariable ||
+                opx == SpvOpAccessChain ||
+                opx == SpvOpInBoundsAccessChain ||
+                opx == SpvOpPtrAccessChain ||
+                opx == SpvOpArrayLength ||
+                opx == SpvOpImageTexelPointer)
+            {
+                for (size_t j = 5; j < in_c;)
+                {
+                    uint32_t jop = in[j] & 0xffff;
+                    uint32_t jwc = in[j] >> 16;
+                    if (!jwc || j + jwc > in_c)
+                        break;
+                    if (jop == SpvOpTypePointer &&
+                        jwc >= 4 &&
+                        in[j + 1] == result_type)
+                        return in[j + 3];
+                    j += jwc;
+                }
+            }
+        }
+        i += wcx;
     }
     return 0;
 }
