@@ -1262,6 +1262,7 @@ spirv_get_pointer_pointee_type(
     size_t in_c,
     uint32_t id)
 {
+    uint32_t pointer_type = 0;
     if (!in || in_c < 5 || !id)
         return 0;
     for (size_t i = 5; i < in_c;)
@@ -1271,30 +1272,31 @@ spirv_get_pointer_pointee_type(
         if (!wcx || i + wcx > in_c)
             break;
         if (wcx >= 3 &&
-            in[i + 2] == id)
-        {
-            uint32_t result_type = in[i + 1];
-            if (opx == SpvOpVariable ||
+            in[i + 2] == id &&
+            (opx == SpvOpVariable ||
                 opx == SpvOpAccessChain ||
                 opx == SpvOpInBoundsAccessChain ||
                 opx == SpvOpPtrAccessChain ||
                 opx == SpvOpArrayLength ||
-                opx == SpvOpImageTexelPointer)
-            {
-                for (size_t j = 5; j < in_c;)
-                {
-                    uint32_t jop = in[j] & 0xffff;
-                    uint32_t jwc = in[j] >> 16;
-                    if (!jwc || j + jwc > in_c)
-                        break;
-                    if (jop == SpvOpTypePointer &&
-                        jwc >= 4 &&
-                        in[j + 1] == result_type)
-                        return in[j + 3];
-                    j += jwc;
-                }
-            }
+                opx == SpvOpImageTexelPointer))
+        {
+            pointer_type = in[i + 1];
+            break;
         }
+        i += wcx;
+    }
+    if (!pointer_type)
+        return 0;
+    for (size_t i = 5; i < in_c;)
+    {
+        uint32_t opx = in[i] & 0xffff;
+        uint32_t wcx = in[i] >> 16;
+        if (!wcx || i + wcx > in_c)
+            break;
+        if (opx == SpvOpTypePointer &&
+            wcx >= 4 &&
+            in[i + 1] == pointer_type)
+            return in[i + 3];
         i += wcx;
     }
     return 0;
@@ -3522,6 +3524,17 @@ bool spirv_patch_stereo_vertex(
                 in,
                 in_c,
                 obj_id);
+            if (ptr_id == 528)
+                STEREO_LOG(
+                    "VS_PATCH_STORE_PTR528 "
+                    "ptr=%u "
+                    "ptrType=%u "
+                    "obj=%u "
+                    "objType=%u",
+                    ptr_id,
+                    ptr_type,
+                    obj_id,
+                    obj_type);
             STEREO_LOG(
                 "VS_PATCH_STORE_CHECK "
                 "ptr=%u "
