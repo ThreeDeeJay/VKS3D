@@ -1538,7 +1538,7 @@ stereo_CmdTraceRaysKHR(
     uint32_t src_layers = 0;
     uint32_t dst_width = sc->app_width;
     uint32_t dst_height = sc->app_height;
-    uint32_t dst_layers = 0;
+    uint32_t dst_layers = 2;
     for (uint32_t ti = 0; ti < sd->tracked_image_info_count; ti++)
     {
         if (sd->tracked_images[ti] == rt_image)
