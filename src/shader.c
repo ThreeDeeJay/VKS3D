@@ -1391,10 +1391,10 @@ spirv_get_result_id(uint32_t op, const uint32_t *ins, uint32_t wc)
         op == SpvOpFunctionCall ||
         op == SpvOpExtInst ||
         op == SpvOpPhi)
-{
+    {
     return wc >= 3 ? ins[2] : 0;
-}
-return 0;
+    }
+    return 0;
 }
 
 static uint32_t spirv_get_value_type(
@@ -1463,9 +1463,27 @@ spirv_get_pointer_pointee_type(
         if (opx == SpvOpTypePointer &&
             wcx >= 4 &&
             in[i + 1] == pointer_type)
+        {
+            STEREO_LOG(
+                "VS_PATCH_PTR_TYPE "
+                "id=%u "
+                "pointerType=%u "
+                "storageClass=%u "
+                "pointee=%u",
+                id,
+                in[i + 1],
+                in[i + 2],
+                in[i + 3]);
             return in[i + 3];
+        }
         i += wcx;
     }
+    STEREO_LOG(
+        "VS_PATCH_PTR_TYPE_MISSING "
+        "id=%u "
+        "pointerType=%u",
+        id,
+        pointer_type);
     return 0;
 }
 
@@ -3692,6 +3710,29 @@ bool spirv_patch_stereo_vertex(
                 in_c,
                 obj_id);
             if (ptr_id == 528)
+            {
+                for (size_t k = 5; k < in_c;)
+                {
+                    uint32_t kop = in[k] & 0xffff;
+                    uint32_t kwc = in[k] >> 16;
+                    if (!kwc || k + kwc > in_c)
+                        break;
+                    if (kwc >= 3 &&
+                        in[k + 2] == ptr_id)
+                    {
+                        STEREO_LOG(
+                            "VS_PATCH_PTR528_DEF "
+                            "op=%u "
+                            "wc=%u "
+                            "resultType=%u "
+                            "id=%u",
+                            kop,
+                            kwc,
+                            in[k + 1],
+                            in[k + 2]);
+                    }
+                    k += kwc;
+                }
                 STEREO_LOG(
                     "VS_PATCH_STORE_PTR528 "
                     "ptr=%u "
@@ -3702,6 +3743,7 @@ bool spirv_patch_stereo_vertex(
                     ptr_type,
                     obj_id,
                     obj_type);
+            }
             STEREO_LOG(
                 "VS_PATCH_STORE_CHECK "
                 "ptr=%u "
