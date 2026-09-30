@@ -3501,6 +3501,16 @@ bool spirv_patch_stereo_vertex(
                 in,
                 in_c,
                 obj_id);
+            STEREO_LOG(
+                "VS_PATCH_STORE_CHECK "
+                "ptr=%u "
+                "ptrType=%u "
+                "obj=%u "
+                "objType=%u",
+                ptr_id,
+                ptr_type,
+                obj_id,
+                obj_type);
             if (ptr_type &&
                 obj_type &&
                 ptr_type != obj_type)
