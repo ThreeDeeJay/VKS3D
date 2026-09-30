@@ -1659,6 +1659,18 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
             pAllocator,
             pView);
         STEREO_LOG("RETURN real CreateImageView result=%d", r);
+        if (r == VK_SUCCESS &&
+            sd->tracked_image_view_count < MAX_IMAGE_VIEW_TRACK)
+        {
+            sd->tracked_image_views[sd->tracked_image_view_count] = *pView;
+            sd->tracked_image_view_images[sd->tracked_image_view_count] = pCreateInfo->image;
+            sd->tracked_image_view_count++;
+            STEREO_LOG(
+                "IMAGE_VIEW_TRACK count=%u view=%p image=%p passthrough=1",
+                sd->tracked_image_view_count,
+                (void *)(uintptr_t)*pView,
+                (void *)(uintptr_t)pCreateInfo->image);
+        }
         STEREO_LOG(
             "IV_EXIT passthrough result=%d view=%p",
             r,
