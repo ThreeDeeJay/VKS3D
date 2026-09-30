@@ -1648,10 +1648,11 @@ stereo_CmdTraceRaysKHR(
         .dstOffset = { 0, 0, 0 },
         .extent = { src_width, src_height, 1 }
     };
-    STEREO_LOG("RT_TRACE_COPY_IMAGE_BEGIN src_layers=%u dst_layers=%u copy_layers=%u extent=%ux%u",
+    STEREO_LOG("RT_TRACE_COPY_IMAGE_BEGIN src_layers=%u dst_layers=%u src_copy_layers=%u dst_copy_layers=%u extent=%ux%u",
         src_layers,
         dst_layers,
-        copy.layerCount,
+        copy.srcSubresource.layerCount,
+        copy.dstSubresource.layerCount,
         copy.extent.width,
         copy.extent.height);
     sd->real.CmdCopyImage(
