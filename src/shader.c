@@ -8731,9 +8731,12 @@ bool spirv_patch_stereo_fs(
             int img_idx = -1;
             for (uint32_t ii = 0; ii < s.n_img; ++ii)
             {
+                if (s.images[ii].dim != SpvDim2D)
+                    continue;
                 if (!s.images[ii].replacement_type)
                     continue;
-                if (s.images[ii].replacement_type != image_type)
+                if (s.images[ii].id != image_type &&
+                    s.images[ii].replacement_type != image_type)
                     continue;
                 img_idx = (int)ii;
                 STEREO_LOG(
@@ -8780,7 +8783,15 @@ bool spirv_patch_stereo_fs(
              *
              * Keep the query instruction itself unchanged apart from its Result Type.
              */
-            uint32_t w[5];
+            uint32_t *w = malloc(wc * sizeof(uint32_t));
+            if (!w)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                    emitted_type[in[i + 1]] = true;
+                i += wc;
+                continue;
+            }
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t old_result_type = w[1];
             uint32_t old_result_id = w[2];
@@ -8796,6 +8807,7 @@ bool spirv_patch_stereo_fs(
                 {
                     emitted_type[w[1]] = true;
                 }
+                free(w);
                 i += wc;
                 continue;
             }
@@ -8836,6 +8848,7 @@ bool spirv_patch_stereo_fs(
             {
                 emitted_type[query_v3_id] = true;
             }
+            free(w);
             i += wc;
             continue;
         }
