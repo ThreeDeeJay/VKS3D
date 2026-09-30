@@ -1256,6 +1256,29 @@ static uint32_t spirv_get_value_type(
     return 0;
 }
 
+static uint32_t
+spirv_get_pointer_pointee_type(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t pointer_type)
+{
+    if (!in || !pointer_type)
+        return 0;
+    for (size_t i = 5; i < in_c;)
+    {
+        uint32_t wc = in[i] >> 16;
+        uint32_t op = in[i] & 0xffff;
+        if (!wc || i + wc > in_c)
+            break;
+        if (op == SpvOpTypePointer &&
+            wc >= 4 &&
+            in[i + 1] == pointer_type)
+            return in[i + 3];
+        i += wc;
+    }
+    return 0;
+}
+
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m = c->m;
@@ -2558,6 +2581,69 @@ bool spirv_patch_stereo_mesh(
                 };
                 sb_push_n(&ob, w, 3);
                 patched_position = true;
+                i += wcx;
+                continue;
+            }
+        }
+        if (opx == SpvOpStore &&
+            wcx >= 3 &&
+            m.v3t &&
+            m.v4t)
+        {
+            uint32_t pointer = in[i + 1];
+            uint32_t object = in[i + 2];
+            uint32_t pointer_type =
+            spirv_get_value_type(
+                in,
+                in_c,
+                pointer);
+            uint32_t pointee_type =
+            spirv_get_pointer_pointee_type(
+                in,
+                in_c,
+                pointer_type);
+            uint32_t object_type =
+            spirv_get_value_type(
+                in,
+                in_c,
+                object);
+            if (pointee_type == m.v3t &&
+                object_type == m.v4t)
+            {
+                uint32_t vec3 = nid++;
+                uint32_t sw[] =
+                {
+                    op_(SpvOpVectorShuffle, 7),
+                    m.v3t,
+                    vec3,
+                    object,
+                    object,
+                    0,
+                    1,
+                    2
+                };
+                sb_push_n(&ob, sw, 7);
+                uint32_t st[] =
+                {
+                    op_(SpvOpStore, 3),
+                    pointer,
+                    vec3
+                };
+                sb_push_n(&ob, st, 3);
+                STEREO_LOG(
+                    "VS_PATCH_STORE "
+                    "pointer=%u "
+                    "object=%u "
+                    "pointerType=%u "
+                    "pointeeType=%u "
+                    "objectType=%u "
+                    "vec3=%u",
+                    pointer,
+                    object,
+                    pointer_type,
+                    pointee_type,
+                    object_type,
+                    vec3);
                 i += wcx;
                 continue;
             }
