@@ -1433,6 +1433,20 @@ stereo_CmdTraceRaysKHR(
                 (void*)(uintptr_t)sd->rt_desc_binding15_images[tracked_slot],
                 (void*)(uintptr_t)sd->rt_desc_binding15_views[tracked_slot],
                 (void*)(uintptr_t)sd->rt_desc_tracked_layouts[tracked_slot]);
+            if (sd->rt_desc_binding15_images[tracked_slot] != VK_NULL_HANDLE)
+            {
+                rt_image = sd->rt_desc_binding15_images[tracked_slot];
+                rt_output_set = bound_set;
+                rt_output_slot = tracked_slot;
+                STEREO_LOG(
+                    "RT_TRACE_OUTPUT_SELECTED set=%p set_index=%u binding=15 image=%p view=%p tracked_slot=%u",
+                    (void*)(uintptr_t)bound_set,
+                    si,
+                    (void*)(uintptr_t)rt_image,
+                    (void*)(uintptr_t)sd->rt_desc_binding15_views[tracked_slot],
+                    tracked_slot);
+                break;
+            }
             if (rt_pipeline_track_slot == UINT32_MAX)
                 continue;
             for (uint32_t wi = 0; wi < sd->rt_pipeline_raygen_write_count[rt_pipeline_track_slot]; wi++)
