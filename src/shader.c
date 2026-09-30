@@ -1230,6 +1230,32 @@ typedef struct StereoDebugCtx {
     bool direct_position_write;
 } StereoDebugCtx;
 
+static uint32_t spirv_get_value_type(
+    const uint32_t *in,
+    size_t in_c,
+    uint32_t value_id)
+{
+    if (!in || !value_id)
+        return 0;
+    for (size_t i = 5; i < in_c;)
+    {
+        uint32_t wc = in[i] >> 16;
+        uint32_t op = in[i] & 0xffff;
+        if (!wc || i + wc > in_c)
+            break;
+        if (spirv_get_result_id(op, &in[i], wc) == value_id)
+        {
+            if (wc >= 3 &&
+                op != SpvOpLabel &&
+                op != SpvOpFunction)
+                return in[i + 1];
+            return 0;
+        }
+        i += wc;
+    }
+    return 0;
+}
+
 static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
 {
     SpvMod *m = c->m;
@@ -2889,6 +2915,13 @@ bool spirv_patch_stereo_vertex(
     {
         id_new_bt = nid++;
     }
+    uint32_t bt_for_types =
+    m.bt ?
+    m.bt :
+    (m.bt_type ? m.bt_type : id_new_bt);
+    uint32_t id_v4bt = 0;
+    if (m.v4t && bt_for_types)
+        id_v4bt = nid++;
     uint32_t id_cz = nid++;
     uint32_t id_cf0 = nid++;
     uint32_t id_cf1 = nid++;
@@ -2993,6 +3026,17 @@ bool spirv_patch_stereo_vertex(
             id_new_bt
         };
         sb_push_n(&te, w, 2);
+    }
+    if (id_v4bt)
+    {
+        uint32_t w[] =
+        {
+            op_(SpvOpTypeVector, 4),
+            id_v4bt,
+            bt_for_types,
+            4
+        };
+        sb_push_n(&te, w, 4);
     }
     if (m.it)
     {
@@ -3367,6 +3411,57 @@ bool spirv_patch_stereo_vertex(
                 &bc,
                 &nid);
             body_done = true;
+        }
+        if (opx == SpvOpSelect &&
+            wcx >= 6 &&
+            id_v4bt &&
+            in[i + 1] == m.v4t)
+        {
+            uint32_t cond = in[i + 3];
+            uint32_t cond_type =
+            spirv_get_value_type(
+                in,
+                in_c,
+                cond);
+            if (cond_type == bt_for_types)
+            {
+                uint32_t vec_cond = nid++;
+                uint32_t cw[] =
+                {
+                    op_(SpvOpCompositeConstruct, 7),
+                    id_v4bt,
+                    vec_cond,
+                    cond,
+                    cond,
+                    cond,
+                    cond
+                };
+                sb_push_n(&ob, cw, 7);
+                uint32_t sw[] =
+                {
+                    op_(SpvOpSelect, 6),
+                    in[i + 1],
+                    in[i + 2],
+                    vec_cond,
+                    in[i + 4],
+                    in[i + 5]
+                };
+                sb_push_n(&ob, sw, 6);
+                STEREO_LOG(
+                    "VS_PATCH_SELECT "
+                    "result=%u "
+                    "cond=%u "
+                    "condType=%u "
+                    "vecCond=%u "
+                    "vecType=%u",
+                    in[i + 2],
+                    cond,
+                    cond_type,
+                    vec_cond,
+                    id_v4bt);
+                i += wcx;
+                continue;
+            }
         }
         sb_push_n(
             &ob,
