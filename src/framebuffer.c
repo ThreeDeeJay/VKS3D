@@ -1631,6 +1631,8 @@ stereo_CmdTraceRaysKHR(
         1,
         &dst_barrier);
     STEREO_LOG("RT_TRACE_COPY_DST_BARRIER_END");
+    uint32_t copy_width = src_width < dst_width ? src_width : dst_width;
+    uint32_t copy_height = src_height < dst_height ? src_height : dst_height;
     VkImageCopy copy = {
         .srcSubresource = {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1646,7 +1648,7 @@ stereo_CmdTraceRaysKHR(
             .layerCount = 2
         },
         .dstOffset = { 0, 0, 0 },
-        .extent = { src_width, src_height, 1 }
+        .extent = { copy_width, copy_height, 1 }
     };
     STEREO_LOG("RT_TRACE_COPY_IMAGE_BEGIN src_layers=%u dst_layers=%u src_copy_layers=%u dst_copy_layers=%u extent=%ux%u",
         src_layers,

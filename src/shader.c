@@ -10380,6 +10380,11 @@ spirv_patch_stereo_raygen(
         if (op == SpvOpImageWrite &&
             wc >= 4)
         {
+            STEREO_LOG(
+                "RT_PATCH_IMAGE_WRITE_REMAP image=%u old_coord=%u new_coord=%u",
+                in[i + 1],
+                in[i + 2],
+                new_coord);
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 2] = new_coord;
             i += wc;
