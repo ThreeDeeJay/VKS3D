@@ -9367,6 +9367,81 @@ bool spirv_patch_stereo_fs(
             i += wc;
             continue;
         }
+        if (in_func && op == SpvOpLoad && wc >= 4)
+        {
+            uint32_t pointer_id = in[i + 3];
+            uint32_t pointer_type = 0;
+            uint32_t pointer_target = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpVariable && sw >= 4 && in[scan + 2] == pointer_id)
+                {
+                    pointer_type = in[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+            if (pointer_type != 0)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypePointer &&
+                        sw >= 4 &&
+                        in[scan + 1] == pointer_type)
+                    {
+                        pointer_target = in[scan + 3];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (pointer_target != 0)
+            {
+                for (uint32_t img = 0; img < s.n_img; ++img)
+                {
+                    if (!s.images[img].stereo ||
+                        !s.images[img].replacement_type)
+                        continue;
+                    if (pointer_target != s.images[img].id)
+                        continue;
+                    if (in[i + 1] != s.images[img].replacement_type)
+                    {
+                        STEREO_LOG(
+                            "FS_LOAD_TYPE_REWRITE "
+                            "result=%u "
+                            "oldType=%u "
+                            "newType=%u "
+                            "pointer=%u "
+                            "pointerType=%u "
+                            "image=%u",
+                            in[i + 2],
+                            in[i + 1],
+                            s.images[img].replacement_type,
+                            pointer_id,
+                            pointer_type,
+                            s.images[img].id);
+                        uint32_t w[4];
+                        memcpy(w, &in[i], sizeof(w));
+                        w[1] = s.images[img].replacement_type;
+                        sb_push_n(&ob, w, wc);
+                        if (w[2] < id_bound)
+                            emitted_type[w[2]] = true;
+                        i += wc;
+                        continue;
+                    }
+                    break;
+                }
+            }
+        }
+        /* Patch OpSampledImage diagnostic */
         if (in_func && op == SpvOpSampledImage && wc >= 3)
         {
             STEREO_LOG(
