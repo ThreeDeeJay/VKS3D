@@ -7888,10 +7888,26 @@ bool spirv_patch_stereo_fs(
         }
         /* Patch OpTypeImage: Dim=2D Arrayed=0 → Arrayed=1 (in-place word change) */
         if (op == SpvOpTypeImage &&
-            wc >= 9 &&
-            in[i + 3] == SpvDim2D &&
-            in[i + 5] == 0)
+            wc >= 9)
         {
+            STEREO_LOG(
+                "FS_TYPEIMAGE_RAW "
+                "id=%u "
+                "sampledType=%u "
+                "dim=%u "
+                "depth=%u "
+                "arrayed=%u "
+                "ms=%u "
+                "sampled=%u "
+                "format=%u",
+                in[i + 1],
+                in[i + 2],
+                in[i + 3],
+                in[i + 4],
+                in[i + 5],
+                in[i + 6],
+                in[i + 7],
+                in[i + 8]);
             int img_idx = -1;
             for (uint32_t ii = 0; ii < s.n_img; ++ii)
             {
