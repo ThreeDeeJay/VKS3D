@@ -4927,7 +4927,7 @@ fs_scan_type_instruction(
             img->sampled          = sampled;
             img->format           = format;
             img->patchable        = (arrayed == 0);
-            img->stereo           = (arrayed != 0);
+            img->stereo           = (arrayed == 0);
             img->replacement_type = 0;
             STEREO_LOG(
                 "FS_IMAGE_FIELDS_INIT "
