@@ -7925,6 +7925,14 @@ bool spirv_patch_stereo_fs(
                     break;
                 }
             }
+            STEREO_LOG(
+                "FS_IMAGE_MATCH_RESULT "
+                "type=%u "
+                "img_idx=%d "
+                "n_img=%u",
+                in[i + 1],
+                img_idx,
+                s.n_img);
             if (img_idx >= 0)
             {
                 FsImageInfo *img = &s.images[img_idx];
