@@ -7725,11 +7725,11 @@ bool spirv_patch_stereo_fs(
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 if (!s.images[img].stereo ||
-                    !s.images[img].replacement_sampled_type)
+                    !s.images[img].replacement_type)
                     continue;
                 if (target_type != s.images[img].sampled_type_id)
                     continue;
-                replacement_type = s.images[img].replacement_sampled_type;
+                replacement_type = s.images[img].replacement_type;
                 patch_pointer = true;
                 STEREO_LOG(
                     "FS_POINTER_PATCH "
