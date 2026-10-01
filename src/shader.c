@@ -8178,11 +8178,11 @@ bool spirv_patch_stereo_fs(
             w[5] = 1;
             STEREO_LOG(
                 "FS_TYPEIMAGE_PATCH "
-                "sampledImageType=%u "
+                "sampledType=%u "
                 "oldImageType=%u "
                 "newImageType=%u",
-                w[1],
-                in[i + 2],
+                w[2],
+                in[i + 1],
                 new_array_type);
             STEREO_LOG(
                 "FS_EMIT_ARRAY_IMAGE "
@@ -8190,6 +8190,18 @@ bool spirv_patch_stereo_fs(
                 "from=%u",
                 w[1],
                 in[i + 1]);
+            STEREO_LOG(
+                "FS_EMIT_ARRAY_WORDS "
+                "%08x %08x %08x %08x %08x %08x %08x %08x %08x",
+                w[0],
+                w[1],
+                w[2],
+                w[3],
+                w[4],
+                w[5],
+                w[6],
+                w[7],
+                w[8]);
             sb_push_n(&ob, w, wc);
             if (w[1] < id_bound)
             {
