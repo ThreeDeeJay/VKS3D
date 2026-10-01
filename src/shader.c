@@ -7653,8 +7653,6 @@ bool spirv_patch_stereo_fs(
         {
             uint32_t sampled_id = in[i + 1];
             uint32_t image_type = in[i + 2];
-            uint32_t replacement_image = 0;
-            uint32_t replacement_sampled = 0;
             bool patch_sampled = false;
             STEREO_LOG(
                 "FS_SAMPLED_IMAGE_DECL "
@@ -7662,17 +7660,13 @@ bool spirv_patch_stereo_fs(
                 "imageType=%u",
                 sampled_id,
                 image_type);
-            STEREO_LOG(
-                "FS_SAMPLED_IMAGE_STATE "
-                "result=%u "
-                "imageType=%u "
-                "emitted=%u",
-                sampled_id,
-                image_type,
-                (sampled_id < id_bound) ? emitted_type[sampled_id] : 0);
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
-                if (s.images[img].sampled_type_id != sampled_id)
+                if (!s.images[img].stereo ||
+                    !s.images[img].replacement_type ||
+                    s.images[img].id != image_type)
+                    continue;
+                if (s.images[img].replacement_type >= id_bound)
                     continue;
                 STEREO_LOG(
                     "FS_SAMPLED_IMAGE_MATCH "
@@ -7680,52 +7674,43 @@ bool spirv_patch_stereo_fs(
                     "result=%u "
                     "oldImage=%u "
                     "replacementImage=%u "
-                    "replacementSampled=%u "
                     "owner=%u "
                     "binding=%u",
                     img,
                     sampled_id,
                     image_type,
                     s.images[img].replacement_type,
-                    s.images[img].replacement_sampled_type,
                     s.images[img].owner_var,
                     s.images[img].binding);
-                if (!s.images[img].stereo ||
-                    !s.images[img].replacement_type)
-                    continue;
-                replacement_image = s.images[img].replacement_type;
-                replacement_sampled =
-                    s.images[img].replacement_sampled_type;
-                if (replacement_sampled == sampled_id)
-                {
-                    patch_sampled = true;
-                    break;
-                }
-            }
-            if (patch_sampled)
-            {
+                uint32_t w[3];
+                memcpy(w, &in[i], sizeof(w));
+                w[2] = s.images[img].replacement_type;
                 STEREO_LOG(
                     "FS_SAMPLED_IMAGE_PATCH "
                     "result=%u "
                     "oldImageType=%u "
-                    "newImageType=%u "
-                    "replacementSampled=%u",
+                    "newImageType=%u",
                     sampled_id,
                     image_type,
-                    replacement_image,
-                    replacement_sampled);
-                uint32_t w[3];
-                memcpy(w, &in[i], sizeof(w));
-                w[2] = replacement_image;
-                sb_push_n(&ob, w, 3);
-                if (sampled_id < id_bound)
+                    w[2]);
+                if (!emitted_type[sampled_id])
+                {
+                    sb_push_n(&ob, w, 3);
                     emitted_type[sampled_id] = true;
-                i += wc;
-                continue;
+                }
+                patch_sampled = true;
+                break;
             }
-            sb_push_n(&ob, &in[i], wc);
-            if (sampled_id < id_bound)
-                emitted_type[sampled_id] = true;
+            if (!patch_sampled)
+            {
+                if (sampled_id >= id_bound ||
+                    !emitted_type[sampled_id])
+                {
+                    sb_push_n(&ob, &in[i], wc);
+                    if (sampled_id < id_bound)
+                        emitted_type[sampled_id] = true;
+                }
+            }
             i += wc;
             continue;
         }
@@ -7740,128 +7725,21 @@ bool spirv_patch_stereo_fs(
                 in[i + 1],
                 in[i + 2],
                 in[i + 3]);
-            bool suppress_original = false;
-            for (uint32_t img = 0; img < s.n_img; ++img)
-            {
-                if (in[i + 3] != s.images[img].sampled_type_id)
-                {
-                    STEREO_LOG(
-                        "FS_POINTER_SKIP_SAME_TYPE "
-                        "idx=%u "
-                        "ptrTarget=%u "
-                        "replacementSampled=%u "
-                        "owner=%u "
-                        "binding=%u",
-                        img,
-                        in[i + 3],
-                        s.images[img].replacement_sampled_type,
-                        s.images[img].owner_var,
-                        s.images[img].binding);
-                    continue;
-                }
-                if (!s.images[img].stereo ||
-                    !s.images[img].replacement_sampled_type ||
-                    s.images[img].replacement_sampled_type == in[i + 3])
-                {
-                    continue;
-                }
-                suppress_original = true;
-                break;
-            }
-            if (!suppress_original)
-            {
-                sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                {
-                    emitted_type[in[i + 1]] = true;
-                }
-            }
-            else
-            {
-                STEREO_LOG(
-                    "FS_POINTER_SUPPRESS_ORIGINAL "
-                    "result=%u "
-                    "storage=%u "
-                    "oldTarget=%u",
-                    in[i + 1],
-                    in[i + 2],
-                    in[i + 3]);
-            }
+            bool patched_pointer = false;
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 if (in[i + 3] != s.images[img].sampled_type_id ||
                     !s.images[img].stereo ||
                     !s.images[img].replacement_pointer_type ||
                     !s.images[img].replacement_sampled_type)
-                {
-                    STEREO_LOG(
-                        "FS_POINTER_SKIP_SAME_POINTER "
-                        "idx=%u "
-                        "pointer=%u "
-                        "owner=%u "
-                        "binding=%u",
-                        img,
-                        in[i + 1],
-                        s.images[img].owner_var,
-                        s.images[img].binding);
                     continue;
-                }
                 if (s.images[img].replacement_pointer_type >= id_bound ||
                     s.images[img].replacement_sampled_type >= id_bound)
-                {
-                    STEREO_LOG(
-                        "FS_POINTER_SKIP_UNDEFINED "
-                        "idx=%u "
-                        "replacementPointer=%u "
-                        "replacementSampled=%u "
-                        "idBound=%u "
-                        "owner=%u "
-                        "binding=%u",
-                        img,
-                        s.images[img].replacement_pointer_type,
-                        s.images[img].replacement_sampled_type,
-                        id_bound,
-                        s.images[img].owner_var,
-                        s.images[img].binding);
                     continue;
-                }
-                if (!emitted_type[s.images[img].replacement_sampled_type])
-                {
-                    STEREO_LOG(
-                        "FS_POINTER_SKIP_SAMPLED_UNDEFINED "
-                        "idx=%u "
-                        "replacementPointer=%u "
-                        "replacementSampled=%u "
-                        "owner=%u "
-                        "binding=%u",
-                        img,
-                        s.images[img].replacement_pointer_type,
-                        s.images[img].replacement_sampled_type,
-                        s.images[img].owner_var,
-                        s.images[img].binding);
-                    continue;
-                }
                 uint32_t w[4];
                 memcpy(w, &in[i], sizeof(w));
                 w[1] = s.images[img].replacement_pointer_type;
                 w[3] = s.images[img].replacement_sampled_type;
-                STEREO_LOG(
-                    "FS_POINTER_EMIT "
-                    "idx=%u "
-                    "ptrTarget=%u "
-                    "replacementSampled=%u "
-                    "replacementPointer=%u "
-                    "sampledDefined=%u "
-                    "owner=%u "
-                    "binding=%u",
-                    img,
-                    in[i + 3],
-                    s.images[img].replacement_sampled_type,
-                    s.images[img].replacement_pointer_type,
-                    s.images[img].replacement_sampled_type < id_bound ?
-                    emitted_type[s.images[img].replacement_sampled_type] : 0,
-                    s.images[img].owner_var,
-                    s.images[img].binding);
                 STEREO_LOG(
                     "FS_POINTER_PATCH "
                     "result=%u "
@@ -7876,12 +7754,19 @@ bool spirv_patch_stereo_fs(
                     w[3],
                     s.images[img].owner_var,
                     s.images[img].binding);
-                if (emitted_type[w[1]])
+                if (!emitted_type[w[1]])
                 {
-                    continue;
+                    sb_push_n(&ob, w, wc);
+                    emitted_type[w[1]] = true;
                 }
-                sb_push_n(&ob, w, wc);
-                emitted_type[w[1]] = true;
+                patched_pointer = true;
+                break;
+            }
+            if (!patched_pointer)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                    emitted_type[in[i + 1]] = true;
             }
             i += wc;
             continue;
