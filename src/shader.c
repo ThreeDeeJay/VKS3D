@@ -9311,6 +9311,17 @@ bool spirv_patch_stereo_fs(
                 image_ssa,
                 image_type,
                 s.images[img_idx].replacement_type);
+            if (image_type != s.images[img_idx].replacement_type)
+            {
+                STEREO_LOG(
+                    "FS_QSIZE_TYPE_MISMATCH "
+                    "image=%u "
+                    "actualType=%u "
+                    "expectedReplacement=%u",
+                    image_ssa,
+                    image_type,
+                    s.images[img_idx].replacement_type);
+            }
             /*
              * The stereo image replacement changes a 2D image into a 2D-array image.
              * OpImageQuerySize* therefore needs a 3-component integer result type:
