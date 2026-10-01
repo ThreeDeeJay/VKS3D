@@ -9371,7 +9371,6 @@ bool spirv_patch_stereo_fs(
         {
             uint32_t pointer_id = in[i + 3];
             uint32_t pointer_type = 0;
-            uint32_t pointer_target = 0;
             for (size_t scan = 5; scan < in_c;)
             {
                 uint32_t sw = in[scan] >> 16;
@@ -9387,30 +9386,12 @@ bool spirv_patch_stereo_fs(
             }
             if (pointer_type != 0)
             {
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
-                        break;
-                    if (sop == SpvOpTypePointer &&
-                        sw >= 4 &&
-                        in[scan + 1] == pointer_type)
-                    {
-                        pointer_target = in[scan + 3];
-                        break;
-                    }
-                    scan += sw;
-                }
-            }
-            if (pointer_target != 0)
-            {
                 for (uint32_t img = 0; img < s.n_img; ++img)
                 {
                     if (!s.images[img].stereo ||
                         !s.images[img].replacement_type)
                         continue;
-                    if (pointer_target != s.images[img].id)
+                    if (pointer_type != s.images[img].replacement_pointer_type)
                         continue;
                     if (in[i + 1] != s.images[img].replacement_type)
                     {
