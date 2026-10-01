@@ -7717,57 +7717,49 @@ bool spirv_patch_stereo_fs(
         if (op == SpvOpTypePointer &&
             wc >= 4)
         {
-            STEREO_LOG(
-                "FS_POINTER_DECL "
-                "result=%u "
-                "storage=%u "
-                "type=%u",
-                in[i + 1],
-                in[i + 2],
-                in[i + 3]);
-            bool patched_pointer = false;
+            uint32_t pointer_id = in[i + 1];
+            uint32_t storage = in[i + 2];
+            uint32_t target_type = in[i + 3];
+            bool patch_pointer = false;
+            uint32_t replacement_type = 0;
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
-                if (in[i + 3] != s.images[img].sampled_type_id ||
-                    !s.images[img].stereo ||
-                    !s.images[img].replacement_pointer_type ||
+                if (!s.images[img].stereo ||
                     !s.images[img].replacement_sampled_type)
                     continue;
-                if (s.images[img].replacement_pointer_type >= id_bound ||
-                    s.images[img].replacement_sampled_type >= id_bound)
+                if (target_type != s.images[img].sampled_type_id)
                     continue;
-                uint32_t w[4];
-                memcpy(w, &in[i], sizeof(w));
-                w[1] = s.images[img].replacement_pointer_type;
-                w[3] = s.images[img].replacement_sampled_type;
+                replacement_type = s.images[img].replacement_sampled_type;
+                patch_pointer = true;
                 STEREO_LOG(
                     "FS_POINTER_PATCH "
                     "result=%u "
-                    "newResult=%u "
+                    "storage=%u "
                     "oldType=%u "
                     "newType=%u "
                     "owner=%u "
                     "binding=%u",
-                    in[i + 1],
-                    w[1],
-                    in[i + 3],
-                    w[3],
+                    pointer_id,
+                    storage,
+                    target_type,
+                    replacement_type,
                     s.images[img].owner_var,
                     s.images[img].binding);
-                if (!emitted_type[w[1]])
-                {
-                    sb_push_n(&ob, w, wc);
-                    emitted_type[w[1]] = true;
-                }
-                patched_pointer = true;
                 break;
             }
-            if (!patched_pointer)
+            if (patch_pointer)
+            {
+                uint32_t w[4];
+                memcpy(w, &in[i], sizeof(w));
+                w[3] = replacement_type;
+                sb_push_n(&ob, w, wc);
+            }
+            else
             {
                 sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                    emitted_type[in[i + 1]] = true;
             }
+            if (pointer_id < id_bound)
+                emitted_type[pointer_id] = true;
             i += wc;
             continue;
         }
