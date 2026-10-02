@@ -9524,7 +9524,9 @@ bool spirv_patch_stereo_fs(
                     coord_id);
             }
             bool image_type_rewritten = false;
-            uint32_t loaded_image_type = 0;
+            uint32_t fetch_pointer_id = 0;
+            uint32_t fetch_pointer_type = 0;
+            uint32_t fetch_pointer_target = 0;
             for (size_t scan = 5; scan < in_c;)
             {
                 uint32_t sw = in[scan] >> 16;
@@ -9535,37 +9537,79 @@ bool spirv_patch_stereo_fs(
                     sw >= 4 &&
                     in[scan + 2] == in[i + 3])
                 {
-                    loaded_image_type = in[scan + 1];
-                    STEREO_LOG(
-                        "FS_FETCH_LOAD_TYPE "
-                        "image=%u "
-                        "loadType=%u "
-                        "off=%zu",
-                        in[i + 3],
-                        loaded_image_type,
-                        scan);
+                    fetch_pointer_id = in[scan + 3];
                     break;
                 }
                 scan += sw;
             }
+            if (fetch_pointer_id)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if ((sop == SpvOpVariable ||
+                        sop == SpvOpAccessChain ||
+                        sop == SpvOpInBoundsAccessChain ||
+                        sop == SpvOpPtrAccessChain ||
+                        sop == SpvOpInBoundsPtrAccessChain ||
+                        sop == SpvOpCopyObject) &&
+                        sw >= 3 &&
+                        in[scan + 2] == fetch_pointer_id)
+                    {
+                        fetch_pointer_type = in[scan + 1];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (fetch_pointer_type)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypePointer &&
+                        sw >= 4 &&
+                        in[scan + 1] == fetch_pointer_type)
+                    {
+                        fetch_pointer_target = in[scan + 3];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            STEREO_LOG(
+                "FS_FETCH_POINTER_TARGET "
+                "image=%u "
+                "pointer=%u "
+                "pointerType=%u "
+                "pointerTarget=%u",
+                in[i+3],
+                fetch_pointer_id,
+                fetch_pointer_type,
+                fetch_pointer_target);
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
-                if (!s.images[img].stereo)
-                    continue;
                 if (!s.images[img].replacement_type)
                     continue;
-                if (s.images[img].replacement_type != loaded_image_type)
+                if (s.images[img].id != fetch_pointer_target &&
+                    s.images[img].replacement_type != fetch_pointer_target)
                     continue;
                 image_type_rewritten = true;
                 STEREO_LOG(
                     "FS_FETCH_REWRITTEN_IMAGE "
                     "image=%u "
                     "descriptor=%u "
-                    "loadType=%u "
+                    "pointerTarget=%u "
                     "replacementType=%u",
                     s.images[img].id,
                     descriptor_var,
-                    loaded_image_type,
+                    fetch_pointer_target,
                     s.images[img].replacement_type);
                 break;
             }
