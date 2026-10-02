@@ -9410,7 +9410,8 @@ bool spirv_patch_stereo_fs(
                     if (!s.images[img].stereo ||
                         !s.images[img].replacement_type)
                         continue;
-                    if (pointer_target != s.images[img].id)
+                    if (pointer_target != s.images[img].id &&
+                        pointer_target != s.images[img].replacement_type)
                         continue;
                     if (in[i + 1] != s.images[img].replacement_type)
                     {
