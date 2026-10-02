@@ -8717,6 +8717,74 @@ bool spirv_patch_stereo_fs(
             }
             if (!descriptor_var)
             {
+                uint32_t sampled_image_id = in[i+3];
+                uint32_t image_id = 0;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpSampledImage &&
+                        sw >= 5 &&
+                        in[scan + 2] == sampled_image_id)
+                    {
+                        image_id = in[scan + 3];
+                        STEREO_LOG(
+                            "FS_SAMPLE_SAMPLEDIMAGE_CHAIN "
+                            "sampledImage=%u "
+                            "image=%u "
+                            "off=%zu",
+                            sampled_image_id,
+                            image_id,
+                            scan);
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (image_id)
+                {
+                    for (size_t scan = 5; scan < in_c;)
+                    {
+                        uint32_t sw = in[scan] >> 16;
+                        uint32_t sop = in[scan] & 0xffffu;
+                        if (sw == 0 || scan + sw > in_c)
+                            break;
+                        if (sop == SpvOpLoad &&
+                            sw >= 4 &&
+                            in[scan + 2] == image_id)
+                        {
+                            uint32_t ptr = in[scan + 3];
+                            for (uint32_t vv = 0; vv < s.n_var; ++vv)
+                            {
+                                if (s.vars[vv].id != ptr)
+                                    continue;
+                                if (s.vars[vv].storage != SpvStorageClassUniformConstant)
+                                    continue;
+                                descriptor_var = ptr;
+                                STEREO_LOG(
+                                    "FS_SAMPLE_SAMPLEDIMAGE_DESCRIPTOR "
+                                    "sampledImage=%u "
+                                    "image=%u "
+                                    "ptr=%u "
+                                    "descriptor=%u "
+                                    "off=%zu",
+                                    sampled_image_id,
+                                    image_id,
+                                    ptr,
+                                    descriptor_var,
+                                    scan);
+                                break;
+                            }
+                            if (descriptor_var)
+                                break;
+                        }
+                        scan += sw;
+                    }
+                }
+            }
+            if (!descriptor_var)
+            {
                 STEREO_LOG(
                     "FS_PATCH_REJECT_NO_DESCRIPTOR "
                     "sampledImage=%u "
