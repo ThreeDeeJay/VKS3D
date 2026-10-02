@@ -9523,7 +9523,29 @@ bool spirv_patch_stereo_fs(
                     in[i+2],
                     coord_id);
             }
-            if (!fs_binding_is_stereo_attachment(&s, descriptor_var))
+            bool image_type_rewritten = false;
+            for (uint32_t img = 0; img < s.n_img; ++img)
+            {
+                if (s.images[img].owner_var != descriptor_var)
+                    continue;
+                if (!s.images[img].stereo)
+                    continue;
+                if (!s.images[img].replacement_type)
+                    continue;
+                image_type_rewritten = true;
+                STEREO_LOG(
+                    "FS_FETCH_REWRITTEN_IMAGE "
+                    "image=%u "
+                    "descriptor=%u "
+                    "originalType=%u "
+                    "replacementType=%u",
+                    s.images[img].id,
+                    descriptor_var,
+                    s.images[img].id,
+                    s.images[img].replacement_type);
+                break;
+            }
+            if (!fs_binding_is_stereo_attachment(&s, descriptor_var) && !image_type_rewritten)
             {
                 STEREO_LOG(
                     "FS_FETCH_SKIP_MONO image=%u descriptor=%u binding_not_stereo",
