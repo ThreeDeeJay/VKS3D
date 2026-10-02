@@ -9013,6 +9013,72 @@ bool spirv_patch_stereo_fs(
             }
             uint32_t w[4];
             memcpy(w, &in[i], sizeof(w));
+            uint32_t sampled_type = 0;
+            uint32_t sampled_image_type = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sw >= 3 && in[scan + 2] == in[i + 3])
+                {
+                    sampled_type = in[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+            if (sampled_type)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeSampledImage &&
+                        sw >= 3 &&
+                        in[scan + 1] == sampled_type)
+                    {
+                        sampled_image_type = in[scan + 2];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            STEREO_LOG(
+                "FS_OPIMAGE_SAMPLED_TYPE "
+                "sampledImage=%u "
+                "sampledType=%u "
+                "imageType=%u",
+                in[i + 3],
+                sampled_type,
+                sampled_image_type);
+            if (sampled_image_type)
+            {
+                for (uint32_t img = 0; img < s.n_img; ++img)
+                {
+                    if (!s.images[img].replacement_type)
+                        continue;
+                    if (s.images[img].id != sampled_image_type &&
+                        s.images[img].replacement_type != sampled_image_type)
+                        continue;
+                    STEREO_LOG(
+                        "FS_OPIMAGE_TYPE_REWRITE "
+                        "result=%u "
+                        "oldType=%u "
+                        "newType=%u "
+                        "sampledImage=%u "
+                        "image=%u",
+                        w[2],
+                        w[1],
+                        s.images[img].replacement_type,
+                        in[i + 3],
+                        s.images[img].id);
+                    w[1] = s.images[img].replacement_type;
+                    break;
+                }
+            }
             int load = fs_find_load(&s, in[i + 3]);
             STEREO_LOG(
                 "FS_PATCH_IMAGE_LOADINDEX sampledImage=%u load=%d",
