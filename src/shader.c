@@ -9524,92 +9524,37 @@ bool spirv_patch_stereo_fs(
                     coord_id);
             }
             bool image_type_rewritten = false;
-            uint32_t fetch_pointer_id = 0;
-            uint32_t fetch_pointer_type = 0;
-            uint32_t fetch_pointer_target = 0;
-            for (size_t scan = 5; scan < in_c;)
-            {
-                uint32_t sw = in[scan] >> 16;
-                uint32_t sop = in[scan] & 0xffffu;
-                if (sw == 0 || scan + sw > in_c)
-                    break;
-                if (sop == SpvOpLoad &&
-                    sw >= 4 &&
-                    in[scan + 2] == in[i + 3])
-                {
-                    fetch_pointer_id = in[scan + 3];
-                    break;
-                }
-                scan += sw;
-            }
-            if (fetch_pointer_id)
-            {
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
-                        break;
-                    if ((sop == SpvOpVariable ||
-                        sop == SpvOpAccessChain ||
-                        sop == SpvOpInBoundsAccessChain ||
-                        sop == SpvOpPtrAccessChain ||
-                        sop == SpvOpInBoundsPtrAccessChain ||
-                        sop == SpvOpCopyObject) &&
-                        sw >= 3 &&
-                        in[scan + 2] == fetch_pointer_id)
-                    {
-                        fetch_pointer_type = in[scan + 1];
-                        break;
-                    }
-                    scan += sw;
-                }
-            }
-            if (fetch_pointer_type)
-            {
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
-                        break;
-                    if (sop == SpvOpTypePointer &&
-                        sw >= 4 &&
-                        in[scan + 1] == fetch_pointer_type)
-                    {
-                        fetch_pointer_target = in[scan + 3];
-                        break;
-                    }
-                    scan += sw;
-                }
-            }
+            uint32_t fetch_image_type =
+            fs_result_type_of(
+                &s,
+                in,
+                in_c,
+                in[i+3]);
             STEREO_LOG(
-                "FS_FETCH_POINTER_TARGET "
+                "FS_FETCH_IMAGE_TYPE "
                 "image=%u "
-                "pointer=%u "
-                "pointerType=%u "
-                "pointerTarget=%u",
+                "imageType=%u",
                 in[i+3],
-                fetch_pointer_id,
-                fetch_pointer_type,
-                fetch_pointer_target);
+                fetch_image_type);
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 if (!s.images[img].replacement_type)
                     continue;
-                if (s.images[img].id != fetch_pointer_target &&
-                    s.images[img].replacement_type != fetch_pointer_target)
+                if (s.images[img].id != fetch_image_type &&
+                    s.images[img].replacement_type != fetch_image_type)
                     continue;
                 image_type_rewritten = true;
                 STEREO_LOG(
                     "FS_FETCH_REWRITTEN_IMAGE "
                     "image=%u "
                     "descriptor=%u "
-                    "pointerTarget=%u "
+                    "imageType=%u "
+                    "originalType=%u "
                     "replacementType=%u",
-                    s.images[img].id,
+                    in[i+3],
                     descriptor_var,
-                    fetch_pointer_target,
+                    fetch_image_type,
+                    s.images[img].id,
                     s.images[img].replacement_type);
                 break;
             }
