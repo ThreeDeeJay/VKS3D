@@ -7693,11 +7693,9 @@ bool spirv_patch_stereo_fs(
                     sampled_id,
                     image_type,
                     w[2]);
-                if (!emitted_type[sampled_id])
-                {
-                    sb_push_n(&ob, w, 3);
+                sb_push_n(&ob, w, 3);
+                if (sampled_id < id_bound)
                     emitted_type[sampled_id] = true;
-                }
                 patch_sampled = true;
                 break;
             }
@@ -7725,11 +7723,14 @@ bool spirv_patch_stereo_fs(
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 if (!s.images[img].stereo ||
-                    !s.images[img].replacement_type)
+                    !s.images[img].replacement_type ||
+                    !s.images[img].replacement_sampled_type)
                     continue;
                 if (target_type != s.images[img].sampled_type_id)
                     continue;
-                replacement_type = s.images[img].replacement_type;
+                replacement_type = s.images[img].replacement_sampled_type;
+                if (replacement_type >= id_bound)
+                    continue;
                 patch_pointer = true;
                 STEREO_LOG(
                     "FS_POINTER_PATCH "
@@ -7737,12 +7738,14 @@ bool spirv_patch_stereo_fs(
                     "storage=%u "
                     "oldType=%u "
                     "newType=%u "
+                    "imageType=%u "
                     "owner=%u "
                     "binding=%u",
                     pointer_id,
                     storage,
                     target_type,
                     replacement_type,
+                    s.images[img].id,
                     s.images[img].owner_var,
                     s.images[img].binding);
                 break;
@@ -8473,13 +8476,39 @@ bool spirv_patch_stereo_fs(
                 if (!s.images[img].stereo ||
                     !s.images[img].replacement_type)
                     continue;
-                if (pointer_target != s.images[img].id &&
-                    pointer_target != s.images[img].replacement_type)
-                    continue;
-                if (in[i + 1] != s.images[img].replacement_type)
+                if (pointer_target == s.images[img].sampled_type_id &&
+                    s.images[img].replacement_sampled_type)
+                {
+                    if (in[i + 1] != s.images[img].replacement_sampled_type)
+                    {
+                        STEREO_LOG(
+                            "FS_LOAD_SAMPLED_TYPE_REWRITE "
+                            "result=%u "
+                            "oldType=%u "
+                            "newType=%u "
+                            "pointer=%u "
+                            "pointerType=%u "
+                            "pointerTarget=%u "
+                            "sampledType=%u "
+                            "replacementSampled=%u",
+                            in[i + 2],
+                            in[i + 1],
+                            s.images[img].replacement_sampled_type,
+                            pointer_id,
+                            pointer_type,
+                            pointer_target,
+                            s.images[img].sampled_type_id,
+                            s.images[img].replacement_sampled_type);
+                        w[1] = s.images[img].replacement_sampled_type;
+                        load_rewritten = true;
+                    }
+                    break;
+                }
+                if (pointer_target == s.images[img].id &&
+                    in[i + 1] != s.images[img].replacement_type)
                 {
                     STEREO_LOG(
-                        "FS_LOAD_TYPE_REWRITE "
+                        "FS_LOAD_IMAGE_TYPE_REWRITE "
                         "result=%u "
                         "oldType=%u "
                         "newType=%u "
@@ -8497,7 +8526,10 @@ bool spirv_patch_stereo_fs(
                     w[1] = s.images[img].replacement_type;
                     load_rewritten = true;
                 }
-                break;
+                if (pointer_target == s.images[img].replacement_type)
+                {
+                    load_rewritten = true;
+                }
             }
             if (!load_rewritten)
             {
