@@ -9524,12 +9524,58 @@ bool spirv_patch_stereo_fs(
                     coord_id);
             }
             bool image_type_rewritten = false;
-            uint32_t fetch_image_type =
-            fs_result_type_of(
-                &s,
-                in,
-                in_c,
-                in[i+3]);
+            uint32_t fetch_image_type = 0;
+            uint32_t fetch_def_opcode = 0;
+            uint32_t fetch_def_type = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sw >= 3 &&
+                    in[scan + 2] == in[i + 3])
+                {
+                    fetch_def_opcode = sop;
+                    fetch_def_type = in[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+            STEREO_LOG(
+                "FS_FETCH_IMAGE_DEF "
+                "image=%u "
+                "opcode=%u "
+                "resultType=%u",
+                in[i+3],
+                fetch_def_opcode,
+                fetch_def_type);
+            if (fetch_def_type)
+            {
+                if (fetch_def_opcode == SpvOpLoad)
+                {
+                    fetch_image_type = fetch_def_type;
+                }
+                else if (fetch_def_opcode == SpvOpSampledImage)
+                {
+                    uint32_t sampled_image_type = fetch_def_type;
+                    for (size_t scan = 5; scan < in_c;)
+                    {
+                        uint32_t sw = in[scan] >> 16;
+                        uint32_t sop = in[scan] & 0xffffu;
+                        if (sw == 0 || scan + sw > in_c)
+                            break;
+                        if (sop == SpvOpTypeSampledImage &&
+                            sw >= 3 &&
+                            in[scan + 1] == sampled_image_type)
+                        {
+                            fetch_image_type = in[scan + 2];
+                            break;
+                        }
+                        scan += sw;
+                    }
+                }
+            }
             STEREO_LOG(
                 "FS_FETCH_IMAGE_TYPE "
                 "image=%u "
