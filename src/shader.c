@@ -8388,12 +8388,13 @@ bool spirv_patch_stereo_fs(
             op == SpvOpLoad &&
             wc >= 4)
         {
-            uint32_t w[4];
-            memcpy(w, &in[i], sizeof(w));
+            uint32_t pointer_id = in[i + 3];
+            uint32_t pointer_type = 0;
+            uint32_t pointer_target = 0;
             STEREO_LOG(
                 "FS_LOAD_REWRITE_CHECK "
                 "ptr=%u",
-                in[i + 3]);
+                pointer_id);
             STEREO_LOG(
                 "FS_LOAD "
                 "off=%zu "
@@ -8401,49 +8402,105 @@ bool spirv_patch_stereo_fs(
                 "type=%u "
                 "ptr=%u",
                 i,
-                w[2],
-                w[1],
-                w[3]);
-            for (uint32_t v = 0; v < s.n_var; ++v)
+                in[i + 2],
+                in[i + 1],
+                pointer_id);
+            for (size_t scan = 5; scan < in_c;)
             {
-                if (s.vars[v].id != w[3])
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpVariable &&
+                    sw >= 4 &&
+                    in[scan + 2] == pointer_id)
+                {
+                    pointer_type = in[scan + 1];
+                    break;
+                }
+                if ((sop == SpvOpAccessChain ||
+                    sop == SpvOpInBoundsAccessChain ||
+                    sop == SpvOpPtrAccessChain ||
+                    sop == SpvOpInBoundsPtrAccessChain ||
+                    sop == SpvOpCopyObject) &&
+                    sw >= 3 &&
+                    in[scan + 2] == pointer_id)
+                {
+                    pointer_type = in[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+            if (pointer_type != 0)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypePointer &&
+                        sw >= 4 &&
+                        in[scan + 1] == pointer_type)
+                    {
+                        pointer_target = in[scan + 3];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            STEREO_LOG(
+                "FS_LOAD_POINTER_TYPE "
+                "pointer=%u "
+                "pointerType=%u "
+                "pointerTarget=%u",
+                pointer_id,
+                pointer_type,
+                pointer_target);
+            bool load_rewritten = false;
+            for (uint32_t img = 0; img < s.n_img; ++img)
+            {
+                if (!s.images[img].stereo ||
+                    !s.images[img].replacement_type)
                     continue;
-                if (s.vars[v].storage == SpvStorageClassUniformConstant)
+                if (pointer_target != s.images[img].id &&
+                    pointer_target != s.images[img].replacement_type)
+                    continue;
+                if (in[i + 1] != s.images[img].replacement_type)
                 {
                     STEREO_LOG(
-                        "FS_LOAD_MATCH "
-                        "ptr=%u "
-                        "storage=%u "
-                        "binding=%u "
-                        "type=%u",
-                        s.vars[v].id,
-                        s.vars[v].storage,
-                        s.vars[v].binding,
-                        s.vars[v].type);
-                    STEREO_LOG(
-                        "FS_LOAD_PTR "
-                        "ptr=%u "
-                        "type=%u "
-                        "storage=%u "
-                        "binding=%u",
-                        s.vars[v].id,
-                        s.vars[v].type,
-                        s.vars[v].storage,
-                        s.vars[v].binding);
+                        "FS_LOAD_TYPE_REWRITE "
+                        "result=%u "
+                        "oldType=%u "
+                        "newType=%u "
+                        "pointer=%u "
+                        "pointerType=%u "
+                        "pointerTarget=%u "
+                        "image=%u",
+                        in[i + 2],
+                        in[i + 1],
+                        s.images[img].replacement_type,
+                        pointer_id,
+                        pointer_type,
+                        pointer_target,
+                        s.images[img].id);
+                    w[1] = s.images[img].replacement_type;
+                    load_rewritten = true;
+                }
+                break;
+            }
+            if (!load_rewritten)
+            {
+                for (uint32_t v = 0; v < s.n_var; ++v)
+                {
+                    if (s.vars[v].id != pointer_id)
+                        continue;
+                    if (s.vars[v].storage != SpvStorageClassUniformConstant)
+                        continue;
                     int img = fs_find_image_by_owner(&s, s.vars[v].id);
                     if (img >= 0)
                     {
                         FsImageInfo *image = &s.images[img];
-                        STEREO_LOG(
-                            "FS_LOAD_IMAGE "
-                            "owner=%u "
-                            "binding=%u "
-                            "replacementPointer=%u "
-                            "replacementSampled=%u",
-                            image->owner_var,
-                            image->binding,
-                            image->replacement_pointer_type,
-                            image->replacement_sampled_type);
                         if (w[1] == image->sampled_type_id &&
                             image->replacement_sampled_type)
                         {
@@ -8459,58 +8516,24 @@ bool spirv_patch_stereo_fs(
                                 image->binding);
                             w[1] = image->replacement_sampled_type;
                         }
-                        else
-                        {
-                            STEREO_LOG(
-                                "FS_LOAD_NO_TYPE_PATCH "
-                                "result=%u "
-                                "type=%u "
-                                "sampledType=%u "
-                                "replacementSampled=%u "
-                                "binding=%u",
-                                w[2],
-                                w[1],
-                                image->sampled_type_id,
-                                image->replacement_sampled_type,
-                                image->binding);
-                        }
-                        STEREO_LOG(
-                            "FS_LOAD_KEEP_OWNER "
-                            "result=%u "
-                            "ptr=%u "
-                            "owner=%u "
-                            "binding=%u",
-                            w[2],
-                            w[3],
-                            image->owner_var,
-                            image->binding);
-                    }
-                    else
-                    {
-                        STEREO_LOG(
-                            "FS_LOAD_NO_IMAGE "
-                            "ptr=%u",
-                            w[3]);
                     }
                     break;
                 }
             }
             STEREO_LOG(
-                "FS_LOAD_DECL "
-                "resultType=%u "
-                "result=%u "
-                "pointer=%u",
-                in[i + 1],
-                in[i + 2],
-                in[i + 3]);
-            STEREO_LOG(
                 "FS_LOAD_FINAL "
                 "result=%u "
                 "resultType=%u "
-                "ptr=%u",
+                "ptr=%u "
+                "pointerType=%u "
+                "pointerTarget=%u "
+                "rewritten=%u",
                 w[2],
                 w[1],
-                w[3]);
+                w[3],
+                pointer_type,
+                pointer_target,
+                load_rewritten);
             sb_push_n(&ob, w, wc);
             i += wc;
             continue;
@@ -9366,83 +9389,6 @@ bool spirv_patch_stereo_fs(
             free(w);
             i += wc;
             continue;
-        }
-        if (in_func && op == SpvOpLoad && wc >= 4)
-        {
-            uint32_t pointer_id = in[i + 3];
-            uint32_t pointer_type = 0;
-            uint32_t pointer_target = 0;
-            for (size_t scan = 5; scan < in_c;)
-            {
-                uint32_t sw = in[scan] >> 16;
-                uint32_t sop = in[scan] & 0xffffu;
-                if (sw == 0 || scan + sw > in_c)
-                    break;
-                if (sop == SpvOpVariable && sw >= 4 && in[scan + 2] == pointer_id)
-                {
-                    pointer_type = in[scan + 1];
-                    break;
-                }
-                scan += sw;
-            }
-            if (pointer_type != 0)
-            {
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
-                        break;
-                    if (sop == SpvOpTypePointer &&
-                        sw >= 4 &&
-                        in[scan + 1] == pointer_type)
-                    {
-                        pointer_target = in[scan + 3];
-                        break;
-                    }
-                    scan += sw;
-                }
-            }
-            if (pointer_target != 0)
-            {
-                for (uint32_t img = 0; img < s.n_img; ++img)
-                {
-                    if (!s.images[img].stereo ||
-                        !s.images[img].replacement_type)
-                        continue;
-                    if (pointer_target != s.images[img].id &&
-                        pointer_target != s.images[img].replacement_type)
-                        continue;
-                    if (in[i + 1] != s.images[img].replacement_type)
-                    {
-                        STEREO_LOG(
-                            "FS_LOAD_TYPE_REWRITE "
-                            "result=%u "
-                            "oldType=%u "
-                            "newType=%u "
-                            "pointer=%u "
-                            "pointerType=%u "
-                            "pointerTarget=%u "
-                            "image=%u",
-                            in[i + 2],
-                            in[i + 1],
-                            s.images[img].replacement_type,
-                            pointer_id,
-                            pointer_type,
-                            pointer_target,
-                            s.images[img].id);
-                        uint32_t w[4];
-                        memcpy(w, &in[i], sizeof(w));
-                        w[1] = s.images[img].replacement_type;
-                        sb_push_n(&ob, w, wc);
-                        if (w[2] < id_bound)
-                            emitted_type[w[2]] = true;
-                        i += wc;
-                        continue;
-                    }
-                    break;
-                }
-            }
         }
         /* Patch OpSampledImage diagnostic */
         if (in_func && op == SpvOpSampledImage && wc >= 3)
