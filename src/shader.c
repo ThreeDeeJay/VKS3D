@@ -9524,24 +9524,48 @@ bool spirv_patch_stereo_fs(
                     coord_id);
             }
             bool image_type_rewritten = false;
+            uint32_t loaded_image_type = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpLoad &&
+                    sw >= 4 &&
+                    in[scan + 2] == in[i + 3])
+                {
+                    loaded_image_type = in[scan + 1];
+                    STEREO_LOG(
+                        "FS_FETCH_LOAD_TYPE "
+                        "image=%u "
+                        "loadType=%u "
+                        "off=%zu",
+                        in[i + 3],
+                        loaded_image_type,
+                        scan);
+                    break;
+                }
+                scan += sw;
+            }
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
-                if (s.images[img].owner_var != descriptor_var)
-                    continue;
                 if (!s.images[img].stereo)
                     continue;
                 if (!s.images[img].replacement_type)
+                    continue;
+                if (s.images[img].replacement_type != loaded_image_type)
                     continue;
                 image_type_rewritten = true;
                 STEREO_LOG(
                     "FS_FETCH_REWRITTEN_IMAGE "
                     "image=%u "
                     "descriptor=%u "
-                    "originalType=%u "
+                    "loadType=%u "
                     "replacementType=%u",
                     s.images[img].id,
                     descriptor_var,
-                    s.images[img].id,
+                    loaded_image_type,
                     s.images[img].replacement_type);
                 break;
             }
