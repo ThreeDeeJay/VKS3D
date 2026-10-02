@@ -9552,7 +9552,8 @@ bool spirv_patch_stereo_fs(
                 fetch_def_type);
             if (fetch_def_type)
             {
-                if (fetch_def_opcode == SpvOpLoad)
+                if (fetch_def_opcode == SpvOpLoad ||
+                    fetch_def_opcode == SpvOpImage)
                 {
                     fetch_image_type = fetch_def_type;
                 }
