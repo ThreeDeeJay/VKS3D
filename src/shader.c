@@ -8740,35 +8740,63 @@ bool spirv_patch_stereo_fs(
                 descriptor_var,
                 in[i+2]);
             int image_dim = -1;
+            int image_idx = -1;
+            uint32_t loaded_image_type = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpLoad &&
+                    sw >= 4 &&
+                    in[scan + 3] == descriptor_var)
+                {
+                    loaded_image_type = in[scan + 1];
+                    STEREO_LOG(
+                        "FS_SAMPLE_IMAGE_LOAD_TYPE "
+                        "descriptor=%u "
+                        "loadResult=%u "
+                        "loadType=%u "
+                        "off=%zu",
+                        descriptor_var,
+                        in[scan + 2],
+                        loaded_image_type,
+                        scan);
+                    break;
+                }
+                scan += sw;
+            }
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
-                if (s.images[img].owner_var != descriptor_var)
-                    continue;
-                image_dim = (int)s.images[img].dim;
-                STEREO_LOG(
-                    "FS_SAMPLE_IMAGE_DESCRIPTOR "
-                    "descriptor=%u "
-                    "image=%u "
-                    "dim=%u "
-                    "stereo=%u",
-                    descriptor_var,
-                    s.images[img].id,
-                    s.images[img].dim,
-                    s.images[img].stereo);
-                break;
+                if (s.images[img].owner_var == descriptor_var ||
+                    s.images[img].id == loaded_image_type ||
+                    s.images[img].replacement_type == loaded_image_type)
+                {
+                    image_idx = (int)img;
+                    image_dim = (int)s.images[img].dim;
+                    STEREO_LOG(
+                        "FS_SAMPLE_IMAGE_DESCRIPTOR "
+                        "descriptor=%u "
+                        "image=%u "
+                        "dim=%u "
+                        "stereo=%u "
+                        "loadedType=%u "
+                        "replacement=%u",
+                        descriptor_var,
+                        s.images[img].id,
+                        s.images[img].dim,
+                        s.images[img].stereo,
+                        loaded_image_type,
+                        s.images[img].replacement_type);
+                    break;
+                }
             }
             int replacement_2d = 0;
-            for (uint32_t img = 0; img < s.n_img; ++img)
-            {
-                if (s.images[img].owner_var != descriptor_var)
-                    continue;
-                if (s.images[img].dim != SpvDim2D)
-                    continue;
-                if (!s.images[img].replacement_type)
-                    continue;
+            if (image_idx >= 0 &&
+                s.images[image_idx].dim == SpvDim2D &&
+                s.images[image_idx].replacement_type)
                 replacement_2d = 1;
-                break;
-            }
             if (!fs_should_patch_sample(&s, h, descriptor_var) && !replacement_2d)
             {
                 STEREO_LOG(
@@ -8794,11 +8822,13 @@ bool spirv_patch_stereo_fs(
                     "sampledImage=%u "
                     "descriptor=%u "
                     "dim=%d "
-                    "coord=%u",
+                    "coord=%u "
+                    "loadedType=%u",
                     in[i + 3],
                     descriptor_var,
                     image_dim,
-                    coord_id);
+                    coord_id,
+                    loaded_image_type);
                 sb_push_n(&ob, &in[i], wc);
                 if (in[i + 1] < id_bound)
                 {
