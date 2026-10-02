@@ -8388,6 +8388,16 @@ bool spirv_patch_stereo_fs(
             op == SpvOpLoad &&
             wc >= 4)
         {
+            uint32_t *w = malloc(wc * sizeof(uint32_t));
+            if (!w)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                    emitted_type[in[i + 1]] = true;
+                i += wc;
+                continue;
+            }
+            memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t pointer_id = in[i + 3];
             uint32_t pointer_type = 0;
             uint32_t pointer_target = 0;
@@ -8535,6 +8545,9 @@ bool spirv_patch_stereo_fs(
                 pointer_target,
                 load_rewritten);
             sb_push_n(&ob, w, wc);
+            if (w[1] < id_bound)
+                emitted_type[w[1]] = true;
+            free(w);
             i += wc;
             continue;
         }
