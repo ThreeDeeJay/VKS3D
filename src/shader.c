@@ -8612,13 +8612,33 @@ bool spirv_patch_stereo_fs(
                 "ptr=%u "
                 "pointerType=%u "
                 "pointerTarget=%u "
-                "rewritten=%u",
+                "rewritten=%u "
+                "word0=%08x "
+                "word1=%08x "
+                "word2=%08x "
+                "word3=%08x",
                 w[2],
                 w[1],
                 w[3],
                 pointer_type,
                 pointer_target,
-                load_rewritten);
+                load_rewritten,
+                w[0],
+                w[1],
+                w[2],
+                w[3]);
+            STEREO_LOG(
+                "FS_LOAD_TARGET_EMIT "
+                "result=%u "
+                "resultType=%u "
+                "ptr=%u "
+                "expectedType=%u "
+                "word1=%08x",
+                w[2],
+                w[1],
+                w[3],
+                pointer_target,
+                w[1]);
             sb_push_n(&ob, w, wc);
             if (w[1] < id_bound)
                 emitted_type[w[1]] = true;
