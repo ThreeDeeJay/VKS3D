@@ -8628,12 +8628,13 @@ bool spirv_patch_stereo_fs(
                 w[2],
                 w[3]);
             STEREO_LOG(
-                "FS_LOAD_TARGET_EMIT "
+                "FS_LOAD_TARGET_EMIT off=%zu "
                 "result=%u "
                 "resultType=%u "
                 "ptr=%u "
                 "expectedType=%u "
                 "word1=%08x",
+                i,
                 w[2],
                 w[1],
                 w[3],
