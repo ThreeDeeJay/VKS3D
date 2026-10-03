@@ -8283,6 +8283,26 @@ bool spirv_patch_stereo_fs(
             {
                 for (uint32_t img = 0; img < s.n_img; ++img)
                 {
+                    STEREO_LOG(
+                        "FS_VAR_IMAGE_SCAN "
+                        "var=%u "
+                        "image=%u "
+                        "owner=%u "
+                        "set=%u "
+                        "binding=%u "
+                        "oldPtr=%u "
+                        "replacementPtr=%u "
+                        "sampledType=%u "
+                        "replacementSampled=%u",
+                        in[i + 2],
+                        s.images[img].id,
+                        s.images[img].owner_var,
+                        s.images[img].set,
+                        s.images[img].binding,
+                        in[i + 1],
+                        s.images[img].replacement_pointer_type,
+                        s.images[img].sampled_type_id,
+                        s.images[img].replacement_sampled_type);
                     if (s.images[img].owner_var != in[i + 2])
                         continue;
                     if (!s.images[img].replacement_pointer_type ||
@@ -8509,67 +8529,6 @@ bool spirv_patch_stereo_fs(
                 pointer_type,
                 pointer_target);
             bool load_rewritten = false;
-            for (uint32_t img = 0; img < s.n_img; ++img)
-            {
-                if (!s.images[img].stereo ||
-                    !s.images[img].replacement_type)
-                    continue;
-                if (pointer_target == s.images[img].replacement_type)
-                {
-                    if (in[i + 1] == s.images[img].replacement_type)
-                        load_rewritten = true;
-                    else
-                    {
-                        STEREO_LOG(
-                            "FS_LOAD_IMAGE_TYPE_REWRITE "
-                            "result=%u "
-                            "oldType=%u "
-                            "newType=%u "
-                            "pointer=%u "
-                            "pointerType=%u "
-                            "pointerTarget=%u "
-                            "image=%u",
-                            in[i + 2],
-                            in[i + 1],
-                            s.images[img].replacement_type,
-                            pointer_id,
-                            pointer_type,
-                            pointer_target,
-                            s.images[img].id);
-                        w[1] = s.images[img].replacement_type;
-                        load_rewritten = true;
-                    }
-                    break;
-                }
-                if (s.images[img].replacement_sampled_type &&
-                    pointer_target == s.images[img].replacement_sampled_type)
-                {
-                    if (in[i + 1] == s.images[img].replacement_sampled_type)
-                        load_rewritten = true;
-                    else
-                    {
-                        STEREO_LOG(
-                            "FS_LOAD_SAMPLED_TYPE_REWRITE "
-                            "result=%u "
-                            "oldType=%u "
-                            "newType=%u "
-                            "pointer=%u "
-                            "pointerType=%u "
-                            "pointerTarget=%u "
-                            "sampledType=%u",
-                            in[i + 2],
-                            in[i + 1],
-                            s.images[img].replacement_sampled_type,
-                            pointer_id,
-                            pointer_type,
-                            pointer_target,
-                            s.images[img].sampled_type_id);
-                        w[1] = s.images[img].replacement_sampled_type;
-                        load_rewritten = true;
-                    }
-                    break;
-                }
-            }
             if (!load_rewritten)
             {
                 for (uint32_t v = 0; v < s.n_var; ++v)
@@ -8652,8 +8611,6 @@ bool spirv_patch_stereo_fs(
                 pointer_target,
                 w[1]);
             sb_push_n(&ob, w, wc);
-            if (w[1] < id_bound)
-                emitted_type[w[1]] = true;
             free(w);
             i += wc;
             continue;
