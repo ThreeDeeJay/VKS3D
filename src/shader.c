@@ -8586,25 +8586,6 @@ bool spirv_patch_stereo_fs(
                     break;
                 }
             }
-            if (pointer_target != 0 && w[1] != pointer_target)
-            {
-                STEREO_LOG(
-                    "FS_LOAD_FORCE_POINTER_TARGET "
-                    "result=%u "
-                    "oldType=%u "
-                    "newType=%u "
-                    "ptr=%u "
-                    "pointerType=%u "
-                    "pointerTarget=%u",
-                    w[2],
-                    w[1],
-                    pointer_target,
-                    w[3],
-                    pointer_type,
-                    pointer_target);
-                w[1]=pointer_target;
-                load_rewritten=true;
-            }
             STEREO_LOG(
                 "FS_LOAD_FINAL "
                 "result=%u "
