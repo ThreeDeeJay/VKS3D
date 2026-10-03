@@ -8288,6 +8288,21 @@ bool spirv_patch_stereo_fs(
                     if (!s.images[img].replacement_pointer_type ||
                         !s.images[img].replacement_sampled_type)
                         continue;
+                    if (in[i + 2] == 931)
+                    {
+                        STEREO_LOG(
+                            "FS_VAR_931_MATCH "
+                            "oldPtr=%u "
+                            "replacementPtr=%u "
+                            "sampledType=%u "
+                            "replacementSampled=%u "
+                            "image=%u",
+                            in[i + 1],
+                            s.images[img].replacement_pointer_type,
+                            s.images[img].sampled_type_id,
+                            s.images[img].replacement_sampled_type,
+                            s.images[img].id);
+                    }
                     if (s.images[img].replacement_pointer_type >= id_bound ||
                         s.images[img].replacement_sampled_type >= id_bound)
                     {
@@ -8564,6 +8579,21 @@ bool spirv_patch_stereo_fs(
                     if (s.vars[v].storage != SpvStorageClassUniformConstant)
                         continue;
                     int img = fs_find_image_by_owner(&s, s.vars[v].id);
+                    if (pointer_id == 931 && w[2] == 2168)
+                    {
+                        STEREO_LOG(
+                            "FS_LOAD_2168_OWNER "
+                            "var=%u "
+                            "img=%d "
+                            "resultType=%u "
+                            "sampledType=%u "
+                            "replacementSampled=%u",
+                            s.vars[v].id,
+                            img,
+                            w[1],
+                            img >= 0 ? s.images[img].sampled_type_id : 0,
+                            img >= 0 ? s.images[img].replacement_sampled_type : 0);
+                    }
                     if (img >= 0)
                     {
                         FsImageInfo *image = &s.images[img];
