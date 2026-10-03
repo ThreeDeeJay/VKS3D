@@ -8279,11 +8279,11 @@ bool spirv_patch_stereo_fs(
                 in[i + 1],
                 in[i + 3]);
             bool patched = false;
+            uint32_t variable_id = in[i + 2];
+            uint32_t variable_pointer_type = in[i + 1];
+            uint32_t variable_target_type = 0;
             if (in[i + 3] == SpvStorageClassUniformConstant)
             {
-                uint32_t variable_id = in[i + 2];
-                uint32_t variable_pointer_type = in[i + 1];
-                uint32_t variable_target_type = 0;
                 for (size_t scan = 5; scan < in_c;)
                 {
                     uint32_t sw = in[scan] >> 16;
@@ -8536,72 +8536,48 @@ bool spirv_patch_stereo_fs(
                 pointer_type,
                 pointer_target);
             bool load_rewritten = false;
-            if (!load_rewritten)
+            if (!load_rewritten &&
+                pointer_target != 0)
             {
-                for (uint32_t v = 0; v < s.n_var; ++v)
+                int img = -1;
+                for (uint32_t j = 0; j < s.n_img; ++j)
                 {
-                    if (s.vars[v].id != pointer_id)
+                    if (!s.images[j].stereo)
                         continue;
-                    if (s.vars[v].storage != SpvStorageClassUniformConstant)
+                    if (s.images[j].id != pointer_target)
                         continue;
-                    uint32_t variable_pointer_type = s.vars[v].type_id;
-                    uint32_t variable_target_type = 0;
-                    for (size_t scan = 5; scan < in_c;)
-                    {
-                        uint32_t sw = in[scan] >> 16;
-                        uint32_t sop = in[scan] & 0xffffu;
-                        if (sw == 0 || scan + sw > in_c)
-                            break;
-                        if (sop == SpvOpTypePointer &&
-                            sw >= 4 &&
-                            in[scan + 1] == variable_pointer_type)
-                        {
-                            variable_target_type = in[scan + 3];
-                            break;
-                        }
-                        scan += sw;
-                    }
-                    int img = -1;
-                    for (uint32_t j = 0; j < s.n_img; ++j)
-                    {
-                        if (!s.images[j].stereo)
-                            continue;
-                        if (s.images[j].id != variable_target_type)
-                            continue;
-                        img = (int)j;
-                        break;
-                    }
-                    STEREO_LOG(
-                        "FS_LOAD_IMAGE_MATCH "
-                        "var=%u "
-                        "ptrType=%u "
-                        "targetType=%u "
-                        "img=%d",
-                        pointer_id,
-                        variable_pointer_type,
-                        variable_target_type,
-                        img);
-                    if (img >= 0)
-                    {
-                        FsImageInfo *image = &s.images[img];
-                        if (w[1] == image->sampled_type_id &&
-                            image->replacement_sampled_type)
-                        {
-                            STEREO_LOG(
-                                "FS_LOAD_PATCH "
-                                "result=%u "
-                                "oldType=%u "
-                                "newType=%u "
-                                "binding=%u",
-                                w[2],
-                                w[1],
-                                image->replacement_sampled_type,
-                                image->binding);
-                            w[1] = image->replacement_sampled_type;
-                            load_rewritten = true;
-                        }
-                    }
+                    img = (int)j;
                     break;
+                }
+                STEREO_LOG(
+                    "FS_LOAD_IMAGE_MATCH "
+                    "ptr=%u "
+                    "pointerType=%u "
+                    "pointerTarget=%u "
+                    "img=%d",
+                    pointer_id,
+                    pointer_type,
+                    pointer_target,
+                    img);
+                if (img >= 0)
+                {
+                    FsImageInfo *image = &s.images[img];
+                    if (w[1] == image->sampled_type_id &&
+                        image->replacement_sampled_type)
+                    {
+                        STEREO_LOG(
+                            "FS_LOAD_PATCH "
+                            "result=%u "
+                            "oldType=%u "
+                            "newType=%u "
+                            "binding=%u",
+                            w[2],
+                            w[1],
+                            image->replacement_sampled_type,
+                            image->binding);
+                        w[1] = image->replacement_sampled_type;
+                        load_rewritten = true;
+                    }
                 }
             }
             STEREO_LOG(
