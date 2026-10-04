@@ -8295,18 +8295,22 @@ bool spirv_patch_stereo_fs(
                         !image->replacement_pointer_type ||
                         !image->replacement_sampled_type)
                         continue;
-                    if (variable_target_type != image->id)
+                    if (image->owner_var != variable_id &&
+                        (variable_target_type == 0 ||
+                            variable_target_type != image->id))
                         continue;
                     STEREO_LOG(
                         "FS_VAR_IMAGE_MATCH "
                         "var=%u "
                         "image=%u "
+                        "owner=%u "
                         "targetType=%u "
                         "replacementPtr=%u "
                         "sampledType=%u "
                         "replacementSampled=%u",
                         variable_id,
                         image->id,
+                        image->owner_var,
                         variable_target_type,
                         image->replacement_pointer_type,
                         image->sampled_type_id,
