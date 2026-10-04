@@ -9361,7 +9361,7 @@ bool spirv_patch_stereo_fs(
                         s.images[img].id,
                         s.images[img].dim,
                         s.images[img].stereo,
-                        s.images[img].sampledType,
+                        s.images[img].sampled_type_id,
                         s.images[img].owner_var,
                         s.images[img].binding);
                     STEREO_LOG(
