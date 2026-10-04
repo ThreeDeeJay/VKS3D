@@ -7654,12 +7654,7 @@ bool spirv_patch_stereo_fs(
             uint32_t sampled_id = in[i + 1];
             uint32_t image_type = in[i + 2];
             bool patch_sampled = false;
-            STEREO_LOG(
-                "FS_SAMPLED_IMAGE_DECL "
-                "result=%u "
-                "imageType=%u",
-                sampled_id,
-                image_type);
+            uint32_t replacement_image = 0;
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 if (!s.images[img].stereo ||
@@ -7668,6 +7663,8 @@ bool spirv_patch_stereo_fs(
                     continue;
                 if (s.images[img].replacement_type >= id_bound)
                     continue;
+                replacement_image = s.images[img].replacement_type;
+                patch_sampled = true;
                 STEREO_LOG(
                     "FS_SAMPLED_IMAGE_MATCH "
                     "idx=%u "
@@ -7679,10 +7676,27 @@ bool spirv_patch_stereo_fs(
                     img,
                     sampled_id,
                     image_type,
-                    s.images[img].replacement_type,
+                    replacement_image,
                     s.images[img].owner_var,
                     s.images[img].binding);
-                uint32_t replacement_image = s.images[img].replacement_type;
+                break;
+            }
+            if (sampled_id < id_bound &&
+                emitted_type[sampled_id])
+            {
+                STEREO_LOG(
+                    "FS_SAMPLED_IMAGE_SKIP_DUP "
+                    "result=%u "
+                    "imageType=%u "
+                    "replacementImage=%u",
+                    sampled_id,
+                    image_type,
+                    replacement_image);
+                i += wc;
+                continue;
+            }
+            if (patch_sampled)
+            {
                 uint32_t w[3];
                 memcpy(w, &in[i], sizeof(w));
                 w[2] = replacement_image;
@@ -7694,24 +7708,15 @@ bool spirv_patch_stereo_fs(
                     sampled_id,
                     image_type,
                     w[2]);
-                if (sampled_id < id_bound &&
-                    !emitted_type[sampled_id])
-                {
-                    sb_push_n(&ob, w, 3);
+                sb_push_n(&ob, w, 3);
+                if (sampled_id < id_bound)
                     emitted_type[sampled_id] = true;
-                }
-                patch_sampled = true;
-                break;
             }
-            if (!patch_sampled)
+            else
             {
-                if (sampled_id >= id_bound ||
-                    !emitted_type[sampled_id])
-                {
-                    sb_push_n(&ob, &in[i], wc);
-                    if (sampled_id < id_bound)
-                        emitted_type[sampled_id] = true;
-                }
+                sb_push_n(&ob, &in[i], wc);
+                if (sampled_id < id_bound)
+                    emitted_type[sampled_id] = true;
             }
             i += wc;
             continue;
