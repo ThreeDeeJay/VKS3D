@@ -7741,6 +7741,8 @@ bool spirv_patch_stereo_fs(
                     continue;
                 if (emitted_type[image->replacement_pointer_type])
                     continue;
+                if (!emitted_type[replacement_target])
+                    continue;
                 uint32_t w[4] =
                 {
                     (4u << 16) | SpvOpTypePointer,
