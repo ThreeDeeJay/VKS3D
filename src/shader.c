@@ -7683,47 +7683,6 @@ bool spirv_patch_stereo_fs(
                     s.images[img].owner_var,
                     s.images[img].binding);
                 uint32_t replacement_image = s.images[img].replacement_type;
-                uint32_t existing_sampled = 0;
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
-                        break;
-                    if (sop == SpvOpTypeSampledImage &&
-                        sw >= 3 &&
-                        in[scan + 2] == replacement_image &&
-                        in[scan + 1] != sampled_id)
-                    {
-                        existing_sampled = in[scan + 1];
-                        break;
-                    }
-                    scan += sw;
-                }
-                if (existing_sampled != 0)
-                {
-                    STEREO_LOG(
-                        "FS_SAMPLED_IMAGE_REUSE "
-                        "result=%u "
-                        "oldImageType=%u "
-                        "newImageType=%u "
-                        "existingSampled=%u",
-                        sampled_id,
-                        image_type,
-                        replacement_image,
-                        existing_sampled);
-                    for (uint32_t copy = 0; copy < s.n_img; ++copy)
-                    {
-                        if (s.images[copy].sampled_type_id != sampled_id)
-                            continue;
-                        s.images[copy].replacement_sampled_type = existing_sampled;
-                        s.images[copy].replacement_type = replacement_image;
-                    }
-                    if (sampled_id < id_bound)
-                        emitted_type[sampled_id] = true;
-                    patch_sampled = true;
-                    break;
-                }
                 uint32_t w[3];
                 memcpy(w, &in[i], sizeof(w));
                 w[2] = replacement_image;
