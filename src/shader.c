@@ -9209,6 +9209,26 @@ bool spirv_patch_stereo_fs(
                     if (s.images[img].id != sampled_image_type &&
                         s.images[img].replacement_type != sampled_image_type)
                         continue;
+                    if (s.images[img].replacement_type >= id_bound ||
+                        !emitted_type[s.images[img].replacement_type])
+                    {
+                        STEREO_LOG(
+                            "FS_OPIMAGE_TYPE_SKIP_UNEMITTED "
+                            "result=%u "
+                            "oldType=%u "
+                            "replacementType=%u "
+                            "sampledImage=%u "
+                            "image=%u "
+                            "emitted=%u",
+                            w[2],
+                            w[1],
+                            s.images[img].replacement_type,
+                            in[i + 3],
+                            s.images[img].id,
+                            s.images[img].replacement_type < id_bound ?
+                            emitted_type[s.images[img].replacement_type] : 0);
+                        continue;
+                    }
                     STEREO_LOG(
                         "FS_OPIMAGE_TYPE_REWRITE "
                         "result=%u "
@@ -9304,7 +9324,9 @@ bool spirv_patch_stereo_fs(
                         owner,
                         s.images[img].sampled_type_id,
                         s.images[img].replacement_type);
-                    if (s.images[img].replacement_type)
+                    if (s.images[img].replacement_type &&
+                        s.images[img].replacement_type < id_bound &&
+                        emitted_type[s.images[img].replacement_type])
                     {
                         w[1] = s.images[img].replacement_type;
                         STEREO_LOG(
@@ -9386,7 +9408,9 @@ bool spirv_patch_stereo_fs(
                                 continue;
                             if (s.images[img].sampled_type_id != (uint32_t)loaded_type)
                                 continue;
-                            if (!s.images[img].replacement_type)
+                            if (!s.images[img].replacement_type ||
+                                s.images[img].replacement_type >= id_bound ||
+                                !emitted_type[s.images[img].replacement_type])
                                 continue;
                             STEREO_LOG(
                                 "FS_PATCH_TYPE_MATCH "
@@ -9436,7 +9460,9 @@ bool spirv_patch_stereo_fs(
                             continue;
                         if (s.images[img].sampled_type_id != sampled_type)
                             continue;
-                        if (!s.images[img].replacement_type)
+                        if (!s.images[img].replacement_type ||
+                            s.images[img].replacement_type >= id_bound ||
+                            !emitted_type[s.images[img].replacement_type])
                             continue;
                         STEREO_LOG(
                             "FS_PATCH_IMAGE_TYPE_MATCH "
