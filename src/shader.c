@@ -8535,33 +8535,44 @@ bool spirv_patch_stereo_fs(
                 pointer_target != 0)
             {
                 int img = -1;
+                uint32_t replacement_load_type = 0;
                 for (uint32_t j = 0; j < s.n_img; ++j)
                 {
                     FsImageInfo *image = &s.images[j];
                     if (!image->stereo)
                         continue;
-                    if (image->id != pointer_target &&
-                        image->replacement_type != pointer_target)
-                        continue;
-                    img = (int)j;
-                    break;
+                    if (image->id == pointer_target ||
+                        image->replacement_type == pointer_target)
+                    {
+                        img = (int)j;
+                        replacement_load_type = image->replacement_type;
+                        break;
+                    }
+                    if (image->sampled_type_id == pointer_target ||
+                        image->replacement_sampled_type == pointer_target)
+                    {
+                        img = (int)j;
+                        replacement_load_type = image->replacement_sampled_type;
+                        break;
+                    }
                 }
                 STEREO_LOG(
                     "FS_LOAD_IMAGE_MATCH "
                     "ptr=%u "
                     "pointerType=%u "
                     "pointerTarget=%u "
-                    "img=%d",
+                    "img=%d "
+                    "replacementLoadType=%u",
                     pointer_id,
                     pointer_type,
                     pointer_target,
-                    img);
-                if (img >= 0)
+                    img,
+                    replacement_load_type);
+                if (img >= 0 &&
+                    replacement_load_type != 0 &&
+                    w[1] != replacement_load_type)
                 {
                     FsImageInfo *image = &s.images[img];
-                    if (pointer_target != 0 &&
-                        w[1] != pointer_target)
-                    {
                         STEREO_LOG(
                             "FS_LOAD_PATCH "
                             "result=%u "
@@ -8570,11 +8581,10 @@ bool spirv_patch_stereo_fs(
                             "binding=%u",
                             w[2],
                             w[1],
-                            pointer_target,
+                            replacement_load_type,
                             image->binding);
-                        w[1] = pointer_target;
+                        w[1] = replacement_load_type;
                         load_rewritten = true;
-                    }
                 }
             }
             if (!load_rewritten &&
