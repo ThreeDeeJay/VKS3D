@@ -8516,6 +8516,28 @@ bool spirv_patch_stereo_fs(
                     scan += sw;
                 }
             }
+            for (uint32_t j = 0; j < s.n_img; ++j)
+            {
+                FsImageInfo *image = &s.images[j];
+                if (!image->stereo ||
+                    image->owner_var != pointer_id ||
+                    !image->replacement_pointer_type)
+                    continue;
+                if (pointer_target == image->sampled_type_id &&
+                    image->replacement_sampled_type)
+                {
+                    pointer_type = image->replacement_pointer_type;
+                    pointer_target = image->replacement_sampled_type;
+                    break;
+                }
+                if (pointer_target == image->id &&
+                    image->replacement_type)
+                {
+                    pointer_type = image->replacement_pointer_type;
+                    pointer_target = image->replacement_type;
+                    break;
+                }
+            }
             STEREO_LOG(
                 "FS_LOAD_POINTER_TYPE "
                 "pointer=%u "
