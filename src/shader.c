@@ -8558,15 +8558,17 @@ bool spirv_patch_stereo_fs(
                         break;
                     }
                 }
-                for (uint32_t img = 0; img < s.n_img; ++img)
+                for (uint32_t j = 0; j < s.n_img; ++j)
                 {
-                    if (!s.images[img].stereo ||
-                        !s.images[img].replacement_pointer_type)
+                    FsImageInfo *image = &s.images[j];
+                    if (!image->stereo ||
+                        !image->replacement_pointer_type)
                         continue;
-                    if (ptr_id == s.images[img].replacement_pointer_type)
+                    if (pointer_id == image->replacement_pointer_type)
                     {
-                        replacement_pointer_type = s.images[img].replacement_pointer_type;
-                        replacement_load_type = s.images[img].replacement_sampled_type;
+                        img = (int)j;
+                        replacement_pointer_type = image->replacement_pointer_type;
+                        replacement_load_type = image->replacement_sampled_type;
                         break;
                     }
                 }
@@ -8575,7 +8577,6 @@ bool spirv_patch_stereo_fs(
                 {
                     pointer_type = replacement_pointer_type;
                     pointer_target = replacement_load_type;
-                    result_type = replacement_load_type;
                 }
                 STEREO_LOG(
                     "FS_LOAD_IMAGE_MATCH "
