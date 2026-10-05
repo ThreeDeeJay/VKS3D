@@ -8589,8 +8589,7 @@ bool spirv_patch_stereo_fs(
                         load_rewritten = true;
                 }
             }
-            if (!load_rewritten &&
-                pointer_target != 0 &&
+            if (pointer_target != 0 &&
                 w[1] != pointer_target)
             {
                 STEREO_LOG(
