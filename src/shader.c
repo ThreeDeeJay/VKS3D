@@ -7311,8 +7311,6 @@ bool spirv_patch_stereo_fs(
         }
         s.images[img].replacement_type = replacement;
         s.images[img].replacement_sampled_type = replacement_sampled;
-        if (replacement_sampled < id_bound)
-            claimed_type[replacement_sampled] = true;
         STEREO_LOG(
             "FS_REPLACEMENT_ASSIGN "
             "idx=%u "
@@ -7375,10 +7373,8 @@ bool spirv_patch_stereo_fs(
         return false;
     uint32_t id_bound = new_bound;
     bool *emitted_type = calloc(id_bound, sizeof(*emitted_type));
-    bool *claimed_type = calloc(id_bound, sizeof(*claimed_type));
-    if (!emitted_type || !claimed_type)
+    if (!emitted_type)
     {
-        free(claimed_type);
         free(emitted_type);
         sb_free(&ob);
         return false;
@@ -7721,28 +7717,6 @@ bool spirv_patch_stereo_fs(
                     "imageType=%u",
                     sampled_id,
                     image_type);
-                if (sampled_id < id_bound && claimed_type[sampled_id])
-                {
-                    uint32_t replacement_image = 0;
-                    for (uint32_t img = 0; img < s.n_img; ++img)
-                    {
-                        if (s.images[img].replacement_sampled_type == sampled_id)
-                        {
-                            replacement_image = s.images[img].replacement_type;
-                            break;
-                        }
-                    }
-                    if (replacement_image != 0)
-                    {
-                        uint32_t w[3];
-                        memcpy(w, &in[i], sizeof(w));
-                        w[2] = replacement_image;
-                        sb_push_n(&ob, w, 3);
-                        emitted_type[sampled_id] = true;
-                    }
-                    i += wc;
-                    continue;
-                }
                 sb_push_n(&ob, &in[i], wc);
                 if (sampled_id < id_bound)
                     emitted_type[sampled_id] = true;
