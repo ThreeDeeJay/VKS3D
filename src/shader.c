@@ -8542,17 +8542,19 @@ bool spirv_patch_stereo_fs(
                     if (!image->stereo)
                         continue;
                     if (image->replacement_type &&
-                        image->replacement_type == pointer_target)
+                        image->replacement_type == pointer_target &&
+                        image->replacement_pointer_type == pointer_type)
                     {
                         img = (int)j;
-                        replacement_load_type = image->replacement_type;
+                        replacement_load_type = pointer_target;
                         break;
                     }
                     if (image->replacement_sampled_type &&
-                        image->replacement_sampled_type == pointer_target)
+                        image->replacement_sampled_type == pointer_target &&
+                        image->replacement_pointer_type == pointer_type)
                     {
                         img = (int)j;
-                        replacement_load_type = image->replacement_sampled_type;
+                        replacement_load_type = pointer_target;
                         break;
                     }
                 }
