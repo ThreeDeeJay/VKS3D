@@ -8541,14 +8541,14 @@ bool spirv_patch_stereo_fs(
                     FsImageInfo *image = &s.images[j];
                     if (!image->stereo)
                         continue;
-                    if (image->id == pointer_target ||
+                    if (image->replacement_type &&
                         image->replacement_type == pointer_target)
                     {
                         img = (int)j;
                         replacement_load_type = image->replacement_type;
                         break;
                     }
-                    if (image->sampled_type_id == pointer_target ||
+                    if (image->replacement_sampled_type &&
                         image->replacement_sampled_type == pointer_target)
                     {
                         img = (int)j;
