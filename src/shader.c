@@ -8525,7 +8525,20 @@ bool spirv_patch_stereo_fs(
                     {
                         img = (int)j;
                         replacement_pointer_type = image->replacement_pointer_type;
-                        replacement_load_type = spirv_get_pointer_pointee_type(in,in_c,replacement_pointer_type);
+                        if (pointer_target == image->sampled_type_id)
+                            replacement_load_type = image->replacement_sampled_type;
+                        else if (pointer_target == image->id)
+                            replacement_load_type = image->replacement_type;
+                        break;
+                    }
+                    if (pointer_type == image->pointer_type)
+                    {
+                        img = (int)j;
+                        replacement_pointer_type = image->replacement_pointer_type;
+                        if (pointer_target == image->sampled_type_id)
+                            replacement_load_type = image->replacement_sampled_type;
+                        else if (pointer_target == image->id)
+                            replacement_load_type = image->replacement_type;
                         break;
                     }
                 }
