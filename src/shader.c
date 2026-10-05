@@ -9660,7 +9660,6 @@ bool spirv_patch_stereo_fs(
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t old_result_type = w[1];
             uint32_t old_result_id = w[2];
-            uint32_t query_v3_id = samp_nid++;
             if (!s.v3int_id)
             {
                 STEREO_LOG(
@@ -9676,6 +9675,18 @@ bool spirv_patch_stereo_fs(
                 i += wc;
                 continue;
             }
+            if (old_result_type == s.v3int_id)
+            {
+                sb_push_n(&ob, w, wc);
+                if (w[1] < id_bound)
+                {
+                    emitted_type[w[1]] = true;
+                }
+                free(w);
+                i += wc;
+                continue;
+            }
+            uint32_t query_v3_id = samp_nid++;
             w[1] = s.v3int_id;
             w[2] = query_v3_id;
             STEREO_LOG(
