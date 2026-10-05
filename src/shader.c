@@ -7664,7 +7664,7 @@ bool spirv_patch_stereo_fs(
                     continue;
                 if (s.images[img].replacement_type >= id_bound)
                     continue;
-                if (s.images[img].replacement_sampled_type >= id_bound)
+                if (s.images[img].replacement_sampled_type != sampled_id)
                     continue;
                 if (s.images[img].replacement_type == image_type)
                     continue;
@@ -8458,9 +8458,6 @@ bool spirv_patch_stereo_fs(
             uint32_t pointer_id = in[i + 3];
             uint32_t pointer_type = 0;
             uint32_t pointer_target = 0;
-            uint32_t replacement_pointer_type = 0;
-            uint32_t replacement_load_type = 0;
-            pointer_target = spirv_get_pointer_pointee_type(in,in_c,pointer_id);
             STEREO_LOG(
                 "FS_LOAD_REWRITE_CHECK "
                 "ptr=%u",
@@ -8475,6 +8472,50 @@ bool spirv_patch_stereo_fs(
                 in[i + 2],
                 in[i + 1],
                 pointer_id);
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpVariable &&
+                    sw >= 4 &&
+                    in[scan + 2] == pointer_id)
+                {
+                    pointer_type = in[scan + 1];
+                    break;
+                }
+                if ((sop == SpvOpAccessChain ||
+                    sop == SpvOpInBoundsAccessChain ||
+                    sop == SpvOpPtrAccessChain ||
+                    sop == SpvOpInBoundsPtrAccessChain ||
+                    sop == SpvOpCopyObject) &&
+                    sw >= 3 &&
+                    in[scan + 2] == pointer_id)
+                {
+                    pointer_type = in[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+            if (pointer_type != 0)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypePointer &&
+                        sw >= 4 &&
+                        in[scan + 1] == pointer_type)
+                    {
+                        pointer_target = in[scan + 3];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
             STEREO_LOG(
                 "FS_LOAD_POINTER_TYPE "
                 "pointer=%u "
@@ -8514,40 +8555,6 @@ bool spirv_patch_stereo_fs(
                         replacement_load_type = image->replacement_sampled_type;
                         break;
                     }
-                }
-                for (uint32_t j = 0; j < s.n_img; ++j)
-                {
-                    FsImageInfo *image = &s.images[j];
-                    if (!image->stereo ||
-                        !image->replacement_pointer_type)
-                        continue;
-                    if (pointer_id == image->replacement_pointer_type)
-                    {
-                        img = (int)j;
-                        replacement_pointer_type = image->replacement_pointer_type;
-                        if (pointer_target == image->sampled_type_id)
-                            replacement_load_type = image->replacement_sampled_type;
-                        else if (pointer_target == image->id)
-                            replacement_load_type = image->replacement_type;
-                        break;
-                    }
-                    if (pointer_type == image->pointer_type)
-                    {
-                        img = (int)j;
-                        replacement_pointer_type = image->replacement_pointer_type;
-                        if (pointer_target == image->sampled_type_id)
-                            replacement_load_type = image->replacement_sampled_type;
-                        else if (pointer_target == image->id)
-                            replacement_load_type = image->replacement_type;
-                        break;
-                    }
-                }
-                if (replacement_pointer_type &&
-                    replacement_load_type &&
-                    replacement_load_type < id_bound)
-                {
-                    pointer_type = replacement_pointer_type;
-                    pointer_target = replacement_load_type;
                 }
                 STEREO_LOG(
                     "FS_LOAD_IMAGE_MATCH "
