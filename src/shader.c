@@ -7664,8 +7664,6 @@ bool spirv_patch_stereo_fs(
                     continue;
                 if (s.images[img].replacement_type >= id_bound)
                     continue;
-                if (s.images[img].replacement_sampled_type != sampled_id)
-                    continue;
                 if (s.images[img].replacement_type == image_type)
                     continue;
                 replacement_image = s.images[img].replacement_type;
@@ -7687,6 +7685,53 @@ bool spirv_patch_stereo_fs(
                     s.images[img].binding);
                 break;
             }
+            bool sampled_type_used_by_image = false;
+            if (patch_sampled &&
+                replacement_sampled != sampled_id)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpImage &&
+                        sw >= 4)
+                    {
+                        uint32_t sampled_object = in[scan + 3];
+                        for (size_t def = 5; def < in_c;)
+                        {
+                            uint32_t dw = in[def] >> 16;
+                            uint32_t dop = in[def] & 0xffffu;
+                            if (dw == 0 || def + dw > in_c)
+                                break;
+                            if (dw >= 3 &&
+                                in[def + 2] == sampled_object &&
+                                in[def + 1] == sampled_id)
+                            {
+                                sampled_type_used_by_image = true;
+                                break;
+                            }
+                            def += dw;
+                        }
+                        if (sampled_type_used_by_image)
+                            break;
+                    }
+                    scan += sw;
+                }
+                STEREO_LOG(
+                    "FS_SAMPLED_IMAGE_USE_CHECK "
+                    "result=%u "
+                    "replacementSampled=%u "
+                    "usedByImage=%u",
+                    sampled_id,
+                    replacement_sampled,
+                    sampled_type_used_by_image);
+            }
+            if (patch_sampled &&
+                replacement_sampled != sampled_id &&
+                !sampled_type_used_by_image)
+                patch_sampled = false;
             if (sampled_id < id_bound &&
                 emitted_type[sampled_id])
             {
@@ -7713,7 +7758,18 @@ bool spirv_patch_stereo_fs(
                     image_type,
                     replacement_image,
                     replacement_sampled);
-                sb_push_n(&ob, &in[i], wc);
+                uint32_t w[3];
+                memcpy(w, &in[i], sizeof(w));
+                w[2] = replacement_image;
+                STEREO_LOG(
+                    "FS_SAMPLED_IMAGE_PATCH "
+                    "result=%u "
+                    "oldImageType=%u "
+                    "newImageType=%u",
+                    sampled_id,
+                    image_type,
+                    w[2]);
+                sb_push_n(&ob, w, 3);
                 if (sampled_id < id_bound)
                     emitted_type[sampled_id] = true;
             }
