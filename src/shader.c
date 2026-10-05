@@ -7759,7 +7759,7 @@ bool spirv_patch_stereo_fs(
                 if (image->replacement_pointer_type >= id_bound ||
                     replacement_target >= id_bound)
                     continue;
-                if (emitted_type[image->replacement_pointer_type])
+                if (image->replacement_pointer_type == pointer_id)
                     continue;
                 uint32_t w[4] =
                 {
