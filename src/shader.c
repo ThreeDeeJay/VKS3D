@@ -7759,7 +7759,7 @@ bool spirv_patch_stereo_fs(
                 if (image->replacement_pointer_type >= id_bound ||
                     replacement_target >= id_bound)
                     continue;
-                if (image->replacement_pointer_type == pointer_id)
+                if (emitted_type[image->replacement_pointer_type])
                     continue;
                 uint32_t w[4] =
                 {
@@ -8564,19 +8564,17 @@ bool spirv_patch_stereo_fs(
                     if (!image->stereo)
                         continue;
                     if (image->replacement_type &&
-                        image->replacement_type == pointer_target &&
-                        image->replacement_pointer_type == pointer_type)
+                        image->replacement_type == pointer_target)
                     {
                         img = (int)j;
-                        replacement_load_type = pointer_target;
+                        replacement_load_type = image->replacement_type;
                         break;
                     }
                     if (image->replacement_sampled_type &&
-                        image->replacement_sampled_type == pointer_target &&
-                        image->replacement_pointer_type == pointer_type)
+                        image->replacement_sampled_type == pointer_target)
                     {
                         img = (int)j;
-                        replacement_load_type = pointer_target;
+                        replacement_load_type = image->replacement_sampled_type;
                         break;
                     }
                 }
@@ -8611,7 +8609,8 @@ bool spirv_patch_stereo_fs(
                         load_rewritten = true;
                 }
             }
-            if (pointer_target != 0 &&
+            if (!load_rewritten &&
+                pointer_target != 0 &&
                 w[1] != pointer_target)
             {
                 STEREO_LOG(
