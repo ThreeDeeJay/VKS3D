@@ -7733,7 +7733,8 @@ bool spirv_patch_stereo_fs(
                 !sampled_type_used_by_image)
                 patch_sampled = false;
             if (sampled_id < id_bound &&
-                emitted_type[sampled_id])
+                emitted_type[sampled_id] &&
+                replacement_sampled != sampled_id)
             {
                 STEREO_LOG(
                     "FS_SAMPLED_IMAGE_SKIP_DUP "
