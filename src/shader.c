@@ -8525,6 +8525,20 @@ bool spirv_patch_stereo_fs(
                     pointer_type = in[scan + 1];
                     break;
                 }
+                if (sop == SpvOpFunctionParameter &&
+                    sw >= 3 &&
+                    in[scan + 2] == pointer_id)
+                {
+                    pointer_type = in[scan + 1];
+                    break;
+                }
+                if (sop == SpvOpFunctionParameter &&
+                    sw >= 3 &&
+                    in[scan + 2] == pointer_id)
+                {
+                    pointer_type = in[scan + 1];
+                    break;
+                }
                 if ((sop == SpvOpAccessChain ||
                     sop == SpvOpInBoundsAccessChain ||
                     sop == SpvOpPtrAccessChain ||
@@ -8657,6 +8671,28 @@ bool spirv_patch_stereo_fs(
                 pointer_target != 0 &&
                 w[1] != pointer_target)
             {
+                bool pointer_target_is_type = false;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (in[scan + 1] == pointer_target &&
+                        (sop == SpvOpTypeImage ||
+                            sop == SpvOpTypeSampledImage ||
+                            sop == SpvOpTypeVector ||
+                            sop == SpvOpTypeFloat ||
+                            sop == SpvOpTypeInt ||
+                            sop == SpvOpTypePointer))
+                    {
+                        pointer_target_is_type = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (pointer_target_is_type)
+                {
                 STEREO_LOG(
                     "FS_LOAD_POINTEE_FIX "
                     "result=%u "
@@ -8669,6 +8705,7 @@ bool spirv_patch_stereo_fs(
                     w[3]);
                 w[1] = pointer_target;
                 load_rewritten = true;
+                }
             }
             STEREO_LOG(
                 "FS_LOAD_FINAL "
