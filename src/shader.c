@@ -8355,16 +8355,23 @@ bool spirv_patch_stereo_fs(
                     if (!image->stereo ||
                         !image->replacement_pointer_type)
                         continue;
+                    bool owner_match = (image->owner_var == variable_id);
                     bool target_is_image = (variable_target_type == image->id);
                     bool target_is_sampled = (variable_target_type == image->sampled_type_id &&
                         image->replacement_sampled_type);
-                    if (variable_target_type != 0 &&
-                        !target_is_image &&
-                        !target_is_sampled)
-                        continue;
-                    if (variable_target_type == 0 &&
-                        image->owner_var != variable_id)
-                        continue;
+                    if (owner_match)
+                    {
+                        if (variable_target_type != 0 &&
+                            !target_is_image &&
+                            !target_is_sampled)
+                            continue;
+                    }
+                    else
+                    {
+                        if (variable_target_type == 0 ||
+                            (!target_is_image && !target_is_sampled))
+                            continue;
+                    }
                     uint32_t replacement_target = target_is_sampled ?
                     image->replacement_sampled_type :
                     image->replacement_type;
@@ -8375,6 +8382,7 @@ bool spirv_patch_stereo_fs(
                         "var=%u "
                         "image=%u "
                         "owner=%u "
+                        "ownerMatch=%u "
                         "targetType=%u "
                         "replacementPtr=%u "
                         "replacementTarget=%u "
@@ -8383,6 +8391,7 @@ bool spirv_patch_stereo_fs(
                         variable_id,
                         image->id,
                         image->owner_var,
+                        owner_match,
                         variable_target_type,
                         image->replacement_pointer_type,
                         replacement_target,
