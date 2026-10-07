@@ -8389,18 +8389,19 @@ bool spirv_patch_stereo_fs(
                     }
                     if (function_type_id)
                     {
-                        for (size_t scan = 5; scan < in_c;)
+                        size_t scan = 5;
+                        while (scan < ob.n)
                         {
-                            uint32_t sw = in[scan] >> 16;
-                            uint32_t sop = in[scan] & 0xffffu;
-                            if (sw == 0 || scan + sw > in_c)
+                            uint32_t sw = ob.data[scan] >> 16;
+                            uint32_t sop = ob.data[scan] & 0xffffu;
+                            if (sw == 0 || scan + sw > ob.n)
                                 break;
                             if (sop == SpvOpTypeFunction &&
                                 sw >= 3 &&
-                                in[scan + 1] == function_type_id &&
+                                ob.data[scan + 1] == function_type_id &&
                                 call_parameter_index + 3 < sw)
                             {
-                                call_pointer_type = in[scan + 3 + call_parameter_index];
+                                call_pointer_type = ob.data[scan + 3 + call_parameter_index];
                                 break;
                             }
                             scan += sw;
