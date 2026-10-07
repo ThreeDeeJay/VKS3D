@@ -8397,11 +8397,29 @@ bool spirv_patch_stereo_fs(
                         continue;
                     if (call_pointer_type)
                     {
-                        if (call_pointer_type >= id_bound)
+                        uint32_t rewritten_parameter_type = 0;
+                        for (size_t scan = 5; scan < in_c;)
+                        {
+                            uint32_t sw = in[scan] >> 16;
+                            uint32_t sop = in[scan] & 0xffffu;
+                            if (sw == 0 || scan + sw > in_c)
+                                break;
+                            if (sop == SpvOpTypeFunction &&
+                                sw >= 3 &&
+                                in[scan + 2] == call_pointer_type)
+                            {
+                                rewritten_parameter_type = in[scan + 3];
+                                break;
+                            }
+                            scan += sw;
+                        }
+                        if (rewritten_parameter_type == 0)
+                            rewritten_parameter_type = call_pointer_type;
+                        if (rewritten_parameter_type >= id_bound)
                             continue;
                         uint32_t w[4];
                         memcpy(w, &in[i], sizeof(w));
-                        w[1] = call_pointer_type;
+                        w[1] = rewritten_parameter_type;
                         STEREO_LOG(
                             "FS_VAR_CALL_PATCH "
                             "var=%u "
