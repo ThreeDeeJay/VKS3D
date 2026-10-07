@@ -8350,22 +8350,62 @@ bool spirv_patch_stereo_fs(
                     variable_pointer_type,
                     variable_target_type);
                 uint32_t call_pointer_type = 0;
+                uint32_t call_parameter_id = 0;
+                uint32_t call_function_id = 0;
+                uint32_t call_parameter_index = 0;
                 for (uint32_t p = 0; p < s.n_param; ++p)
                 {
-                    if (s.params[p].id != 0)
+                    for (uint32_t cidx = 0; cidx < s.n_call; ++cidx)
                     {
-                        for (uint32_t cidx = 0; cidx < s.n_call; ++cidx)
+                        const FsCallInfo *call = &s.calls[cidx];
+                        if (call->argument_var != variable_id ||
+                            call->parameter_id != s.params[p].id)
+                            continue;
+                        call_parameter_id = s.params[p].id;
+                        call_function_id = s.params[p].function_id;
+                        call_parameter_index = s.params[p].index;
+                        break;
+                    }
+                    if (call_parameter_id)
+                        break;
+                }
+                if (call_parameter_id)
+                {
+                    uint32_t function_type_id = 0;
+                    for (size_t scan = 5; scan < in_c;)
+                    {
+                        uint32_t sw = in[scan] >> 16;
+                        uint32_t sop = in[scan] & 0xffffu;
+                        if (sw == 0 || scan + sw > in_c)
+                            break;
+                        if (sop == SpvOpFunction &&
+                            sw >= 5 &&
+                            in[scan + 2] == call_function_id)
                         {
-                            const FsCallInfo *call = &s.calls[cidx];
-                            if (call->argument_var != variable_id ||
-                                call->parameter_id != s.params[p].id)
-                                continue;
-                            call_pointer_type = s.params[p].type;
+                            function_type_id = in[scan + 4];
                             break;
                         }
+                        scan += sw;
                     }
-                    if (call_pointer_type)
-                        break;
+                    if (function_type_id)
+                    {
+                        for (size_t scan = 5; scan < in_c;)
+                        {
+                            uint32_t sw = in[scan] >> 16;
+                            uint32_t sop = in[scan] & 0xffffu;
+                            if (sw == 0 || scan + sw > in_c)
+                                break;
+                            if (sop == SpvOpTypeFunction &&
+                                sw >= 3 &&
+                                in[scan + 1] == function_type_id &&
+                                call_parameter_index + 3 < sw)
+                            {
+                                call_pointer_type = in[scan + 3 + call_parameter_index];
+                                break;
+                            }
+                            scan += sw;
+                        }
+                    }
                 }
                 for (uint32_t img = 0; img < s.n_img; ++img)
                 {
@@ -8425,11 +8465,15 @@ bool spirv_patch_stereo_fs(
                             "var=%u "
                             "oldPtr=%u "
                             "newPtr=%u "
-                            "parameter=%u",
+                            "parameter=%u "
+                            "function=%u "
+                            "index=%u",
                             variable_id,
                             in[i + 1],
                             w[1],
-                            s.params[0].id);
+                            call_parameter_id,
+                            call_function_id,
+                            call_parameter_index);
                         sb_push_n(&ob, w, wc);
                         patched = true;
                         break;
