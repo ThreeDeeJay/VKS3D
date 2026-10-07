@@ -8436,20 +8436,35 @@ bool spirv_patch_stereo_fs(
                     image->replacement_type;
                     if (!replacement_target)
                         continue;
+                    if (target_is_sampled &&
+                        replacement_target == variable_target_type)
+                    {
+                        STEREO_LOG(
+                            "FS_VAR_SAMPLED_UNCHANGED "
+                            "var=%u "
+                            "image=%u "
+                            "pointer=%u "
+                            "sampledType=%u",
+                            variable_id,
+                            image->id,
+                            variable_pointer_type,
+                            variable_target_type);
+                        continue;
+                    }
                     if (call_pointer_type)
                     {
                         uint32_t rewritten_parameter_type = 0;
-                        for (size_t scan = 5; scan < in_c;)
+                        for (size_t scan = 5; scan < ob.n;)
                         {
-                            uint32_t sw = in[scan] >> 16;
-                            uint32_t sop = in[scan] & 0xffffu;
-                            if (sw == 0 || scan + sw > in_c)
+                            uint32_t sw = ob.w[scan] >> 16;
+                            uint32_t sop = ob.w[scan] & 0xffffu;
+                            if (sw == 0 || scan + sw > ob.n)
                                 break;
                             if (sop == SpvOpTypeFunction &&
                                 sw >= 3 &&
-                                in[scan + 2] == call_pointer_type)
+                                ob.w[scan + 2] == call_pointer_type)
                             {
-                                rewritten_parameter_type = in[scan + 3];
+                                rewritten_parameter_type = ob.w[scan + 3];
                                 break;
                             }
                             scan += sw;
