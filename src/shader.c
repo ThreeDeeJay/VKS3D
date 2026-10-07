@@ -8349,6 +8349,24 @@ bool spirv_patch_stereo_fs(
                     variable_id,
                     variable_pointer_type,
                     variable_target_type);
+                uint32_t call_pointer_type = 0;
+                for (uint32_t p = 0; p < s.n_param; ++p)
+                {
+                    if (s.params[p].id != 0)
+                    {
+                        for (uint32_t cidx = 0; cidx < s.n_call; ++cidx)
+                        {
+                            const FsCallInfo *call = &s.calls[cidx];
+                            if (call->argument_var != variable_id ||
+                                call->parameter_id != s.params[p].id)
+                                continue;
+                            call_pointer_type = s.params[p].type;
+                            break;
+                        }
+                    }
+                    if (call_pointer_type)
+                        break;
+                }
                 for (uint32_t img = 0; img < s.n_img; ++img)
                 {
                     FsImageInfo *image = &s.images[img];
@@ -8377,6 +8395,27 @@ bool spirv_patch_stereo_fs(
                     image->replacement_type;
                     if (!replacement_target)
                         continue;
+                    if (call_pointer_type)
+                    {
+                        if (call_pointer_type >= id_bound)
+                            continue;
+                        uint32_t w[4];
+                        memcpy(w, &in[i], sizeof(w));
+                        w[1] = call_pointer_type;
+                        STEREO_LOG(
+                            "FS_VAR_CALL_PATCH "
+                            "var=%u "
+                            "oldPtr=%u "
+                            "newPtr=%u "
+                            "parameter=%u",
+                            variable_id,
+                            in[i + 1],
+                            w[1],
+                            s.params[0].id);
+                        sb_push_n(&ob, w, wc);
+                        patched = true;
+                        break;
+                    }
                     STEREO_LOG(
                         "FS_VAR_IMAGE_MATCH "
                         "var=%u "
