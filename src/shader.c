@@ -8353,12 +8353,22 @@ bool spirv_patch_stereo_fs(
                 {
                     FsImageInfo *image = &s.images[img];
                     if (!image->stereo ||
-                        !image->replacement_pointer_type ||
-                        !image->replacement_sampled_type)
+                        !image->replacement_pointer_type)
                         continue;
-                    if (image->owner_var != variable_id &&
-                        (variable_target_type == 0 ||
-                            variable_target_type != image->id))
+                    bool target_is_image = (variable_target_type == image->id);
+                    bool target_is_sampled = (variable_target_type == image->sampled_type_id &&
+                        image->replacement_sampled_type);
+                    if (variable_target_type != 0 &&
+                        !target_is_image &&
+                        !target_is_sampled)
+                        continue;
+                    if (variable_target_type == 0 &&
+                        image->owner_var != variable_id)
+                        continue;
+                    uint32_t replacement_target = target_is_sampled ?
+                    image->replacement_sampled_type :
+                    image->replacement_type;
+                    if (!replacement_target)
                         continue;
                     STEREO_LOG(
                         "FS_VAR_IMAGE_MATCH "
@@ -8367,6 +8377,7 @@ bool spirv_patch_stereo_fs(
                         "owner=%u "
                         "targetType=%u "
                         "replacementPtr=%u "
+                        "replacementTarget=%u "
                         "sampledType=%u "
                         "replacementSampled=%u",
                         variable_id,
@@ -8374,22 +8385,23 @@ bool spirv_patch_stereo_fs(
                         image->owner_var,
                         variable_target_type,
                         image->replacement_pointer_type,
+                        replacement_target,
                         image->sampled_type_id,
                         image->replacement_sampled_type);
                     if (image->replacement_pointer_type >= id_bound ||
-                        image->replacement_sampled_type >= id_bound)
+                        replacement_target >= id_bound)
                     {
                         STEREO_LOG(
                             "FS_VAR_SKIP_UNDEFINED "
                             "var=%u "
                             "replacementPointer=%u "
-                            "replacementSampled=%u "
+                            "replacementTarget=%u "
                             "idBound=%u "
                             "set=%u "
                             "binding=%u",
                             variable_id,
                             image->replacement_pointer_type,
-                            image->replacement_sampled_type,
+                            replacement_target,
                             id_bound,
                             image->set,
                             image->binding);
@@ -8401,12 +8413,12 @@ bool spirv_patch_stereo_fs(
                             "FS_VAR_SKIP_POINTER_NOT_EMITTED "
                             "var=%u "
                             "replacementPointer=%u "
-                            "replacementSampled=%u "
+                            "replacementTarget=%u "
                             "set=%u "
                             "binding=%u",
                             variable_id,
                             image->replacement_pointer_type,
-                            image->replacement_sampled_type,
+                            replacement_target,
                             image->set,
                             image->binding);
                         continue;
