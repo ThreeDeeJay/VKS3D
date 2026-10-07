@@ -8392,16 +8392,16 @@ bool spirv_patch_stereo_fs(
                         size_t scan = 5;
                         while (scan < ob.n)
                         {
-                            uint32_t sw = ob.data[scan] >> 16;
-                            uint32_t sop = ob.data[scan] & 0xffffu;
+                            uint32_t sw = ob.w[scan] >> 16;
+                            uint32_t sop = ob.w[scan] & 0xffffu;
                             if (sw == 0 || scan + sw > ob.n)
                                 break;
                             if (sop == SpvOpTypeFunction &&
                                 sw >= 3 &&
-                                ob.data[scan + 1] == function_type_id &&
+                                ob.w[scan + 1] == function_type_id &&
                                 call_parameter_index + 3 < sw)
                             {
-                                call_pointer_type = ob.data[scan + 3 + call_parameter_index];
+                                call_pointer_type = ob.w[scan + 3 + call_parameter_index];
                                 break;
                             }
                             scan += sw;
