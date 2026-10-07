@@ -8436,7 +8436,8 @@ bool spirv_patch_stereo_fs(
                     image->replacement_type;
                     if (!replacement_target)
                         continue;
-                    if (target_is_sampled &&
+                    if (!call_pointer_type &&
+                        target_is_sampled &&
                         replacement_target == variable_target_type)
                     {
                         STEREO_LOG(
