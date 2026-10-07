@@ -8353,12 +8353,12 @@ bool spirv_patch_stereo_fs(
                 {
                     FsImageInfo *image = &s.images[img];
                     if (!image->stereo ||
-                        !image->replacement_pointer_type)
+                        !image->replacement_pointer_type ||
+                        !image->replacement_sampled_type)
                         continue;
                     if (image->owner_var != variable_id &&
                         (variable_target_type == 0 ||
-                            (variable_target_type != image->id &&
-                                variable_target_type != image->sampled_type_id)))
+                            variable_target_type != image->id))
                         continue;
                     STEREO_LOG(
                         "FS_VAR_IMAGE_MATCH "
@@ -8377,8 +8377,7 @@ bool spirv_patch_stereo_fs(
                         image->sampled_type_id,
                         image->replacement_sampled_type);
                     if (image->replacement_pointer_type >= id_bound ||
-                        (image->replacement_sampled_type &&
-                            image->replacement_sampled_type >= id_bound))
+                        image->replacement_sampled_type >= id_bound)
                     {
                         STEREO_LOG(
                             "FS_VAR_SKIP_UNDEFINED "
