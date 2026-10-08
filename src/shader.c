@@ -11509,26 +11509,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             {
                 const VkPipelineRenderingCreateInfo *ri =
                  (const VkPipelineRenderingCreateInfo*)base;
-                VkPipelineRenderingCreateInfo *rw =
-                 (VkPipelineRenderingCreateInfo*)base;
-                
-                /* Dynamic rendering path: if stereo is enabled and the app left
-                 * viewMask at 0, promote it to 0x3 so the pipeline is actually
-                 * created for multiview. */
-                if (sd->stereo.multiview && rw->viewMask == 0) {
-                 STEREO_LOG(
-                  "PIPE_RENDERING_UPGRADE p=%u viewMask 0x0->0x3 colors=%u depth=%u stencil=%u",
-                  p,
-                  ri->colorAttachmentCount,
-                  ri->depthAttachmentFormat,
-                  ri->stencilAttachmentFormat);
-                 rw->viewMask = 0x3;
-                }
-                view_mask = rw->viewMask;
+                view_mask = ri->viewMask;
                 STEREO_LOG(
                     "PIPE_RENDERING_CAPTURE p=%u viewMask=0x%x colors=%u depth=%u stencil=%u",
                     p,
-                    rw->viewMask,
+                    ri->viewMask,
                     ri->colorAttachmentCount,
                     ri->depthAttachmentFormat,
                     ri->stencilAttachmentFormat);
