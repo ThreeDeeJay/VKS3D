@@ -35,17 +35,24 @@ Write-Host ""
 
 foreach ($entry in $Entries) {
     $bits   = $entry.Bits
-    $json   = Join-Path $InstallDir $entry.JSON
+    $json   = $entry.JSON
     $drvKey = $entry.DriverKey
     $savKey = $entry.SaveKey
 
     Write-Host "[$bits-bit] " -NoNewline -ForegroundColor White
 
     # Remove VKS3D
-    $existing = Get-ItemProperty -Path $drvKey -Name $json -ErrorAction SilentlyContinue
-    if ($existing) {
-        Remove-ItemProperty -Path $drvKey -Name $json -Force
-        Write-Host "Removed VKS3D registration." -ForegroundColor Green
+    $regItem = Get-Item -Path $drvKey -ErrorAction SilentlyContinue
+    if ($regItem) {
+        $matched = $regItem.GetValueNames() | Where-Object { $_ -match [regex]::Escape($json) -or $_ -match "VKS3D.*\.json" }
+        if ($matched) {
+            foreach ($keyName in $matched) {
+                Remove-ItemProperty -Path $drvKey -Name $keyName -Force -ErrorAction SilentlyContinue
+                Write-Host "Removed VKS3D registration: $keyName" -ForegroundColor Green
+            }
+        } else {
+            Write-Host "VKS3D not registered (nothing to remove)." -ForegroundColor Gray
+        }
     } else {
         Write-Host "VKS3D not registered (nothing to remove)." -ForegroundColor Gray
     }
