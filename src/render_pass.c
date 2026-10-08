@@ -447,7 +447,14 @@ stereo_CreateRenderPass2KHR(
         rpi->shading_rate_attachment,
         (unsigned)rpi->has_shading_rate_attachment);
 
-    if (sd->stereo.enabled && sd->stereo.multiview) {
+    bool rp2_has_color = false;
+    for (uint32_t i = 0; i < sc; i++) {
+        const VkSubpassDescription2 *sub = &pCreateInfo->pSubpasses[i];
+        if (sub->pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS &&
+            sub->colorAttachmentCount > 0)
+            rp2_has_color = true;
+    }
+    if (sd->stereo.enabled && sd->stereo.multiview && rp2_has_color) {
         /* Build multiview subpasses */
         VkAttachmentDescription2 *pa2 = NULL;
         if (ac > 0) {
