@@ -186,6 +186,7 @@ jobs:
           cp "scripts\install.bat" "Release/Install.bat"
           cp "scripts\uninstall.bat" "Release/Uninstall.bat"
           cp "scripts\debug.cmd" "Release/debug.cmd"
+          cp "scripts\Portable.reg" "Release/Portable.reg"
           cp "LICENSE" "Release/License.txt"
           cp "README.md" "Release/ReadMe.txt"
   
