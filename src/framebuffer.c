@@ -913,16 +913,6 @@ stereo_CmdBeginRendering(
             pRenderingInfo->pDepthAttachment->storeOp);
     }
     VkRenderingInfo modified = *pRenderingInfo;
-    if (sd->stereo.multiview &&
-        !sd->stereo.shader_objects_mono &&
-        modified.viewMask == 0)
-    {
-        modified.viewMask = 0x3;
-        STEREO_LOG(
-            "BEGIN_RENDERING_UPGRADE viewMask 0x0->0x3 layerCount=%u colors=%u",
-            modified.layerCount,
-            modified.colorAttachmentCount);
-    }
     STEREO_LOG(
         "BEGIN_RENDERING viewMask=0x%x layerCount=%u colors=%u flags=0x%x",
         modified.viewMask,
