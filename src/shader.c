@@ -7794,20 +7794,6 @@ bool spirv_patch_stereo_fs(
             uint32_t pointer_id = in[i + 1];
             uint32_t storage = in[i + 2];
             uint32_t target_type = in[i + 3];
-            bool reused_pointer = false;
-            for (uint32_t img = 0; img < s.n_img; ++img)
-            {
-                if (s.images[img].stereo && s.images[img].replacement_pointer_type == pointer_id && s.images[img].replacement_type == target_type)
-                {
-                    reused_pointer = true;
-                    break;
-                }
-            }
-            if (reused_pointer)
-            {
-                i += wc;
-                continue;
-            }
             sb_push_n(&ob, &in[i], wc);
             if (pointer_id < id_bound)
                 emitted_type[pointer_id] = true;
