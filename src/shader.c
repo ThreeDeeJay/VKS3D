@@ -10052,7 +10052,7 @@ bool spirv_patch_stereo_fs(
                     break;
                 bool has_result_type =
                 (sop == SpvOpLoad && sw >= 4) ||
-                (sop == SpvOpImage && sw >= 5) ||
+                (sop == SpvOpImage && sw >= 4) ||
                 (sop == SpvOpSampledImage && sw >= 5);
                 if (has_result_type && in[scan + 2] == in[i + 3])
                 {
