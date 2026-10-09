@@ -8145,38 +8145,6 @@ bool spirv_patch_stereo_fs(
             memcpy(w, &in[i], sizeof(w));
             w[1] = new_array_type;
             w[5] = 1;
-            uint32_t existing_array_type =
-            fs_find_matching_image_type(
-                in,
-                in_c,
-                w[2],
-                w[3],
-                w[4],
-                w[5],
-                w[6],
-                w[7],
-                w[8]);
-            if (existing_array_type != 0 &&
-                existing_array_type != new_array_type &&
-                existing_array_type < id_bound &&
-                emitted_type[existing_array_type])
-            {
-                STEREO_LOG(
-                    "FS_REUSE_ARRAY_IMAGE "
-                    "oldImage=%u "
-                    "duplicate=%u "
-                    "existing=%u",
-                    in[i + 1],
-                    new_array_type,
-                    existing_array_type);
-                s.images[patch_img_idx].replacement_type =
-                existing_array_type;
-                sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                    emitted_type[in[i + 1]] = true;
-                i += wc;
-                continue;
-            }
             STEREO_LOG(
                 "FS_TYPEIMAGE_PATCH "
                 "sampledType=%u "
