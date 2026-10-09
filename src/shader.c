@@ -7952,12 +7952,18 @@ bool spirv_patch_stereo_fs(
                     (existing < id_bound) ? emitted_type[existing] : 0);
                 if (existing != 0 && existing < id_bound)
                 {
-                    uint32_t existing_sampled =
-                    fs_find_matching_sampled_image(
-                        in,
-                        in_c,
-                        existing);
                     bool existing_defined = false;
+                    for (size_t scan = 5; scan < in_c;)
+                    {
+                        uint32_t sw = in[scan] >> 16;
+                        uint32_t sop = in[scan] & 0xffffu;
+                        if (sw == 0 || scan + sw > in_c)
+                            break;
+                        if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == existing && in[scan + 5] == 1 && in[scan + 2] == img->sampled_type && in[scan + 3] == img->dim && in[scan + 4] == img->depth && in[scan + 6] == img->ms && in[scan + 7] == img->sampled && in[scan + 8] == img->format)
+                            existing_defined = true;
+                        scan += sw;
+                    }
+                    uint32_t existing_sampled = existing_defined ? fs_find_matching_sampled_image(in, in_c, existing) : 0;
                     bool sampled_defined = false;
                     for (size_t scan = 5; scan < in_c;)
                     {
@@ -7965,9 +7971,7 @@ bool spirv_patch_stereo_fs(
                         uint32_t sop = in[scan] & 0xffffu;
                         if (sw == 0 || scan + sw > in_c)
                             break;
-                        if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == existing)
-                            existing_defined = true;
-                        if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 1] == existing_sampled)
+                        if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 1] == existing_sampled && in[scan + 2] == existing)
                             sampled_defined = true;
                         scan += sw;
                     }
@@ -7985,6 +7989,21 @@ bool spirv_patch_stereo_fs(
                         sampled_defined);
                     if (existing_defined && existing_sampled != 0 && sampled_defined)
                     {
+                        uint32_t original_pointer_target = 0;
+                        for (size_t scan = 5; scan < in_c;)
+                        {
+                            uint32_t sw = in[scan] >> 16;
+                            uint32_t sop = in[scan] & 0xffffu;
+                            if (sw == 0 || scan + sw > in_c)
+                                break;
+                            if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 1] == img->pointer_type)
+                            {
+                                original_pointer_target = in[scan + 3];
+                                break;
+                            }
+                            scan += sw;
+                        }
+                        uint32_t wanted_pointer_target = original_pointer_target == img->sampled_type_id ? existing_sampled : existing;
                         uint32_t existing_pointer = 0;
                         for (size_t scan = 5; scan < in_c;)
                         {
@@ -7992,13 +8011,10 @@ bool spirv_patch_stereo_fs(
                             uint32_t sop = in[scan] & 0xffffu;
                             if (sw == 0 || scan + sw > in_c)
                                 break;
-                            if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 2] == SpvStorageClassUniformConstant && (in[scan + 3] == existing || in[scan + 3] == existing_sampled))
+                            if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 2] == SpvStorageClassUniformConstant && in[scan + 3] == wanted_pointer_target)
                             {
                                 existing_pointer = in[scan + 1];
-                                if (in[scan + 3] != existing)
-                                    existing_pointer = 0;
-                                else
-                                    break;
+                                break;
                             }
                             scan += sw;
                         }
@@ -8112,6 +8128,11 @@ bool spirv_patch_stereo_fs(
             }
             /* Emit the reserved cloned array type after its component type is defined. */
             uint32_t new_array_type = s.images[patch_img_idx].replacement_type;
+            if (new_array_type == 0 || (new_array_type < id_bound && emitted_type[new_array_type]))
+            {
+                i += wc;
+                continue;
+            }
             uint32_t new_sampled_type =
                 s.images[patch_img_idx].replacement_sampled_type;
             STEREO_LOG(
