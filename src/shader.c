@@ -9959,13 +9959,104 @@ bool spirv_patch_stereo_fs(
             i += wc;
             continue;
         }
-        /* Patch OpSampledImage diagnostic */
-        if (in_func && op == SpvOpSampledImage && wc >= 3)
+        /* Patch OpSampledImage result type to match its image operand. */
+        if (in_func && op == SpvOpSampledImage && wc >= 5)
         {
+            uint32_t sampled_result_type = in[i+1];
+            uint32_t sampled_result_id = in[i+2];
+            uint32_t image_id = in[i+3];
+            uint32_t image_value_type = 0;
+            uint32_t image_type = 0;
+            uint32_t replacement_sampled_type = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (!sw || scan + sw > in_c)
+                    break;
+                if ((sop == SpvOpLoad || sop == SpvOpImage) && sw >= 4 && in[scan+2] == image_id)
+                {
+                    image_value_type = in[scan+1];
+                    break;
+                }
+                scan += sw;
+            }
+            if (image_value_type)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan+1] == sampled_result_type)
+                    {
+                        image_type = in[scan+2];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            for (uint32_t img = 0; img < s.n_img; ++img)
+            {
+                FsImageInfo *image = &s.images[img];
+                if (!image->stereo || !image->replacement_type)
+                    continue;
+                if (image_value_type == image->id || image_value_type == image->replacement_type || image_id == image->owner_var)
+                {
+                    image_type = image->replacement_type;
+                    if (image->replacement_sampled_type)
+                        replacement_sampled_type = image->replacement_sampled_type;
+                    break;
+                }
+            }
+            if (image_type)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan+2] == image_type)
+                    {
+                        replacement_sampled_type = in[scan+1];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (replacement_sampled_type && replacement_sampled_type != sampled_result_type)
+            {
+                uint32_t w[5];
+                memcpy(w, &in[i], sizeof(w));
+                w[1] = replacement_sampled_type;
+                STEREO_LOG(
+                    "FS_SAMPLEDIMAGE_TYPE_PATCH "
+                    "result=%u "
+                    "oldType=%u "
+                    "newType=%u "
+                    "image=%u "
+                    "imageType=%u",
+                    sampled_result_id,
+                    sampled_result_type,
+                    replacement_sampled_type,
+                    image_id,
+                    image_type);
+                sb_push_n(&ob, w, wc);
+                i += wc;
+                continue;
+            }
             STEREO_LOG(
-                "FS_IMAGE imageResult=%u sampledImage=%u",
-                in[i+2],
-                in[i+3]);
+                "FS_SAMPLEDIMAGE_TYPE_KEEP "
+                "result=%u "
+                "type=%u "
+                "image=%u "
+                "imageType=%u",
+                sampled_result_id,
+                sampled_result_type,
+                image_id,
+                image_type);
         }
         /* Extend OpImageFetch ivec2 -> ivec3(x,y,ViewIndex) */
         if (in_func && (op == SpvOpImageFetch || op == SpvOpImageRead) && wc >= 5)
