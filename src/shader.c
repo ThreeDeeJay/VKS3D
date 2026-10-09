@@ -10050,8 +10050,11 @@ bool spirv_patch_stereo_fs(
                 uint32_t sop = in[scan] & 0xffffu;
                 if (sw == 0 || scan + sw > in_c)
                     break;
-                if (sw >= 3 &&
-                    in[scan + 2] == in[i + 3])
+                bool has_result_type =
+                (sop == SpvOpLoad && sw >= 4) ||
+                (sop == SpvOpImage && sw >= 5) ||
+                (sop == SpvOpSampledImage && sw >= 5);
+                if (has_result_type && in[scan + 2] == in[i + 3])
                 {
                     fetch_def_opcode = sop;
                     fetch_def_type = in[scan + 1];
@@ -10122,10 +10125,25 @@ bool spirv_patch_stereo_fs(
                     s.images[img].replacement_type);
                 break;
             }
-            if (!fs_binding_is_stereo_attachment(&s, descriptor_var) && !image_type_rewritten)
+            bool fetch_stereo_attachment = fs_binding_is_stereo_attachment(&s, descriptor_var);
+            if (!fetch_stereo_attachment && !image_type_rewritten)
             {
                 STEREO_LOG(
                     "FS_FETCH_SKIP_MONO image=%u descriptor=%u binding_not_stereo",
+                    in[i+3],
+                    descriptor_var);
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                {
+                    emitted_type[in[i + 1]] = true;
+                }
+                i += wc;
+                continue;
+            }
+            if (!image_type_rewritten)
+            {
+                STEREO_LOG(
+                    "FS_FETCH_SKIP_UNCONFIRMED image=%u descriptor=%u",
                     in[i+3],
                     descriptor_var);
                 sb_push_n(&ob, &in[i], wc);
