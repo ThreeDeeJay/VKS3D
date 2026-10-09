@@ -7829,7 +7829,21 @@ bool spirv_patch_stereo_fs(
                 if (image->replacement_pointer_type >= id_bound ||
                     replacement_target >= id_bound)
                     continue;
-                if (emitted_type[image->replacement_pointer_type])
+                bool pointer_is_original = false;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 1] == image->replacement_pointer_type)
+                    {
+                        pointer_is_original = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (pointer_is_original || emitted_type[image->replacement_pointer_type])
                     continue;
                 uint32_t w[4] =
                 {
