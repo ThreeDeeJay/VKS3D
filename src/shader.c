@@ -7803,7 +7803,7 @@ bool spirv_patch_stereo_fs(
                     break;
                 }
             }
-            if (reused_pointer && pointer_id < id_bound && emitted_type[pointer_id])
+            if (reused_pointer)
             {
                 i += wc;
                 continue;
