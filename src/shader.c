@@ -7992,7 +7992,7 @@ bool spirv_patch_stereo_fs(
                             uint32_t sop = in[scan] & 0xffffu;
                             if (sw == 0 || scan + sw > in_c)
                                 break;
-                            if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 2] == SpvStorageClassUniformConstant && in[scan + 3] == existing_sampled)
+                            if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 2] == SpvStorageClassUniformConstant && in[scan + 3] == existing)
                             {
                                 existing_pointer = in[scan + 1];
                                 break;
