@@ -2,8 +2,9 @@
 @echo off
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo ERROR: Must be run as Administrator. Right-click ^> "Run as administrator".
-    pause & exit /b 1
+    echo Requesting administrator privileges...
+    powershell.exe -Command "Start-Process '%~f0' -Verb RunAs"
+    exit /b
 )
 set VKS3D_DIR=%~dp0
 if "%VKS3D_DIR:~-1%"=="\" set VKS3D_DIR=%VKS3D_DIR:~0,-1%
@@ -49,10 +50,36 @@ Write-Host "  Directory: $InstallDir" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Phase 1: Register JSON file names (before user interaction)
+Write-Host "Registering VKS3D portable mode..." -ForegroundColor Cyan
+Write-Host ""
+
+foreach ($entry in $Entries) {
+    $bits   = $entry.Bits
+    $dll    = Join-Path $InstallDir $entry.DLL
+    $json   = $entry.JSON
+    $drvKey = $entry.DriverKey
+
+    Write-Host "[$bits-bit] " -NoNewline -ForegroundColor White
+
+    if (-not (Test-Path $dll))  { Write-Host "SKIP - $($entry.DLL) not found."  -ForegroundColor Yellow; continue }
+
+    Ensure-Key $drvKey
+    New-ItemProperty -Path $drvKey -Name $json -Value 0 -PropertyType DWord -Force | Out-Null
+    Write-Host "Registered: $json" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "Press any key to install in system-wide mode (all games would load VKS3D from this folder)" -ForegroundColor Cyan
+Read-Host
+Write-Host "Installing VKS3D in system-wide mode..." -ForegroundColor Cyan
+Write-Host ""
+
 foreach ($entry in $Entries) {
     $bits   = $entry.Bits
     $dll    = Join-Path $InstallDir $entry.DLL
     $json   = Join-Path $InstallDir $entry.JSON
+    $jsonName = $entry.JSON
     $drvKey = $entry.DriverKey
     $savKey = $entry.SaveKey
 
@@ -60,6 +87,9 @@ foreach ($entry in $Entries) {
 
     if (-not (Test-Path $dll))  { Write-Host "SKIP - $($entry.DLL) not found."  -ForegroundColor Yellow; continue }
     if (-not (Test-Path $json)) { Write-Host "SKIP - $($entry.JSON) not found." -ForegroundColor Yellow; continue }
+
+    # Remove the local JSON file name entry
+    Remove-ItemProperty -Path $drvKey -Name $jsonName -Force -ErrorAction SilentlyContinue
 
     Update-JsonLibraryPath -JsonPath $json -DllPath $dll
     Ensure-Key $drvKey
