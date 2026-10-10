@@ -50,6 +50,7 @@ jobs:
         echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
         echo "AttemptCount=${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_ENV
+        echo "BuildDate=$(git show -s --date=format:'%Y%m%d' --format=%cd)" >> $env:GITHUB_ENV
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
@@ -120,7 +121,7 @@ jobs:
         -DVKS3D_BUILD_DEMO=OFF
         -DSTEREO_BUILD_DEMO=OFF
         -DVKS3D_VER_PATCH=${{env.CommitCount}}
-        -DVKS3D_VER_BUILD=${{env.AttemptCount}}
+        -DVKS3D_VER_BUILD=${{env.BuildDate}}
         -DVKS3D_COMMIT_HASH=${{env.CommitHash}}
         -DVKS3D_BITS=${{matrix.Settings.Bits}}
 
