@@ -12068,7 +12068,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         vm.screen_has_zw_use,
                         vm.proj_found,
                         vm.dot_count);
-                    if (sd->stereo.mono_ui && vs_screen_space && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable)
+                    bool ui_depth_disabled=ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable;
+                    bool ui_screen_candidate=vs_screen_space&&!vm.has_matrix_ops&&vm.has_v2_position_input&&!vm.has_emit_vertex&&vm.screen_value_count==2&&!vm.screen_has_zw_use&&!vm.proj_found&&vm.dot_count>2;
+                    if (sd->stereo.mono_ui && vs_screen_space && (ui_depth_disabled || ui_screen_candidate))
                     {
                         STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
                             (unsigned long long)hash_spv(vs_cache->spv,
