@@ -2,13 +2,14 @@
 @echo off
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo ERROR: Must be run as Administrator. Right-click ^> "Run as administrator".
-    pause & exit /b 1
+    echo Requesting administrator privileges ^(required to unregister Vulkan ICDs^)...
+    powershell.exe -Command "Start-Process '%~f0' -Verb RunAs"
+    exit /b
 )
 set VKS3D_DIR=%~dp0
 if "%VKS3D_DIR:~-1%"=="\" set VKS3D_DIR=%VKS3D_DIR:~0,-1%
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$d=$env:VKS3D_DIR; $lines=Get-Content '%~f0'; $ps=$lines[($lines.IndexOf('#>')+1)..($lines.Length-1)] -join \"`n\"; Invoke-Expression $ps"
-pause & exit /b
+exit /b 0
 #>
 # ============================================================================
 # VKS3D — Vulkan Stereoscopic ICD Uninstaller  (self-contained in uninstall.bat)
@@ -22,8 +23,8 @@ $SaveKey64     = "HKLM:\SOFTWARE\VKS3D\DisplacedICDs64"
 $SaveKey32     = "HKLM:\SOFTWARE\VKS3D\DisplacedICDs32"
 
 $Entries = @(
-    @{ Bits=64; JSON="VKS3D_x64.json"; DriverKey=$VkDriverKey64; SaveKey=$SaveKey64 },
-    @{ Bits=32; JSON="VKS3D_x86.json"; DriverKey=$VkDriverKey32; SaveKey=$SaveKey32 }
+    @{ Bits=32; JSON="VKS3D_x86.json"; DriverKey=$VkDriverKey32; SaveKey=$SaveKey32 },
+    @{ Bits=64; JSON="VKS3D_x64.json"; DriverKey=$VkDriverKey64; SaveKey=$SaveKey64 }
 )
 
 Write-Host ""
@@ -74,3 +75,31 @@ Remove-Item -Path "HKLM:\SOFTWARE\VKS3D" -Recurse -Force -ErrorAction SilentlyCo
 Write-Host ""
 Write-Host "Uninstallation complete. Original ICDs restored." -ForegroundColor Green
 Write-Host ""
+
+Write-Host "Press Enter to delete the VKS3D files from the current folder."
+Read-Host
+
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "ReadMe.txt")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "License.txt")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x86.json")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x64.json")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x86.dll")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x64.dll")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "vks3d.ini")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "debug.cmd")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "Portable.reg")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "Install.bat")
+
+# Schedule self-deletion and cleanup.vbs deletion using a vbscript trick to avoid batch file reference errors
+$BatchPath = Join-Path $InstallDir "Uninstall.bat"
+$VbsPath = Join-Path $InstallDir "cleanup.vbs"
+$VbsCode = @"
+Set fso = CreateObject("Scripting.FileSystemObject")
+WScript.Sleep 500
+On Error Resume Next
+fso.DeleteFile "$BatchPath", True
+fso.DeleteFile "$VbsPath", True
+"@
+Set-Content -Path $VbsPath -Value $VbsCode -Force
+Start-Process "cscript.exe" -ArgumentList $VbsPath -WindowStyle Hidden
