@@ -12056,8 +12056,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                     }
                     bool ui_depth_disabled=ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable;
-                    bool ui_screen_candidate=vs_screen_space&&!vm.has_matrix_ops&&!vm.has_vector_matrix_ops&&vm.has_v2_position_input&&!vm.has_emit_vertex;
-                    if (sd->stereo.mono_ui && vs_screen_space && (ui_depth_disabled || (ui_screen_candidate && vm.screen_value_count == 2 && !vm.screen_has_zw_use && !vm.proj_found && vm.dot_count > 2)))
+                    bool ui_screen_candidate=vs_screen_space&&!vm.has_matrix_ops&&!vm.has_vector_matrix_ops&&vm.has_v2_position_input&&!vm.has_emit_vertex&&vm.screen_value_count==2&&!vm.screen_has_zw_use&&!vm.proj_found&&vm.dot_count>2;
+                    if (sd->stereo.mono_ui && vs_screen_space && (ui_depth_disabled || ui_screen_candidate))
                     {
                         STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
                             (unsigned long long)hash_spv(vs_cache->spv,
