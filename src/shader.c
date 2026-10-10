@@ -12055,8 +12055,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     STEREO_LOG(
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                     }
-                    STEREO_LOG("PIPELINE_UI_GATE mono_ui=%u screen_space=%u depth_state=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u screen_count=%u screen_zw=%u proj=%u dots=%u",
+                    STEREO_LOG("PIPELINE_UI_GATE mono_ui=%u hash=%016llx screen_space=%u depth_state=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u screen_count=%u screen_zw=%u proj=%u dots=%u",
                         sd->stereo.mono_ui,
+                        (unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),
                         vs_screen_space,
                         ci->pDepthStencilState!=NULL,
                         ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,
