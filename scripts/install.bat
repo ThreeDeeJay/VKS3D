@@ -2,7 +2,7 @@
 @echo off
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo Requesting administrator privileges...
+    echo Requesting administrator privileges ^(required to register Vulkan ICDs^)...
     powershell.exe -Command "Start-Process '%~f0' -Verb RunAs"
     exit /b
 )
@@ -23,8 +23,8 @@ $SaveKey64     = "HKLM:\SOFTWARE\VKS3D\DisplacedICDs64"
 $SaveKey32     = "HKLM:\SOFTWARE\VKS3D\DisplacedICDs32"
 
 $Entries = @(
-    @{ Bits=64; DLL="VKS3D_x64.dll"; JSON="VKS3D_x64.json"; DriverKey=$VkDriverKey64; SaveKey=$SaveKey64 },
-    @{ Bits=32; DLL="VKS3D_x86.dll"; JSON="VKS3D_x86.json"; DriverKey=$VkDriverKey32; SaveKey=$SaveKey32 }
+    @{ Bits=32; DLL="VKS3D_x86.dll"; JSON="VKS3D_x86.json"; DriverKey=$VkDriverKey32; SaveKey=$SaveKey32 },
+    @{ Bits=64; DLL="VKS3D_x64.dll"; JSON="VKS3D_x64.json"; DriverKey=$VkDriverKey64; SaveKey=$SaveKey64 }
 )
 
 function Ensure-Key([string]$Path) {
@@ -51,8 +51,7 @@ Write-Host "============================================================" -Foreg
 Write-Host ""
 
 # Phase 1: Register JSON file names (before user interaction)
-Write-Host "Registering VKS3D portable mode..." -ForegroundColor Cyan
-Write-Host ""
+Write-Host "Registering VKS3D in portable mode..." -ForegroundColor Cyan
 
 foreach ($entry in $Entries) {
     $bits   = $entry.Bits
@@ -69,8 +68,10 @@ foreach ($entry in $Entries) {
     Write-Host "Registered: $json" -ForegroundColor Green
 }
 
+Write-Host "Now you can just copy VKS3D's JSON+DLL+INI to any game folder to load it independently of other portable installations."
+Write-Host "No need to run this script again unless you've run VKS3D's Uninstall.bat script."
 Write-Host ""
-Write-Host "Press any key to install in system-wide mode (all games would load VKS3D from this folder)" -ForegroundColor Cyan
+Write-Host "Press Enter to install in system-wide mode instead (all games would load VKS3D from this folder)" -ForegroundColor Cyan
 Read-Host
 Write-Host "Installing VKS3D in system-wide mode..." -ForegroundColor Cyan
 Write-Host ""

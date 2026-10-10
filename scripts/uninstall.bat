@@ -2,7 +2,7 @@
 @echo off
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo Requesting administrator privileges...
+    echo Requesting administrator privileges ^(required to unregister Vulkan ICDs^)...
     powershell.exe -Command "Start-Process '%~f0' -Verb RunAs"
     exit /b
 )
@@ -23,8 +23,8 @@ $SaveKey64     = "HKLM:\SOFTWARE\VKS3D\DisplacedICDs64"
 $SaveKey32     = "HKLM:\SOFTWARE\VKS3D\DisplacedICDs32"
 
 $Entries = @(
-    @{ Bits=64; JSON="VKS3D_x64.json"; DriverKey=$VkDriverKey64; SaveKey=$SaveKey64 },
-    @{ Bits=32; JSON="VKS3D_x86.json"; DriverKey=$VkDriverKey32; SaveKey=$SaveKey32 }
+    @{ Bits=32; JSON="VKS3D_x86.json"; DriverKey=$VkDriverKey32; SaveKey=$SaveKey32 },
+    @{ Bits=64; JSON="VKS3D_x64.json"; DriverKey=$VkDriverKey64; SaveKey=$SaveKey64 }
 )
 
 Write-Host ""
@@ -79,7 +79,7 @@ Write-Host ""
 Write-Host "Press Enter to delete the VKS3D files from the current folder."
 Read-Host
 
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKD3D")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D")
 Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "ReadMe.txt")
 Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "License.txt")
 Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x86.json")
