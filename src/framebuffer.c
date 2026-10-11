@@ -1370,6 +1370,9 @@ stereo_CmdDrawIndexed(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
+    STEREO_LOG(
+        "UI_DRAW_TRACE pipe=%p rp=%p fb=%p info=%u quad=%u indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
+        (void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     if (info)
     {
         STEREO_LOG(
@@ -1430,6 +1433,9 @@ stereo_CmdDraw(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
+    STEREO_LOG(
+        "UI_DRAW_TRACE pipe=%p rp=%p fb=%p info=%u quad=%u vertexCount=%u instanceCount=%u firstVertex=%u firstInstance=%u",
+        (void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,vertexCount,instanceCount,firstVertex,firstInstance);
     if (info)
     {
         STEREO_LOG(
