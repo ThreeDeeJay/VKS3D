@@ -50,7 +50,7 @@ jobs:
         echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
         echo "AttemptCount=${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_ENV
-        echo "BuildDate=$(git show -s --date=format:'%Y%m%d' --format=%cd)" >> $env:GITHUB_ENV
+        echo "BuildDate=$(git show -s --date=format:'%y%m%d' --format=%cd)" >> $env:GITHUB_ENV
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
