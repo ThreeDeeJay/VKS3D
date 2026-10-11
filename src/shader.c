@@ -12091,6 +12091,19 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                             vm.has_vector_matrix_ops,
                             vm.has_v2_position_input,
                             vm.dot_count);
+                        if (ci->pVertexInputState)
+                        {
+                            for (uint32_t ui_b=0;ui_b<ci->pVertexInputState->vertexBindingDescriptionCount;ui_b++)
+                            {
+                                const VkVertexInputBindingDescription *ui_bd=&ci->pVertexInputState->pVertexBindingDescriptions[ui_b];
+                                STEREO_LOG("PIPELINE_UI_BIND hash=%016llx index=%u binding=%u stride=%u input_rate=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_b,ui_bd->binding,ui_bd->stride,ui_bd->inputRate);
+                            }
+                            for (uint32_t ui_a=0;ui_a<ci->pVertexInputState->vertexAttributeDescriptionCount;ui_a++)
+                            {
+                                const VkVertexInputAttributeDescription *ui_ad=&ci->pVertexInputState->pVertexAttributeDescriptions[ui_a];
+                                STEREO_LOG("PIPELINE_UI_ATTR hash=%016llx index=%u location=%u binding=%u format=%u offset=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_a,ui_ad->location,ui_ad->binding,ui_ad->format,ui_ad->offset);
+                            }
+                        }
                         STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_screen_space,ci->pDepthStencilState->depthTestEnable,ci->pDepthStencilState->depthWriteEnable,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
                         goto PIPE_DECISION_CONTINUE;
                     }
