@@ -121,7 +121,10 @@ jobs:
         -DVKS3D_BUILD_DEMO=OFF
         -DSTEREO_BUILD_DEMO=OFF
         -DVKS3D_VER_PATCH=${{env.CommitCount}}
-        -DVKS3D_VER_BUILD=${{env.BuildDate}}
+        -DVKS3D_VER_BUILD=${{env.AttemptCount}}
+        -DVKS3D_VER_DATE=${{env.BuildDate}}
+        -DVKS3D_REPO=${{github.repository}}
+        -DVKS3D_BRANCH=${{env.Branch}}
         -DVKS3D_COMMIT_HASH=${{env.CommitHash}}
         -DVKS3D_BITS=${{matrix.Settings.Bits}}
 
