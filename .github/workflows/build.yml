@@ -128,7 +128,7 @@ jobs:
         -DVKS3D_REPO=${{github.repository}}
         -DVKS3D_BRANCH=${{env.Branch}}
         -DVKS3D_COMMIT_HASH=${{env.CommitHashShort}}
-        -DVKS3D_COMMIT_TITLE=${{env.CommitTitle}}
+        -DVKS3D_COMMIT_TITLE="${{env.CommitTitle}}"
         -DVKS3D_BITS=${{matrix.Settings.Bits}}
 
     - name: Build
