@@ -48,7 +48,9 @@ jobs:
     - name: Get current commit hash and counts
       run: |
         echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
+        echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+        echo "CommitTitle=$(git show --pretty=format:%s -s HEAD)" >> $env:GITHUB_ENV
         echo "AttemptCount=${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_ENV
         echo "BuildDate=$(git show -s --date=format:'%Y%m%d' --format=%cd)" >> $env:GITHUB_ENV
 
@@ -125,7 +127,8 @@ jobs:
         -DVKS3D_VER_DATE=${{env.BuildDate}}
         -DVKS3D_REPO=${{github.repository}}
         -DVKS3D_BRANCH=${{env.Branch}}
-        -DVKS3D_COMMIT_HASH=${{env.CommitHash}}
+        -DVKS3D_COMMIT_HASH=${{env.CommitHashShort}}
+        -DVKS3D_COMMIT_TITLE=${{env.CommitTitle}}
         -DVKS3D_BITS=${{matrix.Settings.Bits}}
 
     - name: Build

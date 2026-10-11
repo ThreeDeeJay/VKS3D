@@ -16,6 +16,7 @@
 #define VKS3D_REPO          @VKS3D_REPO@
 #define VKS3D_BRANCH        @VKS3D_BRANCH@
 #define VKS3D_COMMIT_HASH   @VKS3D_COMMIT_HASH@
+#define VKS3D_COMMIT_TITLE  @VKS3D_COMMIT_TITLE@
 #define VKS3D_BITS          @VKS3D_BITS@
 #define TARGET_NAME         @TARGET_NAME@
 
@@ -33,8 +34,7 @@ BEGIN
         BLOCK "040904b0"   /* Language: US English, Unicode */
         BEGIN
             VALUE "CompanyName",        "3DJ"
-            VALUE "FileDescription",    "VKS3D: Windows @VKS3D_BITS@-bit Vulkan stereoscopic 3D driver"
-            VALUE "Comments",           "Repo: @VKS3D_REPO@ Branch: @VKS3D_BRANCH@ Commit: @VKS3D_COMMIT_HASH@"
+            VALUE "FileDescription",    "@VKS3D_REPO@#@VKS3D_BRANCH@@@VKS3D_COMMIT_HASH@: @VKS3D_COMMIT_TITLE@"
             VALUE "FileVersion",        "1.0.@VKS3D_VER_PATCH@.@VKS3D_VER_BUILD@"
             VALUE "InternalName",       "VKS3D"
             VALUE "LegalCopyright",     "GPLv3 License"
