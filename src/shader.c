@@ -13260,6 +13260,13 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         StereoShaderCache *vs_cache = cache_find(sd, st->module);
                         if (vs_cache)
                             info->vs_hash = hash_spv(vs_cache->spv, vs_cache->words);
+                        else
+                        {
+                            const VkShaderModuleCreateInfo *inline_smci = stereo_stage_inline_spv(st);
+                            if (inline_smci && inline_smci->pCode && inline_smci->codeSize >= 4)
+                                info->vs_hash = hash_spv(inline_smci->pCode, inline_smci->codeSize / 4);
+                        }
+                        STEREO_LOG("PIPE_INFO_VS pipe=%p module=%p hash=%016llx cached=%u",(void*)info->pipeline,(void*)st->module,(unsigned long long)info->vs_hash,vs_cache!=NULL);
                     }
                     if (st->stage == VK_SHADER_STAGE_GEOMETRY_BIT)
                     {
