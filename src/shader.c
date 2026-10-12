@@ -11598,6 +11598,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
+    uint64_t                         *vs_hashes = calloc(N, sizeof(*vs_hashes));
     for (uint32_t i = 0; i < N; i++)
     {
         dbg_out[i].proj_set             = UINT32_MAX;
@@ -11605,8 +11606,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         dbg_out[i].proj_member_mask     = UINT32_MAX;
         dbg_out[i].proj_var             = UINT32_MAX;
     }
-    if (!tmp_mod||!tst||!infos) {
-        free(tmp_mod); free(tst); free(infos);
+    if (!tmp_mod||!tst||!infos||!dbg_out||!vs_hashes) {
+        free(tmp_mod); free(tst); free(infos); free(dbg_out); free(vs_hashes);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
@@ -12052,8 +12053,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_uv_quad = vs_quad_fs && vs_has_user_output && !vs_has_v3_user_output && !vm.has_v2_position_input && !vm.has_direct_position_write && vm.location0_count == 2 && vm.screen_value_count == 2 && !vs_z_one_position;
                     vs_procedural_sky = vs_background && vs_quad_fs && !vs_z_one_position;
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
+                    vs_hashes[p] = hash_spv(vs_cache->spv,vs_cache->words);
                     STEREO_LOG(
-                    "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)vs_hashes[p],vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                     }
                     STEREO_LOG("PIPELINE_UI_GATE mono_ui=%u hash=%016llx screen_space=%u depth_state=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u screen_count=%u screen_zw=%u proj=%u dots=%u",
                         sd->stereo.mono_ui,
@@ -13257,16 +13259,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         info->patched_vs =
                             (tmp_mod[p] != VK_NULL_HANDLE &&
                              st->module == tmp_mod[p]);
-                        StereoShaderCache *vs_cache = cache_find(sd, st->module);
-                        if (vs_cache)
-                            info->vs_hash = hash_spv(vs_cache->spv, vs_cache->words);
-                        else
-                        {
-                            const VkShaderModuleCreateInfo *inline_smci = stereo_stage_inline_spv(st);
-                            if (inline_smci && inline_smci->pCode && inline_smci->codeSize >= 4)
-                                info->vs_hash = hash_spv(inline_smci->pCode, inline_smci->codeSize / 4);
-                        }
-                        STEREO_LOG("PIPE_INFO_VS pipe=%p module=%p hash=%016llx cached=%u",(void*)info->pipeline,(void*)st->module,(unsigned long long)info->vs_hash,vs_cache!=NULL);
+                        info->vs_hash = vs_hashes[p];
+                        STEREO_LOG("PIPE_INFO_VS pipe=%p module=%p hash=%016llx",(void*)info->pipeline,(void*)st->module,(unsigned long long)info->vs_hash);
                     }
                     if (st->stage == VK_SHADER_STAGE_GEOMETRY_BIT)
                     {
@@ -13324,7 +13318,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         free(tst[p]);
     }
-    free(tmp_mod); free(tst); free(infos);
+    free(tmp_mod); free(tst); free(infos); free(dbg_out); free(vs_hashes);
     return res;
 }
 
