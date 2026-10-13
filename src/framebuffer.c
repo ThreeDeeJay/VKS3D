@@ -1370,9 +1370,6 @@ stereo_CmdDrawIndexed(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
-    STEREO_LOG(
-        "UI_DRAW_TRACE pipe=%p rp=%p fb=%p info=%u quad=%u vs_hash=%016llx depth_test=%u depth_write=%u depth_compare=%u blend=%u indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
-        (void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     if (info)
     {
         STEREO_LOG(
@@ -1433,9 +1430,6 @@ stereo_CmdDraw(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
-    STEREO_LOG(
-        "UI_DRAW_TRACE pipe=%p rp=%p fb=%p info=%u quad=%u vs_hash=%016llx depth_test=%u depth_write=%u depth_compare=%u blend=%u vertexCount=%u instanceCount=%u firstVertex=%u firstInstance=%u",
-        (void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,vertexCount,instanceCount,firstVertex,firstInstance);
     if (info)
     {
         STEREO_LOG(

@@ -11598,7 +11598,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
-    uint64_t                         *vs_hashes = calloc(N, sizeof(*vs_hashes));
     for (uint32_t i = 0; i < N; i++)
     {
         dbg_out[i].proj_set             = UINT32_MAX;
@@ -11606,8 +11605,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         dbg_out[i].proj_member_mask     = UINT32_MAX;
         dbg_out[i].proj_var             = UINT32_MAX;
     }
-    if (!tmp_mod||!tst||!infos||!dbg_out||!vs_hashes) {
-        free(tmp_mod); free(tst); free(infos); free(dbg_out); free(vs_hashes);
+    if (!tmp_mod||!tst||!infos) {
+        free(tmp_mod); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
@@ -12053,40 +12052,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_uv_quad = vs_quad_fs && vs_has_user_output && !vs_has_v3_user_output && !vm.has_v2_position_input && !vm.has_direct_position_write && vm.location0_count == 2 && vm.screen_value_count == 2 && !vs_z_one_position;
                     vs_procedural_sky = vs_background && vs_quad_fs && !vs_z_one_position;
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
-                    vs_hashes[p] = hash_spv(vs_cache->spv,vs_cache->words);
                     STEREO_LOG(
-                    "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)vs_hashes[p],vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                    "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                     }
-                    STEREO_LOG("PIPELINE_UI_GATE mono_ui=%u hash=%016llx screen_space=%u depth_state=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u screen_count=%u screen_zw=%u proj=%u dots=%u",
-                        sd->stereo.mono_ui,
-                        (unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),
-                        vs_screen_space,
-                        ci->pDepthStencilState!=NULL,
-                        ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,
-                        ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,
-                        vm.has_matrix_ops,
-                        vm.has_vector_matrix_ops,
-                        vm.has_v2_position_input,
-                        vm.screen_value_count,
-                        vm.screen_has_zw_use,
-                        vm.proj_found,
-                        vm.dot_count);
-                    bool ui_depth_disabled=ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable;
-                    bool ui_blend_enabled=false;
-                    if (ci->pColorBlendState && ci->pColorBlendState->pAttachments)
-                    {
-                        for (uint32_t ui_bi=0;ui_bi<ci->pColorBlendState->attachmentCount;ui_bi++)
-                        {
-                            if (ci->pColorBlendState->pAttachments[ui_bi].blendEnable)
-                            {
-                                ui_blend_enabled=true;
-                                break;
-                            }
-                        }
-                    }
-                    bool ui_screen_candidate=vs_screen_space&&!vm.has_matrix_ops&&vm.has_v2_position_input&&!vm.has_emit_vertex&&vm.screen_value_count==2&&!vm.screen_has_zw_use&&!vm.proj_found&&vm.dot_count>2&&vm.dot_count<24;
-                    STEREO_LOG("PIPELINE_UI_STATE hash=%016llx depth_disabled=%u blend=%u candidate=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_depth_disabled,ui_blend_enabled,ui_screen_candidate);
-                    if (sd->stereo.mono_ui && vs_screen_space && (ui_depth_disabled || (ui_screen_candidate && ui_blend_enabled)))
+                    if (sd->stereo.mono_ui && vs_screen_space && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable)
                     {
                         STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
                             (unsigned long long)hash_spv(vs_cache->spv,
@@ -12105,19 +12074,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                             vm.has_vector_matrix_ops,
                             vm.has_v2_position_input,
                             vm.dot_count);
-                        if (ci->pVertexInputState)
-                        {
-                            for (uint32_t ui_b=0;ui_b<ci->pVertexInputState->vertexBindingDescriptionCount;ui_b++)
-                            {
-                                const VkVertexInputBindingDescription *ui_bd=&ci->pVertexInputState->pVertexBindingDescriptions[ui_b];
-                                STEREO_LOG("PIPELINE_UI_BIND hash=%016llx index=%u binding=%u stride=%u input_rate=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_b,ui_bd->binding,ui_bd->stride,ui_bd->inputRate);
-                            }
-                            for (uint32_t ui_a=0;ui_a<ci->pVertexInputState->vertexAttributeDescriptionCount;ui_a++)
-                            {
-                                const VkVertexInputAttributeDescription *ui_ad=&ci->pVertexInputState->pVertexAttributeDescriptions[ui_a];
-                                STEREO_LOG("PIPELINE_UI_ATTR hash=%016llx index=%u location=%u binding=%u format=%u offset=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_a,ui_ad->location,ui_ad->binding,ui_ad->format,ui_ad->offset);
-                            }
-                        }
                         STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_screen_space,ci->pDepthStencilState->depthTestEnable,ci->pDepthStencilState->depthWriteEnable,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
                         goto PIPE_DECISION_CONTINUE;
                     }
@@ -13242,22 +13198,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 info->vertex_binding_count =
                     pCI[p].pVertexInputState ?
                     pCI[p].pVertexInputState->vertexBindingDescriptionCount : 0;
-                info->vs_hash = 0;
-                info->depth_test_enable = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthTestEnable : VK_FALSE;
-                info->depth_write_enable = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthWriteEnable : VK_FALSE;
-                info->depth_compare_op = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthCompareOp : VK_COMPARE_OP_ALWAYS;
-                info->blend_enable = VK_FALSE;
-                if (pCI[p].pColorBlendState && pCI[p].pColorBlendState->pAttachments)
-                {
-                    for (uint32_t bi = 0; bi < pCI[p].pColorBlendState->attachmentCount; bi++)
-                    {
-                        if (pCI[p].pColorBlendState->pAttachments[bi].blendEnable)
-                        {
-                            info->blend_enable = VK_TRUE;
-                            break;
-                        }
-                    }
-                }
                 info->view_mask = 0; /* default */
                 info->has_proj_ubo          = dbg_out[p].has_proj_ubo;
                 info->proj_set              = dbg_out[p].proj_set;
@@ -13282,8 +13222,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         info->patched_vs =
                             (tmp_mod[p] != VK_NULL_HANDLE &&
                              st->module == tmp_mod[p]);
-                        info->vs_hash = vs_hashes[p];
-                        STEREO_LOG("PIPE_INFO_VS pipe=%p module=%p hash=%016llx",(void*)info->pipeline,(void*)st->module,(unsigned long long)info->vs_hash);
                     }
                     if (st->stage == VK_SHADER_STAGE_GEOMETRY_BIT)
                     {
@@ -13341,7 +13279,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         free(tst[p]);
     }
-    free(tmp_mod); free(tst); free(infos); free(dbg_out); free(vs_hashes);
+    free(tmp_mod); free(tst); free(infos);
     return res;
 }
 

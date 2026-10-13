@@ -557,11 +557,6 @@ typedef struct StereoPipelineInfo
     /* Classification recorded at pipeline creation */
     VkBool32 is_quad;
     uint32_t vertex_binding_count;
-    uint64_t vs_hash;
-    VkBool32 depth_test_enable;
-    VkBool32 depth_write_enable;
-    VkCompareOp depth_compare_op;
-    VkBool32 blend_enable;
     /* Vulkan 1.3 dynamic rendering multiview */
     uint32_t view_mask;
     /* Projection-UBO candidate discovered while scanning the patched stage */
