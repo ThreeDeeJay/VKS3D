@@ -921,6 +921,10 @@ static void do_scan(SpvMod *m, bool p2)
                         }
                     }
                 }
+                if(m->exec_model==SpvExecGeometry&&w[i+3]==SpvStorageInput)
+                {
+                    STEREO_LOG("GS_SIGNATURE entry=%u var=%u inputs=%u emits=%u modes=%u,%u vertices=%u",m->entry_function,w[i+2],m->geometry_location_count,m->emit_count,m->geometry_input_mode,m->geometry_output_mode,m->geometry_output_vertices);
+                }
                 break;
             case SpvOpDecorate:
                 if (wc >= 4)
@@ -1029,6 +1033,10 @@ static void do_scan(SpvMod *m, bool p2)
             }
         }
         i+=wc;
+    }
+    if(m->exec_model==SpvExecGeometry)
+    {
+        STEREO_LOG("GS_SIGNATURE_FINAL entry=%u inputs=%u emits=%u modes=%u,%u vertices=%u",m->entry_function,m->geometry_location_count,m->emit_count,m->geometry_input_mode,m->geometry_output_mode,m->geometry_output_vertices);
     }
 }
 
