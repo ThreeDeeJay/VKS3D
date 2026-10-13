@@ -12072,8 +12072,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         vm.proj_found,
                         vm.dot_count);
                     bool ui_depth_disabled=ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable;
+                    bool ui_blend_enabled=false;
+                    if (ci->pColorBlendState && ci->pColorBlendState->pAttachments)
+                    {
+                        for (uint32_t ui_bi=0;ui_bi<ci->pColorBlendState->attachmentCount;ui_bi++)
+                        {
+                            if (ci->pColorBlendState->pAttachments[ui_bi].blendEnable)
+                            {
+                                ui_blend_enabled=true;
+                                break;
+                            }
+                        }
+                    }
                     bool ui_screen_candidate=vs_screen_space&&!vm.has_matrix_ops&&vm.has_v2_position_input&&!vm.has_emit_vertex&&vm.screen_value_count==2&&!vm.screen_has_zw_use&&!vm.proj_found&&vm.dot_count>2&&vm.dot_count<24;
-                    if (sd->stereo.mono_ui && vs_screen_space && ui_depth_disabled)
+                    STEREO_LOG("PIPELINE_UI_STATE hash=%016llx depth_disabled=%u blend=%u candidate=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_depth_disabled,ui_blend_enabled,ui_screen_candidate);
+                    if (sd->stereo.mono_ui && vs_screen_space && (ui_depth_disabled || (ui_screen_candidate && ui_blend_enabled)))
                     {
                         STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
                             (unsigned long long)hash_spv(vs_cache->spv,
@@ -13234,6 +13247,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 info->depth_write_enable = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthWriteEnable : VK_FALSE;
                 info->depth_compare_op = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthCompareOp : VK_COMPARE_OP_ALWAYS;
                 info->blend_enable = VK_FALSE;
+                if (pCI[p].pColorBlendState && pCI[p].pColorBlendState->pAttachments)
+                {
+                    for (uint32_t bi = 0; bi < pCI[p].pColorBlendState->attachmentCount; bi++)
+                    {
+                        if (pCI[p].pColorBlendState->pAttachments[bi].blendEnable)
+                        {
+                            info->blend_enable = VK_TRUE;
+                            break;
+                        }
+                    }
+                }
                 info->view_mask = 0; /* default */
                 info->has_proj_ubo          = dbg_out[p].has_proj_ubo;
                 info->proj_set              = dbg_out[p].proj_set;
