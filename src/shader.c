@@ -136,9 +136,17 @@ typedef struct
     uint32_t position_function;
     /* Geometry */
     uint32_t emit_count;
+    uint32_t geometry_input_locations[32];
+    uint32_t geometry_input_vars[32];
+    uint32_t geometry_input_var_count;
     uint32_t geometry_input_mode;
     uint32_t geometry_output_mode;
     uint32_t geometry_output_vertices;
+    uint32_t geometry_location_count;
+    uint32_t geometry_uniform_count;
+    uint32_t geometry_uniform_array_lengths[8];
+    bool geometry_has_image;
+    bool geometry_has_sampler;
     /* Mesh output Position */
     uint32_t mesh_vertices_var;
     uint32_t mesh_vertices_type;
@@ -901,6 +909,17 @@ static void do_scan(SpvMod *m, bool p2)
                     {
                         m->has_v2_position_input = true;
                     }
+                    if(m->exec_model==SpvExecGeometry)
+                    {
+                        for(uint32_t k=0;k<m->geometry_input_var_count;k++)
+                        {
+                            if(m->geometry_input_vars[k]==w[i+2])
+                            {
+                                m->geometry_location_count++;
+                                break;
+                            }
+                        }
+                    }
                 }
                 break;
             case SpvOpDecorate:
@@ -921,6 +940,10 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     if(m->location0_count<16)
                         m->location0_vars[m->location0_count++]=w[i+1];
+                }
+                if(wc>=4&&w[i+2]==SpvDecorationLocation&&m->exec_model==SpvExecGeometry&&m->geometry_input_var_count<32)
+                {
+                    m->geometry_input_vars[m->geometry_input_var_count++]=w[i+1];
                 }
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
