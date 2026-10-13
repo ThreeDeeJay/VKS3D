@@ -12055,27 +12055,20 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     STEREO_LOG(
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
                 }
-                if (sd->stereo.mono_ui)
+                bool mono_ui_menu_background = false;
+                if (ci->pVertexInputState && ci->pVertexInputState->vertexAttributeDescriptionCount == 2 && ci->pVertexInputState->pVertexAttributeDescriptions && ci->pVertexInputState->vertexBindingDescriptionCount == 1)
                 {
-                    STEREO_LOG("MONO_UI_PIPELINE hash=%016llx depth_state=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u blend_attachments=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ci->pDepthStencilState!=NULL,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthCompareOp:0,ci->pInputAssemblyState?ci->pInputAssemblyState->topology:0,ci->pRasterizationState?ci->pRasterizationState->cullMode:0,ci->pRasterizationState?ci->pRasterizationState->frontFace:0,ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:0,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0,ci->subpass,ci->pColorBlendState?ci->pColorBlendState->attachmentCount:0);
-                    if (ci->pVertexInputState)
+                    bool has_position = false;
+                    bool has_color = false;
+                    for (uint32_t ui_a = 0; ui_a < ci->pVertexInputState->vertexAttributeDescriptionCount; ui_a++)
                     {
-                        for (uint32_t ui_a=0;ui_a<ci->pVertexInputState->vertexAttributeDescriptionCount;ui_a++)
-                        {
-                            const VkVertexInputAttributeDescription *ui_ad=&ci->pVertexInputState->pVertexAttributeDescriptions[ui_a];
-                            STEREO_LOG("MONO_UI_ATTR hash=%016llx location=%u binding=%u format=%u offset=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_ad->location,ui_ad->binding,ui_ad->format,ui_ad->offset);
-                        }
+                        const VkVertexInputAttributeDescription *ui_ad = &ci->pVertexInputState->pVertexAttributeDescriptions[ui_a];
+                        if (ui_ad->location == 0 && ui_ad->binding == 0 && ui_ad->format == VK_FORMAT_R32G32B32A32_SFLOAT && ui_ad->offset == 0) has_position = true;
+                        if (ui_ad->location == 5 && ui_ad->binding == 0 && ui_ad->format == VK_FORMAT_R8G8B8A8_UNORM && ui_ad->offset == 12) has_color = true;
                     }
-                    if (ci->pColorBlendState&&ci->pColorBlendState->pAttachments)
-                    {
-                        for (uint32_t ui_bi=0;ui_bi<ci->pColorBlendState->attachmentCount;ui_bi++)
-                        {
-                            const VkPipelineColorBlendAttachmentState *ui_ba=&ci->pColorBlendState->pAttachments[ui_bi];
-                            STEREO_LOG("MONO_UI_BLEND hash=%016llx attachment=%u enable=%u src_color=%u dst_color=%u color_op=%u src_alpha=%u dst_alpha=%u alpha_op=%u write_mask=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_bi,ui_ba->blendEnable,ui_ba->srcColorBlendFactor,ui_ba->dstColorBlendFactor,ui_ba->colorBlendOp,ui_ba->srcAlphaBlendFactor,ui_ba->dstAlphaBlendFactor,ui_ba->alphaBlendOp,ui_ba->colorWriteMask);
-                        }
-                    }
+                    mono_ui_menu_background = has_position && has_color;
                 }
-                if (sd->stereo.mono_ui && vs_screen_space && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable)
+                if (sd->stereo.mono_ui && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable && (vs_screen_space || (mono_ui_menu_background && vs_quad_fs && !vm.has_matrix_ops && !vm.has_direct_position_write)))
                 {
                         STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
                             (unsigned long long)hash_spv(vs_cache->spv,
