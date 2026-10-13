@@ -12085,9 +12085,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         }
                     }
                     bool ui_screen_candidate=vs_screen_space&&!vm.has_matrix_ops&&vm.has_v2_position_input&&!vm.has_emit_vertex&&vm.screen_value_count==2&&!vm.screen_has_zw_use&&!vm.proj_found&&vm.dot_count>2&&vm.dot_count<24;
-                    bool ui_depth_always=ci->pDepthStencilState&&ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable&&ci->pDepthStencilState->depthCompareOp==VK_COMPARE_OP_ALWAYS;
-                    STEREO_LOG("PIPELINE_UI_STATE hash=%016llx depth_disabled=%u depth_always=%u blend=%u candidate=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_depth_disabled,ui_depth_always,ui_blend_enabled,ui_screen_candidate);
-                    if (sd->stereo.mono_ui && vs_screen_space && ui_screen_candidate)
+                    STEREO_LOG("PIPELINE_UI_STATE hash=%016llx depth_disabled=%u blend=%u candidate=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),ui_depth_disabled,ui_blend_enabled,ui_screen_candidate);
+                    if (sd->stereo.mono_ui && vs_screen_space && (ui_depth_disabled || (ui_screen_candidate && ui_blend_enabled)))
                     {
                         STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
                             (unsigned long long)hash_spv(vs_cache->spv,
