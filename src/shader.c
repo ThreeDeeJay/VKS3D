@@ -136,6 +136,9 @@ typedef struct
     uint32_t position_function;
     /* Geometry */
     uint32_t emit_count;
+    uint32_t geometry_input_mode;
+    uint32_t geometry_output_mode;
+    uint32_t geometry_output_vertices;
     /* Mesh output Position */
     uint32_t mesh_vertices_var;
     uint32_t mesh_vertices_type;
@@ -502,6 +505,14 @@ static void do_scan(SpvMod *m, bool p2)
                         m->exec_model = (int)e;
                         m->entry_function = w[i + 2];
                     }
+                }
+                break;
+            case SpvOpExecutionMode:
+                if(wc>=3&&w[i+1]==m->entry_function)
+                {
+                    if(w[i+2]==SpvExecutionModeInputPoints)m->geometry_input_mode=w[i+2];
+                    else if(w[i+2]==SpvExecutionModeOutputTriangleStrip)m->geometry_output_mode=w[i+2];
+                    else if(w[i+2]==SpvExecutionModeOutputVertices&&wc>=4)m->geometry_output_vertices=w[i+3];
                 }
                 break;
             case SpvOpTypeFloat:
@@ -3036,10 +3047,10 @@ bool spirv_patch_stereo_vertex(
      */
     if(cfg&&cfg->mono_ui)
     {
-        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.screen_has_zw_use&&!m.has_emit_vertex)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex&&!m.has_matrix_ops&&!m.has_vector_matrix_ops)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_matrix_ops);
+        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.screen_has_zw_use&&!m.has_emit_vertex)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex&&!m.has_matrix_ops&&!m.has_vector_matrix_ops)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_matrix_ops)||(m.exec_model==SpvExecGeometry&&m.pos_is_block&&m.geometry_input_mode==SpvExecutionModeInputPoints&&m.geometry_output_mode==SpvExecutionModeOutputTriangleStrip&&m.geometry_output_vertices==4&&m.location0_count==2&&!m.proj_found&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&!m.has_viewindex_builtin);
         if(ui_candidate)
         {
-            STEREO_LOG("VERTEX_UI_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u vmatrix=%u direct=%u emit=%u proj=%u dots=%u",(unsigned long long)spv_hash,m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_vector_matrix_ops,m.has_direct_position_write,m.has_emit_vertex,m.proj_found,m.dot_count);
+            STEREO_LOG("VERTEX_UI_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u vmatrix=%u direct=%u emit=%u proj=%u dots=%u gs_in=%u gs_out=%u gs_vertices=%u",(unsigned long long)spv_hash,m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_vector_matrix_ops,m.has_direct_position_write,m.emit_count,m.proj_found,m.dot_count,m.geometry_input_mode,m.geometry_output_mode,m.geometry_output_vertices);
             free_spv_provenance(&m);
             return false;
         }
