@@ -13476,6 +13476,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         StereoShaderCache *vs_cache = cache_find(sd, st->module);
                         if (vs_cache)
                             info->vs_hash = hash_spv(vs_cache->spv, vs_cache->words);
+                        else
+                            info->vs_hash = 0;
                     }
                     if (st->stage == VK_SHADER_STAGE_GEOMETRY_BIT)
                     {
