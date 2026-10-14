@@ -915,10 +915,6 @@ static void do_scan(SpvMod *m, bool p2)
                         m->has_v2_position_input = true;
                     }
                 }
-                if(m->exec_model==SpvExecGeometry&&w[i+3]==SpvStorageInput)
-                {
-                    STEREO_LOG("GS_SIGNATURE entry=%u var=%u inputs=%u emits=%u modes=%u,%u vertices=%u",m->entry_function,w[i+2],m->geometry_location_count,m->emit_count,m->geometry_input_mode,m->geometry_output_mode,m->geometry_output_vertices);
-                }
                 break;
             case SpvOpDecorate:
                 if (wc >= 4)
@@ -1041,22 +1037,42 @@ static void count_geometry_inputs(SpvMod *m)
     uint32_t input_count=0;
     uint32_t location_ids[256];
     uint32_t location_count=0;
+    uint32_t variable_ops=0;
+    uint32_t decorate_ops=0;
+    uint32_t input_vars=0;
+    uint32_t location_decorations=0;
     m->geometry_location_count=0;
     for(size_t i=5;i<m->count;)
     {
         uint32_t op=w[i]&0xffff,wc=w[i]>>16;
         if(!wc||i+wc>m->count)break;
-        if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageInput&&input_count<256)
+        if(op==SpvOpVariable&&wc>=4)
         {
-            bool seen=false;
-            for(uint32_t k=0;k<input_count;k++)if(input_ids[k]==w[i+2]){seen=true;break;}
-                if(!seen)input_ids[input_count++]=w[i+2];
+            variable_ops++;
+            if(w[i+3]==SpvStorageInput)
+            {
+                input_vars++;
+                if(input_count<256)
+                {
+                    bool seen=false;
+                    for(uint32_t k=0;k<input_count;k++)if(input_ids[k]==w[i+2]){seen=true;break;}
+                        if(!seen)input_ids[input_count++]=w[i+2];
+                }
+            }
         }
-        if(op==SpvOpDecorate&&wc>=4&&w[i+2]==SpvDecorationLocation&&location_count<256)
+        if(op==SpvOpDecorate&&wc>=4)
         {
-            bool seen=false;
-            for(uint32_t k=0;k<location_count;k++)if(location_ids[k]==w[i+1]){seen=true;break;}
-                if(!seen)location_ids[location_count++]=w[i+1];
+            decorate_ops++;
+            if(w[i+2]==SpvDecorationLocation)
+            {
+                location_decorations++;
+                if(location_count<256)
+                {
+                    bool seen=false;
+                    for(uint32_t k=0;k<location_count;k++)if(location_ids[k]==w[i+1]){seen=true;break;}
+                        if(!seen)location_ids[location_count++]=w[i+1];
+                }
+            }
         }
         i+=wc;
     }
@@ -1071,6 +1087,7 @@ static void count_geometry_inputs(SpvMod *m)
             }
         }
     }
+    STEREO_LOG("GS_INPUT_SCAN hash=%016llx words=%zu var_ops=%u input_vars=%u decorate_ops=%u location_decorations=%u unique_inputs=%u unique_locations=%u matched=%u first_word=0x%08x", (unsigned long long)hash_spv(m->words,m->count),m->count,variable_ops,input_vars,decorate_ops,location_decorations,input_count,location_count,m->geometry_location_count,m->words[0]);
 }
 
 static void spv_scan(SpvMod *m)
