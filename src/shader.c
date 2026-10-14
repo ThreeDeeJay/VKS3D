@@ -324,6 +324,11 @@ static void do_scan(SpvMod *m, bool p2)
 {
     const uint32_t *w=m->words;
     uint32_t current_function = 0;
+    if(!p2)
+    {
+        m->geometry_location_count=0;
+        m->geometry_input_var_count=0;
+    }
     #define MAT(id)        matrix_value(m, (id))
     #define SETMAT(id,v)   set_matrix_value(m, (id), (v))
     #define PTR(id)        matrix_ptr(m, (id))
@@ -911,12 +916,25 @@ static void do_scan(SpvMod *m, bool p2)
                     }
                     if(m->exec_model==SpvExecGeometry)
                     {
+                        bool has_location=false;
                         for(uint32_t k=0;k<m->geometry_input_var_count;k++)
                         {
                             if(m->geometry_input_vars[k]==w[i+2])
                             {
-                                m->geometry_location_count++;
+                                has_location=true;
                                 break;
+                            }
+                        }
+                        if(!has_location)
+                        {
+                            for(uint32_t k=0;k<m->geometry_input_var_count;k++)
+                            {
+                                if(m->geometry_input_vars[k]==UINT32_MAX)
+                                {
+                                    m->geometry_input_vars[k]=w[i+2];
+                                    m->geometry_location_count++;
+                                    break;
+                                }
                             }
                         }
                     }
