@@ -914,30 +914,6 @@ static void do_scan(SpvMod *m, bool p2)
                     {
                         m->has_v2_position_input = true;
                     }
-                    if(m->exec_model==SpvExecGeometry)
-                    {
-                        bool has_location=false;
-                        for(uint32_t k=0;k<m->geometry_input_var_count;k++)
-                        {
-                            if(m->geometry_input_vars[k]==w[i+2])
-                            {
-                                has_location=true;
-                                break;
-                            }
-                        }
-                        if(!has_location)
-                        {
-                            for(uint32_t k=0;k<m->geometry_input_var_count;k++)
-                            {
-                                if(m->geometry_input_vars[k]==UINT32_MAX)
-                                {
-                                    m->geometry_input_vars[k]=w[i+2];
-                                    m->geometry_location_count++;
-                                    break;
-                                }
-                            }
-                        }
-                    }
                 }
                 if(m->exec_model==SpvExecGeometry&&w[i+3]==SpvStorageInput)
                 {
@@ -1058,8 +1034,47 @@ static void do_scan(SpvMod *m, bool p2)
     }
 }
 
+static void count_geometry_inputs(SpvMod *m)
+{
+    const uint32_t *w=m->words;
+    uint32_t locations[32];
+    uint32_t location_count=0;
+    m->geometry_location_count=0;
+    for(size_t i=5;i<m->count;)
+    {
+        uint32_t op=w[i]&0xffff,wc=w[i]>>16;
+        if(!wc||i+wc>m->count)break;
+        if(op==SpvOpDecorate&&wc>=4&&w[i+2]==SpvDecorationLocation&&location_count<32)
+            locations[location_count++]=w[i+1];
+        i+=wc;
+    }
+    for(size_t i=5;i<m->count;)
+    {
+        uint32_t op=w[i]&0xffff,wc=w[i]>>16;
+        if(!wc||i+wc>m->count)break;
+        if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageInput)
+        {
+            for(uint32_t k=0;k<location_count;k++)
+            {
+                if(locations[k]==w[i+2])
+                {
+                    m->geometry_location_count++;
+                    break;
+                }
+            }
+        }
+        i+=wc;
+    }
+}
+
 static void spv_scan(SpvMod *m)
 {
+    /* Reset diagnostics once; do_scan(false) runs twice. */
+    m->emit_count=0;
+    m->has_emit_vertex=false;
+    m->dot_count=0;
+    m->geometry_location_count=0;
+    m->geometry_input_var_count=0;
     /* First pass: discover decorations/types. */
     do_scan(m, false);
     /*
@@ -1070,6 +1085,8 @@ static void spv_scan(SpvMod *m)
     do_scan(m, false);
     if (m->pos_is_block)
         do_scan(m, true);
+    if(m->exec_model==SpvExecGeometry)
+        count_geometry_inputs(m);
     STEREO_LOG(
         "SCAN hash=%016llx exec=%u matrix=%u proj=%u dot=%u direct=%u emit=%u pos=%u block=%u",
         (unsigned long long)hash_spv(m->words, m->count),
