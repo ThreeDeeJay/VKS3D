@@ -11915,24 +11915,95 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 SpvMod gs={0};
                 gs.words=gs_cache->spv;
                 gs.count=gs_cache->words;
-                gs.bound=gs.words[3];
-                gs.value_capacity=gs.bound+64;
-                gs.value_from_matrix=calloc(gs.value_capacity,sizeof(uint8_t));
-                gs.is_matrix_type=calloc(gs.value_capacity,sizeof(uint8_t));
-                gs.is_matrix_ptr=calloc(gs.value_capacity,sizeof(uint8_t));
-                gs.is_proj_value=calloc(gs.value_capacity,sizeof(uint8_t));
-                gs.is_view_value=calloc(gs.value_capacity,sizeof(uint8_t));
-                if(gs.value_from_matrix&&gs.is_matrix_type&&gs.is_matrix_ptr&&gs.is_proj_value&&gs.is_view_value)
+                uint32_t gs_input_count=0;
+                uint32_t gs_output_count=0;
+                uint32_t gs_input_builtin_count=0;
+                uint32_t gs_output_builtin_count=0;
+                uint32_t gs_input_mode=~0u;
+                uint32_t gs_output_mode=~0u;
+                uint32_t gs_output_vertices=0;
+                uint64_t gs_hash=0;
+                if(has_gs&&gs_stage!=~0u)
                 {
-                    spv_scan(&gs);
-                    gs_input_count=gs.geometry_location_count;
-                    gs_hash=hash_spv(gs.words,gs.count);
-                    STEREO_LOG("GS_PIPE_CLASSIFY p=%u hash=%016llx inputs=%u ui_candidate=%u particle_candidate=%u",p,(unsigned long long)gs_hash,gs_input_count,gs_input_count>=7,gs_input_count==2);
-                    free_spv_provenance(&gs);
-                }
-                else
-                {
-                    free_spv_provenance(&gs);
+                    StereoShaderCache *gs_cache=cache_find(sd,ci->pStages[gs_stage].module);
+                    if(gs_cache&&gs_cache->spv&&gs_cache->words>=5)
+                    {
+                        SpvMod gs={0};
+                        gs.words=gs_cache->spv;
+                        gs.count=gs_cache->words;
+                        gs.bound=gs.words[3];
+                        gs.value_capacity=gs.bound+64;
+                        gs.value_from_matrix=calloc(gs.value_capacity,sizeof(uint8_t));
+                        gs.is_matrix_type=calloc(gs.value_capacity,sizeof(uint8_t));
+                        gs.is_matrix_ptr=calloc(gs.value_capacity,sizeof(uint8_t));
+                        gs.is_proj_value=calloc(gs.value_capacity,sizeof(uint8_t));
+                        gs.is_view_value=calloc(gs.value_capacity,sizeof(uint8_t));
+                        if(gs.value_from_matrix&&gs.is_matrix_type&&gs.is_matrix_ptr&&gs.is_proj_value&&gs.is_view_value)
+                        {
+                            spv_scan(&gs);
+                            gs_input_count=gs.geometry_location_count;
+                            gs_hash=hash_spv(gs.words,gs.count);
+                            for(uint32_t gi=5;gi<gs.count;)
+                            {
+                                uint32_t gwc=gs.words[gi]>>16;
+                                uint32_t gop=gs.words[gi]&0xffffu;
+                                if(!gwc||gwc>gs.count-gi)break;
+                                if(gop==SpvOpExecutionMode&&gwc>=3&&gs.words[gi+1]==gs.words[2])
+                                {
+                                    uint32_t mode=gs.words[gi+2];
+                                    if(mode==SpvExecutionModeInputPoints||mode==SpvExecutionModeInputLines||mode==SpvExecutionModeInputLinesAdjacency||mode==SpvExecutionModeTriangles||mode==SpvExecutionModeInputTrianglesAdjacency)gs_input_mode=mode;
+                                    else if(mode==SpvExecutionModeOutputPoints||mode==SpvExecutionModeOutputLineStrip||mode==SpvExecutionModeOutputTriangleStrip)gs_output_mode=mode;
+                                    else if(mode==SpvExecutionModeOutputVertices&&gwc>=4)gs_output_vertices=gs.words[gi+3];
+                                }
+                                gi+=gwc;
+                            }
+                            for(uint32_t gi=5;gi<gs.count;)
+                            {
+                                uint32_t gwc=gs.words[gi]>>16;
+                                uint32_t gop=gs.words[gi]&0xffffu;
+                                if(!gwc||gwc>gs.count-gi)break;
+                                if(gop==SpvOpVariable&&gwc>=4)
+                                {
+                                    uint32_t gid=gs.words[gi+2];
+                                    uint32_t storage=gs.words[gi+3];
+                                    if(storage==SpvStorageClassInput||storage==SpvStorageClassOutput)
+                                    {
+                                        bool has_location=false;
+                                        bool has_builtin=false;
+                                        for(uint32_t di=5;di<gs.count;)
+                                        {
+                                            uint32_t dwc=gs.words[di]>>16;
+                                            uint32_t dop=gs.words[di]&0xffffu;
+                                            if(!dwc||dwc>gs.count-di)break;
+                                            if(dop==SpvOpDecorate&&dwc>=4&&gs.words[di+1]==gid)
+                                            {
+                                                if(gs.words[di+2]==SpvDecorationLocation)has_location=true;
+                                                if(gs.words[di+2]==SpvDecorationBuiltIn)has_builtin=true;
+                                            }
+                                            di+=dwc;
+                                        }
+                                        if(has_location)
+                                        {
+                                            if(storage==SpvStorageClassInput)gs_input_count++;
+                                            else gs_output_count++;
+                                        }
+                                        if(has_builtin)
+                                        {
+                                            if(storage==SpvStorageClassInput)gs_input_builtin_count++;
+                                            else gs_output_builtin_count++;
+                                        }
+                                    }
+                                }
+                                gi+=gwc;
+                            }
+                            STEREO_LOG("GS_PIPE_CLASSIFY p=%u hash=%016llx inputs=%u outputs=%u input_builtins=%u output_builtins=%u input_mode=%u output_mode=%u output_vertices=%u ui_candidate=%u particle_candidate=%u",p,(unsigned long long)gs_hash,gs_input_count,gs_output_count,gs_input_builtin_count,gs_output_builtin_count,gs_input_mode,gs_output_mode,gs_output_vertices,gs_input_count>=7&&gs_output_mode==SpvExecutionModeOutputTriangleStrip&&gs_output_vertices==4,gs_input_count==2);
+                            free_spv_provenance(&gs);
+                        }
+                        else
+                        {
+                            free_spv_provenance(&gs);
+                        }
+                    }
                 }
             }
         }
