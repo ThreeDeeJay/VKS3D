@@ -12231,27 +12231,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 {
                     STEREO_LOG("MONO_UI_CLASSIFY hash=%016llx menu_bg=%u quad_fs=%u matrix=%u direct_pos=%u screen_space=%u depth_state=%u depth_test=%u depth_write=%u bindings=%u attrs=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),mono_ui_menu_background,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write,vs_screen_space,ci->pDepthStencilState!=NULL,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:0,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0);
                 }
-                STEREO_LOG("PIPELINE_UI_GATE hash=%016llx mono_ui=%u has_gs=%u gs_inputs=%u gs_ui=%u depth_state=%u depth_test=%u depth_write=%u screen_space=%u menu_bg=%u quad_fs=%u matrix=%u direct_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),sd->stereo.mono_ui,has_gs,gs_input_count,has_gs&&gs_input_count>=7,ci->pDepthStencilState!=NULL,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,vs_screen_space,mono_ui_menu_background,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write);
-                if (sd->stereo.mono_ui && ci->pDepthStencilState && !ci->pDepthStencilState->depthTestEnable && !ci->pDepthStencilState->depthWriteEnable && (vs_screen_space || (mono_ui_menu_background && vs_quad_fs && !vm.has_matrix_ops && !vm.has_direct_position_write) || (has_gs && gs_input_count >= 7)))
+                bool mono_ui_gs_candidate=sd->stereo.mono_ui&&has_gs&&gs_input_count>=7;
+                bool mono_ui_vs_candidate=sd->stereo.mono_ui&&ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable&&(vs_screen_space||(mono_ui_menu_background&&vs_quad_fs&&!vm.has_matrix_ops&&!vm.has_direct_position_write));
+                STEREO_LOG("PIPELINE_UI_GATE hash=%016llx gs_hash=%016llx mono_ui=%u has_gs=%u gs_inputs=%u gs_ui=%u gs_skip=%u vs_skip=%u depth_state=%u depth_test=%u depth_write=%u screen_space=%u menu_bg=%u quad_fs=%u matrix=%u direct_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),(unsigned long long)gs_hash,sd->stereo.mono_ui,has_gs,gs_input_count,has_gs&&gs_input_count>=7,mono_ui_gs_candidate,mono_ui_vs_candidate,ci->pDepthStencilState!=NULL,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,vs_screen_space,mono_ui_menu_background,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write);
+                if(mono_ui_gs_candidate||mono_ui_vs_candidate)
                 {
-                        STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
-                            (unsigned long long)hash_spv(vs_cache->spv,
-                                vs_cache->words),
-                            vs_screen_space,
-                            ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,
-                            ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,
-                            ci->pDepthStencilState?ci->pDepthStencilState->depthCompareOp:0,
-                            ci->pInputAssemblyState?ci->pInputAssemblyState->topology:0,
-                            ci->pRasterizationState?ci->pRasterizationState->cullMode:0,
-                            ci->pRasterizationState?ci->pRasterizationState->frontFace:0,
-                            ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:0,
-                            ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0,
-                            ci->subpass,
-                            vm.has_matrix_ops,
-                            vm.has_vector_matrix_ops,
-                            vm.has_v2_position_input,
-                            vm.dot_count);
-                        STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_screen_space,ci->pDepthStencilState->depthTestEnable,ci->pDepthStencilState->depthWriteEnable,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
+                        STEREO_LOG("PIPELINE_UI_CANDIDATE hash=%016llx gs_hash=%016llx gs_inputs=%u gs_candidate=%u screen_space=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u front=%u bindings=%u attrs=%u subpass=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",
+                            (unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),(unsigned long long)gs_hash,gs_input_count,mono_ui_gs_candidate,vs_screen_space,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthCompareOp:0,ci->pInputAssemblyState?ci->pInputAssemblyState->topology:0,ci->pRasterizationState?ci->pRasterizationState->cullMode:0,ci->pRasterizationState?ci->pRasterizationState->frontFace:0,ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:0,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0,ci->subpass,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
+                        STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx gs_hash=%016llx gs_inputs=%u gs_skip=%u screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),(unsigned long long)gs_hash,gs_input_count,mono_ui_gs_candidate,vs_screen_space,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
                         goto PIPE_DECISION_CONTINUE;
                     }
                 free_spv_provenance(&vm);
