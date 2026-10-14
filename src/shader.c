@@ -1037,33 +1037,39 @@ static void do_scan(SpvMod *m, bool p2)
 static void count_geometry_inputs(SpvMod *m)
 {
     const uint32_t *w=m->words;
-    uint32_t locations[32];
+    uint32_t input_ids[256];
+    uint32_t input_count=0;
+    uint32_t location_ids[256];
     uint32_t location_count=0;
     m->geometry_location_count=0;
     for(size_t i=5;i<m->count;)
     {
         uint32_t op=w[i]&0xffff,wc=w[i]>>16;
         if(!wc||i+wc>m->count)break;
-        if(op==SpvOpDecorate&&wc>=4&&w[i+2]==SpvDecorationLocation&&location_count<32)
-            locations[location_count++]=w[i+1];
-        i+=wc;
-    }
-    for(size_t i=5;i<m->count;)
-    {
-        uint32_t op=w[i]&0xffff,wc=w[i]>>16;
-        if(!wc||i+wc>m->count)break;
-        if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageInput)
+        if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageInput&&input_count<256)
         {
-            for(uint32_t k=0;k<location_count;k++)
-            {
-                if(locations[k]==w[i+2])
-                {
-                    m->geometry_location_count++;
-                    break;
-                }
-            }
+            bool seen=false;
+            for(uint32_t k=0;k<input_count;k++)if(input_ids[k]==w[i+2]){seen=true;break;}
+                if(!seen)input_ids[input_count++]=w[i+2];
+        }
+        if(op==SpvOpDecorate&&wc>=4&&w[i+2]==SpvDecorationLocation&&location_count<256)
+        {
+            bool seen=false;
+            for(uint32_t k=0;k<location_count;k++)if(location_ids[k]==w[i+1]){seen=true;break;}
+                if(!seen)location_ids[location_count++]=w[i+1];
         }
         i+=wc;
+    }
+    for(uint32_t k=0;k<input_count;k++)
+    {
+        for(uint32_t j=0;j<location_count;j++)
+        {
+            if(input_ids[k]==location_ids[j])
+            {
+                m->geometry_location_count++;
+                break;
+            }
+        }
     }
 }
 
@@ -1076,15 +1082,23 @@ static void spv_scan(SpvMod *m)
     m->geometry_location_count=0;
     m->geometry_input_var_count=0;
     /* First pass: discover decorations/types. */
+    m->emit_count=0;
+    m->dot_count=0;
     do_scan(m, false);
     /*
      * Run again now that block Position info is known.
      * Some TES shaders declare OpTypePointer before
      * OpMemberDecorate(BuiltIn Position).
      */
+    m->emit_count=0;
+    m->dot_count=0;
     do_scan(m, false);
     if (m->pos_is_block)
+    {
+        m->emit_count=0;
+        m->dot_count=0;
         do_scan(m, true);
+    }
     if(m->exec_model==SpvExecGeometry)
         count_geometry_inputs(m);
     STEREO_LOG(
