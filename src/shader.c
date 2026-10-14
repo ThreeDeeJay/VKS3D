@@ -11941,10 +11941,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         if(gs.value_from_matrix&&gs.is_matrix_type&&gs.is_matrix_ptr&&gs.is_proj_value&&gs.is_view_value)
                         {
                             spv_scan(&gs);
-                            gs_input_count=0;
-                            gs_output_count=0;
-                            gs_input_builtin_count=0;
-                            gs_output_builtin_count=0;
                             gs_hash=hash_spv(gs.words,gs.count);
                             uint32_t gs_entry_id=0;
                             for(uint32_t gi=5;gi<gs.count;)
@@ -12012,13 +12008,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                                 }
                                 gi+=gwc;
                             }
-                            STEREO_LOG("GS_PIPE_CLASSIFY p=%u hash=%016llx inputs=%u outputs=%u input_builtins=%u output_builtins=%u input_mode=%u output_mode=%u output_vertices=%u ui_candidate=%u particle_candidate=%u",p,(unsigned long long)gs_hash,gs_input_count,gs_output_count,gs_input_builtin_count,gs_output_builtin_count,gs_input_mode,gs_output_mode,gs_output_vertices,gs_input_count>=7&&gs_output_mode==SpvExecutionModeOutputTriangleStrip&&gs_output_vertices==4,gs_input_count==2);
-                            free_spv_provenance(&gs);
+                            STEREO_LOG("GS_PIPE_CLASSIFY p=%u hash=%016llx inputs=%u outputs=%u input_builtins=%u output_builtins=%u input_mode=%u output_mode=%u output_vertices=%u ui_candidate=%u particle_candidate=%u",p,(unsigned long long)gs_hash,gs_input_count,gs_output_count,gs_input_builtin_count,gs_output_builtin_count,gs_input_mode,gs_output_mode,gs_output_vertices,gs_input_count==7&&gs_output_mode==SpvExecutionModeOutputTriangleStrip&&gs_output_vertices==4,gs_input_count==2);
                         }
-                        else
-                        {
-                            free_spv_provenance(&gs);
-                        }
+                        free_spv_provenance(&gs);
                     }
                 }
             }
