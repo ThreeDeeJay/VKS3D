@@ -11941,14 +11941,30 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         if(gs.value_from_matrix&&gs.is_matrix_type&&gs.is_matrix_ptr&&gs.is_proj_value&&gs.is_view_value)
                         {
                             spv_scan(&gs);
-                            gs_input_count=gs.geometry_location_count;
+                            gs_input_count=0;
+                            gs_output_count=0;
+                            gs_input_builtin_count=0;
+                            gs_output_builtin_count=0;
                             gs_hash=hash_spv(gs.words,gs.count);
+                            uint32_t gs_entry_id=0;
                             for(uint32_t gi=5;gi<gs.count;)
                             {
                                 uint32_t gwc=gs.words[gi]>>16;
                                 uint32_t gop=gs.words[gi]&0xffffu;
                                 if(!gwc||gwc>gs.count-gi)break;
-                                if(gop==SpvOpExecutionMode&&gwc>=3&&gs.words[gi+1]==gs.words[2])
+                                if(gop==SpvOpEntryPoint&&gwc>=4&&gs.words[gi+1]==SpvExecutionModelGeometry)
+                                {
+                                    gs_entry_id=gs.words[gi+2];
+                                    break;
+                                }
+                                gi+=gwc;
+                            }
+                            for(uint32_t gi=5;gi<gs.count;)
+                            {
+                                uint32_t gwc=gs.words[gi]>>16;
+                                uint32_t gop=gs.words[gi]&0xffffu;
+                                if(!gwc||gwc>gs.count-gi)break;
+                                if(gop==SpvOpExecutionMode&&gwc>=3&&gs.words[gi+1]==gs_entry_id)
                                 {
                                     uint32_t mode=gs.words[gi+2];
                                     if(mode==SpvExecutionModeInputPoints||mode==SpvExecutionModeInputLines||mode==SpvExecutionModeInputLinesAdjacency||mode==SpvExecutionModeTriangles||mode==SpvExecutionModeInputTrianglesAdjacency)gs_input_mode=mode;
