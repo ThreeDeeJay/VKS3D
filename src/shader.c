@@ -11907,6 +11907,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         uint32_t gs_input_count=0;
         uint64_t gs_hash=0;
+        uint32_t gs_output_count=0;
+        uint32_t gs_input_builtin_count=0;
+        uint32_t gs_output_builtin_count=0;
+        uint32_t gs_input_mode=~0u;
+        uint32_t gs_output_mode=~0u;
+        uint32_t gs_output_vertices=0;
         if(has_gs&&gs_stage!=~0u)
         {
             StereoShaderCache *gs_cache=cache_find(sd,ci->pStages[gs_stage].module);
@@ -11915,14 +11921,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 SpvMod gs={0};
                 gs.words=gs_cache->spv;
                 gs.count=gs_cache->words;
-                uint32_t gs_input_count=0;
-                uint32_t gs_output_count=0;
-                uint32_t gs_input_builtin_count=0;
-                uint32_t gs_output_builtin_count=0;
-                uint32_t gs_input_mode=~0u;
-                uint32_t gs_output_mode=~0u;
-                uint32_t gs_output_vertices=0;
-                uint64_t gs_hash=0;
                 if(has_gs&&gs_stage!=~0u)
                 {
                     StereoShaderCache *gs_cache=cache_find(sd,ci->pStages[gs_stage].module);
