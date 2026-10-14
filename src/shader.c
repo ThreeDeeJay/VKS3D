@@ -13444,6 +13444,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 info->vertex_binding_count =
                     pCI[p].pVertexInputState ?
                     pCI[p].pVertexInputState->vertexBindingDescriptionCount : 0;
+                info->vs_hash = 0;
+                info->depth_test_enable = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthTestEnable : VK_FALSE;
+                info->depth_write_enable = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthWriteEnable : VK_FALSE;
+                info->depth_compare_op = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthCompareOp : VK_COMPARE_OP_ALWAYS;
+                info->blend_enable = pCI[p].pColorBlendState && pCI[p].pColorBlendState->attachmentCount && pCI[p].pColorBlendState->pAttachments[0].blendEnable;
                 info->view_mask = 0; /* default */
                 info->has_proj_ubo          = dbg_out[p].has_proj_ubo;
                 info->proj_set              = dbg_out[p].proj_set;
@@ -13468,6 +13473,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         info->patched_vs =
                             (tmp_mod[p] != VK_NULL_HANDLE &&
                              st->module == tmp_mod[p]);
+                        StereoShaderCache *vs_cache = cache_find(sd, st->module);
+                        if (vs_cache)
+                            info->vs_hash = hash_spv(vs_cache->spv, vs_cache->words);
                     }
                     if (st->stage == VK_SHADER_STAGE_GEOMETRY_BIT)
                     {
