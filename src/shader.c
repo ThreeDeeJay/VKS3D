@@ -11905,6 +11905,37 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (unsigned long long)(sc ? hash_spv(sc->spv, sc->words) : 0),
                 sc ? sc->words : 0);
         }
+        uint32_t gs_input_count=0;
+        uint64_t gs_hash=0;
+        if(has_gs&&gs_stage!=~0u)
+        {
+            StereoShaderCache *gs_cache=cache_find(sd,ci->pStages[gs_stage].module);
+            if(gs_cache)
+            {
+                SpvMod gs={0};
+                gs.words=gs_cache->spv;
+                gs.count=gs_cache->words;
+                gs.bound=gs.words[3];
+                gs.value_capacity=gs.bound+64;
+                gs.value_from_matrix=calloc(gs.value_capacity,sizeof(uint8_t));
+                gs.is_matrix_type=calloc(gs.value_capacity,sizeof(uint8_t));
+                gs.is_matrix_ptr=calloc(gs.value_capacity,sizeof(uint8_t));
+                gs.is_proj_value=calloc(gs.value_capacity,sizeof(uint8_t));
+                gs.is_view_value=calloc(gs.value_capacity,sizeof(uint8_t));
+                if(gs.value_from_matrix&&gs.is_matrix_type&&gs.is_matrix_ptr&&gs.is_proj_value&&gs.is_view_value)
+                {
+                    spv_scan(&gs);
+                    gs_input_count=gs.geometry_location_count;
+                    gs_hash=hash_spv(gs.words,gs.count);
+                    STEREO_LOG("GS_PIPE_CLASSIFY p=%u hash=%016llx inputs=%u ui_candidate=%u particle_candidate=%u",p,(unsigned long long)gs_hash,gs_input_count,gs_input_count>=7,gs_input_count==2);
+                    free_spv_provenance(&gs);
+                }
+                else
+                {
+                    free_spv_provenance(&gs);
+                }
+            }
+        }
         for (uint32_t fs_dbg_i = 0; fs_dbg_i < ci->stageCount; fs_dbg_i++) {
             if (ci->pStages[fs_dbg_i].stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
                 StereoShaderCache *fs_dbg =
