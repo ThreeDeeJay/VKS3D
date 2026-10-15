@@ -13412,6 +13412,22 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (void *)dbg_st->module);
         }
     }
+    uint64_t original_vs_hash[N];
+    for (uint32_t p=0;p<N;p++)
+    {
+        original_vs_hash[p]=0;
+        for (uint32_t s=0;s<pCI[p].stageCount;s++)
+        {
+            const VkPipelineShaderStageCreateInfo *st=&pCI[p].pStages[s];
+            if (st->stage==VK_SHADER_STAGE_VERTEX_BIT)
+            {
+                StereoShaderCache *vs_cache=cache_find(sd,st->module);
+                if (vs_cache)
+                    original_vs_hash[p]=hash_spv(vs_cache->spv,vs_cache->words);
+                break;
+            }
+        }
+    }
     VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
     STEREO_LOG(
         "[PIPE AFTER DRIVER] res=%d",
@@ -13473,11 +13489,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         info->patched_vs =
                             (tmp_mod[p] != VK_NULL_HANDLE &&
                              st->module == tmp_mod[p]);
-                        StereoShaderCache *vs_cache = cache_find(sd, st->module);
-                        if (vs_cache)
-                            info->vs_hash = hash_spv(vs_cache->spv, vs_cache->words);
-                        else
-                            info->vs_hash = 0;
+                        info->vs_hash = original_vs_hash[p];
                     }
                     if (st->stage == VK_SHADER_STAGE_GEOMETRY_BIT)
                     {
