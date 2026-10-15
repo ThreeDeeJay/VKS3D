@@ -323,7 +323,7 @@ stereo_CreateRenderPass(
     if (!mv_eligible)
     {
         STEREO_LOG(
-            "RP_MV_REJECT rp=%p depth_only=%u shadow_pass=%u present_pass=%u multiview=%u enabled=%u attachments=%u subpasses=%u",
+            "RP_MV_REJECT rp=%p depth_only=%u shadow_pass=%u present_pass=%u multiview=%u enabled=%u attachments=%u subpasses=%u reason=%s",
             (void*)*pRenderPass,
             (unsigned)depth_only,
             (unsigned)shadow_pass,
@@ -331,7 +331,8 @@ stereo_CreateRenderPass(
             (unsigned)sd->stereo.multiview,
             (unsigned)sd->stereo.enabled,
             pCreateInfo->attachmentCount,
-            pCreateInfo->subpassCount);
+            pCreateInfo->subpassCount,
+            pCreateInfo->attachmentCount == 0 ? "NO_ATTACHMENTS" : depth_only ? "DEPTH_ONLY" : shadow_pass ? "SHADOW_PASS" : present_pass ? "PRESENT_PASS" : "MV_DISABLED");
         return VK_SUCCESS;
     }
     STEREO_LOG("RP_MV_CREATE_BEGIN rp=%p slot=%u attachments=%u subpasses=%u", (void*)*pRenderPass, sd->render_pass_count-1, pCreateInfo->attachmentCount, pCreateInfo->subpassCount);

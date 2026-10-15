@@ -90,6 +90,8 @@ stereo_CreateFramebuffer(
     /* CRITICAL: snapshot ORIGINAL RP before any modification */
     VkRenderPass original_rp = pCreateInfo->renderPass;
     VkRenderPass use_mv      = VK_NULL_HANDLE;
+    StereoRenderPassInfo *fb_rpi = stereo_rp_lookup(sd, original_rp);
+    STEREO_LOG("FB_RP_DIAG fb=%p rp=%p rpi=%p tracked_rp=%p tracked_mv=%p has_mv=%u view_mask=%u subpasses=%u attachments=%u", (void*)pFramebuffer, (void*)original_rp, (void*)fb_rpi, fb_rpi ? (void*)fb_rpi->handle : NULL, fb_rpi ? (void*)fb_rpi->mv_handle : NULL, fb_rpi ? (unsigned)fb_rpi->has_multiview : 0, fb_rpi ? fb_rpi->view_mask : 0, fb_rpi ? fb_rpi->subpass_count : 0, pCreateInfo->attachmentCount);
     
     /* HARD ASSERT: framebuffer created without renderPass */
     if (original_rp == VK_NULL_HANDLE) {
@@ -139,13 +141,14 @@ stereo_CreateFramebuffer(
             }
             STEREO_LOG(
                 "FB_ATTACHMENT_CLASSIFY att=%u view=%p class=%s upgraded_index=%u "
-                "shading_rate=%u",
+                "shading_rate=%u mv_eligible_so_far=%u",
                 i,
                 (void*)view,
                 found ? "UPGRADED" : "NORMAL",
                 found ? found_index : UINT32_MAX,
                 (has_shading_rate_attachment &&
-                    shading_rate_attachment == i) ? 1u : 0u);
+                    shading_rate_attachment == i) ? 1u : 0u,
+                (unsigned)(all || (has_shading_rate_attachment && any && only_shading_rate_non_upgraded)));
         }
         STEREO_LOG(
             "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u "
