@@ -702,6 +702,18 @@ stereo_CmdBeginRenderPass(
                 (void*)tracked_mv_rp,
                 lookup ? (void*)lookup->mv_handle : NULL,
                 (unsigned)tracked_rp_match);
+            STEREO_LOG(
+                "MV_BLOCKED_DIAG fb=%p begin_rp=%p tracked_rp=%p "
+                "tracked_used=%p lookup=%p lookup_orig=%p lookup_mv=%p "
+                "lookup_has_mv=%u",
+                (void*)pRenderPassBegin->framebuffer,
+                (void*)pRenderPassBegin->renderPass,
+                (void*)tracked_rp,
+                (void*)sd->fb_tracks[fb_track_index].rp_used_at_create,
+                (void*)lookup,
+                lookup ? (void*)lookup->handle : NULL,
+                lookup ? (void*)lookup->mv_handle : NULL,
+                lookup ? (unsigned)lookup->has_multiview : 0);
         }
     }
     else if (lookup &&
