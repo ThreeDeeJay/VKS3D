@@ -333,6 +333,40 @@ stereo_CreateRenderPass(
             pCreateInfo->attachmentCount,
             pCreateInfo->subpassCount,
             pCreateInfo->attachmentCount == 0 ? "NO_ATTACHMENTS" : depth_only ? "DEPTH_ONLY" : shadow_pass ? "SHADOW_PASS" : present_pass ? "PRESENT_PASS" : "MV_DISABLED");
+        if (shadow_pass && pCreateInfo->pAttachments)
+        {
+            for (uint32_t a = 0; a < pCreateInfo->attachmentCount; a++)
+            {
+                const VkAttachmentDescription *ad = &pCreateInfo->pAttachments[a];
+                STEREO_LOG(
+                    "RP_SHADOW_ATTACHMENT rp=%p index=%u format=%u samples=%u load=%u store=%u initial_layout=%u final_layout=%u",
+                    (void*)*pRenderPass,
+                    a,
+                    (unsigned)ad->format,
+                    (unsigned)ad->samples,
+                    (unsigned)ad->loadOp,
+                    (unsigned)ad->storeOp,
+                    (unsigned)ad->initialLayout,
+                    (unsigned)ad->finalLayout);
+            }
+        }
+        if (shadow_pass && pCreateInfo->pSubpasses)
+        {
+            for (uint32_t s = 0; s < pCreateInfo->subpassCount; s++)
+            {
+                const VkSubpassDescription *sp = &pCreateInfo->pSubpasses[s];
+                STEREO_LOG(
+                    "RP_SHADOW_SUBPASS rp=%p subpass=%u bind_point=%u inputs=%u colors=%u resolves=%u depth_ref=%p preserve=%u",
+                    (void*)*pRenderPass,
+                    s,
+                    (unsigned)sp->pipelineBindPoint,
+                    sp->inputAttachmentCount,
+                    sp->colorAttachmentCount,
+                    sp->pResolveAttachments ? sp->colorAttachmentCount : 0,
+                    (void*)sp->pDepthStencilAttachment,
+                    sp->preserveAttachmentCount);
+            }
+        }
         return VK_SUCCESS;
     }
     STEREO_LOG("RP_MV_CREATE_BEGIN rp=%p slot=%u attachments=%u subpasses=%u", (void*)*pRenderPass, sd->render_pass_count-1, pCreateInfo->attachmentCount, pCreateInfo->subpassCount);
