@@ -3099,39 +3099,10 @@ bool spirv_patch_stereo_vertex(
     STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u loc0_count=%u screen_count=%u zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
         (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input, m.location0_count,m.screen_value_count ,m.screen_has_zw_use,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
 
+    if(stereo_skip_shader_patch(spv_hash))
     {
-        static bool skip_list_init;
-        static char skip_list[1024];
-        if (!skip_list_init)
-        {
-            const char *env =
-                stereo_getenv("VKS3D_SKIP_SHADER_PATCHES");
-            if (env)
-            {
-                strncpy(skip_list, env, sizeof(skip_list) - 1);
-                skip_list[sizeof(skip_list) - 1] = '\0';
-            }
-            skip_list_init = true;
-        }
-        if (skip_list[0])
-        {
-            char hashstr[17];
-            snprintf(
-                hashstr,
-                sizeof(hashstr),
-                "%016llx",
-                (unsigned long long)spv_hash);
-            if (strchr(skip_list, '*') ||
-                strstr(skip_list, hashstr))
-            {
-                STEREO_LOG(
-                    "SKIP_SHADER_PATCH hash=%s reason=%s",
-                    hashstr,
-                    strchr(skip_list, '*') ? "wildcard" : "hash");
-                free_spv_provenance(&m);
-                return false;
-            }
-        }
+        free_spv_provenance(&m);
+        return false;
     }
     /*
      * Reject known monoscopic screen-space/UI shaders.
