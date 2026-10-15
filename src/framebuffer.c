@@ -847,6 +847,24 @@ stereo_CmdBeginRenderPass(
 }
 
 VKAPI_ATTR void VKAPI_CALL
+stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd) return;
+    for (uint32_t i = 0; i < sd->cb_track_count; i++)
+    {
+        if (sd->cb_track[i].cb == commandBuffer)
+        {
+            STEREO_LOG("CB_END_RENDER_PASS cb=%p old_rp=%p old_fb=%p",(void*)commandBuffer,(void*)sd->cb_track[i].render_pass,(void*)sd->cb_track[i].framebuffer);
+            sd->cb_track[i].render_pass = VK_NULL_HANDLE;
+            sd->cb_track[i].framebuffer = VK_NULL_HANDLE;
+            break;
+        }
+    }
+    sd->real.CmdEndRenderPass(commandBuffer);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 stereo_CmdBeginRendering(
     VkCommandBuffer commandBuffer,
     const VkRenderingInfo *pRenderingInfo)
