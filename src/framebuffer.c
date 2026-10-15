@@ -428,6 +428,21 @@ stereo_DestroyFramebuffer(
         pAllocator);
 }
 
+static StereoDevice *
+find_any_device(void)
+{
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real_device)
+            return &g_devices[i];
+    }
+
+    return NULL;
+}
+
 /* ── vkCmdBeginRenderPass ───────────────────────────────────────────────── */
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdBeginRenderPass(
@@ -1341,21 +1356,6 @@ stereo_CmdTraceRaysKHR(
         (void *)(uintptr_t)rt_image,
         (void *)(uintptr_t)dst_image);
     STEREO_LOG("RT_TRACE_END");
-}
-
-static StereoDevice *
-find_any_device(void)
-{
-    extern StereoDevice g_devices[];
-    extern uint32_t g_device_count;
-
-    for (uint32_t i = 0; i < g_device_count; i++)
-    {
-        if (g_devices[i].real_device)
-            return &g_devices[i];
-    }
-
-    return NULL;
 }
 
 VKAPI_ATTR void VKAPI_CALL
