@@ -13412,10 +13412,20 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (void *)dbg_st->module);
         }
     }
-    uint64_t original_vs_hash[N];
+    uint64_t *original_vs_hash = calloc(N, sizeof(*original_vs_hash));
+    if (!original_vs_hash)
+    {
+        for (uint32_t p=0;p<N;p++)
+        {
+            if (tmp_mod[p])
+                sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
+            free(tst[p]);
+        }
+        free(tmp_mod); free(tst); free(infos);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     for (uint32_t p=0;p<N;p++)
     {
-        original_vs_hash[p]=0;
         for (uint32_t s=0;s<pCI[p].stageCount;s++)
         {
             const VkPipelineShaderStageCreateInfo *st=&pCI[p].pStages[s];
@@ -13547,6 +13557,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         free(tst[p]);
     }
+    free(original_vs_hash);
     free(tmp_mod); free(tst); free(infos);
     return res;
 }
