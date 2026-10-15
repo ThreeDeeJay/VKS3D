@@ -1042,78 +1042,48 @@ static void count_geometry_inputs(SpvMod *m)
     uint32_t input_vars=0;
     uint32_t location_decorations=0;
     m->geometry_location_count=0;
+    uint32_t locations[32];
+    uint32_t location_count=0;
     for(size_t i=5;i<m->count;)
     {
         uint32_t op=w[i]&0xffff,wc=w[i]>>16;
         if(!wc||i+wc>m->count)break;
-        if(op==SpvOpVariable&&wc>=4)
+        if(op==SpvOpDecorate&&wc>=4&&w[i+2]==SpvDecorationLocation&&location_count<32)
+            locations[location_count++]=w[i+1];
+        i+=wc;
+    }
+    for(size_t i=5;i<m->count;)
+    {
+        uint32_t op=w[i]&0xffff,wc=w[i]>>16;
+        if(!wc||i+wc>m->count)break;
+        if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageInput)
         {
-            variable_ops++;
-            if(w[i+3]==SpvStorageInput)
+            for(uint32_t k=0;k<location_count;k++)
             {
-                input_vars++;
-                if(input_count<256)
+                if(locations[k]==w[i+2])
                 {
-                    bool seen=false;
-                    for(uint32_t k=0;k<input_count;k++)if(input_ids[k]==w[i+2]){seen=true;break;}
-                        if(!seen)input_ids[input_count++]=w[i+2];
-                }
-            }
-        }
-        if(op==SpvOpDecorate&&wc>=4)
-        {
-            decorate_ops++;
-            if(w[i+2]==SpvDecorationLocation)
-            {
-                location_decorations++;
-                if(location_count<256)
-                {
-                    bool seen=false;
-                    for(uint32_t k=0;k<location_count;k++)if(location_ids[k]==w[i+1]){seen=true;break;}
-                        if(!seen)location_ids[location_count++]=w[i+1];
+                    m->geometry_location_count++;
+                    break;
                 }
             }
         }
         i+=wc;
     }
-    for(uint32_t k=0;k<input_count;k++)
-    {
-        for(uint32_t j=0;j<location_count;j++)
-        {
-            if(input_ids[k]==location_ids[j])
-            {
-                m->geometry_location_count++;
-                break;
-            }
-        }
-    }
-    STEREO_LOG("GS_INPUT_SCAN hash=%016llx words=%zu var_ops=%u input_vars=%u decorate_ops=%u location_decorations=%u unique_inputs=%u unique_locations=%u matched=%u first_word=0x%08x", (unsigned long long)hash_spv(m->words,m->count),m->count,variable_ops,input_vars,decorate_ops,location_decorations,input_count,location_count,m->geometry_location_count,m->words[0]);
+    STEREO_LOG("GS_INPUT_SCAN hash=%016llx words=%zu var_ops=%u input_vars=%u decorate_ops=%u location_decorations=%u unique_inputs=%u unique_locations=%u matched=%u first_word=0x%08x", (unsigned long long)hash_spv(m->words,m->count),m->count,variable_ops,input_vars,decorate_ops,location_decorations,0,location_count,m->geometry_location_count,m->words[0]);
 }
 
 static void spv_scan(SpvMod *m)
 {
-    /* Reset diagnostics once; do_scan(false) runs twice. */
-    m->emit_count=0;
-    m->has_emit_vertex=false;
-    m->dot_count=0;
-    m->geometry_location_count=0;
-    m->geometry_input_var_count=0;
     /* First pass: discover decorations/types. */
-    m->emit_count=0;
-    m->dot_count=0;
     do_scan(m, false);
     /*
-     * Run again now that block Position info is known.
-     * Some TES shaders declare OpTypePointer before
-     * OpMemberDecorate(BuiltIn Position).
-     */
-    m->emit_count=0;
-    m->dot_count=0;
+    * Run again now that block Position info is known.
+    * Some TES shaders declare OpTypePointer before
+    * OpMemberDecorate(BuiltIn Position).
+    */
     do_scan(m, false);
     if (m->pos_is_block)
     {
-        m->emit_count=0;
-        m->dot_count=0;
         do_scan(m, true);
     }
     if(m->exec_model==SpvExecGeometry)
