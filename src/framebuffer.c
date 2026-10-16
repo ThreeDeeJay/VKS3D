@@ -1447,6 +1447,7 @@ stereo_CmdDrawIndexed(
         }
     }
     STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
+    STEREO_LOG("DRAW_CLASSIFY type=INDEXED cb=%p pipe=%p vs_hash=%016llx known=%u quad=%u patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(unsigned long long)(info?info->vs_hash:0),info!=NULL,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
@@ -1512,6 +1513,7 @@ stereo_CmdDraw(
         }
     }
     STEREO_LOG("DRAW_TRACE type=DIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u vertex_count=%u instance_count=%u first_vertex=%u first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,vertexCount,instanceCount,firstVertex,firstInstance);
+    STEREO_LOG("DRAW_CLASSIFY type=DIRECT cb=%p pipe=%p vs_hash=%016llx known=%u quad=%u patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(unsigned long long)(info?info->vs_hash:0),info!=NULL,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDraw(
         commandBuffer,
         vertexCount,
@@ -1572,6 +1574,7 @@ stereo_CmdDrawIndirect(
         }
     }
     STEREO_LOG("DRAW_TRACE type=INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u buffer=%p view_mask=0x%X has_multiview=%u offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
+    STEREO_LOG("DRAW_CLASSIFY type=INDIRECT cb=%p pipe=%p vs_hash=%016llx known=%u quad=%u patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(unsigned long long)(info?info->vs_hash:0),info!=NULL,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDrawIndirect(
         commandBuffer,
         buffer,
@@ -1632,6 +1635,7 @@ stereo_CmdDrawIndexedIndirect(
         }
     }
     STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
+    STEREO_LOG("DRAW_CLASSIFY type=INDEXED_INDIRECT cb=%p pipe=%p vs_hash=%016llx known=%u quad=%u patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(unsigned long long)(info?info->vs_hash:0),info!=NULL,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDrawIndexedIndirect(
         commandBuffer,
         buffer,
