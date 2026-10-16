@@ -12268,7 +12268,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         const VkVertexInputAttributeDescription *ui_ad=&ci->pVertexInputState->pVertexAttributeDescriptions[ui_a];
                         if(ui_ad->location==0&&ui_ad->binding==0&&ui_ad->format==VK_FORMAT_R32G32B32_SFLOAT&&ui_ad->offset==0)has_position=true;
                         if(ui_ad->location==1&&ui_ad->binding==0&&ui_ad->format==VK_FORMAT_R8G8B8A8_UNORM&&ui_ad->offset==12)has_color=true;
-                        if(ui_ad->location==2&&ui_ad->binding==0&&ui_ad->format==VK_FORMAT_R32G32_SFLOAT&&ui_ad->offset==16)has_texcoord=true;
+                        if(ui_ad->location==2&&ui_ad->binding==0&&ui_ad->offset==16)has_texcoord=true;
                     }
                     mono_ui_always_depth_attrs=has_position&&has_color&&has_texcoord;
                 }
