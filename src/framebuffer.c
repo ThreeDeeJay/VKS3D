@@ -1995,6 +1995,11 @@ stereo_CmdSetViewport(
         (void*)commandBuffer,
         firstViewport,
         viewportCount);
+    for (uint32_t i = 0; pViewports && i < viewportCount; i++)
+    {
+        STEREO_LOG("CMD_SET_VIEWPORT_VALUE cb=%p i=%u x=%.3f y=%.3f width=%.3f height=%.3f minDepth=%.3f maxDepth=%.3f",
+            (void*)commandBuffer,i,pViewports[i].x,pViewports[i].y,pViewports[i].width,pViewports[i].height,pViewports[i].minDepth,pViewports[i].maxDepth);
+    }
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetViewport)
         return;
@@ -2015,6 +2020,11 @@ stereo_CmdSetScissor(
         (void*)commandBuffer,
         firstScissor,
         scissorCount);
+    for (uint32_t i = 0; pScissors && i < scissorCount; i++)
+    {
+        STEREO_LOG("CMD_SET_SCISSOR_VALUE cb=%p i=%u x=%d y=%d width=%u height=%u",
+            (void*)commandBuffer,i,pScissors[i].offset.x,pScissors[i].offset.y,pScissors[i].extent.width,pScissors[i].extent.height);
+    }
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetScissor)
         return;
