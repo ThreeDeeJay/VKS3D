@@ -11668,6 +11668,41 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             0,
             0,
             pCI[p].pNext);
+        if(pCI[p].stageCount&&pCI[p].pStages)
+        {
+            for(uint32_t s=0;s<pCI[p].stageCount;s++)
+            {
+                if(pCI[p].pStages[s].stage==VK_SHADER_STAGE_VERTEX_BIT)
+                {
+                    StereoShaderCache *vc=cache_find(sd,pCI[p].pStages[s].module);
+                    uint64_t hash=(vc&&vc->spv&&vc->words)?hash_spv(vc->spv,vc->words):0;
+                    const VkGraphicsPipelineCreateInfo *q=&pCI[p];
+                    const VkPipelineDepthStencilStateCreateInfo *d=q->pDepthStencilState;
+                    const VkPipelineVertexInputStateCreateInfo *v=q->pVertexInputState;
+                    const VkPipelineInputAssemblyStateCreateInfo *a=q->pInputAssemblyState;
+                    const VkPipelineColorBlendStateCreateInfo *b=q->pColorBlendState;
+                    STEREO_LOG("PIPE_ORIGINAL_STATE p=%u vs_hash=%016llx stages=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u bindings=%u attrs=%u subpass=%u blend_attachments=%u",
+                        p,(unsigned long long)hash,q->stageCount,d?d->depthTestEnable:UINT32_MAX,d?d->depthWriteEnable:UINT32_MAX,d?d->depthCompareOp:UINT32_MAX,a?a->topology:UINT32_MAX,q->pRasterizationState?q->pRasterizationState->cullMode:UINT32_MAX,v?v->vertexBindingDescriptionCount:UINT32_MAX,v?v->vertexAttributeDescriptionCount:UINT32_MAX,q->subpass,b?b->attachmentCount:UINT32_MAX);
+                    if(v&&v->pVertexAttributeDescriptions)
+                    {
+                        for(uint32_t j=0;j<v->vertexAttributeDescriptionCount;j++)
+                        {
+                            const VkVertexInputAttributeDescription *x=&v->pVertexAttributeDescriptions[j];
+                            STEREO_LOG("PIPE_ORIGINAL_ATTR p=%u vs_hash=%016llx location=%u binding=%u format=%u offset=%u",p,(unsigned long long)hash,x->location,x->binding,x->format,x->offset);
+                        }
+                    }
+                    if(b&&b->pAttachments)
+                    {
+                        for(uint32_t j=0;j<b->attachmentCount;j++)
+                        {
+                            const VkPipelineColorBlendAttachmentState *x=&b->pAttachments[j];
+                            STEREO_LOG("PIPE_ORIGINAL_BLEND p=%u vs_hash=%016llx attachment=%u enable=%u src_color=%u dst_color=%u src_alpha=%u dst_alpha=%u write_mask=%u",p,(unsigned long long)hash,j,x->blendEnable,x->srcColorBlendFactor,x->dstColorBlendFactor,x->srcAlphaBlendFactor,x->dstAlphaBlendFactor,x->colorWriteMask);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
     }
     const char *dump = stereo_getenv("VKS3D_DUMP_SPIRV");
     static int  dump_n = 0;
