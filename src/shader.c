@@ -1043,7 +1043,6 @@ static void count_geometry_inputs(SpvMod *m)
     uint32_t location_decorations=0;
     m->geometry_location_count=0;
     uint32_t locations[32];
-    uint32_t location_count=0;
     for(size_t i=5;i<m->count;)
     {
         uint32_t op=w[i]&0xffff,wc=w[i]>>16;
