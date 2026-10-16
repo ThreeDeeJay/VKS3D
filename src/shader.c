@@ -11685,11 +11685,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     {
                         STEREO_LOG("PIPE_ORIGINAL_PNEXT p=%u vs_hash=%016llx sType=%u ptr=%p",p,(unsigned long long)hash,(unsigned)pn->sType,(const void*)pn);
                         STEREO_LOG("PIPE_RENDERING_TYPE_CONST core=%u khr=%u",VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR);
-                        if(pn->sType==VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO||pn->sType==VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR)
-                        {
-                            const VkPipelineRenderingCreateInfo *x=(const VkPipelineRenderingCreateInfo*)pn;
-                            STEREO_LOG("PIPE_ORIGINAL_RENDERING p=%u vs_hash=%016llx view_mask=%u color_count=%u color_formats=%p depth_format=%u stencil_format=%u",p,(unsigned long long)hash,x->viewMask,x->colorAttachmentCount,(const void*)x->pColorAttachmentFormats,x->depthAttachmentFormat,x->stencilAttachmentFormat);
-                        }
                     }
                     if(q->pDynamicState&&q->pDynamicState->pDynamicStates)
                     {
