@@ -11681,8 +11681,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     const VkPipelineVertexInputStateCreateInfo *v=q->pVertexInputState;
                     const VkPipelineInputAssemblyStateCreateInfo *a=q->pInputAssemblyState;
                     const VkPipelineColorBlendStateCreateInfo *b=q->pColorBlendState;
-                    STEREO_LOG("PIPE_ORIGINAL_STATE p=%u vs_hash=%016llx stages=%u depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u bindings=%u attrs=%u subpass=%u blend_attachments=%u",
-                        p,(unsigned long long)hash,q->stageCount,d?d->depthTestEnable:UINT32_MAX,d?d->depthWriteEnable:UINT32_MAX,d?d->depthCompareOp:UINT32_MAX,a?a->topology:UINT32_MAX,q->pRasterizationState?q->pRasterizationState->cullMode:UINT32_MAX,v?v->vertexBindingDescriptionCount:UINT32_MAX,v?v->vertexAttributeDescriptionCount:UINT32_MAX,q->subpass,b?b->attachmentCount:UINT32_MAX);
+                    STEREO_LOG("PIPE_ORIGINAL_STATE p=%u vs_hash=%016llx stages=%u flags=%u subpass=%u vi=%p ia=%p rs=%p ds=%p cb=%p dyn=%p depth_test=%u depth_write=%u depth_compare=%u topology=%u cull=%u bindings=%u attrs=%u blend_attachments=%u",
+                        p,(unsigned long long)hash,q->stageCount,q->flags,q->subpass,(void*)q->pVertexInputState,(void*)q->pInputAssemblyState,(void*)q->pRasterizationState,(void*)q->pDepthStencilState,(void*)q->pColorBlendState,(void*)q->pDynamicState,d?d->depthTestEnable:UINT32_MAX,d?d->depthWriteEnable:UINT32_MAX,d?d->depthCompareOp:UINT32_MAX,a?a->topology:UINT32_MAX,q->pRasterizationState?q->pRasterizationState->cullMode:UINT32_MAX,v?v->vertexBindingDescriptionCount:UINT32_MAX,v?v->vertexAttributeDescriptionCount:UINT32_MAX,b?b->attachmentCount:UINT32_MAX);
+                    for(const VkBaseInStructure *pn=(const VkBaseInStructure*)q->pNext;pn;pn=pn->pNext)
+                    {
+                        STEREO_LOG("PIPE_ORIGINAL_PNEXT p=%u vs_hash=%016llx sType=%u",p,(unsigned long long)hash,(unsigned)pn->sType);
+                    }
                     if(v&&v->pVertexAttributeDescriptions)
                     {
                         for(uint32_t j=0;j<v->vertexAttributeDescriptionCount;j++)
