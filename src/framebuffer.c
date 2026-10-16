@@ -902,86 +902,86 @@ stereo_CmdBeginRendering(
     STEREO_LOG("CALLED stereo_CmdBeginRendering cb=%p info=%p",
         (void*)commandBuffer,
         (void*)pRenderingInfo);
-    STEREO_LOG("BEGIN_RENDERING STEP=1");
+    //STEREO_LOG("BEGIN_RENDERING STEP=1");
     extern StereoDevice g_devices[];
     extern uint32_t g_device_count;
-    STEREO_LOG("BEGIN_RENDERING STEP=2 device_count=%u", g_device_count);
+    //STEREO_LOG("BEGIN_RENDERING STEP=2 device_count=%u", g_device_count);
     StereoDevice *sd = NULL;
     for (uint32_t i = 0; i < g_device_count; i++)
     {
-        STEREO_LOG("BEGIN_RENDERING STEP=3 i=%u real_device=%p",
-            i,
-            (void*)g_devices[i].real_device);
+        //STEREO_LOG("BEGIN_RENDERING STEP=3 i=%u real_device=%p",
+        //    i,
+        //    (void*)g_devices[i].real_device);
         if (g_devices[i].real_device)
         {
             sd = &g_devices[i];
             break;
         }
     }
-    STEREO_LOG("BEGIN_RENDERING STEP=4 sd=%p", (void*)sd);
+    //STEREO_LOG("BEGIN_RENDERING STEP=4 sd=%p", (void*)sd);
     if (!sd)
     {
         STEREO_LOG("BEGIN_RENDERING RETURN reason=no_device");
         return;
     }
-    STEREO_LOG("BEGIN_RENDERING STEP=5 real_CmdBeginRendering=%p",
-        (void*)sd->real.CmdBeginRendering);
+    //STEREO_LOG("BEGIN_RENDERING STEP=5 real_CmdBeginRendering=%p",
+    //    (void*)sd->real.CmdBeginRendering);
     if (!sd->real.CmdBeginRendering)
     {
         STEREO_LOG("BEGIN_RENDERING RETURN reason=no_real_function");
         return;
     }
-    STEREO_LOG("BEGIN_RENDERING STEP=6 viewMask=%u layerCount=%u colorCount=%u depthView=%p",
-        pRenderingInfo->viewMask,
-        pRenderingInfo->layerCount,
-        pRenderingInfo->colorAttachmentCount,
-        pRenderingInfo->pDepthAttachment ?
-        (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView : NULL);
-    if (pRenderingInfo->colorAttachmentCount &&
-        pRenderingInfo->pColorAttachments)
-    {
-        for (uint32_t ci = 0; ci < pRenderingInfo->colorAttachmentCount; ci++)
-        {
-            STEREO_LOG(
-                "BEGIN_RENDERING_COLOR ci=%u view=%p layout=%u loadOp=%u storeOp=%u",
-                ci,
-                (void *)(uintptr_t)pRenderingInfo->pColorAttachments[ci].imageView,
-                pRenderingInfo->pColorAttachments[ci].imageLayout,
-                pRenderingInfo->pColorAttachments[ci].loadOp,
-                pRenderingInfo->pColorAttachments[ci].storeOp);
-        }
-    }
-    if (pRenderingInfo->pDepthAttachment)
-    {
-        STEREO_LOG(
-            "BEGIN_RENDERING_DEPTH view=%p layout=%u loadOp=%u storeOp=%u",
-            (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView,
-            pRenderingInfo->pDepthAttachment->imageLayout,
-            pRenderingInfo->pDepthAttachment->loadOp,
-            pRenderingInfo->pDepthAttachment->storeOp);
-    }
+    //STEREO_LOG("BEGIN_RENDERING STEP=6 viewMask=%u layerCount=%u colorCount=%u depthView=%p",
+    //    pRenderingInfo->viewMask,
+    //    pRenderingInfo->layerCount,
+    //    pRenderingInfo->colorAttachmentCount,
+    //    pRenderingInfo->pDepthAttachment ?
+    //    (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView : NULL);
+    //if (pRenderingInfo->colorAttachmentCount &&
+    //    pRenderingInfo->pColorAttachments)
+    //{
+    //    for (uint32_t ci = 0; ci < pRenderingInfo->colorAttachmentCount; ci++)
+    //    {
+    //        STEREO_LOG(
+    //            "BEGIN_RENDERING_COLOR ci=%u view=%p layout=%u loadOp=%u storeOp=%u",
+    //            ci,
+    //            (void *)(uintptr_t)pRenderingInfo->pColorAttachments[ci].imageView,
+    //            pRenderingInfo->pColorAttachments[ci].imageLayout,
+    //            pRenderingInfo->pColorAttachments[ci].loadOp,
+    //            pRenderingInfo->pColorAttachments[ci].storeOp);
+    //    }
+    //}
+    //if (pRenderingInfo->pDepthAttachment)
+    //{
+    //    STEREO_LOG(
+    //        "BEGIN_RENDERING_DEPTH view=%p layout=%u loadOp=%u storeOp=%u",
+    //        (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView,
+    //        pRenderingInfo->pDepthAttachment->imageLayout,
+    //        pRenderingInfo->pDepthAttachment->loadOp,
+    //        pRenderingInfo->pDepthAttachment->storeOp);
+    //}
     VkRenderingInfo modified = *pRenderingInfo;
     if (sd->stereo.multiview &&
         !sd->stereo.shader_objects_mono &&
         modified.viewMask == 0)
     {
         modified.viewMask = 0x3;
-        STEREO_LOG(
-            "BEGIN_RENDERING_UPGRADE viewMask 0x0->0x3 layerCount=%u colors=%u",
-            modified.layerCount,
-            modified.colorAttachmentCount);
+        //STEREO_LOG(
+        //    "BEGIN_RENDERING_UPGRADE viewMask 0x0->0x3 layerCount=%u colors=%u",
+        //    modified.layerCount,
+        //    modified.colorAttachmentCount);
     }
-    STEREO_LOG(
-        "BEGIN_RENDERING viewMask=0x%x layerCount=%u colors=%u flags=0x%x",
-        modified.viewMask,
-        modified.layerCount,
-        modified.colorAttachmentCount,
-        modified.flags);
-    STEREO_LOG(
-        "BEGIN_RENDERING FORWARD real=%p viewMask=0x%x layers=%u",
-        sd->real.CmdBeginRendering,
-        modified.viewMask,
-        modified.layerCount);
+    //STEREO_LOG(
+    //    "BEGIN_RENDERING viewMask=0x%x layerCount=%u colors=%u flags=0x%x",
+    //    modified.viewMask,
+    //    modified.layerCount,
+    //    modified.colorAttachmentCount,
+    //    modified.flags);
+    //STEREO_LOG(
+    //    "BEGIN_RENDERING FORWARD real=%p viewMask=0x%x layers=%u",
+    //    sd->real.CmdBeginRendering,
+    //    modified.viewMask,
+    //    modified.layerCount);
     sd->real.CmdBeginRendering(
         commandBuffer,
         &modified);
@@ -1005,16 +1005,16 @@ stereo_CmdEndRendering(
             break;
         }
     }
-    STEREO_LOG(
-        "END_RENDERING LOOKUP sd=%p real=%p",
-        (void*)sd,
-        sd ? (void*)sd->real.CmdEndRendering : NULL);
+    //STEREO_LOG(
+    //    "END_RENDERING LOOKUP sd=%p real=%p",
+    //    (void*)sd,
+    //    sd ? (void*)sd->real.CmdEndRendering : NULL);
     if (!sd || !sd->real.CmdEndRendering)
         return;
-    STEREO_LOG("END_RENDERING");
-    STEREO_LOG(
-        "END_RENDERING FORWARD real=%p",
-        sd->real.CmdEndRendering);
+    //STEREO_LOG("END_RENDERING");
+    //STEREO_LOG(
+    //    "END_RENDERING FORWARD real=%p",
+    //    sd->real.CmdEndRendering);
     sd->real.CmdEndRendering(commandBuffer);
 }
 
@@ -1059,36 +1059,36 @@ stereo_CmdBindPipeline(
         sd,
         commandBuffer,
         pipeline);
-    STEREO_LOG(
-        "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
-        (void *)pipeline,
-        (void *)active_rp,
-        info ? (void *)info->mv_renderpass : NULL,
-        info ? (void *)info->original_renderpass : NULL);
-    if (info)
-    {
-        STEREO_LOG(
-            "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
-            "orig_rp=%p patched_vs=%u patched_fs=%u "
-            "quad=%u bindings=%u",
-            (void*)pipeline,
-            (void*)active_fb,
-            (void*)active_rp,
-            (void*)info->mv_renderpass,
-            (void*)info->original_renderpass,
-            info->patched_vs,
-            info->patched_fs,
-            info->is_quad,
-            info->vertex_binding_count);
-    }
-    else
-    {
-        STEREO_LOG(
-            "PIPE_BIND pipe=%p UNKNOWN fb=%p rp=%p",
-            (void*)pipeline,
-            (void*)active_fb,
-            (void*)active_rp);
-    }
+    //STEREO_LOG(
+    //    "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
+    //    (void *)pipeline,
+    //    (void *)active_rp,
+    //    info ? (void *)info->mv_renderpass : NULL,
+    //    info ? (void *)info->original_renderpass : NULL);
+    //if (info)
+    //{
+    //    STEREO_LOG(
+    //        "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
+    //        "orig_rp=%p patched_vs=%u patched_fs=%u "
+    //        "quad=%u bindings=%u",
+    //        (void*)pipeline,
+    //        (void*)active_fb,
+    //        (void*)active_rp,
+    //        (void*)info->mv_renderpass,
+    //        (void*)info->original_renderpass,
+    //        info->patched_vs,
+    //        info->patched_fs,
+    //        info->is_quad,
+    //        info->vertex_binding_count);
+    //}
+    //else
+    //{
+    //    STEREO_LOG(
+    //        "PIPE_BIND pipe=%p UNKNOWN fb=%p rp=%p",
+    //        (void*)pipeline,
+    //        (void*)active_fb,
+    //        (void*)active_rp);
+    //}
     sd->real.CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,
