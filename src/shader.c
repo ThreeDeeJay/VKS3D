@@ -11683,11 +11683,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         p,(unsigned long long)hash,q->stageCount,q->flags,q->subpass,(void*)q->pVertexInputState,(void*)q->pInputAssemblyState,(void*)q->pRasterizationState,(void*)q->pDepthStencilState,(void*)q->pColorBlendState,(void*)q->pDynamicState,d?d->depthTestEnable:UINT32_MAX,d?d->depthWriteEnable:UINT32_MAX,d?d->depthCompareOp:UINT32_MAX,a?a->topology:UINT32_MAX,q->pRasterizationState?q->pRasterizationState->cullMode:UINT32_MAX,v?v->vertexBindingDescriptionCount:UINT32_MAX,v?v->vertexAttributeDescriptionCount:UINT32_MAX,b?b->attachmentCount:UINT32_MAX);
                     for(const VkBaseInStructure *pn=(const VkBaseInStructure*)q->pNext;pn;pn=pn->pNext)
                     {
-                        STEREO_LOG("PIPE_ORIGINAL_PNEXT p=%u vs_hash=%016llx sType=%u",p,(unsigned long long)hash,(unsigned)pn->sType);
-                        if(pn->sType==VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO)
+                        STEREO_LOG("PIPE_ORIGINAL_PNEXT p=%u vs_hash=%016llx sType=%u ptr=%p",p,(unsigned long long)hash,(unsigned)pn->sType,(const void*)pn);
+                        STEREO_LOG("PIPE_RENDERING_TYPE_CONST core=%u khr=%u",VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR);
+                        if(pn->sType==VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO||pn->sType==VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR)
                         {
                             const VkPipelineRenderingCreateInfo *x=(const VkPipelineRenderingCreateInfo*)pn;
-                            STEREO_LOG("PIPE_ORIGINAL_RENDERING p=%u vs_hash=%016llx view_mask=%u color_count=%u depth_format=%u stencil_format=%u",p,(unsigned long long)hash,x->viewMask,x->colorAttachmentCount,x->depthAttachmentFormat,x->stencilAttachmentFormat);
+                            STEREO_LOG("PIPE_ORIGINAL_RENDERING p=%u vs_hash=%016llx view_mask=%u color_count=%u color_formats=%p depth_format=%u stencil_format=%u",p,(unsigned long long)hash,x->viewMask,x->colorAttachmentCount,(const void*)x->pColorAttachmentFormats,x->depthAttachmentFormat,x->stencilAttachmentFormat);
                         }
                     }
                     if(q->pDynamicState&&q->pDynamicState->pDynamicStates)
