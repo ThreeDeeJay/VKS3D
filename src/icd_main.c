@@ -440,7 +440,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
             if (real_gdpa) {
                 PFN_vkVoidFunction fp =
                     real_gdpa(g_devices[i].real_device, pName);
-                STEREO_LOG(
+                if(strstr(pName,"DepthTestEnable")||strstr(pName,"DepthWriteEnable")||strstr(pName,"DepthCompareOp"))STEREO_LOG("GDPA_DEPTH_FALLBACK name=%s fp=%p",(pName),(void*)fp);
+                else STEREO_LOG(
                     "GDPA FALLBACK %s -> %p",
                     pName,
                     (void *)fp);
