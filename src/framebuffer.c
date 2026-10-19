@@ -1634,8 +1634,15 @@ stereo_CmdDrawIndexedIndirect(
             break;
         }
     }
-    STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
-    STEREO_LOG("DRAW_CLASSIFY type=INDEXED_INDIRECT cb=%p pipe=%p vs_hash=%016llx known=%u quad=%u patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(unsigned long long)(info?info->vs_hash:0),info!=NULL,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,(void*)buffer,(unsigned long long)offset,drawCount,stride);
+    uint32_t cb_idx = 0;
+    while (cb_idx < sd->cb_track_count && sd->cb_track[cb_idx].cb != commandBuffer) cb_idx++;
+    bool vp_valid = cb_idx < sd->cb_track_count && sd->cb_track[cb_idx].viewport_valid;
+    bool sc_valid = cb_idx < sd->cb_track_count && sd->cb_track[cb_idx].scissor_valid;
+    VkViewport vp = {0};
+    VkRect2D sc = {0};
+    if (vp_valid) vp = sd->cb_track[cb_idx].viewport;
+    if (sc_valid) sc = sd->cb_track[cb_idx].scissor;
+    STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u blend=%u view_mask=0x%X buffer=%p offset=%llu draw_count=%u stride=%u vp_valid=%u vp_x=%.1f vp_y=%.1f vp_w=%.1f vp_h=%.1f sc_valid=%u sc_x=%d sc_y=%d sc_w=%u sc_h=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->blend_enable:0,rp_view_mask,(void*)buffer,(unsigned long long)offset,drawCount,stride,(unsigned)vp_valid,vp.x,vp.y,vp.width,vp.height,(unsigned)sc_valid,sc.offset.x,sc.offset.y,sc.extent.width,sc.extent.height);
     sd->real.CmdDrawIndexedIndirect(
         commandBuffer,
         buffer,
