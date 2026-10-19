@@ -369,12 +369,12 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CmdSetViewportWithCountEXT);
     GDPA_WRAP("vkCmdSetScissorWithCountEXT",
               stereo_CmdSetScissorWithCountEXT);
-    //GDPA_WRAP("vkCmdSetDepthTestEnableEXT",
-    //          stereo_CmdSetDepthTestEnableEXT);
-    //GDPA_WRAP("vkCmdSetDepthWriteEnableEXT",
-    //          stereo_CmdSetDepthWriteEnableEXT);
-    //GDPA_WRAP("vkCmdSetDepthCompareOpEXT",
-    //          stereo_CmdSetDepthCompareOpEXT);
+    GDPA_WRAP("vkCmdSetDepthTestEnableEXT",
+              stereo_CmdSetDepthTestEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthWriteEnableEXT",
+              stereo_CmdSetDepthWriteEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthCompareOpEXT",
+              stereo_CmdSetDepthCompareOpEXT);
     //GDPA_WRAP("vkCmdSetRasterizerDiscardEnableEXT",
     //          stereo_CmdSetRasterizerDiscardEnableEXT);
     //GDPA_WRAP("vkCmdSetPolygonModeEXT",
