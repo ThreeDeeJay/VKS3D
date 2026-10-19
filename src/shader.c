@@ -1175,11 +1175,15 @@ remember_bound_pipeline(
             return;
         CHECK_ARRAY_COUNT(sd->cb_track_count, MAX_CB_TRACK, "cb_track_count");
         uint32_t idx = sd->cb_track_count++;
+        memset(&sd->cb_track[idx],0,sizeof(sd->cb_track[idx]));
         sd->cb_track[idx].cb = cb;
         sd->cb_track[idx].pipeline = pipe;
         sd->cb_track[idx].render_pass = VK_NULL_HANDLE;
         sd->cb_track[idx].framebuffer = VK_NULL_HANDLE;
         sd->cb_track[idx].subpass = 0;
+        sd->cb_track[idx].depth_test_valid=false;
+        sd->cb_track[idx].depth_write_valid=false;
+        sd->cb_track[idx].depth_compare_valid=false;
 }
 
 void
@@ -1202,11 +1206,15 @@ remember_begin_renderpass(
     return;
     CHECK_ARRAY_COUNT(sd->cb_track_count, MAX_CB_TRACK, "cb_track_count");
     uint32_t idx = sd->cb_track_count++;
+    memset(&sd->cb_track[idx],0,sizeof(sd->cb_track[idx]));
     sd->cb_track[idx].cb = cb;
     sd->cb_track[idx].pipeline = VK_NULL_HANDLE;
     sd->cb_track[idx].render_pass = rp;
     sd->cb_track[idx].framebuffer = VK_NULL_HANDLE;
     sd->cb_track[idx].subpass = subpass;
+    sd->cb_track[idx].depth_test_valid=false;
+    sd->cb_track[idx].depth_write_valid=false;
+    sd->cb_track[idx].depth_compare_valid=false;
 }
 
 VkRenderPass

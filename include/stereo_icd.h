@@ -392,6 +392,7 @@ typedef struct RealDeviceDispatch {
     PFN_vkBeginCommandBuffer         BeginCommandBuffer;
     PFN_vkEndCommandBuffer           EndCommandBuffer;
     PFN_vkResetCommandBuffer         ResetCommandBuffer;
+    PFN_vkResetCommandPool           ResetCommandPool;
     PFN_vkCmdBindPipeline            CmdBindPipeline;
     PFN_vkCmdSetLineWidth            CmdSetLineWidth;
     PFN_vkCmdSetDepthBias            CmdSetDepthBias;
@@ -561,6 +562,9 @@ typedef struct StereoPipelineInfo
     VkBool32 depth_test_enable;
     VkBool32 depth_write_enable;
     VkCompareOp depth_compare_op;
+    VkBool32 depth_test_dynamic;
+    VkBool32 depth_write_dynamic;
+    VkBool32 depth_compare_dynamic;
     VkBool32 blend_enable;
     /* Vulkan 1.3 dynamic rendering multiview */
     uint32_t view_mask;
@@ -854,6 +858,9 @@ VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer,
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo *pBeginInfo);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_ResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_ResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags);
 
 /* shader.c */
 StereoPipelineInfo *
