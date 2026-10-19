@@ -671,6 +671,12 @@ typedef struct StereoDevice {
         uint32_t subpass;
         VkRenderPass render_pass;
         VkFramebuffer framebuffer;
+        VkViewport viewport;
+        VkRect2D scissor;
+        uint32_t viewport_count;
+        uint32_t scissor_count;
+        bool viewport_valid;
+        bool scissor_valid;
     } cb_track[MAX_CB_TRACK];
     uint32_t cb_track_count;
     VkImage upgraded_images[MAX_UPGRADED_VIEWS];

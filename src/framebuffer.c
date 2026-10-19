@@ -2003,6 +2003,20 @@ stereo_CmdSetViewport(
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetViewport)
         return;
+    uint32_t ti = 0;
+    while (ti < sd->cb_track_count && sd->cb_track[ti].cb != commandBuffer) ti++;
+    if (ti == sd->cb_track_count && ti < MAX_CB_TRACK)
+    {
+        memset(&sd->cb_track[ti], 0, sizeof(sd->cb_track[ti]));
+        sd->cb_track[ti].cb = commandBuffer;
+        sd->cb_track_count++;
+    }
+    if (ti < sd->cb_track_count && pViewports && firstViewport == 0 && viewportCount > 0)
+    {
+        sd->cb_track[ti].viewport = pViewports[0];
+        sd->cb_track[ti].viewport_count = viewportCount;
+        sd->cb_track[ti].viewport_valid = true;
+    }
     sd->real.CmdSetViewport(
         commandBuffer,
         firstViewport,
@@ -2028,6 +2042,20 @@ stereo_CmdSetScissor(
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetScissor)
         return;
+    uint32_t ti = 0;
+    while (ti < sd->cb_track_count && sd->cb_track[ti].cb != commandBuffer) ti++;
+    if (ti == sd->cb_track_count && ti < MAX_CB_TRACK)
+    {
+        memset(&sd->cb_track[ti], 0, sizeof(sd->cb_track[ti]));
+        sd->cb_track[ti].cb = commandBuffer;
+        sd->cb_track_count++;
+    }
+    if (ti < sd->cb_track_count && pScissors && firstScissor == 0 && scissorCount > 0)
+    {
+        sd->cb_track[ti].scissor = pScissors[0];
+        sd->cb_track[ti].scissor_count = scissorCount;
+        sd->cb_track[ti].scissor_valid = true;
+    }
     sd->real.CmdSetScissor(
         commandBuffer,
         firstScissor,
@@ -2129,6 +2157,20 @@ stereo_CmdSetScissorWithCountEXT(
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetScissorWithCountEXT)
         return;
+    uint32_t ti = 0;
+    while (ti < sd->cb_track_count && sd->cb_track[ti].cb != commandBuffer) ti++;
+    if (ti == sd->cb_track_count && ti < MAX_CB_TRACK)
+    {
+        memset(&sd->cb_track[ti], 0, sizeof(sd->cb_track[ti]));
+        sd->cb_track[ti].cb = commandBuffer;
+        sd->cb_track_count++;
+    }
+    if (ti < sd->cb_track_count && pScissors && scissorCount > 0)
+    {
+        sd->cb_track[ti].scissor = pScissors[0];
+        sd->cb_track[ti].scissor_count = scissorCount;
+        sd->cb_track[ti].scissor_valid = true;
+    }
     sd->real.CmdSetScissorWithCountEXT(
         commandBuffer,
         scissorCount,
