@@ -850,12 +850,9 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(UpdateDescriptorSets);
     L(CreateFramebuffer); L(DestroyFramebuffer);
     L(CreateRenderPass); L(DestroyRenderPass); L(GetRenderAreaGranularity);
-    L(CreateCommandPool); L(DestroyCommandPool);
+    L(CreateCommandPool); L(DestroyCommandPool); L(ResetCommandPool);
     L(AllocateCommandBuffers); L(FreeCommandBuffers);
-    sd->real.ResetCommandPool = (PFN_vkResetCommandPool)stereo_ResetCommandPool;
-    sd->real.BeginCommandBuffer = (PFN_vkBeginCommandBuffer)stereo_BeginCommandBuffer;
-    L(EndCommandBuffer);
-    sd->real.ResetCommandBuffer = (PFN_vkResetCommandBuffer)stereo_ResetCommandBuffer;
+    L(BeginCommandBuffer); L(EndCommandBuffer); L(ResetCommandBuffer);
     L(CmdBindPipeline); L(CmdSetViewport); L(CmdSetScissor);
     L(CmdSetCullMode); L(CmdSetFrontFace); L(CmdSetPrimitiveTopology);
     L(CmdSetCullModeEXT); L(CmdSetFrontFaceEXT); L(CmdSetPrimitiveTopologyEXT);
@@ -903,54 +900,6 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     sd->real.CmdDrawIndexedIndirect = (PFN_vkCmdDrawIndexedIndirect)
         g_real_giPA(real_inst, "vkCmdDrawIndexedIndirect");
 #undef L
-}
-
-static void stereo_clear_dynamic_depth(StereoDevice *sd, VkCommandBuffer cb) {
-    if (!sd) return;
-    for (uint32_t i = 0; i < sd->cb_track_count; i++) {
-        if (sd->cb_track[i].cb == cb) {
-            sd->cb_track[i].depth_test_valid = false;
-            sd->cb_track[i].depth_write_valid = false;
-            sd->cb_track[i].depth_compare_valid = false;
-            sd->cb_track[i].depth_test_enable = VK_FALSE;
-            sd->cb_track[i].depth_write_enable = VK_FALSE;
-            sd->cb_track[i].depth_compare_op = VK_COMPARE_OP_ALWAYS;
-            return;
-        }
-    }
-}
-VKAPI_ATTR VkResult VKAPI_CALL
-stereo_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo *pBeginInfo) {
-    StereoDevice *sd = stereo_device_from_command_buffer(commandBuffer);
-    if (!sd) return VK_ERROR_INITIALIZATION_FAILED;
-    VkResult result = sd->real.BeginCommandBuffer(commandBuffer, pBeginInfo);
-    if (result == VK_SUCCESS) stereo_clear_dynamic_depth(sd, commandBuffer);
-    return result;
-}
-VKAPI_ATTR VkResult VKAPI_CALL
-stereo_ResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags) {
-    StereoDevice *sd = stereo_device_from_command_buffer(commandBuffer);
-    if (!sd) return VK_ERROR_INITIALIZATION_FAILED;
-    VkResult result = sd->real.ResetCommandBuffer(commandBuffer, flags);
-    if (result == VK_SUCCESS) stereo_clear_dynamic_depth(sd, commandBuffer);
-    return result;
-}
-VKAPI_ATTR VkResult VKAPI_CALL
-stereo_ResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) {
-    StereoDevice *sd = stereo_device_from_handle(device);
-    if (!sd) return VK_ERROR_INITIALIZATION_FAILED;
-    VkResult result = sd->real.ResetCommandPool(device, commandPool, flags);
-    if (result == VK_SUCCESS) {
-        for (uint32_t i = 0; i < sd->cb_track_count; i++) {
-            sd->cb_track[i].depth_test_valid = false;
-            sd->cb_track[i].depth_write_valid = false;
-            sd->cb_track[i].depth_compare_valid = false;
-            sd->cb_track[i].depth_test_enable = VK_FALSE;
-            sd->cb_track[i].depth_write_enable = VK_FALSE;
-            sd->cb_track[i].depth_compare_op = VK_COMPARE_OP_ALWAYS;
-        }
-    }
-    return result;
 }
 
 /* ── Windows DllMain + self-identification marker ───────────────────────── */
