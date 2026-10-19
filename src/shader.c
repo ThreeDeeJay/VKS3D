@@ -1136,27 +1136,6 @@ lookup_bound_pipeline(
     return VK_NULL_HANDLE;
 }
 
-StereoDevice *
-stereo_device_from_command_buffer(
-    VkCommandBuffer cb)
-{
-    extern StereoDevice g_devices[];
-    extern uint32_t g_device_count;
-
-    for (uint32_t d = 0; d < g_device_count; d++)
-    {
-        StereoDevice *sd = &g_devices[d];
-
-        for (uint32_t i = 0; i < sd->cb_track_count; i++)
-        {
-            if (sd->cb_track[i].cb == cb)
-                return sd;
-        }
-    }
-
-    return NULL;
-}
-
 void
 remember_bound_pipeline(
     StereoDevice *sd,
