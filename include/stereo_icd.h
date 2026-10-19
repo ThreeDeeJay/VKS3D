@@ -675,6 +675,12 @@ typedef struct StereoDevice {
         VkRect2D scissor;
         uint32_t viewport_count;
         uint32_t scissor_count;
+        VkBool32 depth_test_enable;
+        VkBool32 depth_write_enable;
+        VkCompareOp depth_compare_op;
+        bool depth_test_valid;
+        bool depth_write_valid;
+        bool depth_compare_valid;
         bool viewport_valid;
         bool scissor_valid;
     } cb_track[MAX_CB_TRACK];

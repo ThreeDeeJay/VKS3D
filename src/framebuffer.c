@@ -2189,15 +2189,17 @@ stereo_CmdSetDepthTestEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 depthTestEnable)
 {
-    STEREO_LOG("CMD_SET_DEPTH_TEST_ENABLE_EXT cb=%p enable=%u",
+    STEREO_LOG("CMD_SET_DEPTH_TEST_ENABLE_ENTER cb=%p enable=%u",
         (void*)commandBuffer,
-        depthTestEnable);
-    StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdSetDepthTestEnableEXT)
-        return;
+        (unsigned)depthTestEnable);
+    StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
+    if(!sd)sd=find_any_device();
+    STEREO_LOG("CMD_SET_DEPTH_TEST_ENABLE_DEVICE cb=%p sd=%p real=%p",(void*)commandBuffer,(void*)sd,sd?(void*)sd->real.CmdSetDepthTestEnableEXT:NULL);
+    if(!sd||!sd->real.CmdSetDepthTestEnableEXT){STEREO_LOG("CMD_SET_DEPTH_TEST_ENABLE_SKIP cb=%p reason=no_device_or_dispatch",(void*)commandBuffer);return;}
     sd->real.CmdSetDepthTestEnableEXT(
         commandBuffer,
         depthTestEnable);
+    STEREO_LOG("CMD_SET_DEPTH_TEST_ENABLE_FORWARD cb=%p enable=%u",(void*)commandBuffer,(unsigned)depthTestEnable);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2205,15 +2207,17 @@ stereo_CmdSetDepthWriteEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 depthWriteEnable)
 {
-    STEREO_LOG("CMD_SET_DEPTH_WRITE_ENABLE_EXT cb=%p enable=%u",
+    STEREO_LOG("CMD_SET_DEPTH_WRITE_ENABLE_ENTER cb=%p enable=%u",
         (void*)commandBuffer,
-        depthWriteEnable);
-    StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdSetDepthWriteEnableEXT)
-        return;
+        (unsigned)depthWriteEnable);
+    StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
+    if(!sd)sd=find_any_device();
+    STEREO_LOG("CMD_SET_DEPTH_WRITE_ENABLE_DEVICE cb=%p sd=%p real=%p",(void*)commandBuffer,(void*)sd,sd?(void*)sd->real.CmdSetDepthWriteEnableEXT:NULL);
+    if(!sd||!sd->real.CmdSetDepthWriteEnableEXT){STEREO_LOG("CMD_SET_DEPTH_WRITE_ENABLE_SKIP cb=%p reason=no_device_or_dispatch",(void*)commandBuffer);return;}
     sd->real.CmdSetDepthWriteEnableEXT(
         commandBuffer,
         depthWriteEnable);
+    STEREO_LOG("CMD_SET_DEPTH_WRITE_ENABLE_FORWARD cb=%p enable=%u",(void*)commandBuffer,(unsigned)depthWriteEnable);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2221,15 +2225,17 @@ stereo_CmdSetDepthCompareOpEXT(
     VkCommandBuffer commandBuffer,
     VkCompareOp depthCompareOp)
 {
-    STEREO_LOG("CMD_SET_DEPTH_COMPARE_OP_EXT cb=%p op=%u",
+    STEREO_LOG("CMD_SET_DEPTH_COMPARE_OP_ENTER cb=%p op=%u",
         (void*)commandBuffer,
-        depthCompareOp);
-    StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdSetDepthCompareOpEXT)
-        return;
+        (unsigned)depthCompareOp);
+    StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
+    if(!sd)sd=find_any_device();
+    STEREO_LOG("CMD_SET_DEPTH_COMPARE_OP_DEVICE cb=%p sd=%p real=%p",(void*)commandBuffer,(void*)sd,sd?(void*)sd->real.CmdSetDepthCompareOpEXT:NULL);
+    if(!sd||!sd->real.CmdSetDepthCompareOpEXT){STEREO_LOG("CMD_SET_DEPTH_COMPARE_OP_SKIP cb=%p reason=no_device_or_dispatch",(void*)commandBuffer);return;}
     sd->real.CmdSetDepthCompareOpEXT(
         commandBuffer,
         depthCompareOp);
+    STEREO_LOG("CMD_SET_DEPTH_COMPARE_OP_FORWARD cb=%p op=%u",(void*)commandBuffer,(unsigned)depthCompareOp);
 }
 
 VKAPI_ATTR void VKAPI_CALL
