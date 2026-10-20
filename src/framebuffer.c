@@ -2245,6 +2245,7 @@ stereo_CmdSetDepthTestEnableEXT(
         (void*)commandBuffer,
         (unsigned)depthTestEnable);
     StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
+    STEREO_LOG("DYN_DEPTH_DEVICE cb=%p tracked=%u device=%p",(void*)commandBuffer,(unsigned)(sd!=NULL),(void*)sd);
     if(!sd)sd=find_any_device();
     if(!sd||!sd->real.CmdSetDepthTestEnableEXT)return;
     for(uint32_t i=0;i<sd->cb_track_count;i++){
@@ -2268,6 +2269,7 @@ stereo_CmdSetDepthWriteEnableEXT(
         (void*)commandBuffer,
         (unsigned)depthWriteEnable);
     StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
+    STEREO_LOG("DYN_DEPTH_DEVICE cb=%p tracked=%u device=%p",(void*)commandBuffer,(unsigned)(sd!=NULL),(void*)sd);
     if(!sd)sd=find_any_device();
     if(!sd||!sd->real.CmdSetDepthWriteEnableEXT)return;
     for(uint32_t i=0;i<sd->cb_track_count;i++){
@@ -2291,6 +2293,7 @@ stereo_CmdSetDepthCompareOpEXT(
         (void*)commandBuffer,
         (unsigned)depthCompareOp);
     StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
+    STEREO_LOG("DYN_DEPTH_DEVICE cb=%p tracked=%u device=%p",(void*)commandBuffer,(unsigned)(sd!=NULL),(void*)sd);
     if(!sd)sd=find_any_device();
     if(!sd||!sd->real.CmdSetDepthCompareOpEXT)return;
     for(uint32_t i=0;i<sd->cb_track_count;i++){
