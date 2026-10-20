@@ -303,6 +303,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_DestroyFramebuffer);
     GDPA_WRAP("vkCmdBeginRenderPass",
               stereo_CmdBeginRenderPass);
+    GDPA_WRAP("vkCmdEndRenderPass",
+              stereo_CmdEndRenderPass);
     GDPA_WRAP("vkCmdBeginRendering",
               stereo_CmdBeginRendering);
     GDPA_WRAP("vkCmdBeginRenderingKHR",

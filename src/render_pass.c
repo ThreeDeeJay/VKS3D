@@ -323,13 +323,53 @@ stereo_CreateRenderPass(
     if (!mv_eligible)
     {
         STEREO_LOG(
-            "RenderPass MV disabled: depth_only=%d present_pass=%d multiview=%d enabled=%d",
-            depth_only,
-            present_pass,
-            sd->stereo.multiview,
-            sd->stereo.enabled);
+            "RP_MV_REJECT rp=%p depth_only=%u shadow_pass=%u present_pass=%u multiview=%u enabled=%u attachments=%u subpasses=%u reason=%s",
+            (void*)*pRenderPass,
+            (unsigned)depth_only,
+            (unsigned)shadow_pass,
+            (unsigned)present_pass,
+            (unsigned)sd->stereo.multiview,
+            (unsigned)sd->stereo.enabled,
+            pCreateInfo->attachmentCount,
+            pCreateInfo->subpassCount,
+            pCreateInfo->attachmentCount == 0 ? "NO_ATTACHMENTS" : depth_only ? "DEPTH_ONLY" : shadow_pass ? "SHADOW_PASS" : present_pass ? "PRESENT_PASS" : "MV_DISABLED");
+        if (shadow_pass && pCreateInfo->pAttachments)
+        {
+            for (uint32_t a = 0; a < pCreateInfo->attachmentCount; a++)
+            {
+                const VkAttachmentDescription *ad = &pCreateInfo->pAttachments[a];
+                STEREO_LOG(
+                    "RP_SHADOW_ATTACHMENT rp=%p index=%u format=%u samples=%u load=%u store=%u initial_layout=%u final_layout=%u",
+                    (void*)*pRenderPass,
+                    a,
+                    (unsigned)ad->format,
+                    (unsigned)ad->samples,
+                    (unsigned)ad->loadOp,
+                    (unsigned)ad->storeOp,
+                    (unsigned)ad->initialLayout,
+                    (unsigned)ad->finalLayout);
+            }
+        }
+        if (shadow_pass && pCreateInfo->pSubpasses)
+        {
+            for (uint32_t s = 0; s < pCreateInfo->subpassCount; s++)
+            {
+                const VkSubpassDescription *sp = &pCreateInfo->pSubpasses[s];
+                STEREO_LOG(
+                    "RP_SHADOW_SUBPASS rp=%p subpass=%u bind_point=%u inputs=%u colors=%u resolves=%u depth_ref=%p preserve=%u",
+                    (void*)*pRenderPass,
+                    s,
+                    (unsigned)sp->pipelineBindPoint,
+                    sp->inputAttachmentCount,
+                    sp->colorAttachmentCount,
+                    sp->pResolveAttachments ? sp->colorAttachmentCount : 0,
+                    (void*)sp->pDepthStencilAttachment,
+                    sp->preserveAttachmentCount);
+            }
+        }
         return VK_SUCCESS;
     }
+    STEREO_LOG("RP_MV_CREATE_BEGIN rp=%p slot=%u attachments=%u subpasses=%u", (void*)*pRenderPass, sd->render_pass_count-1, pCreateInfo->attachmentCount, pCreateInfo->subpassCount);
 
     /*
      * FIX 2 CORE: DEDUPE MV render passes
@@ -387,8 +427,10 @@ stereo_CreateRenderPass(
     }
     else
     {
-        STEREO_ERR("RenderPass %p: mv creation failed",
-                   (void*)*pRenderPass);
+        STEREO_ERR("RP_MV_CREATE_FAILED rp=%p result_or_handle_invalid=1 attachments=%u subpasses=%u",
+            (void*)*pRenderPass,
+            pCreateInfo->attachmentCount,
+            pCreateInfo->subpassCount);
     }
 
     return VK_SUCCESS;
@@ -473,11 +515,13 @@ stereo_CreateRenderPass2KHR(
             mv2.correlatedViewMaskCount = sc;
             mv2.pCorrelatedViewMasks    = corr;
             VkRenderPass mv = VK_NULL_HANDLE;
-            if (sd->real.CreateRenderPass2KHR(sd->real_device, &mv2, pAllocator, &mv) == VK_SUCCESS && mv) {
+            VkResult mv2_res = sd->real.CreateRenderPass2KHR(sd->real_device, &mv2, pAllocator, &mv);
+            STEREO_LOG("RP2_MV_CREATE_RESULT rp=%p mv=%p result=%d attachments=%u subpasses=%u", (void*)*pRenderPass, (void*)mv, (int)mv2_res, ac, sc);
+            if (mv2_res == VK_SUCCESS && mv) {
                 rpi->mv_handle = mv; rpi->has_multiview = true;
                 rpi->view_mask = STEREO_VIEW_MASK;
                 sd->multiview_pass_exists = true;
-                STEREO_LOG("RenderPass2 %p: mv=%p (att=%u)", (void*)*pRenderPass, (void*)mv, ac);
+                STEREO_LOG("RP2_MV_STORED rp=%p mv=%p view_mask=0x%X", (void*)*pRenderPass, (void*)mv, (unsigned)rpi->view_mask);
             }
         }
         free(pa2); free(subs); free(corr);

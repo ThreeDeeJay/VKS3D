@@ -48,8 +48,11 @@ jobs:
     - name: Get current commit hash and counts
       run: |
         echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
+        echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+        echo "CommitTitle=$(git show --pretty=format:%s -s HEAD)" >> $env:GITHUB_ENV
         echo "AttemptCount=${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_ENV
+        echo "BuildDate=$(git show -s --date=format:'%Y%m%d' --format=%cd)" >> $env:GITHUB_ENV
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
@@ -121,7 +124,11 @@ jobs:
         -DSTEREO_BUILD_DEMO=OFF
         -DVKS3D_VER_PATCH=${{env.CommitCount}}
         -DVKS3D_VER_BUILD=${{env.AttemptCount}}
-        -DVKS3D_COMMIT_HASH=${{env.CommitHash}}
+        -DVKS3D_VER_DATE=${{env.BuildDate}}
+        -DVKS3D_REPO=${{github.repository}}
+        -DVKS3D_BRANCH=${{env.Branch}}
+        -DVKS3D_COMMIT_HASH=${{env.CommitHashShort}}
+        -DVKS3D_COMMIT_TITLE="${{env.CommitTitle}}"
         -DVKS3D_BITS=${{matrix.Settings.Bits}}
 
     - name: Build
@@ -203,7 +210,7 @@ jobs:
       - name: Release - latest_${{env.Branch}}
         if: github.event_name == 'push'
         run: |
-          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --generate-notes --latest=false --prerelease --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
+          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
           Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
           gh release upload latest_${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
   

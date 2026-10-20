@@ -557,6 +557,11 @@ typedef struct StereoPipelineInfo
     /* Classification recorded at pipeline creation */
     VkBool32 is_quad;
     uint32_t vertex_binding_count;
+    uint64_t vs_hash;
+    VkBool32 depth_test_enable;
+    VkBool32 depth_write_enable;
+    VkCompareOp depth_compare_op;
+    VkBool32 blend_enable;
     /* Vulkan 1.3 dynamic rendering multiview */
     uint32_t view_mask;
     /* Projection-UBO candidate discovered while scanning the patched stage */
@@ -787,6 +792,7 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImageView(VkDevice, const VkImageVie
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateFramebuffer(VkDevice, const VkFramebufferCreateInfo *, const VkAllocationCallbacks *, VkFramebuffer *);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyFramebuffer(VkDevice, VkFramebuffer, const VkAllocationCallbacks *);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRenderPass(VkCommandBuffer, const VkRenderPassBeginInfo *, VkSubpassContents);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRenderingInfo);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdEndRendering(VkCommandBuffer commandBuffer);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImage(VkDevice, const VkImageCreateInfo*, const VkAllocationCallbacks*, VkImage*);
