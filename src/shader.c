@@ -13474,6 +13474,18 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 info->depth_test_enable = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthTestEnable : VK_FALSE;
                 info->depth_write_enable = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthWriteEnable : VK_FALSE;
                 info->depth_compare_op = pCI[p].pDepthStencilState ? pCI[p].pDepthStencilState->depthCompareOp : VK_COMPARE_OP_ALWAYS;
+                info->depth_test_dynamic = VK_FALSE;
+                info->depth_write_dynamic = VK_FALSE;
+                info->depth_compare_dynamic = VK_FALSE;
+                if(pCI[p].pDynamicState&&pCI[p].pDynamicState->pDynamicStates){
+                    for(uint32_t ds=0;ds<pCI[p].pDynamicState->dynamicStateCount;ds++){
+                        VkDynamicState state=pCI[p].pDynamicState->pDynamicStates[ds];
+                        if(state==VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE)info->depth_test_dynamic=VK_TRUE;
+                        if(state==VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE)info->depth_write_dynamic=VK_TRUE;
+                        if(state==VK_DYNAMIC_STATE_DEPTH_COMPARE_OP)info->depth_compare_dynamic=VK_TRUE;
+                    }
+                }
+                STEREO_LOG("PIPE_DEPTH_STATE pipe=%p test=%u test_dynamic=%u write=%u write_dynamic=%u compare=%u compare_dynamic=%u",(void*)info->pipeline,(unsigned)info->depth_test_enable,(unsigned)info->depth_test_dynamic,(unsigned)info->depth_write_enable,(unsigned)info->depth_write_dynamic,(unsigned)info->depth_compare_op,(unsigned)info->depth_compare_dynamic);
                 info->blend_enable = pCI[p].pColorBlendState && pCI[p].pColorBlendState->attachmentCount && pCI[p].pColorBlendState->pAttachments[0].blendEnable;
                 info->view_mask = 0; /* default */
                 info->has_proj_ubo          = dbg_out[p].has_proj_ubo;
