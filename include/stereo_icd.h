@@ -561,6 +561,9 @@ typedef struct StereoPipelineInfo
     VkBool32 depth_test_enable;
     VkBool32 depth_write_enable;
     VkCompareOp depth_compare_op;
+    VkBool32 depth_test_dynamic;
+    VkBool32 depth_write_dynamic;
+    VkBool32 depth_compare_dynamic;
     VkBool32 blend_enable;
     /* Vulkan 1.3 dynamic rendering multiview */
     uint32_t view_mask;
