@@ -1033,9 +1033,7 @@ static void do_scan(SpvMod *m, bool p2)
 static void count_geometry_inputs(SpvMod *m)
 {
     const uint32_t *w=m->words;
-    uint32_t input_ids[256];
     uint32_t input_count=0;
-    uint32_t location_ids[256];
     uint32_t location_count=0;
     uint32_t variable_ops=0;
     uint32_t decorate_ops=0;
