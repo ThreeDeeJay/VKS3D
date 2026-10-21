@@ -9205,6 +9205,7 @@ bool spirv_patch_stereo_fs(
             int image_dim = -1;
             int image_idx = -1;
             uint32_t loaded_image_type = 0;
+            uint32_t image_type_id = 0;
             for (size_t scan = 5; scan < in_c;)
             {
                 uint32_t sw = in[scan] >> 16;
@@ -9220,6 +9221,38 @@ bool spirv_patch_stereo_fs(
                 }
                 scan += sw;
             }
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 1] == loaded_image_type)
+                {
+                    image_type_id = in[scan + 2];
+                    break;
+                }
+                if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == loaded_image_type)
+                {
+                    image_type_id = loaded_image_type;
+                    break;
+                }
+                scan += sw;
+            }
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == image_type_id)
+                {
+                    image_dim = (int)in[scan + 3];
+                    break;
+                }
+                scan += sw;
+            }
+            for (uint32_t img = 0; img < s.n_img; ++img)
             uint32_t image_type_id = 0;
             for (size_t scan = 5; scan < in_c;)
             {
