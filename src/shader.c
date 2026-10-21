@@ -8773,6 +8773,52 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
         }
+        if (op == SpvOpVariable &&
+            wc >= 4 &&
+            in[i + 3] == SpvStorageClassUniformConstant)
+        {
+            uint32_t pointer_target = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (!sw || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypePointer &&
+                    sw >= 4 &&
+                    in[scan + 1] == in[i + 1])
+                {
+                    pointer_target = in[scan + 3];
+                    break;
+                }
+                scan += sw;
+            }
+            bool variable_rewritten = false;
+            for (uint32_t j = 0; j < s.n_img; ++j)
+            {
+                FsImageInfo *image = &s.images[j];
+                if (!image->stereo ||
+                    image->owner_var != in[i + 2] ||
+                    !image->replacement_pointer_type ||
+                    !image->replacement_type ||
+                    pointer_target != image->id)
+                    continue;
+                uint32_t *w = malloc(wc * sizeof(uint32_t));
+                if (!w)
+                    break;
+                memcpy(w, &in[i], wc * sizeof(uint32_t));
+                w[1] = image->replacement_pointer_type;
+                sb_push_n(&ob, w, wc);
+                free(w);
+                variable_rewritten = true;
+                break;
+            }
+            if (variable_rewritten)
+            {
+                i += wc;
+                continue;
+            }
+        }
         if (op == SpvOpFunction) in_func = true;
         if (in_func &&
             (op == SpvOpAccessChain ||
