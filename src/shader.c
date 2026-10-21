@@ -9997,22 +9997,59 @@ bool spirv_patch_stereo_fs(
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t old_result_type = w[1];
             uint32_t old_result_id = w[2];
-            if (!s.v3int_id)
+            uint32_t result_component_type = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (!sw || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypeVector && sw >= 4 && in[scan + 1] == old_result_type && in[scan + 3] == 2)
+                {
+                    result_component_type = in[scan + 2];
+                    break;
+                }
+                scan += sw;
+            }
+            uint32_t query_result_type = 0;
+            if (result_component_type)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeVector && sw >= 4 && in[scan + 2] == result_component_type && in[scan + 3] == 3)
+                    {
+                        query_result_type = in[scan + 1];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (!query_result_type)
             {
                 STEREO_LOG(
-                    "FS_QSIZE_NO_V3INT_TYPE result=%u image=%u",
+                    "FS_QSIZE_NO_MATCHING_V3_TYPE "
+                    "result=%u "
+                    "image=%u "
+                    "oldResultType=%u "
+                    "componentType=%u",
                     old_result_id,
-                    w[3]);
+                    w[3],
+                    old_result_type,
+                    result_component_type);
                 sb_push_n(&ob, &in[i], wc);
-                if (w[1] < id_bound)
+                if (old_result_type < id_bound)
                 {
-                    emitted_type[w[1]] = true;
+                    emitted_type[old_result_type] = true;
                 }
                 free(w);
                 i += wc;
                 continue;
             }
-            if (old_result_type == s.v3int_id)
+            if (old_result_type == query_result_type)
             {
                 sb_push_n(&ob, w, wc);
                 if (w[1] < id_bound)
@@ -10024,8 +10061,7 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             uint32_t query_v3_id = samp_nid++;
-            w[1] = s.v3int_id;
-            w[2] = query_v3_id;
+            w[1] = query_result_type;
             STEREO_LOG(
                 "FS_REWRITE_QUERYSIZE_V3 "
                 "opcode=%s "
@@ -10037,7 +10073,7 @@ bool spirv_patch_stereo_fs(
                 "image=%u",
                 spv_op_name(op),
                 old_result_type,
-                s.v3int_id,
+                query_result_type,
                 old_result_id,
                 query_v3_id,
                 qsize_nid,
