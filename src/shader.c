@@ -8748,7 +8748,85 @@ bool spirv_patch_stereo_fs(
             }
             i += wc; continue;
         }
+        if (op == SpvOpTypeArray &&
+            wc >= 4)
+        {
+            int img = -1;
+            for (uint32_t j = 0; j < s.n_img; ++j)
+            {
+                if (!s.images[j].stereo ||
+                    !s.images[j].replacement_type ||
+                    s.images[j].id != in[i + 2])
+                    continue;
+                img = (int)j;
+                break;
+            }
+            if (img >= 0)
+            {
+                uint32_t w[4];
+                memcpy(w, &in[i], sizeof(w));
+                w[2] = s.images[img].replacement_type;
+                sb_push_n(&ob, w, wc);
+                if (w[1] < id_bound)
+                    emitted_type[w[1]] = true;
+                i += wc;
+                continue;
+            }
+        }
         if (op == SpvOpFunction) in_func = true;
+        if (in_func &&
+            (op == SpvOpAccessChain ||
+                op == SpvOpInBoundsAccessChain ||
+                op == SpvOpPtrAccessChain ||
+                op == SpvOpInBoundsPtrAccessChain ||
+                op == SpvOpCopyObject) &&
+            wc >= 4)
+        {
+            uint32_t pointer_target = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (!sw || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypePointer &&
+                    sw >= 4 &&
+                    in[scan + 1] == in[i + 1])
+                {
+                    pointer_target = in[scan + 3];
+                    break;
+                }
+                scan += sw;
+            }
+            uint32_t replacement_pointer = 0;
+            for (uint32_t j = 0; j < s.n_img; ++j)
+            {
+                FsImageInfo *image = &s.images[j];
+                if (!image->stereo ||
+                    !image->replacement_type ||
+                    !image->replacement_pointer_type ||
+                    image->id != pointer_target)
+                    continue;
+                replacement_pointer = image->replacement_pointer_type;
+                break;
+            }
+            if (replacement_pointer && in[i + 1] != replacement_pointer)
+            {
+                uint32_t *w = malloc(wc * sizeof(uint32_t));
+                if (!w)
+                {
+                    sb_push_n(&ob, &in[i], wc);
+                    i += wc;
+                    continue;
+                }
+                memcpy(w, &in[i], wc * sizeof(uint32_t));
+                w[1] = replacement_pointer;
+                sb_push_n(&ob, w, wc);
+                free(w);
+                i += wc;
+                continue;
+            }
+        }
         if (in_func &&
             op == SpvOpLoad &&
             wc >= 4)
