@@ -9253,8 +9253,16 @@ bool spirv_patch_stereo_fs(
                 scan += sw;
             }
             for (uint32_t img = 0; img < s.n_img; ++img)
-            uint32_t image_type_id = 0;
-            for (size_t scan = 5; scan < in_c;)
+            {
+                if (s.images[img].owner_var == descriptor_var || s.images[img].id == image_type_id || s.images[img].replacement_type == image_type_id)
+                {
+                    image_idx = (int)img;
+                    break;
+                }
+            }
+            int replacement_2d = 0;
+            if (image_idx >= 0 && s.images[image_idx].dim == SpvDim2D && s.images[image_idx].replacement_type)
+                replacement_2d = 1;
             {
                 uint32_t sw = in[scan] >> 16;
                 uint32_t sop = in[scan] & 0xffffu;
