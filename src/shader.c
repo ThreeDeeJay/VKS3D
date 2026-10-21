@@ -10034,9 +10034,9 @@ bool spirv_patch_stereo_fs(
                 }
             }
             if (component_signedness == 0)
-                query_result_type = s.v3uint_id;
+                query_result_type = new_v3u_id;
             else if (component_signedness == 1)
-                query_result_type = s.v3int_id;
+                query_result_type = new_v3i_id;
             if (!query_result_type)
             {
                 STEREO_LOG(
