@@ -9997,10 +9997,10 @@ bool spirv_patch_stereo_fs(
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t old_result_type = w[1];
             uint32_t old_result_id = w[2];
-            if (!s.v3uint_id)
+            if (!s.v3int_id)
             {
                 STEREO_LOG(
-                    "FS_QSIZE_NO_V3UINT_TYPE result=%u image=%u",
+                    "FS_QSIZE_NO_V3INT_TYPE result=%u image=%u",
                     old_result_id,
                     w[3]);
                 sb_push_n(&ob, &in[i], wc);
@@ -10012,7 +10012,7 @@ bool spirv_patch_stereo_fs(
                 i += wc;
                 continue;
             }
-            if (old_result_type == s.v3uint_id)
+            if (old_result_type == s.v3int_id)
             {
                 sb_push_n(&ob, w, wc);
                 if (w[1] < id_bound)
@@ -10024,7 +10024,7 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             uint32_t query_v3_id = samp_nid++;
-            w[1] = s.v3uint_id;
+            w[1] = s.v3int_id;
             w[2] = query_v3_id;
             STEREO_LOG(
                 "FS_REWRITE_QUERYSIZE_V3 "
