@@ -9211,8 +9211,8 @@ bool spirv_patch_stereo_fs(
                 uint32_t sop = in[scan] & 0xffffu;
                 if (sw == 0 || scan + sw > in_c)
                     break;
-                if (sop == SpvOpLoad &&
-                    sw >= 4 &&
+                if (((sop == SpvOpLoad && sw >= 4) ||
+                (sop == SpvOpSampledImage && sw >= 5)) &&
                     in[scan + 2] == in[i + 3])
                 {
                     loaded_image_type = in[scan + 1];
