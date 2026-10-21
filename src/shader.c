@@ -8710,31 +8710,34 @@ bool spirv_patch_stereo_fs(
             {
                 uint32_t w[]={(4u<<16)|SpvOpTypeVector, new_v3i_id, new_int_id, 3};
                 sb_push_n(&ob,w,4);
-                s.v3int_id = new_v3i_id;
-                s.v3uint_id = new_v3u_id;
-                STEREO_LOG(
-                    "FS_EMIT_V3INT id=%u scalar=%u existingInt=%u",
-                    new_v3i_id,
-                    new_int_id,
-                    s.int_id);
             }
-            if (!s.v3uint_id && s.uint_id)
+            bool v3u_type_defined = false;
+            if (s.uint_id && new_v3u_id)
             {
-                STEREO_LOG(
-                    "FS_EMIT_V3UINT id=%u scalar=%u",
-                    new_v3u_id,
-                    s.uint_id);
-                uint32_t w[]={(4u<<16)|SpvOpTypeVector, new_v3u_id, s.uint_id, 3};
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeVector && sw >= 4 && in[scan + 1] == new_v3u_id && in[scan + 2] == s.uint_id && in[scan + 3] == 3)
+                    {
+                        v3u_type_defined = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (!v3u_type_defined)
+                {
+                    uint32_t w[]={(4u<<16)|SpvOpTypeVector,new_v3u_id,s.uint_id,3};
+                    sb_push_n(&ob,w,4);
+                }
+            }
+            if (!s.ptr_int_in_id)
+            {
+                uint32_t w[]={(4u<<16)|32,new_pin_id,1,new_int_id};
                 sb_push_n(&ob,w,4);
             }
-            STEREO_LOG(
-                "FS_TYPES_FINAL v3i=%u scanV3u=%u newV3u=%u",
-                new_v3i_id,
-                s.v3uint_id,
-                new_v3u_id);
-            if (!s.ptr_int_in_id) {
-                uint32_t w[]={(4u<<16)|32, new_pin_id, 1, new_int_id};
-                sb_push_n(&ob,w,4); }
             if (emit_vi_variable) {
                 uint32_t w[]={(4u<<16)|SpvOpVariable, new_pin_id, new_vi_id, SpvStorageClassInput};
                 sb_push_n(&ob,w,4); }
