@@ -10460,6 +10460,37 @@ bool spirv_patch_stereo_fs(
             i += wc;
             continue;
         }
+        if (op == SpvOpConstantComposite && wc >= 4)
+        {
+            bool has_spec_constant = false;
+            for (uint32_t operand = 3; operand < wc; ++operand)
+            {
+                uint32_t constituent = in[i + operand];
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sw >= 3 && in[scan + 2] == constituent && (sop == SpvOpSpecConstantTrue || sop == SpvOpSpecConstantFalse || sop == SpvOpSpecConstant || sop == SpvOpSpecConstantComposite || sop == SpvOpSpecConstantOp))
+                    {
+                        has_spec_constant = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (has_spec_constant)
+                    break;
+            }
+            if (has_spec_constant)
+            {
+                uint32_t w = ((wc << 16) | SpvOpSpecConstantComposite);
+                sb_push(&ob, w);
+                sb_push_n(&ob, &in[i + 1], wc - 1);
+                i += wc;
+                continue;
+            }
+        }
         if (op >= SpvOpImageSampleImplicitLod &&
             op <= SpvOpImageSampleProjDrefExplicitLod)
         {
