@@ -10068,6 +10068,7 @@ bool spirv_patch_stereo_fs(
             }
             uint32_t query_v3_id = samp_nid++;
             w[1] = query_result_type;
+            w[2] = query_v3_id;
             STEREO_LOG(
                 "FS_REWRITE_QUERYSIZE_V3 "
                 "opcode=%s "
