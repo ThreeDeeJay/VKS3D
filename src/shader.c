@@ -9902,9 +9902,9 @@ bool spirv_patch_stereo_fs(
             {
                 uint32_t sw = in[scan] >> 16;
                 uint32_t sop = in[scan] & 0xffffu;
-                if (sw == 0)
+                if (!sw || scan + sw > in_c)
                     break;
-                if (sop == SpvOpImage && sw >= 4 && in[scan + 2] == image_ssa)
+                if ((sop == SpvOpLoad && sw >= 4 && in[scan + 2] == image_ssa) || (sop == SpvOpImage && sw >= 4 && in[scan + 2] == image_ssa))
                 {
                     image_type = in[scan + 1];
                     STEREO_LOG(
