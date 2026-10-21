@@ -3745,6 +3745,34 @@ bool spirv_patch_stereo_vertex(
                 &nid);
             body_done = true;
         }
+        if (opx == SpvOpConstantComposite && wcx >= 4)
+        {
+            bool has_spec_operand = false;
+            for (uint32_t operand = 3; operand < wcx && !has_spec_operand; ++operand)
+            {
+                uint32_t operand_id = in[i + operand];
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if ((sop == SpvOpSpecConstantTrue || sop == SpvOpSpecConstantFalse || sop == SpvOpSpecConstant || sop == SpvOpSpecConstantComposite || sop == SpvOpSpecConstantOp) && sw >= 3 && in[scan + 2] == operand_id)
+                    {
+                        has_spec_operand = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (has_spec_operand)
+            {
+                sb_push(&ob, ((wcx << 16) | SpvOpSpecConstantComposite));
+                sb_push_n(&ob, &in[i + 1], wcx - 1);
+                i += wcx;
+                continue;
+            }
+        }
         if (opx == SpvOpSelect &&
             wcx >= 6 &&
             id_v4bt &&
