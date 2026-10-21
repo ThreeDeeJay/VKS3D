@@ -8711,6 +8711,7 @@ bool spirv_patch_stereo_fs(
                 uint32_t w[]={(4u<<16)|SpvOpTypeVector, new_v3i_id, new_int_id, 3};
                 sb_push_n(&ob,w,4);
                 s.v3int_id = new_v3i_id;
+                s.v3uint_id = new_v3u_id;
                 STEREO_LOG(
                     "FS_EMIT_V3INT id=%u scalar=%u existingInt=%u",
                     new_v3i_id,
@@ -10012,6 +10013,7 @@ bool spirv_patch_stereo_fs(
                 scan += sw;
             }
             uint32_t query_result_type = 0;
+            uint32_t component_signedness = UINT32_MAX;
             if (result_component_type)
             {
                 for (size_t scan = 5; scan < in_c;)
@@ -10020,14 +10022,18 @@ bool spirv_patch_stereo_fs(
                     uint32_t sop = in[scan] & 0xffffu;
                     if (!sw || scan + sw > in_c)
                         break;
-                    if (sop == SpvOpTypeVector && sw >= 4 && in[scan + 2] == result_component_type && in[scan + 3] == 3)
+                    if (sop == SpvOpTypeInt && sw >= 4 && in[scan + 1] == result_component_type)
                     {
-                        query_result_type = in[scan + 1];
+                        component_signedness = in[scan + 3];
                         break;
                     }
                     scan += sw;
                 }
             }
+            if (component_signedness == 0)
+                query_result_type = s.v3uint_id;
+            else if (component_signedness == 1)
+                query_result_type = s.v3int_id;
             if (!query_result_type)
             {
                 STEREO_LOG(
