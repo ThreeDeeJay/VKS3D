@@ -9045,23 +9045,8 @@ bool spirv_patch_stereo_fs(
                         load_rewritten = true;
                 }
             }
-            bool pointer_target_is_image = false;
-            for (size_t scan = 5; scan < in_c;)
-            {
-                uint32_t sw = in[scan] >> 16;
-                uint32_t sop = in[scan] & 0xffffu;
-                if (!sw || scan + sw > in_c)
-                    break;
-                if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == pointer_target)
-                {
-                    pointer_target_is_image = true;
-                    break;
-                }
-                scan += sw;
-            }
             if (!load_rewritten &&
                 pointer_target != 0 &&
-                !pointer_target_is_image &&
                 w[1] != pointer_target)
             {
                 STEREO_LOG(
