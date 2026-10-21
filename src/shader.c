@@ -8842,13 +8842,6 @@ bool spirv_patch_stereo_fs(
             }
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t pointer_id = in[i + 3];
-            if (pointer_id == 19)
-            {
-                sb_push_n(&ob, &in[i], wc);
-                free(w);
-                i += wc;
-                continue;
-            }
             uint32_t pointer_type = 0;
             uint32_t pointer_target = 0;
             STEREO_LOG(
@@ -9008,8 +9001,7 @@ bool spirv_patch_stereo_fs(
             }
             if (!load_rewritten &&
                 pointer_target != 0 &&
-                w[1] != pointer_target &&
-                pointer_id != 19)
+                w[1] != pointer_target)
             {
                 STEREO_LOG(
                     "FS_LOAD_POINTEE_FIX "
