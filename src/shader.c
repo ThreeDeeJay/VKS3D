@@ -9216,16 +9216,59 @@ bool spirv_patch_stereo_fs(
                     in[scan + 3] == descriptor_var)
                 {
                     loaded_image_type = in[scan + 1];
-                    STEREO_LOG(
-                        "FS_SAMPLE_IMAGE_LOAD_TYPE "
-                        "descriptor=%u "
-                        "loadResult=%u "
-                        "loadType=%u "
-                        "off=%zu",
-                        descriptor_var,
-                        in[scan + 2],
-                        loaded_image_type,
-                        scan);
+                    break;
+                }
+                scan += sw;
+            }
+            uint32_t image_type_id = 0;
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 1] == loaded_image_type)
+                {
+                    image_type_id = in[scan + 2];
+                    break;
+                }
+                if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 2] == loaded_image_type)
+                {
+                    image_type_id = in[scan + 1];
+                    break;
+                }
+                if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 1] == loaded_image_type)
+                {
+                    image_type_id = in[scan + 3];
+                    break;
+                }
+                scan += sw;
+            }
+            if (image_type_id == 0)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == loaded_image_type)
+                    {
+                        image_type_id = loaded_image_type;
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == image_type_id)
+                {
+                    image_dim = (int)in[scan + 3];
                     break;
                 }
                 scan += sw;
@@ -9233,25 +9276,10 @@ bool spirv_patch_stereo_fs(
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 if (s.images[img].owner_var == descriptor_var ||
-                    s.images[img].id == loaded_image_type ||
-                    s.images[img].replacement_type == loaded_image_type)
+                    s.images[img].id == image_type_id ||
+                    s.images[img].replacement_type == image_type_id)
                 {
                     image_idx = (int)img;
-                    image_dim = (int)s.images[img].dim;
-                    STEREO_LOG(
-                        "FS_SAMPLE_IMAGE_DESCRIPTOR "
-                        "descriptor=%u "
-                        "image=%u "
-                        "dim=%u "
-                        "stereo=%u "
-                        "loadedType=%u "
-                        "replacement=%u",
-                        descriptor_var,
-                        s.images[img].id,
-                        s.images[img].dim,
-                        s.images[img].stereo,
-                        loaded_image_type,
-                        s.images[img].replacement_type);
                     break;
                 }
             }
