@@ -8921,22 +8921,6 @@ bool spirv_patch_stereo_fs(
             }
             if (replacement_pointer && in[i + 1] != replacement_pointer)
             {
-                uint32_t replacement_target = 0;
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (!sw || scan + sw > in_c)
-                        break;
-                    if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 1] == replacement_pointer)
-                    {
-                        replacement_target = in[scan + 3];
-                        break;
-                    }
-                    scan += sw;
-                }
-                if (replacement_target != 0)
-                {
                 uint32_t *w = malloc(wc * sizeof(uint32_t));
                 if (!w)
                 {
@@ -8950,7 +8934,6 @@ bool spirv_patch_stereo_fs(
                 free(w);
                 i += wc;
                 continue;
-                }
             }
         }
         if (in_func &&
@@ -9126,7 +9109,7 @@ bool spirv_patch_stereo_fs(
                         load_rewritten = true;
                 }
             }
-            if (pointer_type != 0 &&
+            if (!load_rewritten &&
                 pointer_target != 0 &&
                 w[1] != pointer_target)
             {
