@@ -10512,7 +10512,7 @@ bool spirv_patch_stereo_fs(
                     scan += sw;
                 }
             }
-            if (replacement_sampled_type && replacement_sampled_type != sampled_result_type)
+            if (image_type && replacement_sampled_type && replacement_sampled_type != sampled_result_type)
             {
                 bool sampled_type_matches = false;
                 for (size_t scan = 5; scan < in_c;)
