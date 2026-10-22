@@ -9179,20 +9179,24 @@ bool spirv_patch_stereo_fs(
                 FsImageInfo *image = &s.images[j];
                 if (!image->stereo ||
                     !image->replacement_type ||
-                    image->owner_var != image_id)
+                    (image->owner_var != UINT32_MAX && image->owner_var != image_id && image->id != image_id))
                     continue;
                 img_idx = (int)j;
                 break;
             }
             if (img_idx >= 0 && new_vi_id && new_v3u_id && new_v3i_id)
             {
+                STEREO_LOG("TEXEL_PTR_MATCH img=%u img_id=%u owner=%u idx=%d", image_id, s.images[img_idx].id, s.images[img_idx].owner_var, img_idx);
                 uint32_t coord_type = 0;
                 for (size_t scan = 5; scan < in_c;)
                 {
                     uint32_t sw = in[scan] >> 16;
                     uint32_t sop = in[scan] & 0xffffu;
                     if (!sw || scan + sw > in_c)
+                    {
+                        STEREO_LOG("TEXEL_PTR_SCAN_STOP off=%zu wc=%u in_c=%zu", scan, sw, in_c);
                         break;
+                    }
                     if (sw >= 3 &&
                         in[scan + 2] == coord_id)
                     {
@@ -9212,6 +9216,7 @@ bool spirv_patch_stereo_fs(
                     }
                     scan += sw;
                 }
+                STEREO_LOG("TEXEL_PTR_COORD_RESULT coord=%u type=%u", coord_id, coord_type);
                 uint32_t coord_component_type = 0;
                 uint32_t coord_components = 0;
                 for (size_t scan = 5; scan < in_c;)
