@@ -7621,8 +7621,23 @@ bool spirv_patch_stereo_fs(
         if ((op == SpvOpTypeImage && wc >= 9) ||
             (op == SpvOpTypePointer && wc >= 4))
         {
-            if (in[i + 1] < id_bound &&
-                emitted_type[in[i + 1]])
+            bool definition_emitted = false;
+            for (size_t scan = 5; scan < ob.n;)
+            {
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
+                    break;
+                if (ob.w[scan + 1] == in[i + 1] &&
+                    ((op == SpvOpTypeImage && sop == SpvOpTypeImage && sw >= 9) ||
+                        (op == SpvOpTypePointer && sop == SpvOpTypePointer && sw >= 4)))
+                {
+                    definition_emitted = true;
+                    break;
+                }
+                scan += sw;
+            }
+            if (definition_emitted)
             {
                 i += wc;
                 continue;
