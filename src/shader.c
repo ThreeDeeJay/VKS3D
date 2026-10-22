@@ -9182,7 +9182,6 @@ bool spirv_patch_stereo_fs(
                 img_idx = (int)j;
                 break;
             }
-            STEREO_LOG("FS_TEXEL_PTR image=%u coord=%u img_idx=%d vi=%u v3u=%u v3i=%u", image_id, coord_id, img_idx, new_vi_id, new_v3u_id, new_v3i_id);
             if (img_idx >= 0 && new_vi_id && new_v3u_id && new_v3i_id)
             {
                 uint32_t coord_type = 0;
@@ -9226,7 +9225,6 @@ bool spirv_patch_stereo_fs(
                     }
                     scan += sw;
                 }
-                STEREO_LOG("FS_TEXEL_COORD image=%u coord=%u type=%u component=%u components=%u uint=%u int=%u", image_id, coord_id, coord_type, coord_component_type, coord_components, coord_component_type == s.uint_id, coord_component_type == new_int_id || coord_component_type == s.int_id);
                 bool coord_uint = coord_component_type != 0 &&
                 coord_component_type == s.uint_id;
                 bool coord_int = coord_component_type != 0 &&
