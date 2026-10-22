@@ -9171,9 +9171,11 @@ bool spirv_patch_stereo_fs(
         {
             uint32_t image_id = in[i + 3];
             uint32_t coord_id = in[i + 4];
+            STEREO_LOG("TEXEL_PTR_ENTER off=%zu image=%u coord=%u vi=%u v3u=%u v3i=%u n_img=%u", i, image_id, coord_id, new_vi_id, new_v3u_id, new_v3i_id, s.n_img);
             int img_idx = -1;
             for (uint32_t j = 0; j < s.n_img; ++j)
             {
+                STEREO_LOG("TEXEL_PTR_IMAGE idx=%u id=%u owner=%u stereo=%u replacement=%u", j, s.images[j].id, s.images[j].owner_var, s.images[j].stereo, s.images[j].replacement_type);
                 FsImageInfo *image = &s.images[j];
                 if (!image->stereo ||
                     !image->replacement_type ||
@@ -9192,18 +9194,21 @@ bool spirv_patch_stereo_fs(
                     if (!sw || scan + sw > in_c)
                         break;
                     if (sw >= 3 &&
-                        in[scan + 2] == coord_id &&
-                        (sop == SpvOpCompositeConstruct ||
+                        in[scan + 2] == coord_id)
+                    {
+                        STEREO_LOG("TEXEL_PTR_COORD_DEF id=%u op=%u wc=%u type=%u", coord_id, sop, sw, in[scan + 1]);
+                        if (sop == SpvOpCompositeConstruct ||
                             sop == SpvOpLoad ||
                             sop == SpvOpCopyObject ||
                             sop == SpvOpVectorShuffle ||
                             sop == SpvOpPhi ||
                             sop == SpvOpSelect ||
                             sop == SpvOpConstantComposite ||
-                            sop == SpvOpSpecConstantComposite))
-                    {
-                        coord_type = in[scan + 1];
-                        break;
+                            sop == SpvOpSpecConstantComposite)
+                        {
+                            coord_type = in[scan + 1];
+                            break;
+                        }
                     }
                     scan += sw;
                 }
