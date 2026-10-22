@@ -10517,6 +10517,142 @@ bool spirv_patch_stereo_fs(
             uint32_t image_value_type = 0;
             uint32_t image_type = 0;
             uint32_t replacement_sampled_type = 0;
+            for (size_t scan = 5; scan < i;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (!sw || scan + sw > i)
+                    break;
+                if (in[scan+2] == image_id && sw >= 3)
+                {
+                    if ((sop == SpvOpLoad || sop == SpvOpImage) && sw >= 4)
+                    {
+                        image_value_type = in[scan+1];
+                        break;
+                    }
+                    if (sop == SpvOpSampledImage && sw >= 5)
+                    {
+                        uint32_t sampled_type = in[scan+1];
+                        for (size_t ts = 5; ts < in_c;)
+                        {
+                            uint32_t tw = in[ts] >> 16;
+                            uint32_t top = in[ts] & 0xffffu;
+                            if (!tw || ts + tw > in_c)
+                                break;
+                            if (top == SpvOpTypeSampledImage && tw >= 3 && in[ts+1] == sampled_type)
+                            {
+                                image_value_type = in[ts+2];
+                                break;
+                            }
+                            ts += tw;
+                        }
+                        if (image_value_type)
+                            break;
+                    }
+                    if ((sop == SpvOpAccessChain || sop == SpvOpInBoundsAccessChain || sop == SpvOpCopyObject || sop == SpvOpBitcast) && sw >= 4)
+                    {
+                        uint32_t source_id = in[scan+3];
+                        for (size_t ds = 5; ds < scan;)
+                        {
+                            uint32_t dw = in[ds] >> 16;
+                            uint32_t dop = in[ds] & 0xffffu;
+                            if (!dw || ds + dw > scan)
+                                break;
+                            if (dw >= 3 && in[ds+2] == source_id && (dop == SpvOpLoad || dop == SpvOpImage))
+                            {
+                                image_value_type = in[ds+1];
+                                break;
+                            }
+                            ds += dw;
+                        }
+                        if (image_value_type)
+                            break;
+                    }
+                }
+                scan += sw;
+            }
+            if (image_value_type)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypePointer && sw >= 4 && in[scan+1] == image_value_type)
+                    {
+                        image_type = in[scan+3];
+                        break;
+                    }
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan+1] == sampled_result_type)
+                    {
+                        image_type = in[scan+2];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            for (uint32_t img = 0; img < s.n_img; ++img)
+            {
+                FsImageInfo *image = &s.images[img];
+                if (!image->stereo || !image->replacement_type)
+                    continue;
+                if (image_value_type == image->id || image_value_type == image->replacement_type || image_id == image->owner_var)
+                {
+                    image_type = image->replacement_type;
+                    break;
+                }
+            }
+            if (image_type)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan+2] == image_type)
+                    {
+                        replacement_sampled_type = in[scan+1];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (replacement_sampled_type && replacement_sampled_type != sampled_result_type)
+            {
+                uint32_t *w = malloc(wc * sizeof(uint32_t));
+                if (!w)
+                {
+                    sb_push_n(&ob, &in[i], wc);
+                    i += wc;
+                    continue;
+                }
+                memcpy(w, &in[i], wc * sizeof(uint32_t));
+                w[1] = replacement_sampled_type;
+                STEREO_LOG(
+                    "FS_SAMPLEDIMAGE_TYPE_PATCH result=%u oldType=%u newType=%u image=%u imageType=%u",
+                    sampled_result_id,
+                    sampled_result_type,
+                    replacement_sampled_type,
+                    image_id,
+                    image_type);
+                sb_push_n(&ob, w, wc);
+                free(w);
+                i += wc;
+                continue;
+            }
+            STEREO_LOG(
+                "FS_SAMPLEDIMAGE_TYPE_KEEP result=%u type=%u image=%u imageType=%u",
+                sampled_result_id,
+                sampled_result_type,
+                image_id,
+                image_type);
+            uint32_t sampled_result_id = in[i+2];
+            uint32_t image_id = in[i+3];
+            uint32_t image_value_type = 0;
+            uint32_t image_type = 0;
+            uint32_t replacement_sampled_type = 0;
             for (size_t scan = 5; scan < in_c;)
             {
                 uint32_t sw = in[scan] >> 16;
