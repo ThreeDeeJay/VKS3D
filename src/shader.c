@@ -9165,6 +9165,103 @@ bool spirv_patch_stereo_fs(
             i += wc;
             continue;
         }
+        if (in_func &&
+            op == SpvOpImageTexelPointer &&
+            wc >= 6)
+        {
+            uint32_t image_id = in[i + 3];
+            uint32_t coord_id = in[i + 4];
+            int img_idx = -1;
+            for (uint32_t j = 0; j < s.n_img; ++j)
+            {
+                FsImageInfo *image = &s.images[j];
+                if (!image->stereo ||
+                    !image->replacement_type ||
+                    image->owner_var != image_id)
+                    continue;
+                img_idx = (int)j;
+                break;
+            }
+            if (img_idx >= 0 && new_vi_id && new_v3u_id && new_v3i_id)
+            {
+                uint32_t coord_type = 0;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sw >= 3 &&
+                        in[scan + 2] == coord_id &&
+                        (sop == SpvOpCompositeConstruct ||
+                            sop == SpvOpLoad ||
+                            sop == SpvOpCopyObject ||
+                            sop == SpvOpVectorShuffle ||
+                            sop == SpvOpPhi ||
+                            sop == SpvOpSelect ||
+                            sop == SpvOpConstantComposite ||
+                            sop == SpvOpSpecConstantComposite))
+                    {
+                        coord_type = in[scan + 1];
+                        break;
+                    }
+                    scan += sw;
+                }
+                uint32_t coord_component_type = 0;
+                uint32_t coord_components = 0;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeVector &&
+                        sw >= 4 &&
+                        in[scan + 1] == coord_type)
+                    {
+                        coord_component_type = in[scan + 2];
+                        coord_components = in[scan + 3];
+                        break;
+                    }
+                    scan += sw;
+                }
+                bool coord_uint = coord_component_type != 0 &&
+                coord_component_type == s.uint_id;
+                bool coord_int = coord_component_type != 0 &&
+                (coord_component_type == new_int_id ||
+                    coord_component_type == s.int_id);
+                uint32_t coord_v3_type = coord_uint ? new_v3u_id :
+                coord_int ? new_v3i_id : 0;
+                if (coord_components == 2 && coord_v3_type)
+                {
+                    uint32_t view_id = samp_nid++;
+                    uint32_t x_id = samp_nid++;
+                    uint32_t y_id = samp_nid++;
+                    uint32_t layer_id = view_id;
+                    uint32_t new_coord_id = samp_nid++;
+                    uint32_t load_view[] = {(4u << 16) | SpvOpLoad, new_int_id, view_id, new_vi_id};
+                    sb_push_n(&ob, load_view, 4);
+                    if (coord_uint)
+                    {
+                        layer_id = samp_nid++;
+                        uint32_t convert_layer[] = {(4u << 16) | SpvOpConvertSToU, coord_component_type, layer_id, view_id};
+                        sb_push_n(&ob, convert_layer, 4);
+                    }
+                    uint32_t extract_x[] = {(5u << 16) | SpvOpCompositeExtract, coord_component_type, x_id, coord_id, 0};
+                    uint32_t extract_y[] = {(5u << 16) | SpvOpCompositeExtract, coord_component_type, y_id, coord_id, 1};
+                    sb_push_n(&ob, extract_x, 5);
+                    sb_push_n(&ob, extract_y, 5);
+                    uint32_t construct_coord[] = {(6u << 16) | SpvOpCompositeConstruct, coord_v3_type, new_coord_id, x_id, y_id, layer_id};
+                    sb_push_n(&ob, construct_coord, 6);
+                    uint32_t w[6];
+                    memcpy(w, &in[i], sizeof(w));
+                    w[4] = new_coord_id;
+                    sb_push_n(&ob, w, wc);
+                    i += wc;
+                    continue;
+                }
+            }
+        }
         if (op >= SpvOpImageSampleImplicitLod &&
             op <= SpvOpImageSampleProjDrefExplicitLod &&
             wc >= 5)
