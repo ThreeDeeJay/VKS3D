@@ -8990,14 +8990,22 @@ bool spirv_patch_stereo_fs(
                 uint32_t sop = ob.w[scan] & 0xffffu;
                 if (!sw || scan + sw > ob.n)
                     break;
+                if ((sop == SpvOpVariable && sw >= 4) && ob.w[scan + 2] == pointer_id)
+                {
+                    pointer_type = ob.w[scan + 1];
+                    break;
+                }
                 if ((sop == SpvOpAccessChain ||
-                    sop == SpvOpVariable ||
                     sop == SpvOpInBoundsAccessChain ||
                     sop == SpvOpPtrAccessChain ||
-                    sop == SpvOpInBoundsPtrAccessChain ||
-                    sop == SpvOpCopyObject) &&
+                    sop == SpvOpInBoundsPtrAccessChain) &&
                     sw >= 4 &&
                     ob.w[scan + 2] == pointer_id)
+                {
+                    pointer_type = ob.w[scan + 1];
+                    break;
+                }
+                if (sop == SpvOpCopyObject && sw >= 4 && ob.w[scan + 2] == pointer_id)
                 {
                     pointer_type = ob.w[scan + 1];
                     break;
@@ -9156,26 +9164,25 @@ bool spirv_patch_stereo_fs(
                         load_rewritten = true;
                 }
             }
-            if (!load_rewritten &&
-                pointer_type != 0 &&
-                pointer_target != 0 &&
+            if (pointer_type &&
+                pointer_target &&
                 w[1] != pointer_target)
             {
-                bool pointee_type_exists = false;
+                bool pointer_decl_matches = false;
                 for (size_t scan = 5; scan < ob.n;)
                 {
                     uint32_t sw = ob.w[scan] >> 16;
                     uint32_t sop = ob.w[scan] & 0xffffu;
                     if (!sw || scan + sw > ob.n)
                         break;
-                    if (sop >= SpvOpTypeVoid && sop <= SpvOpTypeFunction && sw >= 2 && ob.w[scan + 1] == pointer_target)
+                    if (sop == SpvOpTypePointer && sw >= 4 && ob.w[scan + 1] == pointer_type && ob.w[scan + 3] == pointer_target)
                     {
-                        pointee_type_exists = true;
+                        pointer_decl_matches = true;
                         break;
                     }
                     scan += sw;
                 }
-                if (pointee_type_exists)
+                if (pointer_decl_matches)
                 {
                 STEREO_LOG(
                     "FS_LOAD_POINTEE_FIX "
