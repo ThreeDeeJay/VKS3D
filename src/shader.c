@@ -8287,7 +8287,6 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             uint32_t new_array_type = s.images[patch_img_idx].replacement_type;
-            uint32_t new_array_type = s.images[patch_img_idx].replacement_type;
             uint32_t duplicate_array_type = fs_find_matching_image_type(in, in_c, s.images[patch_img_idx].sampled_type, s.images[patch_img_idx].dim, s.images[patch_img_idx].depth, 1, s.images[patch_img_idx].ms, s.images[patch_img_idx].sampled, s.images[patch_img_idx].format);
             if (duplicate_array_type && duplicate_array_type != s.images[patch_img_idx].id)
             {
