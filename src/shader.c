@@ -9256,8 +9256,12 @@ bool spirv_patch_stereo_fs(
                     if (coord_uint)
                     {
                         layer_id = samp_nid++;
-                        uint32_t convert_layer[] = {(4u << 16) | SpvOpUConvert, coord_component_type, layer_id, view_id};
+                        uint32_t convert_layer[] = {(4u << 16) | SpvOpBitcast, coord_component_type, layer_id, view_id};
                         sb_push_n(&ob, convert_layer, 4);
+                    }
+                    else if (coord_int)
+                    {
+                        layer_id = view_id;
                     }
                     uint32_t extract_x[] = {(5u << 16) | SpvOpCompositeExtract, coord_component_type, x_id, coord_id, 0};
                     uint32_t extract_y[] = {(5u << 16) | SpvOpCompositeExtract, coord_component_type, y_id, coord_id, 1};
