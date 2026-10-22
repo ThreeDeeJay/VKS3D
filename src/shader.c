@@ -8122,14 +8122,14 @@ bool spirv_patch_stereo_fs(
                         if (existing_pointer != 0 && existing_pointer < id_bound)
                         {
                             img->replacement_type = existing;
-                            img->replacement_sampled_type = existing_sampled;
+                            img->replacement_sampled_type = img->sampled_type_id;
                             img->replacement_pointer_type = existing_pointer;
                             for (uint32_t copy = 0; copy < s.n_img; ++copy)
                             {
                                 if (s.images[copy].sampled_type_id != img->sampled_type_id)
                                     continue;
                                 s.images[copy].replacement_type = existing;
-                                s.images[copy].replacement_sampled_type = existing_sampled;
+                                s.images[copy].replacement_sampled_type = img->sampled_type_id;
                                 s.images[copy].replacement_pointer_type = existing_pointer;
                             }
                             STEREO_LOG(
@@ -8229,12 +8229,25 @@ bool spirv_patch_stereo_fs(
             }
             uint32_t new_array_type = s.images[patch_img_idx].replacement_type;
             uint32_t duplicate_array_type = fs_find_matching_image_type(in, in_c, s.images[patch_img_idx].sampled_type, s.images[patch_img_idx].dim, s.images[patch_img_idx].depth, 1, s.images[patch_img_idx].ms, s.images[patch_img_idx].sampled, s.images[patch_img_idx].format);
-            if (duplicate_array_type && duplicate_array_type != new_array_type)
+            if (duplicate_array_type && duplicate_array_type != s.images[patch_img_idx].id)
             {
+                if (new_array_type != duplicate_array_type)
+                {
                 STEREO_LOG("FS_SKIP_DUP_ARRAY_IMAGE original=%u replacement=%u existing=%u", s.images[patch_img_idx].id, new_array_type, duplicate_array_type);
                 s.images[patch_img_idx].replacement_type = duplicate_array_type;
+                for (uint32_t copy = 0; copy < s.n_img; ++copy)
+                {
+                    if (s.images[copy].sampled_type_id != s.images[patch_img_idx].sampled_type_id)
+                        continue;
+                    s.images[copy].replacement_type = duplicate_array_type;
+                }
+                new_array_type = duplicate_array_type;
+                }
+                if (new_array_type != in[i + 1])
+                {
                 i += wc;
                 continue;
+                }
             }
             /* Emit the reserved cloned array type after its component type is defined. */
             if (new_array_type == 0 || (new_array_type < id_bound && emitted_type[new_array_type]))
