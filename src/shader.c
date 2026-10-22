@@ -8062,6 +8062,8 @@ bool spirv_patch_stereo_fs(
                             existing_defined = true;
                         scan += sw;
                     }
+                    if (existing == img->id)
+                        existing_defined = false;
                     uint32_t existing_sampled = existing_defined ? fs_find_matching_sampled_image(in, in_c, existing) : 0;
                     bool sampled_defined = false;
                     for (size_t scan = 5; scan < in_c;)
@@ -8225,8 +8227,16 @@ bool spirv_patch_stereo_fs(
                 i += wc;
                 continue;
             }
-            /* Emit the reserved cloned array type after its component type is defined. */
             uint32_t new_array_type = s.images[patch_img_idx].replacement_type;
+            uint32_t duplicate_array_type = fs_find_matching_image_type(in, in_c, s.images[patch_img_idx].sampled_type, s.images[patch_img_idx].dim, s.images[patch_img_idx].depth, 1, s.images[patch_img_idx].ms, s.images[patch_img_idx].sampled, s.images[patch_img_idx].format);
+            if (duplicate_array_type && duplicate_array_type != new_array_type)
+            {
+                STEREO_LOG("FS_SKIP_DUP_ARRAY_IMAGE original=%u replacement=%u existing=%u", s.images[patch_img_idx].id, new_array_type, duplicate_array_type);
+                s.images[patch_img_idx].replacement_type = duplicate_array_type;
+                i += wc;
+                continue;
+            }
+            /* Emit the reserved cloned array type after its component type is defined. */
             if (new_array_type == 0 || (new_array_type < id_bound && emitted_type[new_array_type]))
             {
                 i += wc;
