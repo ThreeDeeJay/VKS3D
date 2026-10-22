@@ -7894,6 +7894,60 @@ bool spirv_patch_stereo_fs(
             uint32_t pointer_id = in[i + 1];
             uint32_t storage = in[i + 2];
             uint32_t target_type = in[i + 3];
+            bool target_defined = target_type < id_bound && emitted_type[target_type];
+            if (!target_defined)
+            {
+                for (size_t scan = 5; scan < ob.n;)
+                {
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
+                        break;
+                    if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == target_type)
+                    {
+                        target_defined = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (!target_defined)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == target_type)
+                    {
+                        bool target_is_stereo_replacement = false;
+                        for (uint32_t img = 0; img < s.n_img; ++img)
+                        {
+                            if (s.images[img].stereo && s.images[img].replacement_type == target_type)
+                            {
+                                target_is_stereo_replacement = true;
+                                break;
+                            }
+                        }
+                        if (!target_is_stereo_replacement)
+                        {
+                            sb_push_n(&ob, &in[scan], sw);
+                            if (target_type < id_bound)
+                                emitted_type[target_type] = true;
+                            target_defined = true;
+                        }
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (!target_defined)
+            {
+                STEREO_LOG("FS_POINTER_DEFER pointer=%u target=%u storage=%u", pointer_id, target_type, storage);
+                i += wc;
+                continue;
+            }
             sb_push_n(&ob, &in[i], wc);
             if (pointer_id < id_bound)
                 emitted_type[pointer_id] = true;
@@ -7910,9 +7964,7 @@ bool spirv_patch_stereo_fs(
                 else if (target_type == image->sampled_type_id &&
                     image->replacement_sampled_type)
                     replacement_target = image->replacement_sampled_type;
-                if (!replacement_target)
-                    continue;
-                if (image->replacement_pointer_type >= id_bound ||
+                if (!replacement_target || image->replacement_pointer_type >= id_bound ||
                     replacement_target >= id_bound)
                     continue;
                 bool pointer_is_original = false;
@@ -7920,7 +7972,7 @@ bool spirv_patch_stereo_fs(
                 {
                     uint32_t sw = in[scan] >> 16;
                     uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
+                    if (!sw || scan + sw > in_c)
                         break;
                     if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 1] == image->replacement_pointer_type)
                     {
@@ -7931,13 +7983,20 @@ bool spirv_patch_stereo_fs(
                 }
                 if (pointer_is_original || emitted_type[image->replacement_pointer_type])
                     continue;
-                uint32_t w[4] =
+                bool replacement_target_defined = replacement_target < id_bound && emitted_type[replacement_target];
+                for (size_t scan = 5; !replacement_target_defined && scan < ob.n;)
                 {
-                    (4u << 16) | SpvOpTypePointer,
-                    image->replacement_pointer_type,
-                    storage,
-                    replacement_target
-                };
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
+                        break;
+                    if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == replacement_target)
+                        replacement_target_defined = true;
+                    scan += sw;
+                }
+                if (!replacement_target_defined)
+                    continue;
+                uint32_t w[4] = {(4u << 16) | SpvOpTypePointer, image->replacement_pointer_type, storage, replacement_target};
                 STEREO_LOG(
                     "FS_EMIT_REPLACEMENT_POINTER "
                     "oldPointer=%u "
@@ -8228,6 +8287,7 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             uint32_t new_array_type = s.images[patch_img_idx].replacement_type;
+            uint32_t new_array_type = s.images[patch_img_idx].replacement_type;
             uint32_t duplicate_array_type = fs_find_matching_image_type(in, in_c, s.images[patch_img_idx].sampled_type, s.images[patch_img_idx].dim, s.images[patch_img_idx].depth, 1, s.images[patch_img_idx].ms, s.images[patch_img_idx].sampled, s.images[patch_img_idx].format);
             if (duplicate_array_type && duplicate_array_type != s.images[patch_img_idx].id)
             {
@@ -8243,11 +8303,9 @@ bool spirv_patch_stereo_fs(
                 }
                 new_array_type = duplicate_array_type;
                 }
-                if (new_array_type != in[i + 1])
-                {
+                STEREO_LOG("FS_REUSE_ARRAY_TYPE original=%u existing=%u", s.images[patch_img_idx].id, new_array_type);
                 i += wc;
                 continue;
-                }
             }
             /* Emit the reserved cloned array type after its component type is defined. */
             if (new_array_type == 0 || (new_array_type < id_bound && emitted_type[new_array_type]))
