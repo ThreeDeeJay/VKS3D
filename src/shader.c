@@ -8984,48 +8984,79 @@ bool spirv_patch_stereo_fs(
                 in[i + 2],
                 in[i + 1],
                 pointer_id);
-            for (size_t scan = 5; scan < in_c;)
+            for (size_t scan = 5; scan < ob.n;)
             {
-                uint32_t sw = in[scan] >> 16;
-                uint32_t sop = in[scan] & 0xffffu;
-                if (sw == 0 || scan + sw > in_c)
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
                     break;
-                if (sop == SpvOpVariable &&
-                    sw >= 4 &&
-                    in[scan + 2] == pointer_id)
-                {
-                    pointer_type = in[scan + 1];
-                    break;
-                }
                 if ((sop == SpvOpAccessChain ||
+                    sop == SpvOpVariable ||
                     sop == SpvOpInBoundsAccessChain ||
                     sop == SpvOpPtrAccessChain ||
                     sop == SpvOpInBoundsPtrAccessChain ||
                     sop == SpvOpCopyObject) &&
-                    sw >= 3 &&
-                    in[scan + 2] == pointer_id)
+                    sw >= 4 &&
+                    ob.w[scan + 2] == pointer_id)
                 {
-                    pointer_type = in[scan + 1];
+                    pointer_type = ob.w[scan + 1];
                     break;
                 }
                 scan += sw;
             }
-            if (pointer_type != 0)
+            if (!pointer_type)
             {
                 for (size_t scan = 5; scan < in_c;)
                 {
                     uint32_t sw = in[scan] >> 16;
                     uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
+                    if (!sw || scan + sw > in_c)
                         break;
-                    if (sop == SpvOpTypePointer &&
+                    if ((sop == SpvOpVariable ||
+                    sop == SpvOpAccessChain ||
+                    sop == SpvOpInBoundsAccessChain ||
+                    sop == SpvOpPtrAccessChain ||
+                    sop == SpvOpInBoundsPtrAccessChain ||
+                    sop == SpvOpCopyObject) &&
                         sw >= 4 &&
-                        in[scan + 1] == pointer_type)
+                        in[scan + 2] == pointer_id)
                     {
-                        pointer_target = in[scan + 3];
+                        pointer_type = in[scan + 1];
                         break;
                     }
                     scan += sw;
+                }
+            }
+            if (pointer_type)
+            {
+                for (size_t scan = 5; scan < ob.n;)
+                {
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
+                        break;
+                    if (sop == SpvOpTypePointer && sw >= 4 && ob.w[scan + 1] == pointer_type)
+                    {
+                        pointer_target = ob.w[scan + 3];
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (!pointer_target)
+                {
+                    for (size_t scan = 5; scan < in_c;)
+                    {
+                        uint32_t sw = in[scan] >> 16;
+                        uint32_t sop = in[scan] & 0xffffu;
+                        if (!sw || scan + sw > in_c)
+                            break;
+                        if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 1] == pointer_type)
+                        {
+                            pointer_target = in[scan + 3];
+                            break;
+                        }
+                        scan += sw;
+                    }
                 }
             }
             for (uint32_t j = 0; j < s.n_img; ++j)
@@ -9130,6 +9161,22 @@ bool spirv_patch_stereo_fs(
                 pointer_target != 0 &&
                 w[1] != pointer_target)
             {
+                bool pointee_type_exists = false;
+                for (size_t scan = 5; scan < ob.n;)
+                {
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
+                        break;
+                    if (sop >= SpvOpTypeVoid && sop <= SpvOpTypeFunction && sw >= 2 && ob.w[scan + 1] == pointer_target)
+                    {
+                        pointee_type_exists = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (pointee_type_exists)
+                {
                 STEREO_LOG(
                     "FS_LOAD_POINTEE_FIX "
                     "result=%u "
@@ -9142,6 +9189,7 @@ bool spirv_patch_stereo_fs(
                     w[3]);
                 w[1] = pointer_target;
                 load_rewritten = true;
+                }
             }
             STEREO_LOG(
                 "FS_LOAD_FINAL "
