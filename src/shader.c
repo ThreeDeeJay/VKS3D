@@ -9232,6 +9232,8 @@ bool spirv_patch_stereo_fs(
                     coord_component_type == s.int_id);
                 uint32_t coord_v3_type = coord_uint ? new_v3u_id :
                 coord_int ? new_v3i_id : 0;
+                STEREO_LOG("TEXEL_PTR_CHECK img=%u coord=%u img_idx=%d coord_type=%u comp_type=%u comps=%u uint_id=%u int_id=%u new_int=%u v3u=%u v3i=%u v3type=%u vi=%u",
+                    image_id, coord_id, img_idx, coord_type, coord_component_type, coord_components, s.uint_id, s.int_id, new_int_id, new_v3u_id, new_v3i_id, coord_v3_type, new_vi_id);
                 if (coord_components == 2 && coord_v3_type)
                 {
                     uint32_t view_id = samp_nid++;
