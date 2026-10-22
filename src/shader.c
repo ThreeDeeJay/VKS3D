@@ -10606,7 +10606,6 @@ bool spirv_patch_stereo_fs(
             }
             if (image_type)
             {
-                replacement_sampled_type = 0;
                 for (size_t scan = 5; scan < in_c;)
                 {
                     uint32_t sw = in[scan] >> 16;
