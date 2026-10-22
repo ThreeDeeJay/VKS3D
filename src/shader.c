@@ -10530,10 +10530,8 @@ bool spirv_patch_stereo_fs(
                 }
                 scan += sw;
             }
-            if (image_value_type)
+            for (size_t scan = 5; scan < in_c;)
             {
-                for (size_t scan = 5; scan < in_c;)
-                {
                     uint32_t sw = in[scan] >> 16;
                     uint32_t sop = in[scan] & 0xffffu;
                     if (!sw || scan + sw > in_c)
@@ -10544,7 +10542,6 @@ bool spirv_patch_stereo_fs(
                         break;
                     }
                     scan += sw;
-                }
             }
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
@@ -10554,25 +10551,7 @@ bool spirv_patch_stereo_fs(
                 if (image_value_type == image->id || image_value_type == image->replacement_type || image_id == image->owner_var)
                 {
                     image_type = image->replacement_type;
-                    if (image->replacement_sampled_type)
-                        replacement_sampled_type = image->replacement_sampled_type;
                     break;
-                }
-            }
-            if (image_type)
-            {
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (!sw || scan + sw > in_c)
-                        break;
-                    if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan+2] == image_type)
-                    {
-                        replacement_sampled_type = in[scan+1];
-                        break;
-                    }
-                    scan += sw;
                 }
             }
             if (!image_type)
