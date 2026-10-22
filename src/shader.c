@@ -7879,6 +7879,11 @@ bool spirv_patch_stereo_fs(
             uint32_t pointer_id = in[i + 1];
             uint32_t storage = in[i + 2];
             uint32_t target_type = in[i + 3];
+            if (pointer_id < id_bound && emitted_type[pointer_id])
+            {
+                i += wc;
+                continue;
+            }
             sb_push_n(&ob, &in[i], wc);
             if (pointer_id < id_bound)
                 emitted_type[pointer_id] = true;
