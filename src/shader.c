@@ -10575,6 +10575,52 @@ bool spirv_patch_stereo_fs(
                     scan += sw;
                 }
             }
+            if (!image_type)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if ((sop == SpvOpLoad || sop == SpvOpImage) && sw >= 4 && in[scan+2] == image_id)
+                    {
+                        uint32_t value_type = in[scan+1];
+                        for (size_t ts = 5; ts < in_c;)
+                        {
+                            uint32_t tw = in[ts] >> 16;
+                            uint32_t top = in[ts] & 0xffffu;
+                            if (!tw || ts + tw > in_c)
+                                break;
+                            if (top == SpvOpTypePointer && tw >= 4 && in[ts+1] == value_type)
+                            {
+                                image_type = in[ts+3];
+                                break;
+                            }
+                            ts += tw;
+                        }
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (image_type)
+            {
+                replacement_sampled_type = 0;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan+2] == image_type)
+                    {
+                        replacement_sampled_type = in[scan+1];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
             if (replacement_sampled_type && replacement_sampled_type != sampled_result_type)
             {
                 uint32_t w[5];
@@ -10757,7 +10803,9 @@ bool spirv_patch_stereo_fs(
                 if (!s.images[img].replacement_type)
                     continue;
                 if (s.images[img].id != fetch_image_type &&
-                    s.images[img].replacement_type != fetch_image_type)
+                    s.images[img].replacement_type != fetch_image_type &&
+                    s.images[img].sampled_type_id != fetch_image_type &&
+                    s.images[img].replacement_sampled_type != fetch_image_type)
                     continue;
                 image_type_rewritten = true;
                 STEREO_LOG(
