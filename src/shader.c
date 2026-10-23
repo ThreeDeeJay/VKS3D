@@ -7576,19 +7576,7 @@ bool spirv_patch_stereo_fs(
             wc >= 3)
         {
             uint32_t sampled_id = in[i + 1];
-            uint32_t sampled_words[3] = {in[i], in[i + 1], in[i + 2]};
-            for (uint32_t img = 0; img < s.n_img; ++img)
-            {
-                FsImageInfo *image = &s.images[img];
-                if (!image->stereo ||
-                    !image->replacement_type ||
-                    image->sampled_type_id != sampled_id)
-                    continue;
-                sampled_words[2] = image->replacement_type;
-                STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], sampled_words[2]);
-                break;
-            }
-            sb_push_n(&ob, sampled_words, 3);
+            sb_push_n(&ob, &in[i], wc);
             if (sampled_id < id_bound)
                 emitted_type[sampled_id] = true;
             i += wc;
