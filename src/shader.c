@@ -7585,48 +7585,40 @@ bool spirv_patch_stereo_fs(
                     image->sampled_type_id != sampled_id)
                     continue;
                 uint32_t replacement_image = image->replacement_type;
-                uint32_t existing_sampled_id = 0;
-                bool replacement_sampled_exists = false;
+                uint32_t original_image = in[i + 2];
+                uint32_t original_depth = UINT32_MAX;
+                uint32_t replacement_depth = UINT32_MAX;
+                uint32_t original_dim = UINT32_MAX;
+                uint32_t replacement_dim = UINT32_MAX;
                 for (size_t scan = 5; scan < in_c;)
                 {
                     uint32_t sw = in[scan] >> 16;
                     uint32_t sop = in[scan] & 0xffffu;
                     if (!sw || scan + sw > in_c)
                         break;
-                    if (scan != i && sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 2] == replacement_image)
+                    if (sop == SpvOpTypeImage && sw >= 9)
                     {
-                        existing_sampled_id = in[scan + 1];
-                        replacement_sampled_exists = true;
-                        break;
+                        if (in[scan + 1] == original_image)
+                        {
+                            original_dim = in[scan + 3];
+                            original_depth = in[scan + 4];
+                        }
+                        if (in[scan + 1] == replacement_image)
+                        {
+                            replacement_dim = in[scan + 3];
+                            replacement_depth = in[scan + 4];
+                        }
                     }
                     scan += sw;
                 }
-                if (!replacement_sampled_exists)
+                if (original_dim != replacement_dim ||
+                    original_depth != replacement_depth)
                 {
-                    for (size_t scan = 5; scan < ob.n;)
-                    {
-                        uint32_t sw = ob.w[scan] >> 16;
-                        uint32_t sop = ob.w[scan] & 0xffffu;
-                        if (!sw || scan + sw > ob.n)
-                            break;
-                        if (sop == SpvOpTypeSampledImage && sw >= 3 && ob.w[scan + 2] == replacement_image)
-                        {
-                            existing_sampled_id = ob.w[scan + 1];
-                            replacement_sampled_exists = true;
-                            break;
-                        }
-                        scan += sw;
-                    }
+                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_SKIP sampled=%u originalImage=%u originalDim=%u originalDepth=%u replacementImage=%u replacementDim=%u replacementDepth=%u", sampled_id, original_image, original_dim, original_depth, replacement_image, replacement_dim, replacement_depth);
+                    break;
                 }
-                if (!replacement_sampled_exists)
-                {
-                    sampled_words[2] = replacement_image;
-                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], replacement_image);
-                }
-                else
-                {
-                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_KEEP sampled=%u targetImage=%u existingSampled=%u", sampled_id, replacement_image, existing_sampled_id);
-                }
+                sampled_words[2] = replacement_image;
+                STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, original_image, replacement_image);
                 break;
             }
             sb_push_n(&ob, sampled_words, 3);
