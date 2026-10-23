@@ -7432,30 +7432,6 @@ bool spirv_patch_stereo_fs(
         if (op == SpvOpDecorate &&
             wc >= 4)
         {
-            uint32_t target = in[i + 1];
-            uint32_t decoration = in[i + 2];
-            if (decoration == SpvDecorationDescriptorSet ||
-                decoration == SpvDecorationBinding)
-            {
-                for (uint32_t img = 0; img < s.n_img; ++img)
-                {
-                    if (s.images[img].owner_var != target)
-                        continue;
-                    STEREO_LOG(
-                        "FS_DECORATE_KEEP "
-                        "target=%u "
-                        "decoration=%u "
-                        "value=%u "
-                        "binding=%u "
-                        "set=%u",
-                        target,
-                        decoration,
-                        wc >= 4 ? in[i + 3] : 0,
-                        s.images[img].binding,
-                        s.images[img].set);
-                    break;
-                }
-            }
             sb_push_n(&ob, &in[i], wc);
             i += wc;
             continue;
