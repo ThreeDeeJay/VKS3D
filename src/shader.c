@@ -8955,11 +8955,6 @@ bool spirv_patch_stereo_fs(
                     break;
                 }
             }
-            if (pointer_type && pointer_target)
-            {
-                w[1] = pointer_target;
-                load_rewritten = true;
-            }
             STEREO_LOG(
                 "FS_LOAD_POINTER_TYPE "
                 "pointer=%u "
@@ -8969,6 +8964,11 @@ bool spirv_patch_stereo_fs(
                 pointer_type,
                 pointer_target);
             bool load_rewritten = false;
+            if (pointer_type && pointer_target)
+            {
+                w[1] = pointer_target;
+                load_rewritten = true;
+            }
             STEREO_LOG(
                 "FS_LOAD_TARGET_CHECK "
                 "pointer=%u "
