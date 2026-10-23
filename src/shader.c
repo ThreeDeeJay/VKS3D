@@ -9707,63 +9707,69 @@ bool spirv_patch_stereo_fs(
         {
             uint32_t image_ssa = in[i + 3];
             uint32_t image_type = 0;
-            for (size_t scan = 5; scan < in_c;)
+            for (size_t scan = 5; scan < ob.n;)
             {
-                uint32_t sw = in[scan] >> 16;
-                uint32_t sop = in[scan] & 0xffffu;
-                if (!sw || scan + sw > in_c)
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
                     break;
-                if ((sop == SpvOpLoad && sw >= 4 && in[scan + 2] == image_ssa) || (sop == SpvOpImage && sw >= 4 && in[scan + 2] == image_ssa))
+                if ((sop == SpvOpLoad || sop == SpvOpImage) && sw >= 4 && ob.w[scan + 2] == image_ssa)
                 {
-                    image_type = in[scan + 1];
-                    STEREO_LOG(
-                        "FS_QSIZE_IMAGETYPE "
-                        "image=%u "
-                        "imageType=%u "
-                        "imageOff=%zu",
-                        image_ssa,
-                        image_type,
-                        scan);
+                    image_type = ob.w[scan + 1];
                     break;
                 }
                 scan += sw;
             }
-            int img_idx = -1;
-            for (uint32_t ii = 0; ii < s.n_img; ++ii)
+            uint32_t underlying_image_type = 0;
+            for (size_t scan = 5; scan < ob.n;)
             {
-                if (s.images[ii].dim != SpvDim2D)
-                    continue;
-                if (!s.images[ii].replacement_type)
-                    continue;
-                if (s.images[ii].id != image_type &&
-                    s.images[ii].replacement_type != image_type)
-                    continue;
-                img_idx = (int)ii;
-                STEREO_LOG(
-                    "FS_QSIZE_IMAGE_MATCH "
-                    "image=%u "
-                    "imageType=%u "
-                    "sourceImage=%u "
-                    "replacement=%u",
-                    image_ssa,
-                    image_type,
-                    s.images[ii].id,
-                    s.images[ii].replacement_type);
-                break;
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
+                    break;
+                if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == image_type)
+                {
+                    underlying_image_type = image_type;
+                    break;
+                }
+                if (sop == SpvOpTypeSampledImage && sw >= 3 && ob.w[scan + 1] == image_type)
+                {
+                    underlying_image_type = ob.w[scan + 2];
+                    break;
+                }
+                scan += sw;
             }
-            if (img_idx < 0)
+            uint32_t image_dim = UINT32_MAX;
+            uint32_t image_arrayed = 0;
+            if (underlying_image_type)
             {
-                STEREO_LOG(
-                    "FS_QSIZE_NO_IMAGE_MATCH "
-                    "image=%u "
-                    "imageType=%u",
-                    image_ssa,
-                    image_type);
+                for (size_t scan = 5; scan < ob.n;)
+                {
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
+                        break;
+                    if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == underlying_image_type)
+                    {
+                        image_dim = ob.w[scan + 3];
+                        image_arrayed = ob.w[scan + 5];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            STEREO_LOG(
+                "FS_QSIZE_IMAGE_SHAPE image=%u imageType=%u underlying=%u dim=%u arrayed=%u",
+                image_ssa,
+                image_type,
+                underlying_image_type,
+                image_dim,
+                image_arrayed);
+            if (image_dim != SpvDim2D || image_arrayed != 1)
+            {
                 sb_push_n(&ob, &in[i], wc);
                 if (in[i + 1] < id_bound)
-                {
                     emitted_type[in[i + 1]] = true;
-                }
                 i += wc;
                 continue;
             }
