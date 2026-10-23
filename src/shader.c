@@ -9147,7 +9147,6 @@ bool spirv_patch_stereo_fs(
                     replacement_load_type);
                 if (img >= 0 &&
                     replacement_load_type != 0 &&
-                    pointer_type == s.images[img].replacement_pointer_type &&
                     w[1] != replacement_load_type)
                 {
                     FsImageInfo *image = &s.images[img];
