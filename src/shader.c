@@ -8856,7 +8856,7 @@ bool spirv_patch_stereo_fs(
                 uint32_t sop = ob.w[scan] & 0xffffu;
                 if (!sw || scan + sw > ob.n)
                     break;
-                if ((sop == SpvOpVariable && sw >= 4) && ob.w[scan + 2] == pointer_id)
+                if ((sop == SpvOpVariable || sop == SpvOpFunctionParameter) && sw >= 3 && ob.w[scan + 2] == pointer_id)
                 {
                     pointer_type = ob.w[scan + 1];
                     break;
@@ -8887,12 +8887,13 @@ bool spirv_patch_stereo_fs(
                     if (!sw || scan + sw > in_c)
                         break;
                     if ((sop == SpvOpVariable ||
+                    sop == SpvOpFunctionParameter ||
                     sop == SpvOpAccessChain ||
                     sop == SpvOpInBoundsAccessChain ||
                     sop == SpvOpPtrAccessChain ||
                     sop == SpvOpInBoundsPtrAccessChain ||
                     sop == SpvOpCopyObject) &&
-                        sw >= 4 &&
+                        sw >= (sop == SpvOpFunctionParameter ? 3u : 4u) &&
                         in[scan + 2] == pointer_id)
                     {
                         pointer_type = in[scan + 1];
