@@ -7250,6 +7250,13 @@ bool spirv_patch_stereo_fs(
                 continue;
             if (s.images[prev].sampled_type_id != s.images[img].sampled_type_id)
                 continue;
+            if (s.images[prev].dim != s.images[img].dim ||
+                s.images[prev].depth != s.images[img].depth ||
+                s.images[prev].arrayed != s.images[img].arrayed ||
+                s.images[prev].ms != s.images[img].ms ||
+                s.images[prev].sampled != s.images[img].sampled ||
+                s.images[prev].format != s.images[img].format)
+                continue;
             if (!s.images[prev].replacement_type ||
                 !s.images[prev].replacement_sampled_type)
                 continue;
@@ -7260,7 +7267,7 @@ bool spirv_patch_stereo_fs(
         if (replacement == 0)
         {
             replacement = nid++;
-            replacement_sampled = s.images[img].sampled_type_id;
+            replacement_sampled = nid++;
             STEREO_LOG(
                 "FS_REPLACEMENT_ALLOC "
                 "idx=%u "
