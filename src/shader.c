@@ -9773,6 +9773,25 @@ bool spirv_patch_stereo_fs(
                 i += wc;
                 continue;
             }
+            int img_idx = -1;
+            for (uint32_t ii = 0; ii < s.n_img; ++ii)
+            {
+                if (!s.images[ii].stereo || !s.images[ii].replacement_type)
+                    continue;
+                if (s.images[ii].replacement_type != underlying_image_type &&
+                    s.images[ii].id != underlying_image_type)
+                    continue;
+                img_idx = (int)ii;
+                break;
+            }
+            if (img_idx < 0)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                    emitted_type[in[i + 1]] = true;
+                i += wc;
+                continue;
+            }
             STEREO_LOG(
                 "FS_QSIZE_RESOLVE "
                 "image=%u "
@@ -9781,25 +9800,6 @@ bool spirv_patch_stereo_fs(
                 image_ssa,
                 image_type,
                 s.images[img_idx].replacement_type);
-            if (image_type != s.images[img_idx].replacement_type)
-            {
-                STEREO_LOG(
-                    "FS_QSIZE_TYPE_MISMATCH "
-                    "image=%u "
-                    "actualType=%u "
-                    "expectedReplacement=%u",
-                    image_ssa,
-                    image_type,
-                    s.images[img_idx].replacement_type);
-            }
-            /*
-             * The stereo image replacement changes a 2D image into a 2D-array image.
-             * OpImageQuerySize* therefore needs a 3-component integer result type:
-             *   original 2D image       -> ivec2
-             *   stereo 2D-array image   -> ivec3
-             *
-             * Keep the query instruction itself unchanged apart from its Result Type.
-             */
             uint32_t *w = malloc(wc * sizeof(uint32_t));
             if (!w)
             {
