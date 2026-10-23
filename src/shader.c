@@ -7585,6 +7585,29 @@ bool spirv_patch_stereo_fs(
                     image->sampled_type_id != sampled_id)
                     continue;
                 uint32_t replacement_image = image->replacement_type;
+                uint32_t original_image = in[i + 2];
+                uint32_t original_dim = 0;
+                uint32_t replacement_dim = 0;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeImage && sw >= 9)
+                    {
+                        if (in[scan + 1] == original_image)
+                            original_dim = in[scan + 3];
+                        if (in[scan + 1] == replacement_image)
+                            replacement_dim = in[scan + 3];
+                    }
+                    scan += sw;
+                }
+                if (original_dim != replacement_dim)
+                {
+                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_SKIP sampled=%u originalImage=%u originalDim=%u replacementImage=%u replacementDim=%u", sampled_id, original_image, original_dim, replacement_image, replacement_dim);
+                    break;
+                }
                 uint32_t existing_sampled_id = 0;
                 bool replacement_sampled_exists = false;
                 for (size_t scan = 5; scan < in_c;)
@@ -7621,7 +7644,7 @@ bool spirv_patch_stereo_fs(
                 if (!replacement_sampled_exists)
                 {
                     sampled_words[2] = replacement_image;
-                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], replacement_image);
+                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, original_image, replacement_image);
                 }
                 else
                 {
