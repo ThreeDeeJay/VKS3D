@@ -7260,7 +7260,7 @@ bool spirv_patch_stereo_fs(
         if (replacement == 0)
         {
             replacement = nid++;
-            replacement_sampled = s.images[img].sampled_type_id;
+            replacement_sampled = nid++;
             STEREO_LOG(
                 "FS_REPLACEMENT_ALLOC "
                 "idx=%u "
@@ -7577,6 +7577,9 @@ bool spirv_patch_stereo_fs(
         {
             uint32_t sampled_id = in[i + 1];
             uint32_t sampled_words[3] = {in[i], in[i + 1], in[i + 2]};
+            sb_push_n(&ob, sampled_words, 3);
+            if (sampled_id < id_bound)
+                emitted_type[sampled_id] = true;
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 FsImageInfo *image = &s.images[img];
@@ -7607,12 +7610,10 @@ bool spirv_patch_stereo_fs(
                     continue;
                 sampled_words[1] = replacement_sampled;
                 sampled_words[2] = replacement_image;
+                sb_push_n(&ob, sampled_words, 3);
                 emitted_type[replacement_sampled] = true;
                 break;
             }
-            sb_push_n(&ob, sampled_words, 3);
-            if (sampled_id < id_bound)
-                emitted_type[sampled_id] = true;
             i += wc;
             continue;
         }
