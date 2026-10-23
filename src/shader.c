@@ -7618,14 +7618,46 @@ bool spirv_patch_stereo_fs(
                         scan += sw;
                     }
                 }
-                if (!replacement_sampled_exists)
+                bool compatible_image_type = false;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == in[i + 2])
+                    {
+                        for (size_t target = 5; target < in_c;)
+                        {
+                            uint32_t tw = in[target] >> 16;
+                            uint32_t top = in[target] & 0xffffu;
+                            if (!tw || target + tw > in_c)
+                                break;
+                            if (top == SpvOpTypeImage && tw >= 9 && in[target + 1] == replacement_image)
+                            {
+                                compatible_image_type =
+                                in[scan + 2] == in[target + 2] &&
+                                in[scan + 3] == in[target + 3] &&
+                                in[scan + 5] == in[target + 5] &&
+                                in[scan + 6] == in[target + 6] &&
+                                in[scan + 7] == in[target + 7] &&
+                                in[scan + 8] == in[target + 8];
+                                break;
+                            }
+                            target += tw;
+                        }
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (!replacement_sampled_exists && compatible_image_type)
                 {
                     sampled_words[2] = replacement_image;
                     STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], replacement_image);
                 }
                 else
                 {
-                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_KEEP sampled=%u targetImage=%u existingSampled=%u", sampled_id, replacement_image, existing_sampled_id);
+                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_KEEP sampled=%u targetImage=%u existingSampled=%u compatible=%u", sampled_id, replacement_image, existing_sampled_id, compatible_image_type);
                 }
                 break;
             }
