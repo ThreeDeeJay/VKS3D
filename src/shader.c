@@ -10311,6 +10311,52 @@ bool spirv_patch_stereo_fs(
             i += wc;
             continue;
         }
+        if (in_func && op == SpvOpSampledImage && wc == 5)
+        {
+            uint32_t image_id = in[i + 3];
+            uint32_t image_value_type = 0;
+            for (size_t scan = 5; scan < ob.n;)
+            {
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
+                    break;
+                if (sw >= 3 && ob.w[scan + 2] == image_id && (sop == SpvOpLoad || sop == SpvOpImage || sop == SpvOpCopyObject || sop == SpvOpPhi || sop == SpvOpSelect || sop == SpvOpFunctionCall))
+                {
+                    image_value_type = ob.w[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+            uint32_t compatible_sampled_type = 0;
+            if (image_value_type)
+            {
+                for (size_t scan = 5; scan < ob.n;)
+                {
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
+                        break;
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 && ob.w[scan + 2] == image_value_type)
+                    {
+                        compatible_sampled_type = ob.w[scan + 1];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (compatible_sampled_type && compatible_sampled_type != in[i + 1])
+            {
+                uint32_t w[5];
+                memcpy(w, &in[i], sizeof(w));
+                w[1] = compatible_sampled_type;
+                sb_push_n(&ob, w, 5);
+                if (w[1] < id_bound)
+                    emitted_type[w[1]] = true;
+                i += wc;
+                continue;
+            }
+        }
         /* Patch OpSampledImage result type to match its image operand. */
         if (in_func && op == SpvOpSampledImage && wc == 5)
         {
