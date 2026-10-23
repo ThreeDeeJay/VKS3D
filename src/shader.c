@@ -7257,7 +7257,9 @@ bool spirv_patch_stereo_fs(
                 s.images[prev].sampled != s.images[img].sampled ||
                 s.images[prev].format != s.images[img].format)
                 continue;
-            if (!s.images[prev].replacement_type ||
+            if (!s.images[prev].replacement_type)
+                continue;
+            if (s.images[img].sampled != 2 &&
                 !s.images[prev].replacement_sampled_type)
                 continue;
             replacement = s.images[prev].replacement_type;
@@ -7267,7 +7269,7 @@ bool spirv_patch_stereo_fs(
         if (replacement == 0)
         {
             replacement = nid++;
-            replacement_sampled = nid++;
+            replacement_sampled = s.images[img].sampled == 2 ? 0 : nid++;
             STEREO_LOG(
                 "FS_REPLACEMENT_ALLOC "
                 "idx=%u "
@@ -7634,6 +7636,7 @@ bool spirv_patch_stereo_fs(
                         break;
                     if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == in[i + 2])
                     {
+                        uint32_t original_sampled = in[scan + 7];
                         for (size_t target = 5; target < in_c;)
                         {
                             uint32_t tw = in[target] >> 16;
@@ -7643,6 +7646,8 @@ bool spirv_patch_stereo_fs(
                             if (top == SpvOpTypeImage && tw >= 9 && in[target + 1] == replacement_image)
                             {
                                 compatible_image_type =
+                                original_sampled != 2 &&
+                                in[target + 7] != 2 &&
                                 in[scan + 2] == in[target + 2] &&
                                 in[scan + 3] == in[target + 3] &&
                                 in[scan + 5] == in[target + 5] &&
@@ -8176,6 +8181,7 @@ bool spirv_patch_stereo_fs(
                 emitted_type[w[1]] = true;
             }
             if (new_sampled_type != 0 &&
+                s.images[patch_img_idx].sampled != 2 &&
                 new_sampled_type < id_bound &&
                 !emitted_type[new_sampled_type])
             {
