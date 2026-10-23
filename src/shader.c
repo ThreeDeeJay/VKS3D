@@ -7584,8 +7584,49 @@ bool spirv_patch_stereo_fs(
                     !image->replacement_type ||
                     image->sampled_type_id != sampled_id)
                     continue;
-                sampled_words[2] = image->replacement_type;
-                STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], sampled_words[2]);
+                uint32_t replacement_image = image->replacement_type;
+                uint32_t existing_sampled_id = 0;
+                bool replacement_sampled_exists = false;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (scan != i && sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 2] == replacement_image)
+                    {
+                        existing_sampled_id = in[scan + 1];
+                        replacement_sampled_exists = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (!replacement_sampled_exists)
+                {
+                    for (size_t scan = 5; scan < ob.n;)
+                    {
+                        uint32_t sw = ob.w[scan] >> 16;
+                        uint32_t sop = ob.w[scan] & 0xffffu;
+                        if (!sw || scan + sw > ob.n)
+                            break;
+                        if (sop == SpvOpTypeSampledImage && sw >= 3 && ob.w[scan + 2] == replacement_image)
+                        {
+                            existing_sampled_id = ob.w[scan + 1];
+                            replacement_sampled_exists = true;
+                            break;
+                        }
+                        scan += sw;
+                    }
+                }
+                if (!replacement_sampled_exists)
+                {
+                    sampled_words[2] = replacement_image;
+                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], replacement_image);
+                }
+                else
+                {
+                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_KEEP sampled=%u targetImage=%u existingSampled=%u", sampled_id, replacement_image, existing_sampled_id);
+                }
                 break;
             }
             sb_push_n(&ob, sampled_words, 3);
