@@ -7576,7 +7576,41 @@ bool spirv_patch_stereo_fs(
             wc >= 3)
         {
             uint32_t sampled_id = in[i + 1];
-            sb_push_n(&ob, &in[i], wc);
+            uint32_t sampled_words[3] = {in[i], in[i + 1], in[i + 2]};
+            for (uint32_t img = 0; img < s.n_img; ++img)
+            {
+                FsImageInfo *image = &s.images[img];
+                if (!image->stereo ||
+                    !image->replacement_type ||
+                    !image->replacement_sampled_type ||
+                    image->sampled_type_id != sampled_id ||
+                    image->replacement_sampled_type >= id_bound ||
+                    emitted_type[image->replacement_sampled_type])
+                    continue;
+                uint32_t replacement_sampled = image->replacement_sampled_type;
+                uint32_t replacement_image = image->replacement_type;
+                bool sampled_declared = false;
+                bool image_declared = false;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 1] == replacement_sampled)
+                        sampled_declared = true;
+                    if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == replacement_image)
+                        image_declared = true;
+                    scan += sw;
+                }
+                if (sampled_declared || !image_declared)
+                    continue;
+                sampled_words[1] = replacement_sampled;
+                sampled_words[2] = replacement_image;
+                emitted_type[replacement_sampled] = true;
+                break;
+            }
+            sb_push_n(&ob, sampled_words, 3);
             if (sampled_id < id_bound)
                 emitted_type[sampled_id] = true;
             i += wc;
