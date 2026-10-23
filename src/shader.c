@@ -7343,7 +7343,9 @@ bool spirv_patch_stereo_fs(
      * ImageQuerySizeLod consumes only 4 ids,
      * but reserving 5 keeps accounting simple.
      */
-    uint32_t new_bound     = nid + n_patches * 10 + 32;
+    if (in_c > (UINT32_MAX-nid - n_patches * 10 - 32) / 8)
+        return false;
+    uint32_t new_bound     = nid + n_patches * 10 + 32 + (uint32_t)in_c * 8;
     STEREO_LOG(
         "FS_NID_INIT bound=%u nid=%u",
         new_bound,
