@@ -7376,6 +7376,12 @@ bool spirv_patch_stereo_fs(
     ob.w[3] = new_bound;
     for (size_t i = 5; i < in_c; ) {
         uint32_t op = in[i] & 0xffff; uint32_t wc = in[i] >> 16;
+        if (!wc || i + wc > in_c)
+        {
+            free(emitted_type);
+            sb_free(&ob);
+            return false;
+        }
         if (!wc || i + wc > in_c) break;
         /* Emit MultiView capability immediately before the first non-capability. */
         if (!mv_added &&
