@@ -7354,7 +7354,7 @@ bool spirv_patch_stereo_fs(
         if (replacement == 0)
         {
             replacement = nid++;
-            replacement_sampled = nid++;
+            replacement_sampled = s.images[img].sampled_type_id;
             STEREO_LOG(
                 "FS_REPLACEMENT_ALLOC "
                 "idx=%u "
@@ -8098,7 +8098,7 @@ bool spirv_patch_stereo_fs(
                             }
                             scan += sw;
                         }
-                        if (existing_pointer != 0 && existing_pointer < id_bound)
+                        if (existing_pointer != 0 && existing_pointer < id_bound && wanted_pointer_target != 0)
                         {
                             img->replacement_type = existing;
                             img->replacement_sampled_type = existing_sampled;
