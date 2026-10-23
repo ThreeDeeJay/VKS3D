@@ -7751,60 +7751,21 @@ bool spirv_patch_stereo_fs(
             wc >= 3)
         {
             uint32_t sampled_id = in[i + 1];
-            sb_push_n(&ob, &in[i], wc);
-            if (sampled_id < id_bound)
-                emitted_type[sampled_id] = true;
+            uint32_t sampled_words[3] = {in[i], in[i + 1], in[i + 2]};
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 FsImageInfo *image = &s.images[img];
                 if (!image->stereo ||
                     !image->replacement_type ||
-                    !image->replacement_sampled_type ||
                     image->sampled_type_id != sampled_id)
                     continue;
-                uint32_t replacement_image = image->replacement_type;
-                uint32_t replacement_sampled = image->replacement_sampled_type;
-                if (replacement_sampled == sampled_id || replacement_sampled >= id_bound || emitted_type[replacement_sampled])
-                    continue;
-                bool replacement_declared = false;
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (!sw || scan + sw > in_c)
-                        break;
-                    if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan + 1] == replacement_sampled)
-                    {
-                        replacement_declared = true;
-                        break;
-                    }
-                    scan += sw;
-                }
-                if (replacement_declared)
-                    continue;
-                bool image_type_defined = replacement_image < id_bound && emitted_type[replacement_image];
-                if (!image_type_defined)
-                {
-                    for (size_t scan = 5; scan < ob.n;)
-                    {
-                        uint32_t sw = ob.w[scan] >> 16;
-                        uint32_t sop = ob.w[scan] & 0xffffu;
-                        if (!sw || scan + sw > ob.n)
-                            break;
-                        if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == replacement_image)
-                        {
-                            image_type_defined = true;
-                            break;
-                        }
-                        scan += sw;
-                    }
-                }
-                if (!image_type_defined)
-                    continue;
-                uint32_t sampled[] = {(3u << 16) | SpvOpTypeSampledImage, replacement_sampled, replacement_image};
-                sb_push_n(&ob, sampled, 3);
-                emitted_type[replacement_sampled] = true;
+                sampled_words[2] = image->replacement_type;
+                STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], sampled_words[2]);
+                break;
             }
+            sb_push_n(&ob, sampled_words, 3);
+            if (sampled_id < id_bound)
+                emitted_type[sampled_id] = true;
             i += wc;
             continue;
         }
