@@ -10311,66 +10311,6 @@ bool spirv_patch_stereo_fs(
             i += wc;
             continue;
         }
-        if (in_func && op == SpvOpSampledImage && wc == 5)
-        {
-            uint32_t image_value = in[i + 3];
-            uint32_t image_value_type = 0;
-            for (size_t scan = 5; scan < ob.n;)
-            {
-                uint32_t sw = ob.w[scan] >> 16;
-                uint32_t sop = ob.w[scan] & 0xffffu;
-                if (!sw || scan + sw > ob.n)
-                    break;
-                if ((sop == SpvOpLoad || sop == SpvOpImage || sop == SpvOpCopyObject) && sw >= 4 && ob.w[scan + 2] == image_value)
-                {
-                    image_value_type = ob.w[scan + 1];
-                    break;
-                }
-                scan += sw;
-            }
-            if (image_value_type)
-            {
-                bool stereo_replacement = false;
-                for (uint32_t img = 0; img < s.n_img; ++img)
-                {
-                    if (!s.images[img].stereo || !s.images[img].replacement_type)
-                        continue;
-                    if (s.images[img].replacement_type == image_value_type)
-                    {
-                        stereo_replacement = true;
-                        break;
-                    }
-                }
-                if (stereo_replacement)
-                {
-                    uint32_t matching_sampled_type = 0;
-                    for (size_t scan = 5; scan < ob.n;)
-                    {
-                        uint32_t sw = ob.w[scan] >> 16;
-                        uint32_t sop = ob.w[scan] & 0xffffu;
-                        if (!sw || scan + sw > ob.n)
-                            break;
-                        if (sop == SpvOpTypeSampledImage && sw >= 3 && ob.w[scan + 2] == image_value_type)
-                        {
-                            matching_sampled_type = ob.w[scan + 1];
-                            break;
-                        }
-                        scan += sw;
-                    }
-                    if (matching_sampled_type)
-                    {
-                        uint32_t w[5];
-                        memcpy(w, &in[i], sizeof(w));
-                        w[1] = matching_sampled_type;
-                        sb_push_n(&ob, w, wc);
-                        if (w[2] < id_bound)
-                            emitted_type[w[2]] = true;
-                        i += wc;
-                        continue;
-                    }
-                }
-            }
-        }
         /* Patch OpSampledImage result type to match its image operand. */
         if (in_func && op == SpvOpSampledImage && wc == 5)
         {
