@@ -11037,11 +11037,7 @@ spirv_patch_stereo_raygen(
         {
             first_function = (uint32_t)i;
         }
-        else if (op == SpvOpFunction && !first_function)
-        {
-            first_function = (uint32_t)i;
-        }
-        else if (op == SpvOpLabel && first_function && !first_label)
+        if (op == SpvOpLabel && first_function && !first_label)
         {
             first_label = (uint32_t)i;
         }
@@ -11077,6 +11073,10 @@ spirv_patch_stereo_raygen(
                     STEREO_LOG("RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u", t, origin_var, origin_result);
                     break;
                 }
+                if (twc >= 3 && (top == SpvOpCopyObject || top == SpvOpBitcast) && in[t + 3] == origin_result)
+                    STEREO_LOG("RT_PATCH_ORIGIN_ALIAS i=%zu op=%u result=%u source=%u", t, top, in[t + 2], in[t + 3]);
+                if (top == SpvOpStore && twc >= 3 && t + 2 < in_c && t < first_function_end)
+                    STEREO_LOG("RT_PATCH_STORE i=%zu pointer=%u object=%u origin_result=%u", t, in[t + 1], in[t + 2], origin_result);
                 t += twc;
             }
         }
