@@ -8010,7 +8010,14 @@ bool spirv_patch_stereo_fs(
                             img->replacement_pointer_type = existing_pointer;
                             for (uint32_t copy = 0; copy < s.n_img; ++copy)
                             {
-                                if (s.images[copy].sampled_type_id != img->sampled_type_id)
+                                if (s.images[copy].sampled_type_id != s.images[img].sampled_type_id ||
+                                    s.images[copy].sampled_type != s.images[img].sampled_type ||
+                                    s.images[copy].dim != s.images[img].dim ||
+                                    s.images[copy].depth != s.images[img].depth ||
+                                    s.images[copy].arrayed != s.images[img].arrayed ||
+                                    s.images[copy].ms != s.images[img].ms ||
+                                    s.images[copy].sampled != s.images[img].sampled ||
+                                    s.images[copy].format != s.images[img].format)
                                     continue;
                                 s.images[copy].replacement_type = existing;
                                 s.images[copy].replacement_sampled_type = existing_sampled;
@@ -8121,7 +8128,14 @@ bool spirv_patch_stereo_fs(
                 s.images[patch_img_idx].replacement_type = duplicate_array_type;
                 for (uint32_t copy = 0; copy < s.n_img; ++copy)
                 {
-                    if (s.images[copy].sampled_type_id != s.images[patch_img_idx].sampled_type_id)
+                    if (s.images[copy].sampled_type_id != s.images[patch_img_idx].sampled_type_id ||
+                        s.images[copy].sampled_type != s.images[patch_img_idx].sampled_type ||
+                        s.images[copy].dim != s.images[patch_img_idx].dim ||
+                        s.images[copy].depth != s.images[patch_img_idx].depth ||
+                        s.images[copy].arrayed != s.images[patch_img_idx].arrayed ||
+                        s.images[copy].ms != s.images[patch_img_idx].ms ||
+                        s.images[copy].sampled != s.images[patch_img_idx].sampled ||
+                        s.images[copy].format != s.images[patch_img_idx].format)
                         continue;
                     s.images[copy].replacement_type = duplicate_array_type;
                 }
