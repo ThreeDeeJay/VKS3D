@@ -11059,38 +11059,63 @@ spirv_patch_stereo_raygen(
                 f += fwc;
             }
         }
-        if (origin_result && first_function && first_function_end)
+        if (origin_result && origin_mtv)
         {
-            for (size_t t = first_function; t < first_function_end;)
+            size_t origin_function = 0;
+            size_t origin_function_end = 0;
+            for (size_t t = 5; t < in_c;)
             {
                 uint32_t top = in[t] & 0xffffu;
                 uint32_t twc = in[t] >> 16;
                 if (!twc || t + twc > in_c)
                     break;
-                if (top == SpvOpVectorShuffle && twc >= 5 && (in[t + 3] == origin_result || in[t + 4] == origin_result))
+                if (top == SpvOpFunction)
                 {
-                    uint32_t shuffled_result = in[t + 2];
-                    for (size_t u = t + twc; u < first_function_end;)
-                    {
-                        uint32_t uop = in[u] & 0xffffu;
-                        uint32_t uwc = in[u] >> 16;
-                        if (!uwc || u + uwc > in_c)
-                            break;
-                        if (uop == SpvOpStore && uwc >= 3 && in[u + 2] == shuffled_result && !origin_var)
-                        {
-                            origin_var = in[u + 1];
-                            STEREO_LOG("RT_PATCH_ORIGIN_SHUFFLE_STORE i=%zu origin_var=%u origin_result=%u shuffled=%u", u, origin_var, origin_result, shuffled_result);
-                            break;
-                        }
-                        u += uwc;
-                    }
+                    origin_function = t;
+                    origin_function_end = 0;
                 }
-                else if (top == SpvOpStore && twc >= 3 && in[t + 2] == origin_result && !origin_var)
+                else if (top == SpvOpFunctionEnd && origin_function && !origin_function_end)
                 {
-                    origin_var = in[t + 1];
-                    STEREO_LOG("RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u", t, origin_var, origin_result);
+                    origin_function_end = t + twc;
+                    if (origin_mtv >= origin_function && origin_mtv < origin_function_end)
+                        break;
+                    origin_function = 0;
                 }
                 t += twc;
+            }
+            if (origin_function && origin_function_end)
+            {
+                for (size_t t = origin_function; t < origin_function_end;)
+                {
+                    uint32_t top = in[t] & 0xffffu;
+                    uint32_t twc = in[t] >> 16;
+                    if (!twc || t + twc > in_c)
+                        break;
+                    if (top == SpvOpVectorShuffle && twc >= 5 && (in[t + 3] == origin_result || in[t + 4] == origin_result))
+                    {
+                        uint32_t shuffled_result = in[t + 2];
+                        for (size_t u = t + twc; u < origin_function_end;)
+                        {
+                            uint32_t uop = in[u] & 0xffffu;
+                            uint32_t uwc = in[u] >> 16;
+                            if (!uwc || u + uwc > in_c)
+                                break;
+                            if (uop == SpvOpStore && uwc >= 3 && in[u + 2] == shuffled_result && !origin_var)
+                            {
+                                origin_var = in[u + 1];
+                                STEREO_LOG("RT_PATCH_ORIGIN_SHUFFLE_STORE i=%zu origin_var=%u origin_result=%u shuffled=%u", u, origin_var, origin_result, shuffled_result);
+                                break;
+                            }
+                            u += uwc;
+                        }
+                    }
+                    else if (top == SpvOpStore && twc >= 3 && in[t + 2] == origin_result && !origin_var)
+                    {
+                        origin_var = in[t + 1];
+                        STEREO_LOG("RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u", t, origin_var, origin_result);
+                    }
+                    t += twc;
+                }
             }
         }
         for (size_t t = 5; t < in_c;)
