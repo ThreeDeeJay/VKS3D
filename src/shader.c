@@ -11072,6 +11072,7 @@ spirv_patch_stereo_raygen(
         !image_type ||
         (!image_read_coord && !image_write_coord) ||
         !first_function ||
+        !first_function_end ||
         !first_label ||
         !int_type ||
         !uint_type ||
