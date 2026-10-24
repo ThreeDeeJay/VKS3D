@@ -11455,7 +11455,7 @@ spirv_patch_stereo_raygen(
                 (5u << 16) | SpvOpCompositeExtract,
                 float_type,
                 ray_w,
-                ray_ndc_raw,
+                origin_vec,
                 3
             };
             sb_push_n(&ob, x, 5);
