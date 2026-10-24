@@ -10917,6 +10917,7 @@ spirv_patch_stereo_raygen(
     uint32_t origin_mtv = 0;
     uint32_t origin_result = 0;
     uint32_t origin_var = 0;
+    uint32_t origin_store_type = 0;
     uint32_t ray_ndc_vec = 0;
     uint32_t ray_ndc_mat = 0;
     uint32_t ray_ndc_mtv = 0;
@@ -11103,7 +11104,8 @@ spirv_patch_stereo_raygen(
                             if (uop == SpvOpStore && uwc >= 3 && in[u + 2] == shuffled_result && !origin_var)
                             {
                                 origin_var = in[u + 1];
-                                STEREO_LOG("RT_PATCH_ORIGIN_SHUFFLE_STORE i=%zu origin_var=%u origin_result=%u shuffled=%u", u, origin_var, origin_result, shuffled_result);
+                                origin_store_type = in[t + 1];
+                                STEREO_LOG("RT_PATCH_ORIGIN_SHUFFLE_STORE i=%zu origin_var=%u origin_result=%u shuffled=%u store_type=%u", u, origin_var, origin_result, shuffled_result, origin_store_type);
                                 break;
                             }
                             u += uwc;
@@ -11285,6 +11287,10 @@ spirv_patch_stereo_raygen(
     uint32_t eye_shift = generated_id++;
     uint32_t eye_origin = generated_id++;
     uint32_t new_origin = generated_id++;
+    uint32_t origin_x = generated_id++;
+    uint32_t origin_y = generated_id++;
+    uint32_t origin_z = generated_id++;
+    uint32_t new_origin3 = generated_id++;
     uint32_t ray_x = generated_id++;
     uint32_t ray_y = generated_id++;
     uint32_t ray_z = generated_id++;
@@ -11543,7 +11549,24 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, eye_neg, 4);
             sb_push_n(&ob, eye_vec, 6);
             sb_push_n(&ob, eye_mtv, 5);
-            sb_push_n(&ob, store_origin, 3);
+            if (origin_store_type && origin_store_type != v4float_type)
+            {
+                uint32_t ox[] = {(5u << 16) | SpvOpCompositeExtract,float_type,origin_x,new_origin,0};
+                uint32_t oy[] = {(5u << 16) | SpvOpCompositeExtract,float_type,origin_y,new_origin,1};
+                uint32_t oz[] = {(5u << 16) | SpvOpCompositeExtract,float_type,origin_z,new_origin,2};
+                uint32_t o3[] = {(6u << 16) | SpvOpCompositeConstruct,origin_store_type,new_origin3,origin_x,origin_y,origin_z};
+                uint32_t store_origin[] = {(3u << 16) | SpvOpStore,origin_var,new_origin3};
+                sb_push_n(&ob, ox, 5);
+                sb_push_n(&ob, oy, 5);
+                sb_push_n(&ob, oz, 5);
+                sb_push_n(&ob, o3, 6);
+                sb_push_n(&ob, store_origin, 3);
+            }
+            else
+            {
+                uint32_t store_origin[] = {(3u << 16) | SpvOpStore,origin_var,new_origin};
+                sb_push_n(&ob, store_origin, 3);
+            }
             uint32_t x[] = {
                 (5u << 16) | SpvOpCompositeExtract,
                 float_type,
