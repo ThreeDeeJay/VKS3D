@@ -11078,6 +11078,25 @@ spirv_patch_stereo_raygen(
             uint32_t twc = in[t] >> 16;
             if (!twc || t + twc > in_c)
                 break;
+            if (top == SpvOpTypeInt && twc >= 4)
+            {
+                if (in[t + 2] == 32 && in[t + 3] == 1)
+                    int_type = in[t + 1];
+                else if (in[t + 2] == 32 && in[t + 3] == 0)
+                    uint_type = in[t + 1];
+            }
+            else if (top == SpvOpTypeFloat && twc >= 3 && in[t + 2] == 32)
+                float_type = in[t + 1];
+            else if (top == SpvOpTypeBool && twc >= 2)
+                bool_type = in[t + 1];
+            t += twc;
+        }
+        for (size_t t = 5; t < in_c;)
+        {
+            uint32_t top = in[t] & 0xffffu;
+            uint32_t twc = in[t] >> 16;
+            if (!twc || t + twc > in_c)
+                break;
             if (top == SpvOpTypeVector && twc >= 4)
             {
                 if (in[t + 3] == 2 && in[t + 2] == int_type)
@@ -11089,9 +11108,17 @@ spirv_patch_stereo_raygen(
                 if (in[t + 3] == 4 && in[t + 2] == float_type)
                     v4float_type = in[t + 1];
             }
+            else if (top == SpvOpTypeImage && twc >= 9 && in[t + 3] == SpvDim2D && in[t + 4] == 0 && in[t + 5] == 0 && in[t + 6] == 0 && in[t + 7] == 2 && !image_type)
+            {
+                image_type = in[t + 1];
+                image_texel_type = in[t + 2];
+                image_dim = in[t + 3];
+                image_arrayed = in[t + 5];
+            }
             t += twc;
         }
         STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
+        STEREO_LOG("RT_PATCH_PRE_REJECT launch=%u load=%u image=%u read_coord=%u write_coord=%u function=%u function_end=%u label=%u int=%u uint=%u float=%u v2int=%u v3uint=%u v4float=%u texel=%u zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_vec=%u ray_mtv=%u", launch_id_var, launch_id_load, image_type, image_read_coord, image_write_coord, first_function, first_function_end, first_label, int_type, uint_type, float_type, v2int_type, v3uint_type, v4float_type, image_texel_type, float_zero, origin_vec, origin_mtv, origin_var, ray_ndc_vec, ray_ndc_mtv);
         if (!launch_id_var ||
         !launch_id_load ||
         !image_type ||
