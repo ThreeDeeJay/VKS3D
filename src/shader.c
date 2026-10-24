@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <errno.h>
 #include <math.h>
 #include "stereo_icd.h"
 #include "tes_inject.h"
@@ -13857,8 +13858,14 @@ stereo_CreateRayTracingPipelinesKHR(
                     f = fopen(dp, "wb");
                     if (f)
                     {
-                        fwrite(patched_spv, 4, patched_words, f);
-                        fclose(f);
+                        size_t written = fwrite(patched_spv, sizeof(uint32_t), patched_words, f);
+                        int close_res = fclose(f);
+                        if (written != patched_words || close_res != 0)
+                            STEREO_LOG("RT_PATCH_DUMP_WRITE_FAILED hash=%016llx words=%zu written=%zu close=%d", (unsigned long long)spv_hash, patched_words, written, close_res);
+                    }
+                    else
+                    {
+                        STEREO_LOG("RT_PATCH_DUMP_OPEN_FAILED path=%s error=%d", dp, errno);
                     }
                 }
                 else
