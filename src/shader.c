@@ -10851,26 +10851,18 @@ spirv_patch_stereo_raygen(
                 f += fwc;
             }
         }
-        if (origin_result)
+        if (origin_result && first_function && first_function_end)
         {
-            for (size_t t = 5; t < in_c;)
+            for (size_t t = first_function; t < first_function_end;)
             {
                 uint32_t top = in[t] & 0xffffu;
                 uint32_t twc = in[t] >> 16;
                 if (!twc || t + twc > in_c)
                     break;
-                if (t >= first_function && t < first_function_end && top == SpvOpStore && twc >= 3)
-                    STEREO_LOG("RT_PATCH_FUNC_STORE i=%zu pointer=%u object=%u origin_result=%u", t, in[t + 1], in[t + 2], origin_result);
-                if (t >= origin_mtv && t < first_function_end && top != SpvOpFunctionEnd)
+                if (top == SpvOpStore && twc >= 3 && in[t + 2] == origin_result && !origin_var)
                 {
-                    for (uint32_t k = 1; k < twc; k++)
-                    {
-                        if (in[t + k] == origin_result)
-                        {
-                            STEREO_LOG("RT_PATCH_ORIGIN_USE i=%zu op=%u wc=%u operand=%u", t, top, twc, k);
-                            break;
-                        }
-                    }
+                    origin_var = in[t + 1];
+                    STEREO_LOG("RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u", t, origin_var, origin_result);
                 }
                 t += twc;
             }
