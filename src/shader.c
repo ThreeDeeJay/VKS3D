@@ -9824,7 +9824,7 @@ bool spirv_patch_stereo_fs(
                             uint32_t top = in[target] & 0xffffu;
                             if (!tw || target + tw > in_c)
                                 break;
-                            if (top == SpvOpTypeTypeImage && tw >= 9 && in[target + 1] == in[scan + 2])
+                            if (top == SpvOpTypeImage && tw >= 9 && in[target + 1] == in[scan + 2])
                             {
                                 sampled_image_matches_replacement = true;
                                 break;
