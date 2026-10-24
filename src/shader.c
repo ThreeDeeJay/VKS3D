@@ -8010,9 +8010,9 @@ bool spirv_patch_stereo_fs(
                             img->replacement_pointer_type = existing_pointer;
                             for (uint32_t copy = 0; copy < s.n_img; ++copy)
                             {
-                                if (s.images[copy].sampled_type_id != s.images[img].sampled_type_id ||
-                                    s.images[copy].sampled_type != s.images[img].sampled_type ||
-                                    s.images[copy].dim != s.images[img].dim ||
+                                if (s.images[copy].sampled_type_id != s.images[img_idx].sampled_type_id ||
+                                    s.images[copy].sampled_type != s.images[img_idx].sampled_type ||
+                                    s.images[copy].dim != s.images[img_idx].dim ||
                                     s.images[copy].depth != s.images[img].depth ||
                                     s.images[copy].arrayed != s.images[img].arrayed ||
                                     s.images[copy].ms != s.images[img].ms ||
