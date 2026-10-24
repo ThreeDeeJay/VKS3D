@@ -10958,11 +10958,13 @@ spirv_patch_stereo_raygen(
         }
         else if (op == SpvOpTypeVector && wc >= 4)
         {
-            if (in[i + 3] == 2)
+            if (in[i + 3] == 2 && in[i + 2] == int_type)
                 v2int_type = in[i + 1];
-            if (in[i + 3] == 3 && !v3int_type)
+            if (in[i + 3] == 3 && in[i + 2] == int_type && !v3int_type)
                 v3int_type = in[i + 1];
-            if (in[i + 3] == 4)
+            if (in[i + 3] == 3 && in[i + 2] == uint_type && !v3uint_type)
+                v3uint_type = in[i + 1];
+            if (in[i + 3] == 4 && in[i + 2] == float_type)
                 v4float_type = in[i + 1];
         }
         else if (op == SpvOpTypeImage &&
@@ -11065,6 +11067,25 @@ spirv_patch_stereo_raygen(
                 }
                 f += fwc;
             }
+        }
+        for (size_t t = 5; t < in_c;)
+        {
+            uint32_t top = in[t] & 0xffffu;
+            uint32_t twc = in[t] >> 16;
+            if (!twc || t + twc > in_c)
+                break;
+            if (top == SpvOpTypeVector && twc >= 4)
+            {
+                if (in[t + 3] == 2 && in[t + 2] == int_type)
+                    v2int_type = in[t + 1];
+                if (in[t + 3] == 3 && in[t + 2] == int_type && !v3int_type)
+                    v3int_type = in[t + 1];
+                if (in[t + 3] == 3 && in[t + 2] == uint_type && !v3uint_type)
+                    v3uint_type = in[t + 1];
+                if (in[t + 3] == 4 && in[t + 2] == float_type)
+                    v4float_type = in[t + 1];
+            }
+            t += twc;
         }
         STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
         if (!launch_id_var ||
