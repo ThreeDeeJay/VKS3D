@@ -10150,8 +10150,6 @@ bool spirv_patch_stereo_fs(
                     w[3]);
                 w[1] = in[i + 1];
             }
-            if (sampled_image_type)
-                w[1] = sampled_image_type;
             STEREO_LOG(
                 "FS_PATCH_IMAGE_EMIT result=%u type=%u sampledImage=%u",
                 w[2],
@@ -10216,8 +10214,7 @@ bool spirv_patch_stereo_fs(
                     continue;
                 if (!s.images[ii].replacement_type)
                     continue;
-                if (s.images[ii].id != image_type &&
-                    s.images[ii].replacement_type != image_type)
+                if (s.images[ii].replacement_type != image_type)
                     continue;
                 img_idx = (int)ii;
                 STEREO_LOG(
