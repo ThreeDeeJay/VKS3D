@@ -10103,6 +10103,16 @@ bool spirv_patch_stereo_fs(
                     }
                 }
             }
+            if (sampled_image_type)
+            {
+                STEREO_LOG(
+                    "FS_OPIMAGE_ENFORCE_TYPE result=%u previousType=%u actualImageType=%u sampledImage=%u",
+                    w[2],
+                    w[1],
+                    sampled_image_type,
+                    w[3]);
+                w[1] = sampled_image_type;
+            }
             if (w[1] < id_bound && w[1] != in[i + 1] && !emitted_type[w[1]])
             {
                 STEREO_LOG(
