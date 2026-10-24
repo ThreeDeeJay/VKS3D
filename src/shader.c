@@ -1618,6 +1618,10 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
     uint32_t ch = (*nid)++;
     uint32_t lp = (*nid)++;
     uint32_t pptr;
+    if (!m->pos_var || !m->v4t || !m->ft)
+        return;
+    if (m->pos_is_block && (!c->uv4 || !m->it || !c->cz))
+        return;
     if (m->pos_is_block)
     {
         uint32_t mid = (m->pos_member_idx == 0) ? c->cz : (*nid)++;
