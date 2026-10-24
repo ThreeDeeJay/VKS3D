@@ -11073,10 +11073,12 @@ spirv_patch_stereo_raygen(
                     STEREO_LOG("RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u", t, origin_var, origin_result);
                     break;
                 }
-                if (twc >= 3 && (top == SpvOpCopyObject || top == SpvOpBitcast) && in[t + 3] == origin_result)
-                    STEREO_LOG("RT_PATCH_ORIGIN_ALIAS i=%zu op=%u result=%u source=%u", t, top, in[t + 2], in[t + 3]);
-                if (top == SpvOpStore && twc >= 3 && t + 2 < in_c && t < first_function_end)
-                    STEREO_LOG("RT_PATCH_STORE i=%zu pointer=%u object=%u origin_result=%u", t, in[t + 1], in[t + 2], origin_result);
+                if ((top == SpvOpCopyObject || top == SpvOpBitcast) && twc >= 4 && in[t + 3] == origin_result)
+                    STEREO_LOG("RT_PATCH_ORIGIN_ALIAS i=%zu op=%u result_type=%u result=%u source=%u", t, top, in[t + 1], in[t + 2], in[t + 3]);
+                if (top == SpvOpAccessChain || top == SpvOpInBoundsAccessChain || top == SpvOpPtrAccessChain)
+                    STEREO_LOG("RT_PATCH_ORIGIN_ACCESS i=%zu op=%u result_type=%u result=%u base=%u", t, top, in[t + 1], in[t + 2], in[t + 3]);
+                if (top == SpvOpStore && twc >= 3 && in[t + 2] == origin_result)
+                    STEREO_LOG("RT_PATCH_ORIGIN_STORE_MATCH i=%zu pointer=%u object=%u", t, in[t + 1], in[t + 2]);
                 t += twc;
             }
         }
