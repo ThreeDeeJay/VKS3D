@@ -11206,7 +11206,7 @@ spirv_patch_stereo_raygen(
             };
             uint32_t eye_mtv[] = {
                 (5u << 16) | SpvOpMatrixTimesVector,
-                v4float_type,
+                in[origin_mtv + 1],
                 new_origin,
                 origin_mat,
                 eye_origin
