@@ -11305,7 +11305,9 @@ spirv_patch_stereo_raygen(
             continue;
         }
         if (op == SpvOpImageWrite &&
-            wc >= 4)
+            wc >= 4 &&
+            i >= first_function &&
+            i < first_label + (in[first_label] >> 16))
         {
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 2] = new_coord;
