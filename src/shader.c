@@ -10688,6 +10688,8 @@ spirv_patch_stereo_raygen(
     uint32_t launch_id_var = 0;
     uint32_t launch_id_load = 0;
     uint32_t image_type = 0;
+    uint32_t image_dim = 0;
+    uint32_t image_arrayed = 0;
     uint32_t image_read_coord = 0;
     uint32_t image_write_coord = 0;
     uint32_t float_zero = 0;
@@ -10770,6 +10772,8 @@ spirv_patch_stereo_raygen(
         {
             image_type = in[i + 1];
             image_texel_type = in[i + 2];
+            image_dim = in[i + 3];
+            image_arrayed = in[i + 5];
         }
         else if (op == SpvOpConstant &&
             wc >= 4 &&
@@ -11191,11 +11195,9 @@ spirv_patch_stereo_raygen(
         }
         if (op == SpvOpTypeImage &&
             wc >= 9 &&
-            in[i + 1] == image_type &&
-            in[i + 5] == 0)
+            in[i + 1] == image_type)
         {
             sb_push_n(&ob, &in[i], wc);
-            ob.w[ob.n - wc + 5] = 1;
             i += wc;
             continue;
         }
@@ -11348,7 +11350,9 @@ spirv_patch_stereo_raygen(
         if (op == SpvOpImageWrite &&
             wc >= 4 &&
             i >= first_function &&
-            i < first_function_end)
+            i < first_function_end &&
+            image_dim == SpvDim2D &&
+            image_arrayed == 1)
         {
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 2] = new_coord;
