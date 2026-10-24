@@ -9772,9 +9772,9 @@ bool spirv_patch_stereo_fs(
             {
                 uint32_t sw = in[scan] >> 16;
                 uint32_t sop = in[scan] & 0xffffu;
-                if (sw == 0 || scan + sw > in_c)
+                if (!sw || scan + sw > in_c)
                     break;
-                if (sw >= 3 && in[scan + 2] == in[i + 3])
+                if (sop == SpvOpLoad && sw >= 4 && in[scan + 2] == in[i + 3])
                 {
                     sampled_type = in[scan + 1];
                     break;
@@ -9787,7 +9787,7 @@ bool spirv_patch_stereo_fs(
                 {
                     uint32_t sw = in[scan] >> 16;
                     uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
+                    if (!sw || scan + sw > in_c)
                         break;
                     if (sop == SpvOpTypeSampledImage &&
                         sw >= 3 &&
