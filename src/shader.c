@@ -952,11 +952,18 @@ static void do_scan(SpvMod *m, bool p2)
                     w[i+3] == SpvDecorationBuiltIn &&
                     w[i+4] == SpvBuiltInPosition)
                 {
-                    if (m->pos_block_count < 8)
+                    bool known_block = false;
+                    for (uint32_t k = 0; k < m->pos_block_count; ++k)
+                    {
+                        if (m->pos_block_type[k] == w[i+1])
+                            known_block = true;
+                    }
+                    if (!known_block && m->pos_block_count < 8)
                         m->pos_block_type[m->pos_block_count++] = w[i+1];
                     m->pos_member_idx = w[i+2];
                     m->pos_is_block   = true;
                     m->pos_var        = 0;
+                    m->pos_ptr_type   = 0;
                     if (m->exec_model == SpvExecMeshEXT)
                     {
                         m->mesh_per_vertex_type = w[i+1];
