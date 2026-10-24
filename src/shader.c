@@ -10908,6 +10908,7 @@ spirv_patch_stereo_raygen(
     uint32_t v4float_type = 0;
     uint32_t v3int_type = 0;
     uint32_t first_function = 0;
+    uint32_t first_function_end = 0;
     uint32_t image_texel_type = 0;
     uint32_t origin_vec = 0;
     uint32_t origin_mat = 0;
@@ -10939,7 +10940,7 @@ spirv_patch_stereo_raygen(
         {
             launch_id_var = in[i + 1];
         }
-        else if (op == SpvOpTypeInt && wc >= 4)
+        if (op == SpvOpTypeInt && wc >= 4)
         {
             if (in[i + 2] == 32 && in[i + 3] == 0)
                 uint_type = in[i + 1];
@@ -10957,13 +10958,11 @@ spirv_patch_stereo_raygen(
         }
         else if (op == SpvOpTypeVector && wc >= 4)
         {
-            if (in[i + 2] == int_type && in[i + 3] == 2)
+            if (in[i + 3] == 2)
                 v2int_type = in[i + 1];
-            if (in[i + 2] == int_type && in[i + 3] == 3 && !v3int_type)
+            if (in[i + 3] == 3 && !v3int_type)
                 v3int_type = in[i + 1];
-            if (in[i + 2] == uint_type && in[i + 3] == 3)
-                v3uint_type = in[i + 1];
-            if (in[i + 2] == float_type && in[i + 3] == 4)
+            if (in[i + 3] == 4)
                 v4float_type = in[i + 1];
         }
         else if (op == SpvOpTypeImage &&
@@ -10972,7 +10971,8 @@ spirv_patch_stereo_raygen(
             in[i + 4] == 0 &&
             in[i + 5] == 0 &&
             in[i + 6] == 0 &&
-            in[i + 7] == 2)
+            in[i + 7] == 2 &&
+            !image_type)
         {
             image_type = in[i + 1];
             image_texel_type = in[i + 2];
@@ -11027,7 +11027,7 @@ spirv_patch_stereo_raygen(
                 ray_ndc_vec = in[i + 4];
             }
         }
-        else if (op == SpvOpStore &&
+        if (op == SpvOpStore &&
             wc >= 3 &&
             origin_result &&
             in[i + 2] == origin_result &&
@@ -11049,6 +11049,22 @@ spirv_patch_stereo_raygen(
             first_label = (uint32_t)i;
         }
         i += wc;
+        }
+        if (first_function)
+        {
+            for (size_t f = first_function; f < in_c;)
+            {
+                uint32_t fop = in[f] & 0xffffu;
+                uint32_t fwc = in[f] >> 16;
+                if (!fwc || f + fwc > in_c)
+                    break;
+                if (fop == SpvOpFunctionEnd)
+                {
+                    first_function_end = (uint32_t)f;
+                    break;
+                }
+                f += fwc;
+            }
         }
         STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
         if (!launch_id_var ||
@@ -11506,7 +11522,9 @@ spirv_patch_stereo_raygen(
             continue;
         }
         if (op == SpvOpImageRead &&
-            wc >= 5)
+            wc >= 5 &&
+            i >= first_function &&
+            i < first_function_end)
         {
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 4] = new_coord;
@@ -11516,7 +11534,7 @@ spirv_patch_stereo_raygen(
         if (op == SpvOpImageWrite &&
             wc >= 4 &&
             i >= first_function &&
-            i < first_label + (in[first_label] >> 16))
+            i < first_function_end)
         {
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 2] = new_coord;
