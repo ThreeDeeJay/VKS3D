@@ -11272,15 +11272,14 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, x_conv, 5);
             sb_push_n(&ob, x_add, 5);
             uint32_t construct[] = {
-                (7u << 16) | SpvOpCompositeConstruct,
-                v4float_type,
+                (6u << 16) | SpvOpCompositeConstruct,
+                in[ray_ndc_mtv + 1],
                 result_id,
                 ray_new_x,
                 ray_y,
-                ray_z,
-                ray_w
+                ray_z
             };
-            sb_push_n(&ob, construct, 7);
+            sb_push_n(&ob, construct, 6);
             STEREO_LOG(
                 "RT_PATCH_STEREO result=%u raw=%u projInv=%u invP00=%u eyeProduct=%u eyeShift=%u eyeOrigin=%u newOrigin=%u selectedOffset=%u conv=%u mode=%d",
                 result_id,
