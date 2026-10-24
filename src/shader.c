@@ -11033,18 +11033,9 @@ spirv_patch_stereo_raygen(
                 ray_ndc_vec = in[i + 4];
             }
         }
-        if (op == SpvOpStore &&
-            wc >= 3 &&
-            origin_result &&
-            in[i + 2] == origin_result &&
-            !origin_var)
+        if (op == SpvOpFunction && !first_function)
         {
-            origin_var = in[i + 1];
-            STEREO_LOG(
-                "RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u",
-                i,
-                origin_var,
-                origin_result);
+            first_function = (uint32_t)i;
         }
         else if (op == SpvOpFunction && !first_function)
         {
@@ -11070,6 +11061,23 @@ spirv_patch_stereo_raygen(
                     break;
                 }
                 f += fwc;
+            }
+        }
+        if (origin_result)
+        {
+            for (size_t t = 5; t < in_c;)
+            {
+                uint32_t top = in[t] & 0xffffu;
+                uint32_t twc = in[t] >> 16;
+                if (!twc || t + twc > in_c)
+                    break;
+                if (top == SpvOpStore && twc >= 3 && in[t + 2] == origin_result)
+                {
+                    origin_var = in[t + 1];
+                    STEREO_LOG("RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u", t, origin_var, origin_result);
+                    break;
+                }
+                t += twc;
             }
         }
         for (size_t t = 5; t < in_c;)
