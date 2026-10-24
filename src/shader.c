@@ -8013,11 +8013,11 @@ bool spirv_patch_stereo_fs(
                                 if (s.images[copy].sampled_type_id != s.images[img_idx].sampled_type_id ||
                                     s.images[copy].sampled_type != s.images[img_idx].sampled_type ||
                                     s.images[copy].dim != s.images[img_idx].dim ||
-                                    s.images[copy].depth != s.images[img].depth ||
-                                    s.images[copy].arrayed != s.images[img].arrayed ||
-                                    s.images[copy].ms != s.images[img].ms ||
-                                    s.images[copy].sampled != s.images[img].sampled ||
-                                    s.images[copy].format != s.images[img].format)
+                                    s.images[copy].depth != s.images[img_idx].depth ||
+                                    s.images[copy].arrayed != s.images[img_idx].arrayed ||
+                                    s.images[copy].ms != s.images[img_idx].ms ||
+                                    s.images[copy].sampled != s.images[img_idx].sampled ||
+                                    s.images[copy].format != s.images[img_idx].format)
                                     continue;
                                 s.images[copy].replacement_type = existing;
                                 s.images[copy].replacement_sampled_type = existing_sampled;
