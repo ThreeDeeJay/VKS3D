@@ -7695,7 +7695,8 @@ bool spirv_patch_stereo_fs(
                     }
                     scan += sw;
                 }
-                if (!replacement_sampled_exists && compatible_image_type)
+                bool patch_original_sampled_type = image->replacement_sampled_type == sampled_id && image->sampled != 2;
+                if (!replacement_sampled_exists && (compatible_image_type || patch_original_sampled_type))
                 {
                     sampled_words[2] = replacement_image;
                     STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], replacement_image);
@@ -10214,7 +10215,8 @@ bool spirv_patch_stereo_fs(
                     continue;
                 if (!s.images[ii].replacement_type)
                     continue;
-                if (s.images[ii].replacement_type != image_type)
+                if (s.images[ii].id != image_type &&
+                    s.images[ii].replacement_type != image_type)
                     continue;
                 img_idx = (int)ii;
                 STEREO_LOG(
