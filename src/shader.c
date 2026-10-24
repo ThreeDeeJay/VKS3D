@@ -7269,7 +7269,23 @@ bool spirv_patch_stereo_fs(
         if (replacement == 0)
         {
             replacement = nid++;
-            replacement_sampled = s.images[img].sampled == 2 ? 0 : nid++;
+            bool sampled_type_reusable = s.images[img].sampled != 2 && s.images[img].sampled_type_id != 0;
+            for (uint32_t other = 0; other < s.n_img; ++other)
+            {
+                if (other == img || !s.images[other].patchable || s.images[other].sampled_type_id != s.images[img].sampled_type_id)
+                    continue;
+                if (s.images[other].dim != s.images[img].dim || s.images[other].depth != s.images[img].depth || s.images[other].arrayed != s.images[img].arrayed || s.images[other].ms != s.images[img].ms || s.images[other].sampled != s.images[img].sampled || s.images[other].format != s.images[img].format)
+                {
+                    sampled_type_reusable = false;
+                    break;
+                }
+            }
+            if (s.images[img].sampled == 2)
+                replacement_sampled = 0;
+            else if (sampled_type_reusable)
+                replacement_sampled = s.images[img].sampled_type_id;
+            else
+                replacement_sampled = nid++;
             STEREO_LOG(
                 "FS_REPLACEMENT_ALLOC "
                 "idx=%u "
@@ -7343,7 +7359,24 @@ bool spirv_patch_stereo_fs(
     {
         if (!s.images[img].patchable)
             continue;
-        s.images[img].replacement_pointer_type = nid++;
+        uint32_t existing_pointer = 0;
+        if (s.images[img].replacement_sampled_type != 0 && s.images[img].replacement_sampled_type == s.images[img].sampled_type_id)
+        {
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (!sw || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 2] == SpvStorageClassUniformConstant && in[scan + 3] == s.images[img].replacement_sampled_type)
+                {
+                    existing_pointer = in[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+        }
+        s.images[img].replacement_pointer_type = existing_pointer ? existing_pointer : nid++;
     }
     uint32_t samp_nid      = nid;
     uint32_t qsize_nid     = nid;
@@ -7662,7 +7695,8 @@ bool spirv_patch_stereo_fs(
                     }
                     scan += sw;
                 }
-                if (!replacement_sampled_exists && compatible_image_type)
+                bool patch_original_sampled_type = image->replacement_sampled_type == sampled_id && image->sampled != 2;
+                if (!replacement_sampled_exists && (compatible_image_type || patch_original_sampled_type))
                 {
                     sampled_words[2] = replacement_image;
                     STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], replacement_image);
