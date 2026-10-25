@@ -855,23 +855,32 @@ stereo_CmdBeginRenderPass(
             (void*)commandBuffer,
             (void*)sd,
             (void*)sd->real_device);
+        bool cb_found = false;
         for (uint32_t i = 0; i < sd->cb_track_count; i++)
         {
             if (sd->cb_track[i].cb == commandBuffer)
             {
                 sd->cb_track[i].render_pass = pRenderPassBegin->renderPass;
                 sd->cb_track[i].framebuffer = pRenderPassBegin->framebuffer;
+                cb_found = true;
+                STEREO_LOG("CB_TRACK_UPDATE cb=%p rp=%p fb=%p", (void*)commandBuffer, (void*)pRenderPassBegin->renderPass, (void*)pRenderPassBegin->framebuffer);
                 break;
             }
         }
-        STEREO_LOG(
-            "BEGIN_PASS_DRIVER original=%p framebuffer=%p",
-            (void*)pRenderPassBegin->renderPass,
-            (void*)pRenderPassBegin->framebuffer);
-        STEREO_LOG(
-            "[RP BEGIN MONO] fb=%p rp=%p",
-            (void*)pRenderPassBegin->framebuffer,
-            (void*)pRenderPassBegin->renderPass);
+        if (!cb_found && sd->cb_track_count < MAX_CB_TRACK)
+        {
+            uint32_t idx = sd->cb_track_count++;
+            sd->cb_track[idx].cb = commandBuffer;
+            sd->cb_track[idx].render_pass = pRenderPassBegin->renderPass;
+            sd->cb_track[idx].framebuffer = pRenderPassBegin->framebuffer;
+            STEREO_LOG("CB_TRACK_CREATE cb=%p idx=%u rp=%p fb=%p", (void*)commandBuffer, idx, (void*)pRenderPassBegin->renderPass, (void*)pRenderPassBegin->framebuffer);
+        }
+        else if (!cb_found)
+        {
+            STEREO_LOG("CB_TRACK_OVERFLOW cb=%p count=%u max=%u", (void*)commandBuffer, sd->cb_track_count, MAX_CB_TRACK);
+        }
+        STEREO_LOG("BEGIN_PASS_DRIVER original=%p framebuffer=%p", (void*)pRenderPassBegin->renderPass, (void*)pRenderPassBegin->framebuffer);
+        STEREO_LOG("[RP BEGIN MONO] fb=%p rp=%p", (void*)pRenderPassBegin->framebuffer, (void*)pRenderPassBegin->renderPass);
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
 }
@@ -1033,25 +1042,24 @@ stereo_CmdBindPipeline(
     VkRenderPass active_rp = VK_NULL_HANDLE;
     VkFramebuffer active_fb = VK_NULL_HANDLE;
 
-    for (uint32_t i = 0; i < g_device_count; i++)
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
     {
-        if (g_devices[i].real_device)
+        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
         {
-            sd = &g_devices[i];
-            break;
+            if (g_devices[d].cb_track[i].cb == commandBuffer)
+            {
+                sd = &g_devices[d];
+                active_rp = g_devices[d].cb_track[i].render_pass;
+                active_fb = g_devices[d].cb_track[i].framebuffer;
+                break;
+            }
         }
     }
     if (!sd)
-    return;
 
-    for (uint32_t i = 0; i < sd->cb_track_count; i++)
     {
-        if (sd->cb_track[i].cb == commandBuffer)
-        {
-            active_rp = sd->cb_track[i].render_pass;
-            active_fb = sd->cb_track[i].framebuffer;
-            break;
-        }
+        STEREO_LOG("CB_OWNER_NOT_FOUND cb=%p bind_pipeline=%p", (void*)commandBuffer, (void*)pipeline);
+        return;
     }
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipeline);
