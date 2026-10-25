@@ -27,22 +27,32 @@ For %%A in (%*) do (
         ) else (
             If "%%~xA"==".spv" (
                 Echo Validating "%%~nxA"
-                If exist "!VULKAN_SDK!\Bin\spirv-val.exe" ("!VULKAN_SDK!\Bin\spirv-val.exe" --target-env vulkan1.0 "%%~A")
-                If exist "!VULKAN_SDK!\Bin\spirv-val.exe" ("!VULKAN_SDK!\Bin\spirv-val.exe" --target-env vulkan1.1 "%%~A")
-                If exist "!VULKAN_SDK!\Bin\spirv-val.exe" ("!VULKAN_SDK!\Bin\spirv-val.exe" --target-env vulkan1.2 "%%~A")
-                If exist "!VULKAN_SDK!\Bin\spirv-val.exe" ("!VULKAN_SDK!\Bin\spirv-val.exe" --target-env vulkan1.3 "%%~A")
                 If exist "!VULKAN_SDK!\Bin\spirv-val.exe" ("!VULKAN_SDK!\Bin\spirv-val.exe" "%%~A")
                 Echo Decompiling "%%~nxA"
                 If exist "!VULKAN_SDK!\Bin\spirv-dis.exe" ("!VULKAN_SDK!\Bin\spirv-dis.exe" "%%~A" -o "%%~dpA\%%~nxA.asm")
-                Set Run=%%~dpA\%%~nxA.asm
+                Set Run=%%~dpA%%~nxA.asm
             ) else (
                 pushD "%%~dpA"
                 Set VKD3D_LOG_FILE=%~dp0VKS3D\%%~nA\%%~nA+VKD3D.log
                 Set VKD3D_SHADER_DUMP_PATH=%~dp0VKS3D\%%~nA
                 Set VKD3D_VULKAN_DEVICE=0
                 Set VKD3D_FRAME_RATE=
+                Set DXVK_STATE_CACHE=0 
+                Set VK_ICD_FILENAMES=
+                Set STEREO_ENABLED=
+                Set STEREO_FLIP_EYES=
+                Set STEREO_REAL_ICD=
+                Set STEREO_REAL_ICD=
+                Set STEREO_REAL_ICD=
+                Set STEREO_REAL_ICD=
+                Set STEREO_REAL_ICD=
+                Set STEREO_FLIP_EYES=
+                Set WINE_D3D_CONFIG=
+                Set VKS3D_DISABLE_SHADER_PATCH=
+                Set VKS3D_SHADER_OBJECTS_MONO=
                 Set STEREO_LOGFILE_PATH=%~dp0VKS3D\%%~nA\%%~nA+VKS3D.log
                 Set VKS3D_DUMP_SPIRV=%~dp0VKS3D\%%~nA
+                Set VKS3D_SKIP_SHADER_PATCHES=
                 if not exist "%~dp0VKS3D\%%~nA" (
                     mkdir "%~dp0VKS3D\%%~nA"
                 ) else (
@@ -53,10 +63,12 @@ For %%A in (%*) do (
                     If !ErrorLevel! NEQ 0 (
                         Echo Error deleting "%~dp0VKS3D\%%~nA\*"
                         Pause
+                        )
                     )
-                )
+                Title %%~nA
                 Echo %%~nA
-                If exist "%%~dpA%%~nA.dxvk-cache" (del "%%~dpA%%~nA.dxvk-cache")
+                If exist "%%~dpA*.dxvk-cache" (del "%%~dpA*.dxvk-cache")
+                If exist "%LOCALAPPDATA%\dxvk\%%~nA.dxvk-cache" (del "%LOCALAPPDATA%\dxvk\%%~nA.dxvk-cache")
                 If exist "%%~dpAvkd3d-proton.cache.write" (del "%%~dpAvkd3d-proton.cache.write")
                 "%%~dpA%%~nxA"
                 REM "%%~dpA%%~nxA" -fullscreen --fullscreen --full-screen --width 1920 --height 1080 -mode 1920x1080x144x32
@@ -75,58 +87,57 @@ For %%A in (%*) do (
                             For %%S in (*.spv) do (
                                 If exist "!VULKAN_SDK!\Bin\spirv-val.exe" (
                                     Echo Validating "%%~nxS" reports:
-                                    "!VULKAN_SDK!\Bin\spirv-val.exe" --target-env vulkan1.0 "%%~nxS"
-                                    if !ErrorLevel! NEQ 0 (Echo Failed to validate for Vulkan 1.0)
-                                    "!VULKAN_SDK!\Bin\spirv-val.exe" --target-env vulkan1.1 "%%~nxS"
-                                    if !ErrorLevel! NEQ 0 (Echo Failed to validate for Vulkan 1.1)
-                                    "!VULKAN_SDK!\Bin\spirv-val.exe" --target-env vulkan1.2 "%%~nxS"
-                                    if !ErrorLevel! NEQ 0 (Echo Failed to validate for Vulkan 1.2)
-                                    "!VULKAN_SDK!\Bin\spirv-val.exe" --target-env vulkan1.3 "%%~nxS"
-                                    if !ErrorLevel! NEQ 0 (Echo Failed to validate for Vulkan 1.3)
                                     "!VULKAN_SDK!\Bin\spirv-val.exe" "%%~nxS"
                                     if !ErrorLevel! NEQ 0 (
                                         If exist "!VULKAN_SDK!\Bin\spirv-dis.exe" (
-                                            Echo "%%~nxS">>"%~dp0VKS3D\%%~nA\%%~nA+VKS3D_spirv-val_error.log"
                                             Set ShaderFile=%%~nxS
                                             Echo Decompiling "%%~nxS"...
                                             "!VULKAN_SDK!\Bin\spirv-dis.exe" "!ShaderFile!"     -o "!ShaderFile!.asm"
                                             "!VULKAN_SDK!\Bin\spirv-dis.exe" "!ShaderFile:+=-!" -o "!ShaderFile:+=-!.asm"
-                                            If not "!ShaderFile!"=="!ShaderFile:+=!" (
-                                                If exist "!ShaderFile!.asm" (
-                                                    Set /A Warnings=!Warnings!+1
-                                                ) else (
-                                                    Set /A Errors=!Errors!+1
+                                            If exist "!ShaderFile:+=-!.asm" (
+                                                If not "!ShaderFile!"=="!ShaderFile:+=!" (
+                                                    Echo "%%~nxS">>"%~dp0VKS3D\%%~nA\%%~nA+VKS3D_spirv-val_error.log"
+                                                    If exist "!ShaderFile!.asm" (
+                                                        Set /A Warnings=!Warnings!+1
+                                                    ) else (
+                                                        Set /A Errors=!Errors!+1
+                                                    )
+                                                    Title %%~nA: Warnings=!Warnings! Errors=!Errors!
                                                 )
                                             )
                                             If not defined Run (Set Run=!ShaderFile!.asm)
                                         )
+REM                                        If exist "%%~nxS.asm" (Start "" "%%~nxS.asm")
+REM                                        Pause
                                     )
                                 )
+                                )
+                            )
+                        ) else (
+                        If not exist "%~dp0VKS3D\%%~nA/*" (
+                            rmdir /s /q "%~dp0VKS3D\%%~nA"
                             )
                         )
                     ) else (
-                        If not exist "%~dp0VKS3D\%%~nA/*" (
-                            rmdir /s /q "%~dp0VKS3D\%%~nA"
-                        )
-                    )
-                ) else (
                     If not exist "%~dp0VKS3D\%%~nA/*.log" (
                         If not exist "%~dp0VKS3D\%%~nA/*.spv" (
                             If not exist "%~dp0VKS3D\%%~nA/*.asm" (
                                 rmdir /s /q "%~dp0VKS3D\%%~nA"
+                                )
                             )
                         )
                     )
-                )
                 Echo %%~nA
+                Echo.
+                )
             )
-)
-)
-)
+        )
+    )
 Echo Patched shader dump report:
-If !Warnings! GTR 0 (Echo [93mWarnings:  !Warnings![0m) else (Echo [92mWarnings:  !Warnings!)
-If !Errors!   GTR 0 (Echo [91mErrors:    !Errors![0m)   else (Echo [92mErrors:    !Errors!)
-pause >Nul
-REM If defined ShaderFile (pause)
+If !Warnings! GTR 0 (Echo [93mWarnings:  !Warnings!) else (Echo [92mWarnings:  !Warnings!)
+If !Errors!   GTR 0 (Echo [91mErrors:    !Errors!)   else (Echo [92mErrors:    !Errors!)
+If defined Run (Echo [96mPress any key to open "!Run!")
+ pause >Nul
+If defined ShaderFile (pause >Nul)
 If defined Run ("!Run!")
 exit
