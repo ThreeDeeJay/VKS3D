@@ -13729,6 +13729,16 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         }
                     }
                 }
+                if (pCI[p].pColorBlendState)
+                {
+                    const VkPipelineColorBlendStateCreateInfo *b = pCI[p].pColorBlendState;
+                    for (uint32_t j = 0; j < b->attachmentCount; j++)
+                    {
+                        const VkPipelineColorBlendAttachmentState *a = &b->pAttachments[j];
+                        STEREO_LOG("MONO_BLEND_ATTACHMENT pipe=%p index=%u count=%u enable=%u srcColor=%u dstColor=%u colorOp=%u srcAlpha=%u dstAlpha=%u alphaOp=%u writeMask=%u\n",
+                            (void *)pP[p],j,b->attachmentCount,a->blendEnable,a->srcColorBlendFactor,a->dstColorBlendFactor,a->colorBlendOp,a->srcAlphaBlendFactor,a->dstAlphaBlendFactor,a->alphaBlendOp,a->colorWriteMask);
+                    }
+                }
                 STEREO_LOG(
                     "MONO_CANDIDATE_STATE pipe=%p hash=%016llx rp=%p subpass=%u topology=%u restart=%u polygon=%u cull=%u front=%u samples=%u depth_test=%u depth_write=%u depth_compare=%u stencil=%u blend_attachments=%u blend0=%u srcColor=%u dstColor=%u colorOp=%u srcAlpha=%u dstAlpha=%u alphaOp=%u writeMask=%u logicOp=%u vertex_bindings=%u vertex_attributes=%u viewports=%u scissors=%u dynamic_states=%u\n",
                     (void *)pP[p],(unsigned long long)info->vs_hash,(void *)pCI[p].renderPass,pCI[p].subpass,a?a->topology:0,a?a->primitiveRestartEnable:0,r?r->polygonMode:0,r?r->cullMode:0,r?r->frontFace:0,m?m->rasterizationSamples:0,d?d->depthTestEnable:0,d?d->depthWriteEnable:0,d?d->depthCompareOp:0,d?d->stencilTestEnable:0,b?b->attachmentCount:0,b&&b->attachmentCount&&b->pAttachments?b->pAttachments[0].blendEnable:0,b&&b->attachmentCount&&b->pAttachments?b->pAttachments[0].srcColorBlendFactor:0,b&&b->attachmentCount&&b->pAttachments?b->pAttachments[0].dstColorBlendFactor:0,b&&b->attachmentCount&&b->pAttachments?b->pAttachments[0].colorBlendOp:0,b&&b->attachmentCount&&b->pAttachments?b->pAttachments[0].srcAlphaBlendFactor:0,b&&b->attachmentCount&&b->pAttachments?b->pAttachments[0].dstAlphaBlendFactor:0,b&&b->attachmentCount&&b->pAttachments?b->pAttachments[0].alphaBlendOp:0,b&&b->attachmentCount&&b->pAttachments?b->pAttachments[0].colorWriteMask:0,b?b->logicOpEnable:0,pCI[p].pVertexInputState?pCI[p].pVertexInputState->vertexBindingDescriptionCount:0,pCI[p].pVertexInputState?pCI[p].pVertexInputState->vertexAttributeDescriptionCount:0,pCI[p].pViewportState?pCI[p].pViewportState->viewportCount:0,pCI[p].pViewportState?pCI[p].pViewportState->scissorCount:0,pCI[p].pDynamicState?pCI[p].pDynamicState->dynamicStateCount:0);
