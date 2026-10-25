@@ -1129,25 +1129,6 @@ find_pipeline_info(
     return NULL;
 }
 
-VKAPI_ATTR void VKAPI_CALL
-stereo_DestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks *pAllocator)
-{
-    StereoDevice *sd = stereo_device_from_handle(device);
-    if (!sd || !sd->real.DestroyPipeline) return;
-    for (uint32_t i = 0; i < sd->pipeline_info_count; i++) {
-        StereoPipelineInfo *info = &sd->pipeline_info[i];
-        if (info->pipeline != pipeline) continue;
-        if (info->mono_pipeline != VK_NULL_HANDLE) {
-            sd->real.DestroyPipeline(sd->real_device, info->mono_pipeline, pAllocator);
-            info->mono_pipeline = VK_NULL_HANDLE;
-        }
-        info->pipeline = VK_NULL_HANDLE;
-        info->mono_ui_draw_pattern_known = VK_FALSE;
-        break;
-    }
-    sd->real.DestroyPipeline(sd->real_device, pipeline, pAllocator);
-}
-
 VkPipeline
 lookup_bound_pipeline(
     StereoDevice *sd,
