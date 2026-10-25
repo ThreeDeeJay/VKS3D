@@ -822,7 +822,6 @@ stereo_CmdBeginRenderPass(
         if (!cb_found && sd->cb_track_count < MAX_CB_TRACK)
         {
             uint32_t idx = sd->cb_track_count++;
-            memset(&sd->cb_track[idx],0,sizeof(sd->cb_track[idx]));
             sd->cb_track[idx].cb = commandBuffer;
             sd->cb_track[idx].render_pass = modified.renderPass;
             sd->cb_track[idx].framebuffer = modified.framebuffer;
@@ -1374,37 +1373,6 @@ stereo_CmdTraceRaysKHR(
     STEREO_LOG("RT_TRACE_END");
 }
 
-static bool
-get_tracked_dynamic_depth(
-    StereoDevice *sd,
-    VkCommandBuffer cb,
-    VkBool32 *depth_test,
-    VkBool32 *depth_write,
-    VkCompareOp *depth_compare,
-    bool *test_valid,
-    bool *write_valid,
-    bool *compare_valid)
-{
-    for(uint32_t i=0;i<sd->cb_track_count;i++){
-        if(sd->cb_track[i].cb==cb){
-            *depth_test=sd->cb_track[i].depth_test_enable;
-            *depth_write=sd->cb_track[i].depth_write_enable;
-            *depth_compare=sd->cb_track[i].depth_compare_op;
-            *test_valid=sd->cb_track[i].depth_test_valid;
-            *write_valid=sd->cb_track[i].depth_write_valid;
-            *compare_valid=sd->cb_track[i].depth_compare_valid;
-            return true;
-        }
-    }
-    *depth_test=VK_FALSE;
-    *depth_write=VK_FALSE;
-    *depth_compare=VK_COMPARE_OP_ALWAYS;
-    *test_valid=false;
-    *write_valid=false;
-    *compare_valid=false;
-    return false;
-}
-
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdDrawIndexed(
     VkCommandBuffer commandBuffer,
@@ -1478,13 +1446,7 @@ stereo_CmdDrawIndexed(
             break;
         }
     }
-    VkBool32 dyn_depth_test=VK_FALSE,dyn_depth_write=VK_FALSE;
-    VkCompareOp dyn_depth_compare=VK_COMPARE_OP_ALWAYS;
-    bool dyn_test_valid=false,dyn_write_valid=false,dyn_compare_valid=false;
-    get_tracked_dynamic_depth(sd,commandBuffer,&dyn_depth_test,&dyn_depth_write,&dyn_depth_compare,&dyn_test_valid,&dyn_write_valid,&dyn_compare_valid);
-    STEREO_LOG("DRAW_DYNAMIC_DEPTH cb=%p pipe=%p test=%u test_valid=%u write=%u write_valid=%u compare=%u compare_valid=%u",(void*)commandBuffer,(void*)pipe,(unsigned)dyn_depth_test,(unsigned)dyn_test_valid,(unsigned)dyn_depth_write,(unsigned)dyn_write_valid,(unsigned)dyn_depth_compare,(unsigned)dyn_compare_valid);
     STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
-    STEREO_LOG("DRAW_CLASSIFY type=INDEXED cb=%p pipe=%p vs_hash=%016llx known=%u quad=%u patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(unsigned long long)(info?info->vs_hash:0),info!=NULL,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
@@ -1549,13 +1511,7 @@ stereo_CmdDraw(
             break;
         }
     }
-    VkBool32 dyn_depth_test=VK_FALSE,dyn_depth_write=VK_FALSE;
-    VkCompareOp dyn_depth_compare=VK_COMPARE_OP_ALWAYS;
-    bool dyn_test_valid=false,dyn_write_valid=false,dyn_compare_valid=false;
-    get_tracked_dynamic_depth(sd,commandBuffer,&dyn_depth_test,&dyn_depth_write,&dyn_depth_compare,&dyn_test_valid,&dyn_write_valid,&dyn_compare_valid);
-    STEREO_LOG("DRAW_DYNAMIC_DEPTH cb=%p pipe=%p test=%u test_valid=%u write=%u write_valid=%u compare=%u compare_valid=%u",(void*)commandBuffer,(void*)pipe,(unsigned)dyn_depth_test,(unsigned)dyn_test_valid,(unsigned)dyn_depth_write,(unsigned)dyn_write_valid,(unsigned)dyn_depth_compare,(unsigned)dyn_compare_valid);
     STEREO_LOG("DRAW_TRACE type=DIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u vertex_count=%u instance_count=%u first_vertex=%u first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,vertexCount,instanceCount,firstVertex,firstInstance);
-    STEREO_LOG("DRAW_CLASSIFY type=DIRECT cb=%p pipe=%p vs_hash=%016llx known=%u quad=%u patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X vertex_count=%u instance_count=%u first_vertex=%u first_instance=%u",(void*)commandBuffer,(void*)pipe,(unsigned long long)(info?info->vs_hash:0),info!=NULL,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,vertexCount,instanceCount,firstVertex,firstInstance);
     sd->real.CmdDraw(
         commandBuffer,
         vertexCount,
@@ -1615,13 +1571,7 @@ stereo_CmdDrawIndirect(
             break;
         }
     }
-    VkBool32 dyn_depth_test=VK_FALSE,dyn_depth_write=VK_FALSE;
-    VkCompareOp dyn_depth_compare=VK_COMPARE_OP_ALWAYS;
-    bool dyn_test_valid=false,dyn_write_valid=false,dyn_compare_valid=false;
-    get_tracked_dynamic_depth(sd,commandBuffer,&dyn_depth_test,&dyn_depth_write,&dyn_depth_compare,&dyn_test_valid,&dyn_write_valid,&dyn_compare_valid);
-    STEREO_LOG("DRAW_DYNAMIC_DEPTH cb=%p pipe=%p test=%u test_valid=%u write=%u write_valid=%u compare=%u compare_valid=%u",(void*)commandBuffer,(void*)pipe,(unsigned)dyn_depth_test,(unsigned)dyn_test_valid,(unsigned)dyn_depth_write,(unsigned)dyn_write_valid,(unsigned)dyn_depth_compare,(unsigned)dyn_compare_valid);
-    STEREO_LOG("DRAW_TRACE type=INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u buffer=%p view_mask=0x%X has_multiview=%u offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,(void*)buffer,rp_view_mask,rp_has_multiview,(unsigned long long)offset,drawCount,stride);
-    STEREO_LOG("DRAW_CLASSIFY type=INDIRECT cb=%p pipe=%p vs_hash=%016llx known=%u quad=%u patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(unsigned long long)(info?info->vs_hash:0),info!=NULL,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,(void*)buffer,(unsigned long long)offset,drawCount,stride);
+    STEREO_LOG("DRAW_TRACE type=INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u buffer=%p view_mask=0x%X has_multiview=%u offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
     sd->real.CmdDrawIndirect(
         commandBuffer,
         buffer,
@@ -1681,20 +1631,7 @@ stereo_CmdDrawIndexedIndirect(
             break;
         }
     }
-    uint32_t cb_idx = 0;
-    while (cb_idx < sd->cb_track_count && sd->cb_track[cb_idx].cb != commandBuffer) cb_idx++;
-    bool vp_valid = cb_idx < sd->cb_track_count && sd->cb_track[cb_idx].viewport_valid;
-    bool sc_valid = cb_idx < sd->cb_track_count && sd->cb_track[cb_idx].scissor_valid;
-    VkViewport vp = {0};
-    VkRect2D sc = {0};
-    if (vp_valid) vp = sd->cb_track[cb_idx].viewport;
-    if (sc_valid) sc = sd->cb_track[cb_idx].scissor;
-    VkBool32 dyn_depth_test=VK_FALSE,dyn_depth_write=VK_FALSE;
-    VkCompareOp dyn_depth_compare=VK_COMPARE_OP_ALWAYS;
-    bool dyn_test_valid=false,dyn_write_valid=false,dyn_compare_valid=false;
-    get_tracked_dynamic_depth(sd,commandBuffer,&dyn_depth_test,&dyn_depth_write,&dyn_depth_compare,&dyn_test_valid,&dyn_write_valid,&dyn_compare_valid);
-    STEREO_LOG("DRAW_DYNAMIC_DEPTH cb=%p pipe=%p test=%u test_valid=%u write=%u write_valid=%u compare=%u compare_valid=%u",(void*)commandBuffer,(void*)pipe,(unsigned)dyn_depth_test,(unsigned)dyn_test_valid,(unsigned)dyn_depth_write,(unsigned)dyn_write_valid,(unsigned)dyn_depth_compare,(unsigned)dyn_compare_valid);
-    STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u blend=%u view_mask=0x%X buffer=%p offset=%llu draw_count=%u stride=%u vp_valid=%u vp_x=%.1f vp_y=%.1f vp_w=%.1f vp_h=%.1f sc_valid=%u sc_x=%d sc_y=%d sc_w=%u sc_h=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->blend_enable:0,rp_view_mask,(void*)buffer,(unsigned long long)offset,drawCount,stride,(unsigned)vp_valid,vp.x,vp.y,vp.width,vp.height,(unsigned)sc_valid,sc.offset.x,sc.offset.y,sc.extent.width,sc.extent.height);
+    STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
     sd->real.CmdDrawIndexedIndirect(
         commandBuffer,
         buffer,
@@ -2054,28 +1991,9 @@ stereo_CmdSetViewport(
         (void*)commandBuffer,
         firstViewport,
         viewportCount);
-    for (uint32_t i = 0; pViewports && i < viewportCount; i++)
-    {
-        STEREO_LOG("CMD_SET_VIEWPORT_VALUE cb=%p i=%u x=%.3f y=%.3f width=%.3f height=%.3f minDepth=%.3f maxDepth=%.3f",
-            (void*)commandBuffer,i,pViewports[i].x,pViewports[i].y,pViewports[i].width,pViewports[i].height,pViewports[i].minDepth,pViewports[i].maxDepth);
-    }
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetViewport)
         return;
-    uint32_t ti = 0;
-    while (ti < sd->cb_track_count && sd->cb_track[ti].cb != commandBuffer) ti++;
-    if (ti == sd->cb_track_count && ti < MAX_CB_TRACK)
-    {
-        memset(&sd->cb_track[ti], 0, sizeof(sd->cb_track[ti]));
-        sd->cb_track[ti].cb = commandBuffer;
-        sd->cb_track_count++;
-    }
-    if (ti < sd->cb_track_count && pViewports && firstViewport == 0 && viewportCount > 0)
-    {
-        sd->cb_track[ti].viewport = pViewports[0];
-        sd->cb_track[ti].viewport_count = viewportCount;
-        sd->cb_track[ti].viewport_valid = true;
-    }
     sd->real.CmdSetViewport(
         commandBuffer,
         firstViewport,
@@ -2093,28 +2011,9 @@ stereo_CmdSetScissor(
         (void*)commandBuffer,
         firstScissor,
         scissorCount);
-    for (uint32_t i = 0; pScissors && i < scissorCount; i++)
-    {
-        STEREO_LOG("CMD_SET_SCISSOR_VALUE cb=%p i=%u x=%d y=%d width=%u height=%u",
-            (void*)commandBuffer,i,pScissors[i].offset.x,pScissors[i].offset.y,pScissors[i].extent.width,pScissors[i].extent.height);
-    }
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetScissor)
         return;
-    uint32_t ti = 0;
-    while (ti < sd->cb_track_count && sd->cb_track[ti].cb != commandBuffer) ti++;
-    if (ti == sd->cb_track_count && ti < MAX_CB_TRACK)
-    {
-        memset(&sd->cb_track[ti], 0, sizeof(sd->cb_track[ti]));
-        sd->cb_track[ti].cb = commandBuffer;
-        sd->cb_track_count++;
-    }
-    if (ti < sd->cb_track_count && pScissors && firstScissor == 0 && scissorCount > 0)
-    {
-        sd->cb_track[ti].scissor = pScissors[0];
-        sd->cb_track[ti].scissor_count = scissorCount;
-        sd->cb_track[ti].scissor_valid = true;
-    }
     sd->real.CmdSetScissor(
         commandBuffer,
         firstScissor,
@@ -2216,20 +2115,6 @@ stereo_CmdSetScissorWithCountEXT(
     StereoDevice *sd = find_any_device();
     if (!sd || !sd->real.CmdSetScissorWithCountEXT)
         return;
-    uint32_t ti = 0;
-    while (ti < sd->cb_track_count && sd->cb_track[ti].cb != commandBuffer) ti++;
-    if (ti == sd->cb_track_count && ti < MAX_CB_TRACK)
-    {
-        memset(&sd->cb_track[ti], 0, sizeof(sd->cb_track[ti]));
-        sd->cb_track[ti].cb = commandBuffer;
-        sd->cb_track_count++;
-    }
-    if (ti < sd->cb_track_count && pScissors && scissorCount > 0)
-    {
-        sd->cb_track[ti].scissor = pScissors[0];
-        sd->cb_track[ti].scissor_count = scissorCount;
-        sd->cb_track[ti].scissor_valid = true;
-    }
     sd->real.CmdSetScissorWithCountEXT(
         commandBuffer,
         scissorCount,
@@ -2241,20 +2126,12 @@ stereo_CmdSetDepthTestEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 depthTestEnable)
 {
-    STEREO_LOG("CMD_SET_DEPTH_TEST_ENABLE_ENTER cb=%p enable=%u",
+    STEREO_LOG("CMD_SET_DEPTH_TEST_ENABLE_EXT cb=%p enable=%u",
         (void*)commandBuffer,
-        (unsigned)depthTestEnable);
-    StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
-    STEREO_LOG("DYN_DEPTH_DEVICE cb=%p tracked=%u device=%p",(void*)commandBuffer,(unsigned)(sd!=NULL),(void*)sd);
-    if(!sd)sd=find_any_device();
-    if(!sd||!sd->real.CmdSetDepthTestEnableEXT)return;
-    for(uint32_t i=0;i<sd->cb_track_count;i++){
-        if(sd->cb_track[i].cb==commandBuffer){
-            sd->cb_track[i].depth_test_enable=depthTestEnable;
-            sd->cb_track[i].depth_test_valid=true;
-            break;
-        }
-    }
+        depthTestEnable);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdSetDepthTestEnableEXT)
+        return;
     sd->real.CmdSetDepthTestEnableEXT(
         commandBuffer,
         depthTestEnable);
@@ -2265,20 +2142,12 @@ stereo_CmdSetDepthWriteEnableEXT(
     VkCommandBuffer commandBuffer,
     VkBool32 depthWriteEnable)
 {
-    STEREO_LOG("CMD_SET_DEPTH_WRITE_ENABLE_ENTER cb=%p enable=%u",
+    STEREO_LOG("CMD_SET_DEPTH_WRITE_ENABLE_EXT cb=%p enable=%u",
         (void*)commandBuffer,
-        (unsigned)depthWriteEnable);
-    StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
-    STEREO_LOG("DYN_DEPTH_DEVICE cb=%p tracked=%u device=%p",(void*)commandBuffer,(unsigned)(sd!=NULL),(void*)sd);
-    if(!sd)sd=find_any_device();
-    if(!sd||!sd->real.CmdSetDepthWriteEnableEXT)return;
-    for(uint32_t i=0;i<sd->cb_track_count;i++){
-        if(sd->cb_track[i].cb==commandBuffer){
-            sd->cb_track[i].depth_write_enable=depthWriteEnable;
-            sd->cb_track[i].depth_write_valid=true;
-            break;
-        }
-    }
+        depthWriteEnable);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdSetDepthWriteEnableEXT)
+        return;
     sd->real.CmdSetDepthWriteEnableEXT(
         commandBuffer,
         depthWriteEnable);
@@ -2289,20 +2158,12 @@ stereo_CmdSetDepthCompareOpEXT(
     VkCommandBuffer commandBuffer,
     VkCompareOp depthCompareOp)
 {
-    STEREO_LOG("CMD_SET_DEPTH_COMPARE_OP_ENTER cb=%p op=%u",
+    STEREO_LOG("CMD_SET_DEPTH_COMPARE_OP_EXT cb=%p op=%u",
         (void*)commandBuffer,
-        (unsigned)depthCompareOp);
-    StereoDevice *sd=stereo_device_from_command_buffer(commandBuffer);
-    STEREO_LOG("DYN_DEPTH_DEVICE cb=%p tracked=%u device=%p",(void*)commandBuffer,(unsigned)(sd!=NULL),(void*)sd);
-    if(!sd)sd=find_any_device();
-    if(!sd||!sd->real.CmdSetDepthCompareOpEXT)return;
-    for(uint32_t i=0;i<sd->cb_track_count;i++){
-        if(sd->cb_track[i].cb==commandBuffer){
-            sd->cb_track[i].depth_compare_op=depthCompareOp;
-            sd->cb_track[i].depth_compare_valid=true;
-            break;
-        }
-    }
+        depthCompareOp);
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdSetDepthCompareOpEXT)
+        return;
     sd->real.CmdSetDepthCompareOpEXT(
         commandBuffer,
         depthCompareOp);
