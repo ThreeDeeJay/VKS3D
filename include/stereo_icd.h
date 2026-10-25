@@ -563,6 +563,12 @@ typedef struct StereoPipelineInfo
     VkBool32 depth_write_enable;
     VkCompareOp depth_compare_op;
     VkBool32 blend_enable;
+    /* UI classification */
+    uint32_t mono_ui_draw_count;
+    uint32_t mono_ui_small_index_draw_count;
+    uint32_t mono_ui_large_index_draw_count;
+    uint32_t mono_ui_last_index_count;
+    VkBool32 mono_ui_draw_pattern_known;
     /* Vulkan 1.3 dynamic rendering multiview */
     uint32_t view_mask;
     /* Projection-UBO candidate discovered while scanning the patched stage */
