@@ -1270,6 +1270,20 @@ add_pipeline_info(
     return info;
 }
 
+static void
+remove_pipeline_info(StereoDevice *sd,VkPipeline pipeline)
+{
+    for(uint32_t i=0;i<sd->pipeline_info_count;i++)
+    {
+        if(sd->pipeline_info[i].pipeline==pipeline)
+        {
+            sd->pipeline_info[i]=sd->pipeline_info[sd->pipeline_info_count-1];
+            sd->pipeline_info_count--;
+            return;
+        }
+    }
+}
+
 /* ── Stereo offset injection body ────────────────────────────────────────── */
 typedef struct {
     SpvMod *m;
@@ -13735,6 +13749,27 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     free(original_vs_hash);
     free(tmp_mod); free(tst); free(infos);
     return res;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyPipeline(VkDevice device,VkPipeline pipeline,const VkAllocationCallbacks *pAllocator)
+{
+    STEREO_LOG("CALLED stereo_DestroyPipeline");
+    StereoDevice *sd=NULL;
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+    for(uint32_t i=0;i<g_device_count;i++)
+    {
+        if(g_devices[i].real_device==device||(VkDevice)(uintptr_t)&g_devices[i]==device)
+        {
+            sd=&g_devices[i];
+            break;
+        }
+    }
+    if(!sd)return;
+    remove_pipeline_info(sd,pipeline);
+    if(sd->real.DestroyPipeline)
+        sd->real.DestroyPipeline(sd->real_device,pipeline,pAllocator);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
