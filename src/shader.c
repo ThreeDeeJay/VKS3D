@@ -13710,11 +13710,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         }
                     }
                 }
-                if (sd->stereo.mono_ui && info->patched_vs && info->blend_enable && info->depth_test_enable && info->depth_write_enable)
-                {
-                    STEREO_LOG("MONO_UI_COMPANION_SKIP pipe=%p reason=requires_verified_renderpass_and_ui_classification", (void*)pP[p]);
-                    info->mono_pipeline = VK_NULL_HANDLE;
-                }
             }
             STEREO_LOG(
                 "PIPE_INFO pipe=%p rp=%p orig_rp=%p stages=%u",
