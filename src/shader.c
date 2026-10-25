@@ -13731,18 +13731,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
                 if (sd->stereo.mono_ui && info->patched_vs && info->blend_enable && info->depth_test_enable && info->depth_write_enable)
                 {
-                    VkGraphicsPipelineCreateInfo mono_ci = infos[p];
-                    mono_ci.pStages = pCI[p].pStages;
-                    mono_ci.basePipelineHandle = VK_NULL_HANDLE;
-                    mono_ci.basePipelineIndex = -1;
-                    mono_ci.flags &= ~VK_PIPELINE_CREATE_DERIVATIVE_BIT;
-                    VkResult mono_res = sd->real.CreateGraphicsPipelines(sd->real_device, pc, 1, &mono_ci, pAlloc, &info->mono_pipeline);
-                    if (mono_res != VK_SUCCESS) {
-                        info->mono_pipeline = VK_NULL_HANDLE;
-                        STEREO_LOG("MONO_UI_COMPANION_FAIL pipe=%p result=%d", (void*)pP[p], mono_res);
-                    } else {
-                        STEREO_LOG("MONO_UI_COMPANION pipe=%p mono=%p renderpass=%p blend=%u depth_test=%u depth_write=%u", (void*)pP[p], (void*)info->mono_pipeline, (void*)mono_ci.renderPass, info->blend_enable, info->depth_test_enable, info->depth_write_enable);
-                    }
+                    STEREO_LOG("MONO_UI_COMPANION_SKIP pipe=%p reason=requires_verified_renderpass_and_ui_classification", (void*)pP[p]);
+                    info->mono_pipeline = VK_NULL_HANDLE;
                 }
             }
             STEREO_LOG(
