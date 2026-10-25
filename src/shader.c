@@ -16,7 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <errno.h>
 #include <math.h>
 #include "stereo_icd.h"
 #include "tes_inject.h"
@@ -10896,8 +10895,6 @@ spirv_patch_stereo_raygen(
     uint32_t launch_id_var = 0;
     uint32_t launch_id_load = 0;
     uint32_t image_type = 0;
-    uint32_t image_dim = 0;
-    uint32_t image_arrayed = 0;
     uint32_t image_read_coord = 0;
     uint32_t image_write_coord = 0;
     uint32_t float_zero = 0;
@@ -10910,14 +10907,12 @@ spirv_patch_stereo_raygen(
     uint32_t v4float_type = 0;
     uint32_t v3int_type = 0;
     uint32_t first_function = 0;
-    uint32_t first_function_end = 0;
     uint32_t image_texel_type = 0;
     uint32_t origin_vec = 0;
     uint32_t origin_mat = 0;
     uint32_t origin_mtv = 0;
     uint32_t origin_result = 0;
     uint32_t origin_var = 0;
-    uint32_t origin_store_type = 0;
     uint32_t ray_ndc_vec = 0;
     uint32_t ray_ndc_mat = 0;
     uint32_t ray_ndc_mtv = 0;
@@ -10943,7 +10938,7 @@ spirv_patch_stereo_raygen(
         {
             launch_id_var = in[i + 1];
         }
-        if (op == SpvOpTypeInt && wc >= 4)
+        else if (op == SpvOpTypeInt && wc >= 4)
         {
             if (in[i + 2] == 32 && in[i + 3] == 0)
                 uint_type = in[i + 1];
@@ -10961,13 +10956,13 @@ spirv_patch_stereo_raygen(
         }
         else if (op == SpvOpTypeVector && wc >= 4)
         {
-            if (in[i + 3] == 2 && in[i + 2] == int_type)
+            if (in[i + 2] == int_type && in[i + 3] == 2)
                 v2int_type = in[i + 1];
-            if (in[i + 3] == 3 && in[i + 2] == int_type && !v3int_type)
+            if (in[i + 2] == int_type && in[i + 3] == 3 && !v3int_type)
                 v3int_type = in[i + 1];
-            if (in[i + 3] == 3 && in[i + 2] == uint_type && !v3uint_type)
+            if (in[i + 2] == uint_type && in[i + 3] == 3)
                 v3uint_type = in[i + 1];
-            if (in[i + 3] == 4 && in[i + 2] == float_type)
+            if (in[i + 2] == float_type && in[i + 3] == 4)
                 v4float_type = in[i + 1];
         }
         else if (op == SpvOpTypeImage &&
@@ -10976,13 +10971,10 @@ spirv_patch_stereo_raygen(
             in[i + 4] == 0 &&
             in[i + 5] == 0 &&
             in[i + 6] == 0 &&
-            in[i + 7] == 2 &&
-            !image_type)
+            in[i + 7] == 2)
         {
             image_type = in[i + 1];
             image_texel_type = in[i + 2];
-            image_dim = in[i + 3];
-            image_arrayed = in[i + 5];
         }
         else if (op == SpvOpConstant &&
             wc >= 4 &&
@@ -11034,153 +11026,35 @@ spirv_patch_stereo_raygen(
                 ray_ndc_vec = in[i + 4];
             }
         }
-        if (op == SpvOpFunction)
+        else if (op == SpvOpStore &&
+            wc >= 3 &&
+            origin_result &&
+            in[i + 2] == origin_result &&
+            !origin_var)
         {
-            current_function = (uint32_t)i;
-            if (!first_function)
-                first_function = (uint32_t)i;
+            origin_var = in[i + 1];
+            STEREO_LOG(
+                "RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u",
+                i,
+                origin_var,
+                origin_result);
         }
-        if (op == SpvOpFunctionEnd)
+        else if (op == SpvOpFunction && !first_function)
         {
-            current_function = 0;
+            first_function = (uint32_t)i;
         }
-        if (op == SpvOpLabel && current_function && !first_label)
+        else if (op == SpvOpLabel && first_function && !first_label)
         {
             first_label = (uint32_t)i;
         }
-        if (op == SpvOpMatrixTimesVector && wc >= 5 && matrix_times_vector_count == 2)
-            ray_function = current_function;
         i += wc;
         }
-        if (first_function)
-        {
-            for (size_t f = first_function; f < in_c;)
-            {
-                uint32_t fop = in[f] & 0xffffu;
-                uint32_t fwc = in[f] >> 16;
-                if (!fwc || f + fwc > in_c)
-                    break;
-                if (fop == SpvOpFunctionEnd)
-                {
-                    first_function_end = (uint32_t)f;
-                    break;
-                }
-                f += fwc;
-            }
-        }
-        if (origin_result && origin_mtv)
-        {
-            size_t origin_function = 0;
-            size_t origin_function_end = 0;
-            for (size_t t = 5; t < in_c;)
-            {
-                uint32_t top = in[t] & 0xffffu;
-                uint32_t twc = in[t] >> 16;
-                if (!twc || t + twc > in_c)
-                    break;
-                if (top == SpvOpFunction)
-                {
-                    origin_function = t;
-                    origin_function_end = 0;
-                }
-                else if (top == SpvOpFunctionEnd && origin_function && !origin_function_end)
-                {
-                    origin_function_end = t + twc;
-                    if (origin_mtv >= origin_function && origin_mtv < origin_function_end)
-                        break;
-                    origin_function = 0;
-                }
-                t += twc;
-            }
-            if (origin_function && origin_function_end)
-            {
-                for (size_t t = origin_function; t < origin_function_end;)
-                {
-                    uint32_t top = in[t] & 0xffffu;
-                    uint32_t twc = in[t] >> 16;
-                    if (!twc || t + twc > in_c)
-                        break;
-                    if (top == SpvOpVectorShuffle && twc >= 5 && (in[t + 3] == origin_result || in[t + 4] == origin_result))
-                    {
-                        uint32_t shuffled_result = in[t + 2];
-                        for (size_t u = t + twc; u < origin_function_end;)
-                        {
-                            uint32_t uop = in[u] & 0xffffu;
-                            uint32_t uwc = in[u] >> 16;
-                            if (!uwc || u + uwc > in_c)
-                                break;
-                            if (uop == SpvOpStore && uwc >= 3 && in[u + 2] == shuffled_result && !origin_var)
-                            {
-                                origin_var = in[u + 1];
-                                origin_store_type = in[t + 1];
-                                STEREO_LOG("RT_PATCH_ORIGIN_SHUFFLE_STORE i=%zu origin_var=%u origin_result=%u shuffled=%u store_type=%u", u, origin_var, origin_result, shuffled_result, origin_store_type);
-                                break;
-                            }
-                            u += uwc;
-                        }
-                    }
-                    else if (top == SpvOpStore && twc >= 3 && in[t + 2] == origin_result && !origin_var)
-                    {
-                        origin_var = in[t + 1];
-                        STEREO_LOG("RT_PATCH_ORIGIN_STORE i=%zu origin_var=%u origin_result=%u", t, origin_var, origin_result);
-                    }
-                    t += twc;
-                }
-            }
-        }
-        for (size_t t = 5; t < in_c;)
-        {
-            uint32_t top = in[t] & 0xffffu;
-            uint32_t twc = in[t] >> 16;
-            if (!twc || t + twc > in_c)
-                break;
-            if (top == SpvOpTypeInt && twc >= 4)
-            {
-                if (in[t + 2] == 32 && in[t + 3] == 1)
-                    int_type = in[t + 1];
-                else if (in[t + 2] == 32 && in[t + 3] == 0)
-                    uint_type = in[t + 1];
-            }
-            else if (top == SpvOpTypeFloat && twc >= 3 && in[t + 2] == 32)
-                float_type = in[t + 1];
-            else if (top == SpvOpTypeBool && twc >= 2)
-                bool_type = in[t + 1];
-            t += twc;
-        }
-        for (size_t t = 5; t < in_c;)
-        {
-            uint32_t top = in[t] & 0xffffu;
-            uint32_t twc = in[t] >> 16;
-            if (!twc || t + twc > in_c)
-                break;
-            if (top == SpvOpTypeVector && twc >= 4)
-            {
-                if (in[t + 3] == 2 && in[t + 2] == int_type)
-                    v2int_type = in[t + 1];
-                if (in[t + 3] == 3 && in[t + 2] == int_type && !v3int_type)
-                    v3int_type = in[t + 1];
-                if (in[t + 3] == 3 && in[t + 2] == uint_type && !v3uint_type)
-                    v3uint_type = in[t + 1];
-                if (in[t + 3] == 4 && in[t + 2] == float_type)
-                    v4float_type = in[t + 1];
-            }
-            else if (top == SpvOpTypeImage && twc >= 9 && in[t + 3] == SpvDim2D && in[t + 4] == 0 && in[t + 5] == 0 && in[t + 6] == 0 && in[t + 7] == 2 && !image_type)
-            {
-                image_type = in[t + 1];
-                image_texel_type = in[t + 2];
-                image_dim = in[t + 3];
-                image_arrayed = in[t + 5];
-            }
-            t += twc;
-        }
         STEREO_LOG("RT_PATCH_ID_BOUND header=%u", bound);
-        STEREO_LOG("RT_PATCH_PRE_REJECT launch=%u load=%u image=%u read_coord=%u write_coord=%u function=%u function_end=%u label=%u int=%u uint=%u float=%u v2int=%u v3uint=%u v4float=%u texel=%u zero=%u origin_vec=%u origin_mtv=%u origin_var=%u ray_vec=%u ray_mtv=%u", launch_id_var, launch_id_load, image_type, image_read_coord, image_write_coord, first_function, first_function_end, first_label, int_type, uint_type, float_type, v2int_type, v3uint_type, v4float_type, image_texel_type, float_zero, origin_vec, origin_mtv, origin_var, ray_ndc_vec, ray_ndc_mtv);
         if (!launch_id_var ||
         !launch_id_load ||
         !image_type ||
         (!image_read_coord && !image_write_coord) ||
         !first_function ||
-        !first_function_end ||
         !first_label ||
         !int_type ||
         !uint_type ||
@@ -11295,10 +11169,6 @@ spirv_patch_stereo_raygen(
     uint32_t eye_shift = generated_id++;
     uint32_t eye_origin = generated_id++;
     uint32_t new_origin = generated_id++;
-    uint32_t origin_x = generated_id++;
-    uint32_t origin_y = generated_id++;
-    uint32_t origin_z = generated_id++;
-    uint32_t new_origin3 = generated_id++;
     uint32_t ray_x = generated_id++;
     uint32_t ray_y = generated_id++;
     uint32_t ray_z = generated_id++;
@@ -11490,9 +11360,11 @@ spirv_patch_stereo_raygen(
         }
         if (op == SpvOpTypeImage &&
             wc >= 9 &&
-            in[i + 1] == image_type)
+            in[i + 1] == image_type &&
+            in[i + 5] == 0)
         {
             sb_push_n(&ob, &in[i], wc);
+            ob.w[ob.n - wc + 5] = 1;
             i += wc;
             continue;
         }
@@ -11542,7 +11414,7 @@ spirv_patch_stereo_raygen(
             };
             uint32_t eye_mtv[] = {
                 (5u << 16) | SpvOpMatrixTimesVector,
-                in[origin_mtv + 1],
+                v4float_type,
                 new_origin,
                 origin_mat,
                 eye_origin
@@ -11557,24 +11429,7 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, eye_neg, 4);
             sb_push_n(&ob, eye_vec, 6);
             sb_push_n(&ob, eye_mtv, 5);
-            if (origin_store_type && origin_store_type != v4float_type)
-            {
-                uint32_t ox[] = {(5u << 16) | SpvOpCompositeExtract,float_type,origin_x,new_origin,0};
-                uint32_t oy[] = {(5u << 16) | SpvOpCompositeExtract,float_type,origin_y,new_origin,1};
-                uint32_t oz[] = {(5u << 16) | SpvOpCompositeExtract,float_type,origin_z,new_origin,2};
-                uint32_t o3[] = {(6u << 16) | SpvOpCompositeConstruct,origin_store_type,new_origin3,origin_x,origin_y,origin_z};
-                uint32_t store_origin[] = {(3u << 16) | SpvOpStore,origin_var,new_origin3};
-                sb_push_n(&ob, ox, 5);
-                sb_push_n(&ob, oy, 5);
-                sb_push_n(&ob, oz, 5);
-                sb_push_n(&ob, o3, 6);
-                sb_push_n(&ob, store_origin, 3);
-            }
-            else
-            {
-                uint32_t store_origin[] = {(3u << 16) | SpvOpStore,origin_var,new_origin};
-                sb_push_n(&ob, store_origin, 3);
-            }
+            sb_push_n(&ob, store_origin, 3);
             uint32_t x[] = {
                 (5u << 16) | SpvOpCompositeExtract,
                 float_type,
@@ -11600,7 +11455,7 @@ spirv_patch_stereo_raygen(
                 (5u << 16) | SpvOpCompositeExtract,
                 float_type,
                 ray_w,
-                origin_vec,
+                ray_ndc_raw,
                 3
             };
             sb_push_n(&ob, x, 5);
@@ -11626,7 +11481,7 @@ spirv_patch_stereo_raygen(
             sb_push_n(&ob, x_add, 5);
             uint32_t construct[] = {
                 (7u << 16) | SpvOpCompositeConstruct,
-                in[ray_ndc_mtv + 1],
+                v4float_type,
                 result_id,
                 ray_new_x,
                 ray_y,
@@ -11651,9 +11506,7 @@ spirv_patch_stereo_raygen(
             continue;
         }
         if (op == SpvOpImageRead &&
-            wc >= 5 &&
-            i >= first_function &&
-            i < first_function_end)
+            wc >= 5)
         {
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 4] = new_coord;
@@ -11661,11 +11514,7 @@ spirv_patch_stereo_raygen(
             continue;
         }
         if (op == SpvOpImageWrite &&
-            wc >= 4 &&
-            i >= first_function &&
-            i < first_function_end &&
-            image_dim == SpvDim2D &&
-            image_arrayed == 1)
+            wc >= 4)
         {
             sb_push_n(&ob, &in[i], wc);
             ob.w[ob.n - wc + 2] = new_coord;
@@ -14007,14 +13856,8 @@ stereo_CreateRayTracingPipelinesKHR(
                     f = fopen(dp, "wb");
                     if (f)
                     {
-                        size_t written = fwrite(patched_spv, sizeof(uint32_t), patched_words, f);
-                        int close_res = fclose(f);
-                        if (written != patched_words || close_res != 0)
-                            STEREO_LOG("RT_PATCH_DUMP_WRITE_FAILED hash=%016llx words=%zu written=%zu close=%d", (unsigned long long)spv_hash, patched_words, written, close_res);
-                    }
-                    else
-                    {
-                        STEREO_LOG("RT_PATCH_DUMP_OPEN_FAILED path=%s error=%d", dp, errno);
+                        fwrite(patched_spv, 4, patched_words, f);
+                        fclose(f);
                     }
                 }
                 else
