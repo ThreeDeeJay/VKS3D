@@ -561,6 +561,9 @@ typedef struct StereoPipelineInfo
     VkBool32 depth_test_enable;
     VkBool32 depth_write_enable;
     VkCompareOp depth_compare_op;
+    VkBool32 depth_test_dynamic;
+    VkBool32 depth_write_dynamic;
+    VkBool32 depth_compare_dynamic;
     VkBool32 blend_enable;
     /* Vulkan 1.3 dynamic rendering multiview */
     uint32_t view_mask;
@@ -671,6 +674,18 @@ typedef struct StereoDevice {
         uint32_t subpass;
         VkRenderPass render_pass;
         VkFramebuffer framebuffer;
+        VkViewport viewport;
+        VkRect2D scissor;
+        uint32_t viewport_count;
+        uint32_t scissor_count;
+        VkBool32 depth_test_enable;
+        VkBool32 depth_write_enable;
+        VkCompareOp depth_compare_op;
+        bool depth_test_valid;
+        bool depth_write_valid;
+        bool depth_compare_valid;
+        bool viewport_valid;
+        bool scissor_valid;
     } cb_track[MAX_CB_TRACK];
     uint32_t cb_track_count;
     VkImage upgraded_images[MAX_UPGRADED_VIEWS];

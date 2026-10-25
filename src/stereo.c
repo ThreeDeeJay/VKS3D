@@ -633,6 +633,21 @@ StereoDevice *stereo_device_from_handle(VkDevice h) {
     stereo_mutex_unlock(&g_registry_lock);
     return NULL;
 }
+StereoDevice *stereo_device_from_command_buffer(VkCommandBuffer cb) {
+    ensure_registry_init();
+    stereo_mutex_lock(&g_registry_lock);
+    for (uint32_t d = 0; d < g_device_count; d++) {
+        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++) {
+            if (g_devices[d].cb_track[i].cb == cb) {
+                StereoDevice *sd = &g_devices[d];
+                stereo_mutex_unlock(&g_registry_lock);
+                return sd;
+            }
+        }
+    }
+    stereo_mutex_unlock(&g_registry_lock);
+    return NULL;
+}
 void stereo_device_free(VkDevice h) {
     ensure_registry_init();
     stereo_mutex_lock(&g_registry_lock);

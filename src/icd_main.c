@@ -349,10 +349,10 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_DestroyShaderEXT);
     GDPA_WRAP("vkCmdBindShadersEXT",
               stereo_CmdBindShadersEXT);
-    //GDPA_WRAP("vkCmdSetViewport",
-    //          stereo_CmdSetViewport);
-    //GDPA_WRAP("vkCmdSetScissor",
-    //          stereo_CmdSetScissor);
+    GDPA_WRAP("vkCmdSetViewport",
+              stereo_CmdSetViewport);
+    GDPA_WRAP("vkCmdSetScissor",
+              stereo_CmdSetScissor);
     //GDPA_WRAP("vkCmdSetCullMode",
     //          stereo_CmdSetCullMode);
     //GDPA_WRAP("vkCmdSetCullModeEXT",
@@ -365,16 +365,22 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
     //          stereo_CmdSetPrimitiveTopology);
     //GDPA_WRAP("vkCmdSetPrimitiveTopologyEXT",
     //          stereo_CmdSetPrimitiveTopology);
-    //GDPA_WRAP("vkCmdSetViewportWithCountEXT",
-    //          stereo_CmdSetViewportWithCountEXT);
-    //GDPA_WRAP("vkCmdSetScissorWithCountEXT",
-    //          stereo_CmdSetScissorWithCountEXT);
-    //GDPA_WRAP("vkCmdSetDepthTestEnableEXT",
-    //          stereo_CmdSetDepthTestEnableEXT);
-    //GDPA_WRAP("vkCmdSetDepthWriteEnableEXT",
-    //          stereo_CmdSetDepthWriteEnableEXT);
-    //GDPA_WRAP("vkCmdSetDepthCompareOpEXT",
-    //          stereo_CmdSetDepthCompareOpEXT);
+    GDPA_WRAP("vkCmdSetViewportWithCountEXT",
+              stereo_CmdSetViewportWithCountEXT);
+    GDPA_WRAP("vkCmdSetScissorWithCountEXT",
+              stereo_CmdSetScissorWithCountEXT);
+    GDPA_WRAP("vkCmdSetDepthTestEnable",
+              stereo_CmdSetDepthTestEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthTestEnableEXT",
+              stereo_CmdSetDepthTestEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthWriteEnable",
+              stereo_CmdSetDepthWriteEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthWriteEnableEXT",
+              stereo_CmdSetDepthWriteEnableEXT);
+    GDPA_WRAP("vkCmdSetDepthCompareOp",
+              stereo_CmdSetDepthCompareOpEXT);
+    GDPA_WRAP("vkCmdSetDepthCompareOpEXT",
+              stereo_CmdSetDepthCompareOpEXT);
     //GDPA_WRAP("vkCmdSetRasterizerDiscardEnableEXT",
     //          stereo_CmdSetRasterizerDiscardEnableEXT);
     //GDPA_WRAP("vkCmdSetPolygonModeEXT",
@@ -434,7 +440,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
             if (real_gdpa) {
                 PFN_vkVoidFunction fp =
                     real_gdpa(g_devices[i].real_device, pName);
-                STEREO_LOG(
+                if(strstr(pName,"DepthTestEnable")||strstr(pName,"DepthWriteEnable")||strstr(pName,"DepthCompareOp"))STEREO_LOG("GDPA_DEPTH_FALLBACK name=%s fp=%p",(pName),(void*)fp);
+                else STEREO_LOG(
                     "GDPA FALLBACK %s -> %p",
                     pName,
                     (void *)fp);
