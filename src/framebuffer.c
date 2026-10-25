@@ -1406,6 +1406,13 @@ stereo_CmdDrawIndexed(
         find_pipeline_info(sd, pipe);
     if (info)
     {
+        info->mono_ui_draw_count++;
+        info->mono_ui_last_index_count = indexCount;
+        info->mono_ui_draw_pattern_known = VK_TRUE;
+        if (indexCount <= 6)
+            info->mono_ui_small_index_draw_count++;
+        else
+            info->mono_ui_large_index_draw_count++;
         STEREO_LOG(
             "DRAW_INDEXED pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u cb=%p "
             "indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
@@ -1456,6 +1463,8 @@ stereo_CmdDrawIndexed(
         info->mono_ui_draw_pattern_known=VK_TRUE;
     }
     STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
+    if(info)
+        STEREO_LOG("MONO_UI_DRAW_PATTERN pipe=%p draws=%u small=%u large=%u last=%u blend=%u depth_test=%u depth_write=%u depth_compare=%u",(void*)pipe,info->mono_ui_draw_count,info->mono_ui_small_index_draw_count,info->mono_ui_large_index_draw_count,info->mono_ui_last_index_count,info->blend_enable,info->depth_test_enable,info->depth_write_enable,info->depth_compare_op);
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
