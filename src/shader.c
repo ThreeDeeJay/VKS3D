@@ -1129,6 +1129,25 @@ find_pipeline_info(
     return NULL;
 }
 
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks *pAllocator)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd || !sd->real.DestroyPipeline) return;
+    for (uint32_t i = 0; i < sd->pipeline_info_count; i++) {
+        StereoPipelineInfo *info = &sd->pipeline_info[i];
+        if (info->pipeline != pipeline) continue;
+        if (info->mono_pipeline != VK_NULL_HANDLE) {
+            sd->real.DestroyPipeline(sd->real_device, info->mono_pipeline, pAllocator);
+            info->mono_pipeline = VK_NULL_HANDLE;
+        }
+        info->pipeline = VK_NULL_HANDLE;
+        info->mono_ui_draw_pattern_known = VK_FALSE;
+        break;
+    }
+    sd->real.DestroyPipeline(sd->real_device, pipeline, pAllocator);
+}
+
 VkPipeline
 lookup_bound_pipeline(
     StereoDevice *sd,
@@ -13702,6 +13721,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                                 (unsigned long long)h,
                                 fs_cache->words);
                         }
+                    }
+                }
+                if (sd->stereo.mono_ui && info->patched_vs && info->blend_enable && info->depth_test_enable && info->depth_write_enable)
+                {
+                    VkGraphicsPipelineCreateInfo mono_ci = infos[p];
+                    mono_ci.pStages = pCI[p].pStages;
+                    mono_ci.basePipelineHandle = VK_NULL_HANDLE;
+                    mono_ci.basePipelineIndex = -1;
+                    mono_ci.flags &= ~VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+                    VkResult mono_res = sd->real.CreateGraphicsPipelines(sd->real_device, pc, 1, &mono_ci, pAlloc, &info->mono_pipeline);
+                    if (mono_res != VK_SUCCESS) {
+                        info->mono_pipeline = VK_NULL_HANDLE;
+                        STEREO_LOG("MONO_UI_COMPANION_FAIL pipe=%p result=%d", (void*)pP[p], mono_res);
+                    } else {
+                        STEREO_LOG("MONO_UI_COMPANION pipe=%p mono=%p renderpass=%p blend=%u depth_test=%u depth_write=%u", (void*)pP[p], (void*)info->mono_pipeline, (void*)mono_ci.renderPass, info->blend_enable, info->depth_test_enable, info->depth_write_enable);
                     }
                 }
             }

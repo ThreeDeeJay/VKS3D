@@ -542,6 +542,7 @@ typedef struct StereoFramebufferTrack {
 typedef struct StereoPipelineInfo
 {
     VkPipeline pipeline;
+    VkPipeline mono_pipeline;
     VkRenderPass original_renderpass;
     VkRenderPass mv_renderpass;
     uint32_t stage_count;
@@ -801,6 +802,7 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(VkDevice, const VkRenderP
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass2KHR(VkDevice, const VkRenderPassCreateInfo2*, const VkAllocationCallbacks*, VkRenderPass*);
 #endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateGraphicsPipelines(VkDevice, VkPipelineCache, uint32_t, const VkGraphicsPipelineCreateInfo*, const VkAllocationCallbacks*, VkPipeline*);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyShaderModule(VkDevice, VkShaderModule, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShadersEXT(VkDevice, uint32_t, const VkShaderCreateInfoEXT*, const VkAllocationCallbacks*, VkShaderEXT*);

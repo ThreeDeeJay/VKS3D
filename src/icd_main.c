@@ -397,6 +397,10 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
     //          stereo_CmdSetColorWriteMaskEXT);
     //GDPA_WRAP("vkCmdSetVertexInputEXT",
     //          stereo_CmdSetVertexInputEXT);
+    if (!strcmp(pName, "vkDestroyPipeline")) {
+        STEREO_LOG("GDPA WRAPPED vkDestroyPipeline -> %p", (void*)stereo_DestroyPipeline);
+        return (PFN_vkVoidFunction)stereo_DestroyPipeline;
+    }
     if (!strcmp(pName, "vkCreateGraphicsPipelines")) {
         STEREO_LOG(
             "GDPA wrapper addr=%p stereo_CreateGraphicsPipelines=%p",

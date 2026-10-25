@@ -1374,6 +1374,13 @@ stereo_CmdTraceRaysKHR(
     STEREO_LOG("RT_TRACE_END");
 }
 
+static void stereo_bind_draw_pipeline(StereoDevice *sd, VkCommandBuffer commandBuffer, VkPipeline app_pipeline, StereoPipelineInfo *info, VkBool32 allow_mono)
+{
+    if (!sd || !info || info->mono_pipeline == VK_NULL_HANDLE || !sd->real.CmdBindPipeline) return;
+    VkPipeline selected = (allow_mono && sd->stereo.mono_ui && info->mono_ui_draw_pattern_known) ? info->mono_pipeline : app_pipeline;
+    if (selected != VK_NULL_HANDLE) sd->real.CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, selected);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdDrawIndexed(
     VkCommandBuffer commandBuffer,
@@ -1404,6 +1411,15 @@ stereo_CmdDrawIndexed(
         lookup_bound_framebuffer(sd, commandBuffer);
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
+    if (info && sd->stereo.mono_ui && info->mono_pipeline != VK_NULL_HANDLE && indexCount > 0 && instanceCount > 0) {
+        VkBool32 previous_pattern = info->mono_ui_draw_pattern_known;
+        info->mono_ui_draw_count++;
+        info->mono_ui_last_index_count = indexCount;
+        if (indexCount == 6 && instanceCount == 1 && firstIndex == 0 && vertexOffset == 0 && firstInstance == 0) info->mono_ui_small_index_draw_count++;
+        else if (indexCount > 6) info->mono_ui_large_index_draw_count++;
+        info->mono_ui_draw_pattern_known = info->mono_ui_draw_count >= 8 && info->mono_ui_small_index_draw_count == info->mono_ui_draw_count && info->mono_ui_large_index_draw_count == 0;
+        if (previous_pattern != info->mono_ui_draw_pattern_known) STEREO_LOG("MONO_UI_DRAW_PATTERN pipe=%p enabled=%u draws=%u six=%u other=%u last_index=%u", (void*)pipe, info->mono_ui_draw_pattern_known, info->mono_ui_draw_count, info->mono_ui_small_index_draw_count, info->mono_ui_large_index_draw_count, info->mono_ui_last_index_count);
+    }
     if (info)
     {
         STEREO_LOG(
@@ -1448,6 +1464,7 @@ stereo_CmdDrawIndexed(
         }
     }
     STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
+    stereo_bind_draw_pipeline(sd, commandBuffer, pipe, info, VK_TRUE);
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
@@ -1513,6 +1530,7 @@ stereo_CmdDraw(
         }
     }
     STEREO_LOG("DRAW_TRACE type=DIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u vertex_count=%u instance_count=%u first_vertex=%u first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,vertexCount,instanceCount,firstVertex,firstInstance);
+    stereo_bind_draw_pipeline(sd, commandBuffer, pipe, info, VK_FALSE);
     sd->real.CmdDraw(
         commandBuffer,
         vertexCount,
@@ -1573,6 +1591,7 @@ stereo_CmdDrawIndirect(
         }
     }
     STEREO_LOG("DRAW_TRACE type=INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u buffer=%p view_mask=0x%X has_multiview=%u offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
+    stereo_bind_draw_pipeline(sd, commandBuffer, pipe, info, VK_FALSE);
     sd->real.CmdDrawIndirect(
         commandBuffer,
         buffer,
@@ -1633,6 +1652,7 @@ stereo_CmdDrawIndexedIndirect(
         }
     }
     STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
+    stereo_bind_draw_pipeline(sd, commandBuffer, pipe, info, VK_FALSE);
     sd->real.CmdDrawIndexedIndirect(
         commandBuffer,
         buffer,
