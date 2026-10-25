@@ -1059,36 +1059,37 @@ stereo_CmdBindPipeline(
         sd,
         commandBuffer,
         pipeline);
-    //STEREO_LOG(
-    //    "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
-    //    (void *)pipeline,
-    //    (void *)active_rp,
-    //    info ? (void *)info->mv_renderpass : NULL,
-    //    info ? (void *)info->original_renderpass : NULL);
-    //if (info)
-    //{
-    //    STEREO_LOG(
-    //        "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
-    //        "orig_rp=%p patched_vs=%u patched_fs=%u "
-    //        "quad=%u bindings=%u",
-    //        (void*)pipeline,
-    //        (void*)active_fb,
-    //        (void*)active_rp,
-    //        (void*)info->mv_renderpass,
-    //        (void*)info->original_renderpass,
-    //        info->patched_vs,
-    //        info->patched_fs,
-    //        info->is_quad,
-    //        info->vertex_binding_count);
-    //}
-    //else
-    //{
-    //    STEREO_LOG(
-    //        "PIPE_BIND pipe=%p UNKNOWN fb=%p rp=%p",
-    //        (void*)pipeline,
-    //        (void*)active_fb,
-    //        (void*)active_rp);
-    //}
+    STEREO_LOG("MONO_UI_BIND_TRACE pipe=%p cb=%p bind_point=%u rp=%p fb=%p known=%u vs_hash=%016llx depth_test=%u depth_write=%u depth_compare=%u blend=%u quad=%u patched_vs=%u patched_fs=%u",(void*)pipeline,(void*)commandBuffer,(unsigned)pipelineBindPoint,(void*)active_rp,(void*)active_fb,info!=NULL,(unsigned long long)(info?info->vs_hash:0),info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,info?info->is_quad:0,info?info->patched_vs:0,info?info->patched_fs:0);
+    STEREO_LOG(
+        "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
+        (void *)pipeline,
+        (void *)active_rp,
+        info ? (void *)info->mv_renderpass : NULL,
+        info ? (void *)info->original_renderpass : NULL);
+    if (info)
+    {
+        STEREO_LOG(
+            "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
+            "orig_rp=%p patched_vs=%u patched_fs=%u "
+            "quad=%u bindings=%u",
+            (void*)pipeline,
+            (void*)active_fb,
+            (void*)active_rp,
+            (void*)info->mv_renderpass,
+            (void*)info->original_renderpass,
+            info->patched_vs,
+            info->patched_fs,
+            info->is_quad,
+            info->vertex_binding_count);
+    }
+    else
+    {
+        STEREO_LOG(
+            "PIPE_BIND pipe=%p UNKNOWN fb=%p rp=%p",
+            (void*)pipeline,
+            (void*)active_fb,
+            (void*)active_rp);
+    }
     sd->real.CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,
