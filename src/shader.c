@@ -10826,22 +10826,14 @@ spirv_patch_stereo_raygen(
                 ray_ndc_vec = in[i + 4];
             }
         }
-        if (op == SpvOpFunction)
+        if (op == SpvOpFunction && !first_function)
         {
-            current_function = (uint32_t)i;
-            if (!first_function)
-                first_function = (uint32_t)i;
+            first_function = (uint32_t)i;
         }
-        if (op == SpvOpFunctionEnd)
-        {
-            current_function = 0;
-        }
-        if (op == SpvOpLabel && current_function && !first_label)
+        if (op == SpvOpLabel && first_function && !first_label)
         {
             first_label = (uint32_t)i;
         }
-        if (op == SpvOpMatrixTimesVector && wc >= 5 && matrix_times_vector_count == 2)
-            ray_function = current_function;
         i += wc;
         }
         if (first_function)
