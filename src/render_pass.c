@@ -127,6 +127,7 @@ static VkResult create_mv_rp(StereoDevice *sd,
     const VkRenderPassCreateInfo *pCI, const VkAllocationCallbacks *pA,
     VkRenderPass *pRP)
 {
+    const VkBaseInStructure *x=(const VkBaseInStructure *)stage->pNext;
     VkAttachmentDescription *pa = NULL;
     if (pCI->attachmentCount > 0) {
         pa = malloc(pCI->attachmentCount * sizeof(*pa));
