@@ -127,7 +127,6 @@ static VkResult create_mv_rp(StereoDevice *sd,
     const VkRenderPassCreateInfo *pCI, const VkAllocationCallbacks *pA,
     VkRenderPass *pRP)
 {
-    const VkBaseInStructure *x=(const VkBaseInStructure *)pCI->pNext;
     VkAttachmentDescription *pa = NULL;
     if (pCI->attachmentCount > 0) {
         pa = malloc(pCI->attachmentCount * sizeof(*pa));
@@ -159,12 +158,7 @@ static VkResult create_mv_rp(StereoDevice *sd,
     };
     VkRenderPassCreateInfo mod = *pCI;
     if (pa) mod.pAttachments = pa;
-    if (x->sType == VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO)
-    {   /* app already uses multiview: leave it alone */
-        free(pa); free(vm); free(cm); free(vo);
-    return VK_INCOMPLETE;
-    }
-    mv.pNext = pCI->pNext;
+    mv.pNext = NULL;
     mod.pNext = &mv;
     STEREO_LOG(
         "MV_RP_CREATE subpasses=%u viewMask0=0x%x correlationMask0=0x%x",
