@@ -7403,6 +7403,7 @@ bool spirv_patch_stereo_fs(
         "FS_NID_INIT bound=%u nid=%u",
         new_bound,
         nid);
+    SpvBuf ob;
     if (!sb_init(&ob, in_c + 60 + (size_t)n_patches * 28))
         return false;
     uint32_t id_bound = new_bound;
