@@ -1736,6 +1736,82 @@ static void stereo_overwrite_projection_binding(
         (void *)(uintptr_t)sd->stereo_ubo);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateDescriptorSetLayout(
+    VkDevice device,
+    const VkDescriptorSetLayoutCreateInfo *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator,
+    VkDescriptorSetLayout *pSetLayout)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd || !sd->real.CreateDescriptorSetLayout)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    if (pCreateInfo)
+    {
+        for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++)
+        {
+            const VkDescriptorSetLayoutBinding *b = &pCreateInfo->pBindings[i];
+            STEREO_LOG("DESC_LAYOUT_BINDING binding=%u type=%u count=%u stages=0x%X",
+                b->binding,
+                b->descriptorType,
+                b->descriptorCount,
+                b->stageFlags);
+        }
+    }
+    VkResult result = sd->real.CreateDescriptorSetLayout(
+        sd->real_device,
+        pCreateInfo,
+        pAllocator,
+        pSetLayout);
+    STEREO_LOG("DESC_LAYOUT_CREATE result=%d layout=%p bindings=%u",
+        result,
+        (result == VK_SUCCESS && pSetLayout) ? (void *)(uintptr_t)*pSetLayout : NULL,
+        pCreateInfo ? pCreateInfo->bindingCount : 0);
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_AllocateDescriptorSets(
+    VkDevice device,
+    const VkDescriptorSetAllocateInfo *pAllocateInfo,
+    VkDescriptorSet *pDescriptorSets)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd || !sd->real.AllocateDescriptorSets)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    STEREO_LOG("DESC_ALLOC_BEGIN pool=%p count=%u",
+        pAllocateInfo ? (void *)(uintptr_t)pAllocateInfo->descriptorPool : NULL,
+        pAllocateInfo ? pAllocateInfo->descriptorSetCount : 0);
+    if (pAllocateInfo && pAllocateInfo->pSetLayouts)
+    {
+        for (uint32_t i = 0; i < pAllocateInfo->descriptorSetCount; i++)
+        {
+            STEREO_LOG("DESC_ALLOC_LAYOUT index=%u layout=%p",
+                i,
+                (void *)(uintptr_t)pAllocateInfo->pSetLayouts[i]);
+        }
+    }
+    VkResult result = sd->real.AllocateDescriptorSets(
+        sd->real_device,
+        pAllocateInfo,
+        pDescriptorSets);
+    STEREO_LOG("DESC_ALLOC_RESULT result=%d count=%u",
+        result,
+        (result == VK_SUCCESS && pAllocateInfo) ? pAllocateInfo->descriptorSetCount : 0);
+    if (result == VK_SUCCESS && pAllocateInfo && pDescriptorSets)
+    {
+        for (uint32_t i = 0; i < pAllocateInfo->descriptorSetCount; i++)
+        {
+            STEREO_LOG("DESC_ALLOC_SET pool=%p index=%u layout=%p set=%p",
+                (void *)(uintptr_t)pAllocateInfo->descriptorPool,
+                i,
+                pAllocateInfo->pSetLayouts ? (void *)(uintptr_t)pAllocateInfo->pSetLayouts[i] : NULL,
+                (void *)(uintptr_t)pDescriptorSets[i]);
+        }
+    }
+    return result;
+}
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_UpdateDescriptorSets(
     VkDevice device,
