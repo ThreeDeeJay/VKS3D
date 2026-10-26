@@ -2780,6 +2780,11 @@ bool spirv_patch_stereo_mesh(
             sb_push_n(&ob, c, 2);
             mv_done = true;
         }
+        if (!ann_done && i == ins_ann)
+        {
+            sb_push_n(&ob, ann.w, ann.n);
+            ann_done = true;
+        }
         if (!te_done && i == ins_t)
         {
             sb_push_n(&ob, te.w, te.n);
