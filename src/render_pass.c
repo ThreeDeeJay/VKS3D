@@ -158,7 +158,12 @@ static VkResult create_mv_rp(StereoDevice *sd,
     };
     VkRenderPassCreateInfo mod = *pCI;
     if (pa) mod.pAttachments = pa;
-    mv.pNext = NULL;
+    if (x->sType == VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO)
+    {   /* app already uses multiview: leave it alone */
+        free(pa); free(vm); free(cm); free(vo);
+    return VK_INCOMPLETE;
+    }
+    mv.pNext = pCI->pNext;
     mod.pNext = &mv;
     STEREO_LOG(
         "MV_RP_CREATE subpasses=%u viewMask0=0x%x correlationMask0=0x%x",
