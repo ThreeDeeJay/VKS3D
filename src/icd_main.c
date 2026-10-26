@@ -323,6 +323,10 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CmdDrawIndirect);
     GDPA_WRAP("vkCmdDrawIndexedIndirect",
               stereo_CmdDrawIndexedIndirect);
+    GDPA_WRAP("vkCreateDescriptorSetLayout",
+              stereo_CreateDescriptorSetLayout);
+    GDPA_WRAP("vkAllocateDescriptorSets",
+              stereo_AllocateDescriptorSets);
     GDPA_WRAP("vkUpdateDescriptorSets",
               stereo_UpdateDescriptorSets);
     GDPA_WRAP("vkCmdBindDescriptorSets",
@@ -339,6 +343,12 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CreateRayTracingPipelinesKHR);
     GDPA_WRAP("vkCmdTraceRaysKHR",
               stereo_CmdTraceRaysKHR);
+    GDPA_WRAP("vkCmdCopyImage",
+              stereo_CmdCopyImage);
+    GDPA_WRAP("vkCmdBlitImage",
+              stereo_CmdBlitImage);
+    GDPA_WRAP("vkCmdResolveImage",
+              stereo_CmdResolveImage);
     GDPA_WRAP("vkCreateShaderModule",
               stereo_CreateShaderModule);
     GDPA_WRAP("vkDestroyShaderModule",

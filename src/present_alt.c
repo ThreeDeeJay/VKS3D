@@ -1003,12 +1003,15 @@ void gpu_compose_sc_destroy(StereoDevice *sd, StereoSwapchain *sc)
 VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
                              VkQueue queue,
                              uint32_t wait_sem_count,
-                             const VkSemaphore *wait_sems)
+                             const VkSemaphore *wait_sems,
+                             uint32_t app_img_idx)
 {
     if (!sc->real_swapchain || !sc->comp_sc_images || !sc->barrier_cmds)
         return VK_ERROR_INITIALIZATION_FAILED;
 
     /* Acquire output swapchain image */
+    if (app_img_idx >= sc->image_count)
+        return VK_ERROR_OUT_OF_DATE_KHR;
     uint32_t img_idx = 0;
     VkResult res = sd->real.AcquireNextImageKHR(
         sd->real_device, sc->real_swapchain, UINT64_MAX,
@@ -1017,14 +1020,16 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         STEREO_ERR("[GPU Compose] AcquireNextImageKHR: %d", res); return res;
     }
 
-    VkCommandBuffer cmd = sc->barrier_cmds[0];
-    VkImage src = sc->stereo_images[0];
+    VkCommandBuffer cmd = sc->barrier_cmds[app_img_idx];
+    VkImage src = sc->stereo_images[app_img_idx];
+    VkImage dst = sc->comp_sc_images[img_idx];
     STEREO_LOG(
-        "COMPOSE_SRC sc=%p src=%p img_idx=%u",
+        "COMPOSE_SRC sc=%p src=%p app_img=%u comp_img=%u dst=%p",
         (void *)sc,
         (void *)(uintptr_t)src,
-        img_idx);
-    VkImage dst = sc->comp_sc_images[img_idx];
+        app_img_idx,
+        img_idx,
+        (void *)(uintptr_t)dst);
     int32_t w   = (int32_t)sc->app_width;
     int32_t h   = (int32_t)sc->app_height;
 
@@ -1057,7 +1062,7 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask       = 0,
         .dstAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
+        .oldLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         .newLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -1065,7 +1070,7 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         .subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
     };
     sd->real.CmdPipelineBarrier(cmd,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,NULL,0,NULL,1,&b1);
 
     /* Blit: layer0 → left half, layer1 → right half */
@@ -1121,7 +1126,7 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
     wsems[wait_sem_count] = sc->comp_acquire_sem;
     wmsk [wait_sem_count] = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
-    sd->real.ResetFences(sd->real_device, 1, &sc->barrier_fences[0]);
+    sd->real.ResetFences(sd->real_device, 1, &sc->barrier_fences[app_img_idx]);
 
     VkSubmitInfo sub = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -1133,7 +1138,7 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         .signalSemaphoreCount = 1,
         .pSignalSemaphores    = &sc->comp_blit_done_sem,
     };
-    res = sd->real.QueueSubmit(queue, 1, &sub, sc->barrier_fences[0]);
+    res = sd->real.QueueSubmit(queue, 1, &sub, sc->barrier_fences[app_img_idx]);
     free(wsems); free(wmsk);
     if (res != VK_SUCCESS) { STEREO_ERR("[GPU Compose] QueueSubmit: %d", res); return res; }
 

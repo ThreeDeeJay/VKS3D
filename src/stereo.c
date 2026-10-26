@@ -833,6 +833,11 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(CreateDescriptorPool); L(DestroyDescriptorPool);
     L(ResetDescriptorPool); L(AllocateDescriptorSets); L(FreeDescriptorSets);
     L(UpdateDescriptorSets);
+    STEREO_LOG("DESC_DISPATCH create_layout=%p allocate_sets=%p free_sets=%p update_sets=%p",
+        (void*)sd->real.CreateDescriptorSetLayout,
+        (void*)sd->real.AllocateDescriptorSets,
+        (void*)sd->real.FreeDescriptorSets,
+        (void*)sd->real.UpdateDescriptorSets);
     L(CreateFramebuffer); L(DestroyFramebuffer);
     L(CreateRenderPass); L(DestroyRenderPass); L(GetRenderAreaGranularity);
     L(CreateCommandPool); L(DestroyCommandPool); L(ResetCommandPool);

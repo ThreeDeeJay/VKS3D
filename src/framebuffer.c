@@ -78,10 +78,26 @@ stereo_CreateFramebuffer(
         pCreateInfo->layers,
         pCreateInfo->attachmentCount);
     for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
+        VkImageView view = pCreateInfo->pAttachments[i];
+        bool upgraded = false;
+        uint32_t upgraded_index = UINT32_MAX;
+        VkImage tracked_image = VK_NULL_HANDLE;
+        for (uint32_t k = 0; k < sd->upgraded_view_count; k++) {
+            if (sd->upgraded_views[k] == view) {
+                upgraded = true;
+                upgraded_index = k;
+                if (k < sd->upgraded_image_count)
+                    tracked_image = sd->upgraded_images[k];
+                break;
+            }
+        }
         STEREO_LOG(
-            "FB_CREATE_ATTACHMENT i=%u view=%p",
+            "FB_CREATE_ATTACHMENT i=%u view=%p upgraded=%u upgraded_index=%u image=%p",
             i,
-            (void*)pCreateInfo->pAttachments[i]);
+            (void*)view,
+            (unsigned)upgraded,
+            upgraded_index,
+            (void*)(uintptr_t)tracked_image);
     }
     if (debug_original == VK_NULL_HANDLE) {
         STEREO_LOG("[FATAL] upstream pCreateInfo->renderPass already NULL!");
@@ -147,8 +163,40 @@ stereo_CreateFramebuffer(
                 found ? "UPGRADED" : "NORMAL",
                 found ? found_index : UINT32_MAX,
                 (has_shading_rate_attachment &&
-                    shading_rate_attachment == i) ? 1u : 0u,
-                (unsigned)(all || (has_shading_rate_attachment && any && only_shading_rate_non_upgraded)));
+                    shading_rate_attachment == i) ? 1u : 0u);
+            if (found &&
+                found_index < sd->upgraded_image_count)
+            {
+                VkImage tracked_image = sd->upgraded_images[found_index];
+                bool color_image = false;
+                uint32_t color_index = UINT32_MAX;
+                for (uint32_t ci = 0; ci < sd->intercepted_color_count; ci++)
+                {
+                    if (sd->intercepted_color[ci] == tracked_image)
+                    {
+                        color_image = true;
+                        color_index = ci;
+                        break;
+                    }
+                }
+                STEREO_LOG(
+                    "FB_ATTACHMENT_IMAGE att=%u view=%p image=%p upgraded_index=%u color=%u color_index=%u",
+                    i,
+                    (void*)view,
+                    (void *)(uintptr_t)tracked_image,
+                    found_index,
+                    (unsigned)color_image,
+                    color_index);
+                if (color_image)
+                {
+                    STEREO_LOG(
+                        "FB_COLOR_SOURCE_CANDIDATE att=%u view=%p image=%p color_index=%u",
+                        i,
+                        (void*)view,
+                        (void *)(uintptr_t)tracked_image,
+                        color_index);
+                }
+            }
         }
         STEREO_LOG(
             "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u "
@@ -342,6 +390,29 @@ stereo_CreateFramebuffer(
         t->mv_rp = use_mv;
         t->has_mv = (use_mv != VK_NULL_HANDLE) &&
         sd->stereo.multiview;
+        t->attachment_count = pCreateInfo->attachmentCount;
+        if (t->attachment_count > MAX_FB_ATTACHMENTS)
+            t->attachment_count = MAX_FB_ATTACHMENTS;
+        for (uint32_t ai = 0; ai < t->attachment_count; ai++)
+        {
+            t->attachment_views[ai] = pCreateInfo->pAttachments[ai];
+            t->attachment_images[ai] = VK_NULL_HANDLE;
+            for (uint32_t vi = 0; vi < sd->upgraded_view_count; vi++)
+            {
+                if (sd->upgraded_views[vi] == pCreateInfo->pAttachments[ai])
+                {
+                    if (vi < sd->upgraded_image_count)
+                        t->attachment_images[ai] = sd->upgraded_images[vi];
+                    break;
+                }
+            }
+            STEREO_LOG(
+                "FB_TRACK_ATTACHMENT fb=%p att=%u view=%p image=%p",
+                (void*)t->fb,
+                ai,
+                (void*)t->attachment_views[ai],
+                (void*)(uintptr_t)t->attachment_images[ai]);
+        }
         STEREO_LOG(
             "FB_FIELDS rp=%p rp_used=%p mv_rp=%p has_mv=%u",
             (void*)t->rp,
@@ -742,6 +813,70 @@ stereo_CmdBeginRenderPass(
         (void*)pRenderPassBegin->framebuffer,
         (void*)mv_rp,
         mv_rp != VK_NULL_HANDLE);
+    if (fb_found)
+    {
+        StereoFramebufferTrack *t = &sd->fb_tracks[fb_track_index];
+        STEREO_LOG(
+            "FB_BEGIN_TRACK fb=%p track=%u rp=%p rp_used=%p mv_rp=%p has_mv=%u attachments=%u",
+            (void*)t->fb,
+            fb_track_index,
+            (void*)t->rp,
+            (void*)t->rp_used_at_create,
+            (void*)t->mv_rp,
+            (unsigned)t->has_mv,
+            t->attachment_count);
+        for (uint32_t ai = 0; ai < t->attachment_count; ai++)
+        {
+            VkImage image = VK_NULL_HANDLE;
+            uint32_t view_index = UINT32_MAX;
+            for (uint32_t vi = 0; vi < sd->upgraded_view_count; vi++)
+            {
+                if (sd->upgraded_views[vi] == t->attachment_views[ai])
+                {
+                    view_index = vi;
+                    if (vi < sd->upgraded_image_count)
+                        image = sd->upgraded_images[vi];
+                    break;
+                }
+            }
+            STEREO_LOG(
+                "FB_BEGIN_ATTACHMENT fb=%p track=%u att=%u view=%p view_index=%u image=%p",
+                (void*)t->fb,
+                fb_track_index,
+                ai,
+                (void*)t->attachment_views[ai],
+                view_index,
+                (void*)(uintptr_t)image);
+        }
+    }
+    if (fb_found)
+    {
+        uint32_t ci = UINT32_MAX;
+        for (uint32_t i = 0; i < sd->cmd_fb_track_count; i++)
+        {
+            if (sd->cmd_fb_tracks[i].cmd == commandBuffer)
+            {
+                ci = i;
+                break;
+            }
+        }
+        if (ci == UINT32_MAX && sd->cmd_fb_track_count < MAX_CMD_FB_TRACK)
+        {
+            ci = sd->cmd_fb_track_count++;
+            sd->cmd_fb_tracks[ci].cmd = commandBuffer;
+        }
+        if (ci != UINT32_MAX)
+        {
+            sd->cmd_fb_tracks[ci].fb_track = fb_track_index;
+            STEREO_LOG(
+                "CMD_FB_BIND cmd=%p ci=%u fb=%p track=%u has_mv=%u",
+                (void*)commandBuffer,
+                ci,
+                (void*)sd->fb_tracks[fb_track_index].fb,
+                fb_track_index,
+                (unsigned)sd->fb_tracks[fb_track_index].has_mv);
+        }
+    }
     if (mv_rp)
     {
         VkRenderPassBeginInfo modified = *pRenderPassBegin;
@@ -1059,36 +1194,37 @@ stereo_CmdBindPipeline(
         sd,
         commandBuffer,
         pipeline);
-    //STEREO_LOG(
-    //    "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
-    //    (void *)pipeline,
-    //    (void *)active_rp,
-    //    info ? (void *)info->mv_renderpass : NULL,
-    //    info ? (void *)info->original_renderpass : NULL);
-    //if (info)
-    //{
-    //    STEREO_LOG(
-    //        "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
-    //        "orig_rp=%p patched_vs=%u patched_fs=%u "
-    //        "quad=%u bindings=%u",
-    //        (void*)pipeline,
-    //        (void*)active_fb,
-    //        (void*)active_rp,
-    //        (void*)info->mv_renderpass,
-    //        (void*)info->original_renderpass,
-    //        info->patched_vs,
-    //        info->patched_fs,
-    //        info->is_quad,
-    //        info->vertex_binding_count);
-    //}
-    //else
-    //{
-    //    STEREO_LOG(
-    //        "PIPE_BIND pipe=%p UNKNOWN fb=%p rp=%p",
-    //        (void*)pipeline,
-    //        (void*)active_fb,
-    //        (void*)active_rp);
-    //}
+    STEREO_LOG(
+        "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
+        (void *)pipeline,
+        (void *)active_rp,
+        info ? (void *)info->mv_renderpass : NULL,
+        info ? (void *)info->original_renderpass : NULL);
+    if (info)
+    {
+        STEREO_LOG(
+            "PIPE_BIND pipe=%p layout=%p fb=%p rp=%p mv_rp=%p "
+            "orig_rp=%p patched_vs=%u patched_fs=%u "
+            "quad=%u bindings=%u",
+            (void*)pipeline,
+            (void*)info->layout,
+            (void*)active_fb,
+            (void*)active_rp,
+            (void*)info->mv_renderpass,
+            (void*)info->original_renderpass,
+            info->patched_vs,
+            info->patched_fs,
+            info->is_quad,
+            info->vertex_binding_count);
+    }
+    else
+    {
+        STEREO_LOG(
+            "PIPE_BIND pipe=%p UNKNOWN fb=%p rp=%p",
+            (void*)pipeline,
+            (void*)active_fb,
+            (void*)active_rp);
+    }
     sd->real.CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,
@@ -1684,6 +1820,82 @@ static void stereo_overwrite_projection_binding(
         (void *)(uintptr_t)sd->stereo_ubo);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_CreateDescriptorSetLayout(
+    VkDevice device,
+    const VkDescriptorSetLayoutCreateInfo *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator,
+    VkDescriptorSetLayout *pSetLayout)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd || !sd->real.CreateDescriptorSetLayout)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    if (pCreateInfo)
+    {
+        for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++)
+        {
+            const VkDescriptorSetLayoutBinding *b = &pCreateInfo->pBindings[i];
+            STEREO_LOG("DESC_LAYOUT_BINDING binding=%u type=%u count=%u stages=0x%X",
+                b->binding,
+                b->descriptorType,
+                b->descriptorCount,
+                b->stageFlags);
+        }
+    }
+    VkResult result = sd->real.CreateDescriptorSetLayout(
+        sd->real_device,
+        pCreateInfo,
+        pAllocator,
+        pSetLayout);
+    STEREO_LOG("DESC_LAYOUT_CREATE result=%d layout=%p bindings=%u",
+        result,
+        (result == VK_SUCCESS && pSetLayout) ? (void *)(uintptr_t)*pSetLayout : NULL,
+        pCreateInfo ? pCreateInfo->bindingCount : 0);
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_AllocateDescriptorSets(
+    VkDevice device,
+    const VkDescriptorSetAllocateInfo *pAllocateInfo,
+    VkDescriptorSet *pDescriptorSets)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd || !sd->real.AllocateDescriptorSets)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    STEREO_LOG("DESC_ALLOC_BEGIN pool=%p count=%u",
+        pAllocateInfo ? (void *)(uintptr_t)pAllocateInfo->descriptorPool : NULL,
+        pAllocateInfo ? pAllocateInfo->descriptorSetCount : 0);
+    if (pAllocateInfo && pAllocateInfo->pSetLayouts)
+    {
+        for (uint32_t i = 0; i < pAllocateInfo->descriptorSetCount; i++)
+        {
+            STEREO_LOG("DESC_ALLOC_LAYOUT index=%u layout=%p",
+                i,
+                (void *)(uintptr_t)pAllocateInfo->pSetLayouts[i]);
+        }
+    }
+    VkResult result = sd->real.AllocateDescriptorSets(
+        sd->real_device,
+        pAllocateInfo,
+        pDescriptorSets);
+    STEREO_LOG("DESC_ALLOC_RESULT result=%d count=%u",
+        result,
+        (result == VK_SUCCESS && pAllocateInfo) ? pAllocateInfo->descriptorSetCount : 0);
+    if (result == VK_SUCCESS && pAllocateInfo && pDescriptorSets)
+    {
+        for (uint32_t i = 0; i < pAllocateInfo->descriptorSetCount; i++)
+        {
+            STEREO_LOG("DESC_ALLOC_SET pool=%p index=%u layout=%p set=%p",
+                (void *)(uintptr_t)pAllocateInfo->descriptorPool,
+                i,
+                pAllocateInfo->pSetLayouts ? (void *)(uintptr_t)pAllocateInfo->pSetLayouts[i] : NULL,
+                (void *)(uintptr_t)pDescriptorSets[i]);
+        }
+    }
+    return result;
+}
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_UpdateDescriptorSets(
     VkDevice device,
@@ -1699,6 +1911,22 @@ stereo_UpdateDescriptorSets(
     for (uint32_t i = 0; i < descriptorWriteCount; i++)
     {
         const VkWriteDescriptorSet *w = &pDescriptorWrites[i];
+        STEREO_LOG(
+            "DESC_WRITE_ANY "
+            "set=%p "
+            "binding=%u "
+            "array=%u "
+            "count=%u "
+            "type=%u "
+            "pImageInfo=%p "
+            "pBufferInfo=%p",
+            (void *)(uintptr_t)w->dstSet,
+            w->dstBinding,
+            w->dstArrayElement,
+            w->descriptorCount,
+            w->descriptorType,
+            (void *)w->pImageInfo,
+            (void *)w->pBufferInfo);
         if (w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
             w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
         {
@@ -1727,6 +1955,12 @@ stereo_UpdateDescriptorSets(
         {
             VkImageView view = w->pImageInfo[j].imageView;
             bool upgraded = false;
+            uint32_t view_index = UINT32_MAX;
+            VkImage image = VK_NULL_HANDLE;
+            bool stereo_image = false;
+            bool color_image = false;
+            bool depth_image = false;
+            bool storage_image = false;
             for (uint32_t k = 0;
                  k < sd->upgraded_view_count;
                  k++)
@@ -1734,30 +1968,146 @@ stereo_UpdateDescriptorSets(
                 if (sd->upgraded_views[k] == view)
                 {
                     upgraded = true;
+                    view_index = k;
+                    if (k < sd->upgraded_image_count)
+                        image = sd->upgraded_images[k];
                     break;
                 }
             }
+            if (image != VK_NULL_HANDLE)
+            {
+                for (uint32_t k = 0;
+                    k < sd->swapchain_count;
+                    k++)
+                {
+                    StereoSwapchain *sc = &sd->swapchains[k];
+                    if (!sc->stereo_images)
+                        continue;
+                    for (uint32_t n = 0; n < sc->image_count; n++)
+                    {
+                        if (sc->stereo_images[n] == image)
+                        {
+                            stereo_image = true;
+                            break;
+                        }
+                    }
+                    if (stereo_image)
+                        break;
+                }
+                for (uint32_t k = 0;
+                    k < sd->intercepted_color_count; k++)
+                {
+                    if (sd->intercepted_color[k] == image)
+                    {
+                        color_image = true;
+                        break;
+                    }
+                }
+                for (uint32_t k = 0;
+                    k < sd->intercepted_depth_count; k++)
+                {
+                    if (sd->intercepted_depth[k] == image)
+                    {
+                        depth_image = true;
+                        break;
+                    }
+                }
+                for (uint32_t k = 0;
+                    k < sd->intercepted_storage_count; k++)
+                {
+                    if (sd->intercepted_storage[k] == image)
+                    {
+                        storage_image = true;
+                        break;
+                    }
+                }
+            }
             STEREO_LOG(
-                "DESC_WRITE binding=%u view=%p layout=%u type=%u",
+                "DESC_WRITE set=%p binding=%u array=%u view=%p layout=%u type=%u",
+                (void *)(uintptr_t)w->dstSet,
                 w->dstBinding,
+                w->dstArrayElement + j,
                 (void *)(uintptr_t)view,
                 w->pImageInfo[j].imageLayout,
                 w->descriptorType);
             STEREO_LOG(
-                "DESC_IMAGE_WRITE binding=%u view=%p upgraded=%d",
+                "DESC_IMAGE_MAP set=%p binding=%u array=%u view=%p upgraded=%u view_index=%u image=%p stereo=%u color=%u depth=%u storage=%u",
+                (void *)(uintptr_t)w->dstSet,
                 w->dstBinding,
+                w->dstArrayElement + j,
                 (void *)(uintptr_t)view,
-                upgraded);
+                upgraded ? 1u : 0u,
+                view_index,
+                (void *)(uintptr_t)image,
+                stereo_image ? 1u : 0u,
+                color_image ? 1u : 0u,
+                depth_image ? 1u : 0u,
+                storage_image ? 1u : 0u);
+            if (sd->descriptor_set_image_count < MAX_DESCRIPTOR_SET_IMAGES)
+            {
+                uint32_t di = sd->descriptor_set_image_count++;
+                sd->descriptor_set_images[di].set = w->dstSet;
+                sd->descriptor_set_images[di].binding = w->dstBinding;
+                sd->descriptor_set_images[di].array = w->dstArrayElement + j;
+                sd->descriptor_set_images[di].view = view;
+                sd->descriptor_set_images[di].upgraded = upgraded;
+            }
             if (upgraded)
             {
                 STEREO_LOG(
-                    "DESC_IMAGE_UPGRADED binding=%u view=%p descriptorType=%u layout=%u",
+                    "DESC_IMAGE_UPGRADED set=%p binding=%u array=%u view=%p view_index=%u image=%p descriptorType=%u layout=%u",
+                    (void *)(uintptr_t)w->dstSet,
                     w->dstBinding,
+                    w->dstArrayElement + j,
                     (void *)(uintptr_t)view,
+                    view_index,
+                    (void *)(uintptr_t)image,
                     w->descriptorType,
                     w->pImageInfo[j].imageLayout);
+                bool tracked_set = false;
+                for (uint32_t k = 0; k < sd->upgraded_descriptor_count; k++)
+                {
+                    if (sd->upgraded_descriptor_sets[k] == w->dstSet)
+                    {
+                        tracked_set = true;
+                        break;
+                    }
+                }
+                if (!tracked_set &&
+                    sd->upgraded_descriptor_count < MAX_UPGRADED_DESCRIPTOR_SETS)
+                {
+                    sd->upgraded_descriptor_sets[sd->upgraded_descriptor_count++] = w->dstSet;
+                    STEREO_LOG(
+                        "DESC_SET_STEREO_TRACK "
+                        "set=%p "
+                        "binding=%u "
+                        "array=%u",
+                        w->dstSet,
+                        w->dstBinding,
+                        w->dstArrayElement + j);
+                }
             }
         }
+    }
+    for (uint32_t i = 0; i < descriptorCopyCount; i++)
+    {
+        const VkCopyDescriptorSet *c = &pDescriptorCopies[i];
+        STEREO_LOG(
+            "DESC_COPY "
+            "srcSet=%p "
+            "srcBinding=%u "
+            "srcArray=%u "
+            "dstSet=%p "
+            "dstBinding=%u "
+            "dstArray=%u "
+            "count=%u",
+            (void *)(uintptr_t)c->srcSet,
+            c->srcBinding,
+            c->srcArrayElement,
+            (void *)(uintptr_t)c->dstSet,
+            c->dstBinding,
+            c->dstArrayElement,
+            c->descriptorCount);
     }
     sd->real.UpdateDescriptorSets(
         sd->real_device,
@@ -1779,6 +2129,9 @@ stereo_CmdBindDescriptorSets(
     const uint32_t *pDynamicOffsets)
 {
     STEREO_LOG("CALLED stereo_CmdBindDescriptorSets");
+    StereoDevice *sd = find_any_device();
+    if (!sd)
+        return;
     STEREO_LOG(
         "RT_DESC_BIND cb=%p bind_point=%u layout=%p first_set=%u count=%u dynamic_count=%u",
         (void*)commandBuffer,
@@ -1789,15 +2142,61 @@ stereo_CmdBindDescriptorSets(
         dynamicOffsetCount);
     for (uint32_t i = 0; i < descriptorSetCount; i++)
     {
+        VkDescriptorSet ds = pDescriptorSets[i];
         STEREO_LOG(
-            "RT_DESC_SET cb=%p set_index=%u set=%p",
+            "DESC_BIND_SET "
+            "cb=%p "
+            "layout=%p "
+            "bindPoint=%u "
+            "firstSet=%u "
+            "index=%u "
+            "setNumber=%u "
+            "set=%p",
             (void*)commandBuffer,
+            (void*)(uintptr_t)layout,
+            pipelineBindPoint,
+            firstSet,
+            i,
             firstSet + i,
-            (void*)(uintptr_t)pDescriptorSets[i]);
+            (void*)(uintptr_t)ds);
+        if (firstSet + i == 1)
+        {
+            uint32_t image_count = 0;
+            uint32_t upgraded_count = 0;
+            for (uint32_t w = 0; w < sd->descriptor_set_image_count; w++)
+            {
+                if (sd->descriptor_set_images[w].set != ds)
+                    continue;
+                image_count++;
+                if (sd->descriptor_set_images[w].upgraded)
+                    upgraded_count++;
+                STEREO_LOG(
+                    "RT_DESC_SET1_IMAGE "
+                    "cb=%p "
+                    "set=%p "
+                    "binding=%u "
+                    "array=%u "
+                    "view=%p "
+                    "upgraded=%u",
+                    (void*)commandBuffer,
+                    (void*)(uintptr_t)ds,
+                    sd->descriptor_set_images[w].binding,
+                    sd->descriptor_set_images[w].array,
+                    (void*)(uintptr_t)sd->descriptor_set_images[w].view,
+                    sd->descriptor_set_images[w].upgraded ? 1u : 0u);
+            }
+            STEREO_LOG(
+                "RT_DESC_SET1_SUMMARY "
+                "cb=%p "
+                "set=%p "
+                "images=%u "
+                "upgraded=%u",
+                (void*)commandBuffer,
+                (void*)(uintptr_t)ds,
+                image_count,
+                upgraded_count);
+        }
     }
-    StereoDevice *sd = find_any_device();
-    if (!sd)
-        return;
     if (sd->stereo.enabled &&
         pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS &&
         pDescriptorSets &&
@@ -2362,4 +2761,213 @@ stereo_CmdSetVertexInputEXT(
         pVertexBindingDescriptions,
         vertexAttributeDescriptionCount,
         pVertexAttributeDescriptions);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdCopyImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageCopy *pRegions)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdCopyImage)
+        return;
+    STEREO_LOG("COPY_IMAGE cmd=%p src=%p dst=%p regions=%u",
+        (void*)commandBuffer,
+        (void*)srcImage,
+        (void*)dstImage,
+        regionCount);
+    sd->real.CmdCopyImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBlitImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageBlit *pRegions,
+    VkFilter filter)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdBlitImage)
+        return;
+    uint32_t src_upgraded = UINT32_MAX;
+    uint32_t dst_upgraded = UINT32_MAX;
+    for (uint32_t i = 0; i < sd->intercepted_color_count; i++)
+    {
+        if (sd->intercepted_color[i] == srcImage)
+            src_upgraded = i;
+    }
+    for (uint32_t s = 0; s < sd->swapchain_count; s++)
+    {
+        StereoSwapchain *sc = &sd->swapchains[s];
+        for (uint32_t i = 0; i < sc->image_count; i++)
+        {
+            if (sc->stereo_images && sc->stereo_images[i] == dstImage)
+            {
+                dst_upgraded = i;
+                break;
+            }
+        }
+        if (dst_upgraded != UINT32_MAX)
+            break;
+    }
+    bool stereo_blit = src_upgraded != UINT32_MAX && dst_upgraded != UINT32_MAX;
+    uint32_t src_view_index = UINT32_MAX;
+    VkImageView src_view = VK_NULL_HANDLE;
+    for (uint32_t ci = 0; ci < sd->cmd_fb_track_count; ci++)
+    {
+        if (sd->cmd_fb_tracks[ci].cmd != commandBuffer)
+            continue;
+        uint32_t fi = sd->cmd_fb_tracks[ci].fb_track;
+        if (fi >= MAX_FB_TRACK)
+            continue;
+        StereoFramebufferTrack *t = &sd->fb_tracks[fi];
+        STEREO_LOG(
+            "BLIT_CMD_FB cmd=%p ci=%u fb=%p track=%u has_mv=%u attachments=%u",
+            (void*)commandBuffer,
+            ci,
+            (void*)t->fb,
+            fi,
+            (unsigned)t->has_mv,
+            t->attachment_count);
+        for (uint32_t ai = 0; ai < t->attachment_count; ai++)
+        {
+            STEREO_LOG(
+                "BLIT_CMD_FB_ATT cmd=%p track=%u att=%u view=%p image=%p",
+                (void*)commandBuffer,
+                fi,
+                ai,
+                (void*)t->attachment_views[ai],
+                (void*)(uintptr_t)t->attachment_images[ai]);
+            if (t->attachment_images[ai] == srcImage)
+            {
+                src_view = t->attachment_views[ai];
+                STEREO_LOG(
+                    "BLIT_SOURCE_CMD_FB_MATCH src=%p cmd=%p fb=%p track=%u att=%u view=%p",
+                    (void*)srcImage,
+                    (void*)commandBuffer,
+                    (void*)t->fb,
+                    fi,
+                    ai,
+                    (void*)src_view);
+            }
+        }
+        break;
+    }
+    for (uint32_t i = 0; i < sd->upgraded_view_count; i++)
+    {
+        if (sd->upgraded_views[i] == src_view)
+        {
+            src_view_index = i;
+            break;
+        }
+    }
+    STEREO_LOG(
+        "BLIT_SOURCE_MAP src=%p color_index=%u view_index=%u view=%p",
+        (void*)srcImage,
+        src_upgraded,
+        src_view_index,
+        (void*)src_view);
+    STEREO_LOG(
+        "BLIT_ROUTE "
+        "src=%p "
+        "dst=%p "
+        "srcColor=%u "
+        "dstStereo=%u "
+        "srcViewIndex=%u "
+        "srcView=%p "
+        "stereo=%u",
+        (void*)srcImage,
+        (void*)dstImage,
+        src_upgraded,
+        dst_upgraded,
+        src_view_index,
+        (void*)src_view,
+        (unsigned)stereo_blit);
+    VkImageBlit *stereo_regions = NULL;
+    if (stereo_blit && regionCount)
+    {
+        stereo_regions = malloc(sizeof(VkImageBlit) * regionCount);
+        if (stereo_regions)
+        {
+            memcpy(stereo_regions, pRegions, sizeof(VkImageBlit) * regionCount);
+            for (uint32_t i = 0; i < regionCount; i++)
+            {
+                if (stereo_regions[i].srcSubresource.layerCount == 1 &&
+                    stereo_regions[i].dstSubresource.layerCount == 1)
+                {
+                    stereo_regions[i].srcSubresource.layerCount = 2;
+                    stereo_regions[i].dstSubresource.layerCount = 2;
+                }
+            }
+            pRegions = stereo_regions;
+        }
+    }
+    for (uint32_t i = 0; i < regionCount; i++)
+    {
+        STEREO_LOG("BLIT_IMAGE cmd=%p src=%p dst=%p regions=%u region=%u srcMip=%u srcBaseLayer=%u srcLayers=%u dstMip=%u dstBaseLayer=%u dstLayers=%u srcUpgraded=%u dstUpgraded=%u stereo=%d",
+            (void*)commandBuffer,
+            (void*)(uintptr_t)srcImage,
+            (void*)(uintptr_t)dstImage,
+            regionCount,
+            i,
+            pRegions[i].srcSubresource.mipLevel,
+            pRegions[i].srcSubresource.baseArrayLayer,
+            pRegions[i].srcSubresource.layerCount,
+            pRegions[i].dstSubresource.mipLevel,
+            pRegions[i].dstSubresource.baseArrayLayer,
+            pRegions[i].dstSubresource.layerCount,
+            src_upgraded,
+            dst_upgraded,
+            stereo_blit);
+    }
+    STEREO_LOG(
+        "BLIT_EXEC "
+        "src=%p "
+        "dst=%p "
+        "regions=%u "
+        "srcLayout=%u "
+        "dstLayout=%u "
+        "srcLayers=%u "
+        "dstLayers=%u "
+        "srcBase=%u "
+        "dstBase=%u",
+        (void*)srcImage,
+        (void*)dstImage,
+        regionCount,
+        srcImageLayout,
+        dstImageLayout,
+        regionCount ? pRegions[0].srcSubresource.layerCount : 0,
+        regionCount ? pRegions[0].dstSubresource.layerCount : 0,
+        regionCount ? pRegions[0].srcSubresource.baseArrayLayer : 0,
+        regionCount ? pRegions[0].dstSubresource.baseArrayLayer : 0);
+    sd->real.CmdBlitImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions,filter);
+    free(stereo_regions);
+}
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdResolveImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage,
+    VkImageLayout srcImageLayout,
+    VkImage dstImage,
+    VkImageLayout dstImageLayout,
+    uint32_t regionCount,
+    const VkImageResolve *pRegions)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdResolveImage)
+        return;
+    STEREO_LOG("RESOLVE_IMAGE cmd=%p src=%p dst=%p regions=%u",
+        (void*)commandBuffer,
+        (void*)srcImage,
+        (void*)dstImage,
+        regionCount);
+    sd->real.CmdResolveImage(commandBuffer,srcImage,srcImageLayout,dstImage,dstImageLayout,regionCount,pRegions);
 }

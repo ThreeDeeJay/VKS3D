@@ -531,17 +531,23 @@ typedef struct StereoRenderPassInfo {
     uint8_t       _pad[2];
 } StereoRenderPassInfo;
 
+#define MAX_UPGRADED_VIEWS 4096
+#define MAX_FB_ATTACHMENTS 16
 typedef struct StereoFramebufferTrack {
     VkFramebuffer fb;
     VkRenderPass  rp;      /* original RP */
     VkRenderPass  rp_used_at_create;
     VkRenderPass  mv_rp;   /* multiview RP */
     bool          has_mv;
+    uint32_t      attachment_count;
+    VkImageView   attachment_views[MAX_FB_ATTACHMENTS];
+    VkImage       attachment_images[MAX_FB_ATTACHMENTS];
 } StereoFramebufferTrack;
 
 typedef struct StereoPipelineInfo
 {
     VkPipeline pipeline;
+    VkPipelineLayout layout;
     VkRenderPass original_renderpass;
     VkRenderPass mv_renderpass;
     uint32_t stage_count;
@@ -597,12 +603,17 @@ typedef struct StereoDevice {
     uint32_t               intercepted_storage_count;
     uint32_t               stereo_w, stereo_h;
     /* Upgraded image-view tracking for per-framebuffer multiview decision */
-#define MAX_UPGRADED_VIEWS     4096
     VkImageView            upgraded_views[MAX_UPGRADED_VIEWS];
     uint32_t               upgraded_view_count;
     /* Per-framebuffer: which render pass (multiview version) was used */
 #define MAX_FB_TRACK           512
     StereoFramebufferTrack fb_tracks[MAX_FB_TRACK];
+#define MAX_CMD_FB_TRACK       1024
+    struct {
+        VkCommandBuffer cmd;
+        uint32_t fb_track;
+    } cmd_fb_tracks[MAX_CMD_FB_TRACK];
+    uint32_t cmd_fb_track_count;
     uint32_t               fb_track_count;
     stereo_mutex_t         lock;
     /* -- Multiview render pass tracking ----------------------------------- *
@@ -675,6 +686,18 @@ typedef struct StereoDevice {
     uint32_t cb_track_count;
     VkImage upgraded_images[MAX_UPGRADED_VIEWS];
     uint32_t upgraded_image_count;
+#define MAX_UPGRADED_DESCRIPTOR_SETS 4096
+    VkDescriptorSet upgraded_descriptor_sets[MAX_UPGRADED_DESCRIPTOR_SETS];
+    uint32_t upgraded_descriptor_count;
+#define MAX_DESCRIPTOR_SET_IMAGES 16384
+    struct {
+        VkDescriptorSet set;
+        uint32_t binding;
+        uint32_t array;
+        VkImageView view;
+        bool upgraded;
+    } descriptor_set_images[MAX_DESCRIPTOR_SET_IMAGES];
+    uint32_t descriptor_set_image_count;
 } StereoDevice;
 
 void stereo_write_ubo(StereoDevice *sd);
@@ -836,10 +859,15 @@ VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImageView(VkDevice device, VkImageV
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRayTracingPipelinesKHR( VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkRayTracingPipelineCreateInfoKHR *pCreateInfos, const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdTraceRaysKHR( VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdCopyImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageCopy *);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBlitImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageBlit *, VkFilter);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdResolveImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageResolve *);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDraw(VkCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexed(VkCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDescriptorSetLayout *pSetLayout);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo, VkDescriptorSet *pDescriptorSets);
 VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
 

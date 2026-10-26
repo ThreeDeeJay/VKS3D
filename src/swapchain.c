@@ -140,7 +140,7 @@ static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = sc->barrier_pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
+        .commandBufferCount = sc->image_count,
     };
     if (sd->real.AllocateCommandBuffers(sd->real_device, &cbai, sc->barrier_cmds)
             != VK_SUCCESS) return false;
@@ -148,57 +148,66 @@ static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,  /* starts signaled → first acquire never blocks */
     };
-    return sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[0])
-           == VK_SUCCESS;
+    for (uint32_t i = 0; i < sc->image_count; i++)
+    {
+        if (sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[i])
+            != VK_SUCCESS) return false;
+    }
+    return true;
 }
 
 /* ── Allocate stereo render target (2-layer image + view, no CPU staging) ─ */
-static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc)
+static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc, uint32_t image_count)
 {
-    sc->image_count      = 1;
-    sc->stereo_images    = calloc(1, sizeof(VkImage));
-    sc->stereo_memory    = calloc(1, sizeof(VkDeviceMemory));
-    sc->stereo_views_arr = calloc(1, sizeof(VkImageView));
-    sc->barrier_cmds     = calloc(1, sizeof(VkCommandBuffer));
-    sc->barrier_fences   = calloc(1, sizeof(VkFence));
+    sc->image_count      = image_count;
+    sc->stereo_images    = calloc(image_count, sizeof(VkImage));
+    sc->stereo_memory    = calloc(image_count, sizeof(VkDeviceMemory));
+    sc->stereo_views_arr = calloc(image_count, sizeof(VkImageView));
+    sc->barrier_cmds     = calloc(image_count, sizeof(VkCommandBuffer));
+    sc->barrier_fences   = calloc(image_count, sizeof(VkFence));
     if (!sc->stereo_images || !sc->stereo_memory || !sc->stereo_views_arr ||
         !sc->barrier_cmds  || !sc->barrier_fences)
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+    for (uint32_t i = 0; i < image_count; i++)
+    {
     VkResult res = alt_alloc_stereo_image(sd, sc,
-                       &sc->stereo_images[0], &sc->stereo_memory[0]);
+                       &sc->stereo_images[i], &sc->stereo_memory[i]);
     if (res != VK_SUCCESS) return res;
 
+    STEREO_LOG(
+        "STEREO_IMAGE_ALLOC sc=%p index=%u image=%p",
+        (void *)sc,
+        i,
+        (void *)(uintptr_t)sc->stereo_images[i]);
     VkImageViewCreateInfo vci = {
         .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image    = sc->stereo_images[0],
+        .image    = sc->stereo_images[i],
         .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
         .format   = sc->format,
         .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2 },
     };
-    STEREO_LOG("CALL real CreateImageView");
-    res = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[0]);
-    STEREO_LOG("RETURN real CreateImageView result=%d", res);
-    if (res != VK_SUCCESS) return res;
 
+    VkResult res_view = sd->real.CreateImageView(sd->real_device, &vci, NULL, &sc->stereo_views_arr[i]);
+    if (res_view != VK_SUCCESS) return res_view;
+    STEREO_LOG(
+        "STEREO_VIEW_ALLOC sc=%p index=%u image=%p view=%p",
+        (void *)sc,
+        i,
+        (void *)(uintptr_t)sc->stereo_images[i],
+        (void *)(uintptr_t)sc->stereo_views_arr[i]);
     if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
     {
         CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
         sd->upgraded_views[sd->upgraded_view_count++] =
-            sc->stereo_views_arr[0];
+            sc->stereo_views_arr[i];
     
         //STEREO_LOG(
         //    "[VIEW TRACK ADD NV3D] view=%p count=%u",
         //    sc->stereo_views_arr[0],
         //    sd->upgraded_view_count);
     }
-    //STEREO_LOG(
-    //    "[NV3D TEST] alloc_alt_stereo_swapchain image=%p view=%p count=%u",
-    //    sc->stereo_images[0],
-    //    sc->stereo_views_arr[0],
-    //    sc->image_count);
-
-    /* CPU staging NOT created here — caller adds it for DX9, not for GPU compose */
+    }
     return VK_SUCCESS;
 }
 
@@ -313,11 +322,13 @@ stereo_CreateSwapchainKHR(VkDevice device,
     uint32_t app_w = pCreateInfo->imageExtent.width;
     uint32_t app_h = pCreateInfo->imageExtent.height;
 
+    uint32_t image_count = pCreateInfo->minImageCount;
+    if (image_count < 2) image_count = 2;
     STEREO_LOG(
-        "[CREATE SC] swapchain_count=%u old=%p",
+        "[CREATE SC] swapchain_count=%u old=%p image_count=%u",
         sd->swapchain_count,
-        pCreateInfo->oldSwapchain);
-
+        pCreateInfo->oldSwapchain,
+        image_count);
     StereoSwapchain *old_sc = NULL;
 
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
@@ -406,7 +417,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
         STEREO_LOG("[NV3D] init succeeded");
 
         VkResult nvres =
-            alloc_alt_stereo_swapchain(sd, sc);
+            alloc_alt_stereo_swapchain(sd, sc, image_count);
 
         if (nvres == VK_SUCCESS)
         {
@@ -554,7 +565,7 @@ try_dx9:
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DX9) {
         if (!sd->d3d11_ok) dxgi_device_init(sd);
         if (sc->hwnd && dx9_init(sd, sc)) {
-            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            VkResult res = alloc_alt_stereo_swapchain(sd, sc, image_count);
             if (res == VK_SUCCESS) res = alt_cpu_staging_init(sd, sc); /* DX9 needs CPU staging */
             if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
                 sc->present_mode  = STEREO_PRESENT_DX9;
@@ -586,11 +597,12 @@ try_dx9:
         req == STEREO_PRESENT_INTERLACED) {
         STEREO_LOG("[SBS] gpu_compose_sc_init surface=%p", (void*)(uintptr_t)pCreateInfo->surface);
         STEREO_LOG(
-            "[CREATE SC GPU] hwnd=%p surface=%p",
+            "[CREATE SC GPU] hwnd=%p surface=%p image_count=%u",
             sc->hwnd,
-            pCreateInfo->surface);
+            pCreateInfo->surface,
+            image_count);
         if (sc->hwnd && gpu_compose_sc_init(sd, sc, pCreateInfo->surface)) {
-            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            VkResult res = alloc_alt_stereo_swapchain(sd, sc, image_count);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
             if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
                 sc->present_mode  = req;
@@ -1021,9 +1033,10 @@ stereo_GetSwapchainImagesKHR(
         pImages[i] = sc->stereo_images[i];
 
         STEREO_LOG(
-            "[NV3D TEST] image[%u]=%p",
+            "STEREO_IMAGE_RETURN sc=%p index=%u image=%p",
+            (void *)sc,
             i,
-            (void*)pImages[i]);
+            (void*)(uintptr_t)pImages[i]);
     }
     *pCount = copy;
     return (copy < sc->image_count) ? VK_INCOMPLETE : VK_SUCCESS;
@@ -1139,9 +1152,10 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
     /* Wait for the previous frame's GPU work (DXGI barrier or GPU blit) to
      * complete before allowing the app to render into stereo_images[0] again.
      * barrier_fences[0] starts SIGNALED so the very first acquire never blocks. */
-    if (sc->barrier_fences && sc->barrier_fences[0]) {
+    uint32_t idx = sc->acquire_idx++ % sc->image_count;
+    if (sc->barrier_fences && sc->barrier_fences[idx]) {
         VkResult wres = sd->real.WaitForFences(
-            sd->real_device, 1, &sc->barrier_fences[0], VK_TRUE, timeout);
+            sd->real_device, 1, &sc->barrier_fences[idx], VK_TRUE, timeout);
         if (wres != VK_SUCCESS) return wres;
     }
 
@@ -1154,7 +1168,8 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
         };
         if (sd->gfx_queue) sd->real.QueueSubmit(sd->gfx_queue, 1, &sig, fence);
     }
-    *pImageIndex = 0;
+    *pImageIndex = idx;
+    STEREO_LOG("[ACQUIRE] sc=%p image=%u/%u", (void *)sc, idx, sc->image_count);
     return VK_SUCCESS;
 }
 
@@ -1199,6 +1214,18 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
         uint32_t           wcount = (i == 0) ? pPresentInfo->waitSemaphoreCount : 0;
         const VkSemaphore *wsems  = (i == 0) ? pPresentInfo->pWaitSemaphores    : NULL;
 
+        uint32_t present_img_idx = pPresentInfo->pImageIndices[i];
+        VkImage present_img = VK_NULL_HANDLE;
+        if (present_img_idx < sc_i->image_count && sc_i->stereo_images)
+            present_img = sc_i->stereo_images[present_img_idx];
+        STEREO_LOG(
+            "QUEUE_PRESENT_MAP sc=%p mode=%d index=%u image=%p image_count=%u",
+            (void *)sc_i,
+            (int)sc_i->present_mode,
+            present_img_idx,
+            (void *)(uintptr_t)present_img,
+            sc_i->image_count);
+
         VkResult pr;
         switch (sc_i->present_mode) {
         case STEREO_PRESENT_DXGI:
@@ -1216,10 +1243,12 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
                 wsems);
             break;
         case STEREO_PRESENT_SBS:
+            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems, present_img_idx);
+            break;
         case STEREO_PRESENT_TAB:
         case STEREO_PRESENT_INTERLACED:
             /* GPU blit compose — no CPU readback, no GDI */
-            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems);
+            pr = gpu_compose_present(sd, sc_i, queue, wcount, wsems, present_img_idx);
             break;
         default:
             pr = VK_SUCCESS;
@@ -1293,6 +1322,16 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
         && pCreateInfo->extent.width  > 1
         && pCreateInfo->extent.height > 1
         && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT);
+    STEREO_LOG("IMAGE_DECIDE extent=%ux%u layers=%u mip=%u usage=0x%llX base=%d depth=%d color=%d storage=%d",
+        pCreateInfo->extent.width,
+        pCreateInfo->extent.height,
+        pCreateInfo->arrayLayers,
+        pCreateInfo->mipLevels,
+        (unsigned long long)pCreateInfo->usage,
+        base,
+        intercept_depth,
+        intercept_color,
+        intercept_storage);
     STEREO_LOG(
         "IMAGE_CREATE imageType=%d fmt=%d samples=%d usage=0x%x layers=%u extent=%ux%u flags=0x%x cube=%d array=%d upgrade=%d",
         pCreateInfo->imageType,
@@ -1333,6 +1372,19 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
             "IMG_EXIT passthrough result=%d image=%p",
             r,
             (r == VK_SUCCESS) ? (void *)(uintptr_t)*pImage : NULL);
+        if (r == VK_SUCCESS)
+        {
+            STEREO_LOG("IMAGE_CREATED image=%p type=%u format=%u extent=%ux%ux%u layers=%u usage=0x%X flags=0x%X",
+                (void *)(uintptr_t)*pImage,
+                pCreateInfo->imageType,
+                pCreateInfo->format,
+                pCreateInfo->extent.width,
+                pCreateInfo->extent.height,
+                pCreateInfo->extent.depth,
+                pCreateInfo->arrayLayers,
+                pCreateInfo->usage,
+                pCreateInfo->flags);
+        }
         return r;
     }
     STEREO_LOG(
@@ -1474,6 +1526,16 @@ stereo_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
             }
         }
     }
+    STEREO_LOG("IMAGE_CREATED image=%p type=%u format=%u extent=%ux%ux%u layers=%u usage=0x%X flags=0x%X",
+        (void *)(uintptr_t)*pImage,
+        pCreateInfo->imageType,
+        pCreateInfo->format,
+        pCreateInfo->extent.width,
+        pCreateInfo->extent.height,
+        pCreateInfo->extent.depth,
+        pCreateInfo->arrayLayers,
+        pCreateInfo->usage,
+        pCreateInfo->flags);
     return res;
 }
 
@@ -1490,6 +1552,23 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         pCreateInfo->subresourceRange.layerCount,
         pCreateInfo->subresourceRange.aspectMask);
     if (!sd) return VK_ERROR_DEVICE_LOST;
+    for (uint32_t si = 0; si < sd->swapchain_count; si++)
+    {
+        StereoSwapchain *scc = &sd->swapchains[si];
+        if (!scc->stereo_active || !scc->stereo_images)
+            continue;
+        for (uint32_t ii = 0; ii < scc->image_count; ii++)
+        {
+            if (scc->stereo_images[ii] == pCreateInfo->image)
+            {
+                STEREO_LOG(
+                    "IV_SWAPCHAIN_IMAGE sc=%p index=%u image=%p",
+                    (void *)scc,
+                    ii,
+                    (void *)(uintptr_t)pCreateInfo->image);
+            }
+        }
+    }
     /*
      * Cube and cube-array images use array layers for faces.
      * They are not stereo render targets and must never be converted
@@ -1515,15 +1594,37 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
     bool depth_match = false;
     bool color_match = false;
     bool storage_match = false;
-    for (uint32_t si = 0; si < sd->swapchain_count; si++) {
+    uint32_t stereo_sc = UINT32_MAX;
+    uint32_t stereo_img = UINT32_MAX;
+    for (uint32_t si = 0; si < sd->swapchain_count; si++)
+    {
         StereoSwapchain *scc = &sd->swapchains[si];
-        if (!scc->stereo_active || !scc->stereo_images) continue;
+        if (!scc->stereo_active || !scc->stereo_images)
+            continue;
         for (uint32_t ii = 0; ii < scc->image_count; ii++)
+        {
             if (scc->stereo_images[ii] == pCreateInfo->image)
             {
+                STEREO_LOG(
+                    "STEREO_IMAGE_VIEW_FOUND sc=%p index=%u image=%p viewType=%u layers=%u aspect=0x%X",
+                    (void *)scc,
+                    ii,
+                    (void *)(uintptr_t)pCreateInfo->image,
+                    pCreateInfo->viewType,
+                    pCreateInfo->subresourceRange.layerCount,
+                    pCreateInfo->subresourceRange.aspectMask);
                 needs_upgrade = true;
                 swapchain_match = true;
+                stereo_sc = si;
+                stereo_img = ii;
+                STEREO_LOG(
+                    "STEREO_IMAGE_MATCH sc=%p stereo_index=%u image=%p",
+                    (void *)scc,
+                    ii,
+                    (void *)(uintptr_t)pCreateInfo->image);
+                break;
             }
+        }
     }
     uint32_t depth_matches = 0;
     uint32_t color_matches = 0;
@@ -1533,7 +1634,7 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         {
             depth_matches++;
             needs_upgrade = true;
-            swapchain_match = true;
+            depth_match = true;
         }
     }
     for (uint32_t i = 0; i < sd->intercepted_color_count; i++)
@@ -1542,7 +1643,7 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         {
             color_matches++;
             needs_upgrade = true;
-            swapchain_match = true;
+            color_match = true;
         }
     }
     for (uint32_t i = 0; i < sd->intercepted_storage_count; i++)
@@ -1559,7 +1660,11 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         {
             color_matches++;
             needs_upgrade = true;
-            swapchain_match = true;
+            color_match = true;
+            STEREO_LOG(
+                "UPGRADED_IMAGE_MATCH index=%u image=%p",
+                i,
+                (void *)(uintptr_t)pCreateInfo->image);
         }
     }
     if (!needs_upgrade &&
@@ -1634,6 +1739,10 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         upgraded.viewType,
         upgraded.subresourceRange.layerCount);
     STEREO_LOG("CALL real CreateImageView");
+    STEREO_LOG("UPGRADE_IMAGE image=%p viewType=%u layers=%u",
+        (void *)(uintptr_t)pCreateInfo->image,
+        pCreateInfo->viewType,
+        pCreateInfo->subresourceRange.layerCount);
     VkResult _r=
         sd->real.CreateImageView(
         sd->real_device,
@@ -1647,46 +1756,69 @@ stereo_CreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo
         (_r == VK_SUCCESS) ? (void *)(uintptr_t)*pView : NULL);
     if (_r == VK_SUCCESS)
     {
+        uint32_t upgraded_view_index = UINT32_MAX;
+        uint32_t upgraded_image_index = UINT32_MAX;
+        for (uint32_t ui = 0; ui < sd->upgraded_view_count; ui++)
+        {
+            if (sd->upgraded_views[ui] == *pView)
+            {
+                upgraded_view_index = ui;
+                break;
+            }
+        }
+        for (uint32_t ui = 0; ui < sd->upgraded_image_count; ui++)
+        {
+            if (sd->upgraded_images[ui] == pCreateInfo->image)
+            {
+                upgraded_image_index = ui;
+                break;
+            }
+        }
         STEREO_LOG(
-            "VIEW_CREATED view=%p image=%p type=%u layers=%u",
+            "VIEW_CREATED view=%p image=%p type=%u layers=%u stereo=%u sc=%u image_index=%u upgraded_view=%u upgraded_image=%u",
             (void *)(uintptr_t)*pView,
             (void *)(uintptr_t)upgraded.image,
             upgraded.viewType,
-            upgraded.subresourceRange.layerCount);
+            upgraded.subresourceRange.layerCount,
+            stereo_sc != UINT32_MAX,
+            stereo_sc,
+            stereo_img,
+            upgraded_view_index,
+            upgraded_image_index);
     }
-    /* Track upgraded views for framebuffer multiview detection */
+    /* Track upgraded views and images as a paired mapping */
     if (_r == VK_SUCCESS &&
-        sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
+        sd->upgraded_view_count < MAX_UPGRADED_VIEWS &&
+        sd->upgraded_image_count < MAX_UPGRADED_VIEWS)
     {
+        uint32_t track_index = sd->upgraded_view_count;
+        CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
+        CHECK_ARRAY_COUNT(sd->upgraded_image_count, MAX_UPGRADED_VIEWS, "upgraded_image_count");
+        sd->upgraded_views[track_index] = *pView;
+        sd->upgraded_images[track_index] = pCreateInfo->image;
+        sd->upgraded_view_count++;
+        sd->upgraded_image_count++;
         STEREO_LOG(
-            "UPGRADED_VIEW_TRACK image=%p view=%p",
+            "UPGRADED_VIEW_TRACK image=%p view=%p index=%u",
             (void*)(uintptr_t)pCreateInfo->image,
-            (void*)(uintptr_t)*pView);
-        if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
-        {
-            CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
-            sd->upgraded_views[sd->upgraded_view_count++] = *pView;
-            STEREO_LOG(
-                "VIEW_TRACK count=%u view=%p",
-                sd->upgraded_view_count,
-                (void *)(uintptr_t)*pView);
-        }
-        if (sd->upgraded_image_count < MAX_UPGRADED_VIEWS)
-        {
-            CHECK_ARRAY_COUNT(sd->upgraded_image_count, MAX_UPGRADED_VIEWS, "upgraded_image_count");
-            sd->upgraded_images[sd->upgraded_image_count++] =
-                pCreateInfo->image;
-            STEREO_LOG(
-                "IMAGE_TRACK count=%u image=%p",
-                sd->upgraded_image_count,
-                (void *)(uintptr_t)pCreateInfo->image);
-            STEREO_LOG(
-                "COUNTS depth=%u color=%u upgradedImages=%u upgradedViews=%u",
-                sd->intercepted_depth_count,
-                sd->intercepted_color_count,
-                sd->upgraded_image_count,
-                sd->upgraded_view_count);
-        }
+            (void*)(uintptr_t)*pView,
+            track_index);
+        STEREO_LOG(
+            "VIEW_IMAGE_MAP view=%p image=%p index=%u",
+            (void*)(uintptr_t)*pView,
+            (void*)(uintptr_t)pCreateInfo->image,
+            track_index);
+        STEREO_LOG(
+            "IMAGE_TRACK count=%u image=%p index=%u",
+            sd->upgraded_image_count,
+            (void *)(uintptr_t)pCreateInfo->image,
+            track_index);
+        STEREO_LOG(
+            "COUNTS depth=%u color=%u upgradedImages=%u upgradedViews=%u",
+            sd->intercepted_depth_count,
+            sd->intercepted_color_count,
+            sd->upgraded_image_count,
+            sd->upgraded_view_count);
     }
     return _r;
 }
