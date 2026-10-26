@@ -1856,13 +1856,20 @@ stereo_DestroyImageView(
             //    "[VIEW TRACK REMOVE] view=%p slot=%u",
             //    imageView,
             //    i);
-            uint32_t last = --sd->upgraded_view_count;
+            uint32_t last = sd->upgraded_view_count - 1;
             if (i != last)
+            {
                 sd->upgraded_views[i] = sd->upgraded_views[last];
+                sd->upgraded_images[i] = sd->upgraded_images[last];
+            }
             sd->upgraded_views[last] = VK_NULL_HANDLE;
             //STEREO_LOG(
             //    "[VIEW TRACK COUNT] count=%u",
             //    sd->upgraded_view_count);
+            sd->upgraded_images[last] = VK_NULL_HANDLE;
+            sd->upgraded_view_count--;
+            if (sd->upgraded_image_count > sd->upgraded_view_count)
+                sd->upgraded_image_count = sd->upgraded_view_count;
             break;
         }
     }
