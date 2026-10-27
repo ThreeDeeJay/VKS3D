@@ -12176,7 +12176,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
             }
         }
-        if (!in_mv_rp)
+        bool is_quad = !ci->pVertexInputState ||
+        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
+        if (!in_mv_rp && !is_quad)
         {
             STEREO_LOG(
                 "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
@@ -12185,14 +12187,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 has_vs,
                 has_tes,
                 ci->stageCount);
-            /* IMPORTANT:
-             * Do NOT patch renderpass-based multiview logic for clearly mono pipelines
-             * BUT still allow FS quad / UI heuristics to run later
-             */
             goto PIPE_DECISION_CONTINUE;
         }
-        bool is_quad = !ci->pVertexInputState ||
-                       ci->pVertexInputState->vertexBindingDescriptionCount == 0;
         bool vs_fullscreen = false;
         bool vs_quad_fs = false;
         bool vs_screen_space = false;
