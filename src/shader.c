@@ -2992,6 +2992,8 @@ bool spirv_patch_stereo_vertex(
     float ro,
     float conv,
     bool inj_vi,
+    bool force_far_depth,
+    bool procedural_sky,
     StereoDebugCtx *dbg)
 {
     STEREO_LOG("CALLED spirv_patch_stereo_vertex");
