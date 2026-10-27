@@ -121,7 +121,7 @@ VkRenderPassMultiviewCreateInfo mv = {
 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
 .pNext = NULL, .subpassCount = sc, .pViewMasks = vm,
 .dependencyCount = pCI->dependencyCount, .pViewOffsets = vo,
-.correlationMaskCount = sc, .pCorrelationMasks = cm,
+.correlationMaskCount = 0, .pCorrelationMasks = NULL,
 };
 VkRenderPassCreateInfo mod = *pCI;
 if (pa) mod.pAttachments = pa;
@@ -299,8 +299,8 @@ corr[i] = STEREO_CORRELATION_MASK;
 VkRenderPassCreateInfo2 mv2 = *pCreateInfo;
 if (pa2) mv2.pAttachments = pa2;
 mv2.pSubpasses = subs;
-mv2.correlatedViewMaskCount = sc;
-mv2.pCorrelatedViewMasks = corr;
+mv2.correlatedViewMaskCount = 0;
+mv2.pCorrelatedViewMasks = NULL;
 VkRenderPass mv = VK_NULL_HANDLE;
 VkResult mv2_res = sd->real.CreateRenderPass2KHR(sd->real_device, &mv2, pAllocator, &mv);
 if (mv2_res == VK_SUCCESS && mv) {

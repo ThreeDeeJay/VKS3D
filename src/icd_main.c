@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "stereo_icd.h"
+VKAPI_ATTR void VKAPI_CALL stereo_CmdBlitImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageBlit *, VkFilter);
+VKAPI_ATTR void VKAPI_CALL stereo_CmdCopyImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageCopy *);
+VKAPI_ATTR void VKAPI_CALL stereo_CmdResolveImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageResolve *);
 PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
 stereo_dl_t stereo_get_real_icd_handle(void);
 static PFN_vkVoidFunction get_instance_proc_addr_internal(
@@ -242,6 +245,12 @@ GDPA_WRAP("vkCreateRayTracingPipelinesKHR",
 stereo_CreateRayTracingPipelinesKHR);
 GDPA_WRAP("vkCmdTraceRaysKHR",
 stereo_CmdTraceRaysKHR);
+GDPA_WRAP("vkCmdBlitImage",
+stereo_CmdBlitImage);
+GDPA_WRAP("vkCmdCopyImage",
+stereo_CmdCopyImage);
+GDPA_WRAP("vkCmdResolveImage",
+stereo_CmdResolveImage);
 GDPA_WRAP("vkCreateShaderModule",
 stereo_CreateShaderModule);
 GDPA_WRAP("vkDestroyShaderModule",
