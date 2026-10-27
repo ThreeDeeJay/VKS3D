@@ -213,6 +213,10 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_CreateShaderModule;
     if (!strcmp(name, "vkDestroyShaderModule"))
         return (PFN_vkVoidFunction)stereo_DestroyShaderModule;
+    if (!strcmp(name, "vkCreateShadersEXT"))
+        return (PFN_vkVoidFunction)stereo_CreateShadersEXT;
+    if (!strcmp(name, "vkDestroyShaderEXT"))
+        return (PFN_vkVoidFunction)stereo_DestroyShaderEXT;
     if (!strcmp(name, "vkCmdBindShadersEXT"))
         return (PFN_vkVoidFunction)stereo_CmdBindShadersEXT;
     if (!strcmp(name, "vkCreateSwapchainKHR"))
@@ -331,12 +335,18 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
     GDPA_WRAP("vkCreateRenderPass2",
               stereo_CreateRenderPass2KHR);
 #endif
+    GDPA_WRAP("vkCreateRayTracingPipelinesKHR",
+              stereo_CreateRayTracingPipelinesKHR);
     GDPA_WRAP("vkCmdTraceRaysKHR",
               stereo_CmdTraceRaysKHR);
     GDPA_WRAP("vkCreateShaderModule",
               stereo_CreateShaderModule);
     GDPA_WRAP("vkDestroyShaderModule",
               stereo_DestroyShaderModule);
+    GDPA_WRAP("vkCreateShadersEXT",
+              stereo_CreateShadersEXT);
+    GDPA_WRAP("vkDestroyShaderEXT",
+              stereo_DestroyShaderEXT);
     GDPA_WRAP("vkCmdBindShadersEXT",
               stereo_CmdBindShadersEXT);
     //GDPA_WRAP("vkCmdSetViewport",
