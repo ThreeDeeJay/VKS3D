@@ -8665,10 +8665,13 @@ bool spirv_patch_stereo_fs(
             continue;
         }
         /* Inject new types + gl_ViewIndex variable before first OpFunction */
-        if (op == SpvOpFunction && !types_done) {
-            types_done = true;
-            in_func    = true;
-            /* BuiltIn decoration is emitted earlier in the annotation section. */
+        if (op==SpvOpFunction && !types_done) {
+            types_done=true;
+            in_func=true;
+            if (emit_vi_decorate) {
+                uint32_t w[]={(4u<<16)|SpvOpDecorate,new_vi_id,SpvDecorationBuiltIn,SpvBuiltInViewIndex};
+                sb_push_n(&ob,w,4);
+                emit_vi_decorate=false;}
             if (!s.int_id) {
                 uint32_t w[]={(4u<<16)|SpvOpTypeInt, new_int_id, 32, 1};
                 sb_push_n(&ob,w,4); }
