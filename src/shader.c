@@ -11823,6 +11823,98 @@ static const VkShaderModuleCreateInfo *stereo_stage_inline_spv(const VkPipelineS
     return NULL;
 }
 
+/* ── MV pipeline variant table ────────────────────────────────────────────
+* The pipeline handle returned to the app is the ORIGINAL (non-multiview,
+* unpatched) pipeline.  A second, multiview+stereo-patched pipeline is kept
+* here and substituted at vkCmdBindPipeline ONLY when the active render pass
+* instance is multiview.  This guarantees pipeline/render-pass viewMask
+* agreement: a multiview pipeline drawn into a non-MV pass broadcasts both
+* views into the same layer (eyes overlap in one view). */
+typedef struct { uint64_t base; uint64_t mv; } PipeVariant;
+static PipeVariant *g_pv;
+static uint32_t g_pv_cap, g_pv_cnt;
+static volatile LONG g_pv_lock;
+static void pv_lock(void){ while (InterlockedCompareExchange(&g_pv_lock,1,0)!=0) Sleep(0); }
+static void pv_unlock(void){ InterlockedExchange(&g_pv_lock,0); }
+static uint32_t pv_hash(uint64_t k){ k^=k>>33; k*=0xff51afd7ed558ccdULL; k^=k>>33; return (uint32_t)k; }
+static void pv_put(PipeVariant *t,uint32_t cap,uint64_t b,uint64_t m)
+{
+    uint32_t i=pv_hash(b)&(cap-1);
+    while(t[i].base && t[i].base!=b) i=(i+1)&(cap-1);
+    t[i].base=b; t[i].mv=m;
+}
+void stereo_pipeline_variant_add(VkPipeline base, VkPipeline mv)
+{
+    uint64_t b=(uint64_t)(uintptr_t)base, m=(uint64_t)(uintptr_t)mv;
+    if(!b||!m) return;
+    pv_lock();
+    if((g_pv_cnt+1)*2>g_pv_cap){
+        uint32_t nc=g_pv_cap?g_pv_cap*2:1024;
+        PipeVariant *nt=calloc(nc,sizeof(*nt));
+        if(!nt){ pv_unlock(); return; }
+        for(uint32_t i=0;i<g_pv_cap;i++) if(g_pv[i].base) pv_put(nt,nc,g_pv[i].base,g_pv[i].mv);
+            free(g_pv); g_pv=nt; g_pv_cap=nc;
+    }
+    uint32_t i=pv_hash(b)&(g_pv_cap-1);
+    while(g_pv[i].base && g_pv[i].base!=b) i=(i+1)&(g_pv_cap-1);
+    if(!g_pv[i].base) g_pv_cnt++;
+    g_pv[i].base=b; g_pv[i].mv=m;
+    pv_unlock();
+}
+VkPipeline stereo_pipeline_mv_variant(VkPipeline base)
+{
+    uint64_t b=(uint64_t)(uintptr_t)base; uint64_t r=0;
+    if(!b) return VK_NULL_HANDLE;
+    pv_lock();
+    if(g_pv_cap){
+        uint32_t i=pv_hash(b)&(g_pv_cap-1);
+        while(g_pv[i].base){ if(g_pv[i].base==b){ r=g_pv[i].mv; break; } i=(i+1)&(g_pv_cap-1); }
+    }
+    pv_unlock();
+    return (VkPipeline)(uintptr_t)r;
+}
+static VkPipeline pv_remove(VkPipeline base)
+{
+    uint64_t b=(uint64_t)(uintptr_t)base; uint64_t r=0;
+    pv_lock();
+    if(g_pv_cap){
+        uint32_t mask=g_pv_cap-1, i=pv_hash(b)&mask;
+        while(g_pv[i].base && g_pv[i].base!=b) i=(i+1)&mask;
+        if(g_pv[i].base==b){
+            r=g_pv[i].mv;
+            uint32_t j=i;
+            for(;;){
+                j=(j+1)&mask;
+                if(!g_pv[j].base) break;
+                uint32_t k=pv_hash(g_pv[j].base)&mask;
+                if((i<=j)?(i<k&&k<=j):(i<k||k<=j)) continue;
+                g_pv[i]=g_pv[j]; i=j;
+            }
+            g_pv[i].base=0; g_pv[i].mv=0; g_pv_cnt--;
+        }
+    }
+    pv_unlock();
+    return (VkPipeline)(uintptr_t)r;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyPipeline(VkDevice device, VkPipeline pipeline,
+    const VkAllocationCallbacks *pAlloc)
+{
+    StereoDevice *sd=stereo_device_from_handle(device);
+    if (!sd) return;
+    if (pipeline) {
+        VkPipeline mv=pv_remove(pipeline);
+        if (mv) sd->real.DestroyPipeline(sd->real_device,mv,pAlloc);
+        for (uint32_t i=0;i<sd->pipeline_info_count;i++)
+            if (sd->pipeline_info[i].pipeline==pipeline) {
+                sd->pipeline_info[i]=sd->pipeline_info[--sd->pipeline_info_count];
+                break;
+            }
+        }
+        sd->real.DestroyPipeline(sd->real_device,pipeline,pAlloc);
+    }
+
 /* ── vkCreateGraphicsPipelines ───────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
@@ -11852,6 +11944,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
+    bool *dyn_mv                              = calloc(N, sizeof(bool));
+    VkPipelineRenderingCreateInfo **dyn_rw    = calloc(N, sizeof(*dyn_rw));
     for (uint32_t i = 0; i < N; i++)
     {
         dbg_out[i].proj_set             = UINT32_MAX;
@@ -11908,6 +12002,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                  (const VkPipelineRenderingCreateInfo*)base;
                 VkPipelineRenderingCreateInfo *rw =
                  (VkPipelineRenderingCreateInfo*)base;
+                 view_mask = rw->viewMask;
                 
                 /* Dynamic rendering path: if stereo is enabled and the app left
                  * viewMask at 0, promote it to 0x3 so the pipeline is actually
@@ -11919,9 +12014,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                   ri->colorAttachmentCount,
                   ri->depthAttachmentFormat,
                   ri->stencilAttachmentFormat);
-                 rw->viewMask = 0x3;
+                 dyn_mv[p] = true;
+                 dyn_rw[p] = rw;
+                 view_mask = 0x3;
                 }
-                view_mask = rw->viewMask;
                 STEREO_LOG(
                     "PIPE_RENDERING_CAPTURE p=%u viewMask=0x%x colors=%u depth=%u stencil=%u",
                     p,
@@ -13591,7 +13687,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
             free(tst[p]);
         }
-        free(tmp_mod); free(tst); free(infos);
+        free(tmp_mod); free(tst); free(infos); free(dbg_out); free(dyn_mv); free(dyn_rw);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     for (uint32_t p=0;p<N;p++)
@@ -13608,7 +13704,75 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             }
         }
     }
-    VkResult res=sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,infos,pAlloc,pP);
+    VkResult res = VK_SUCCESS;
+    bool *is_lib = calloc(N, sizeof(bool));
+    bool *need_mv = calloc(N, sizeof(bool));
+    VkGraphicsPipelineCreateInfo *orig_infos = malloc(N * sizeof(*orig_infos));
+    if (!is_lib || !need_mv || !orig_infos)
+    {
+        free(is_lib); free(need_mv); free(orig_infos);
+        for (uint32_t p=0;p<N;p++)
+        {
+            if (tmp_mod[p]) sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
+            free(tst[p]);
+        }
+        free(original_vs_hash); free(tmp_mod); free(tst); free(infos);
+        free(dbg_out); free(dyn_mv); free(dyn_rw);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    for (uint32_t p=0;p<N;p++)
+    {
+        bool lib = (pCI[p].flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0;
+        for (const VkBaseInStructure *x=(const VkBaseInStructure *)pCI[p].pNext;x;x=x->pNext)
+            if (x->sType==VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT ||
+                x->sType==VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR)
+                lib = true;
+            is_lib[p] = lib;
+            need_mv[p] = !lib && (dyn_mv[p] || tst[p] != NULL ||
+                infos[p].renderPass != pCI[p].renderPass);
+            /* Library pipelines keep the legacy single-pipeline behaviour. */
+            orig_infos[p] = lib ? infos[p] : pCI[p];
+            if (lib && dyn_mv[p]) dyn_rw[p]->viewMask = 0x3;
+    }
+    res = sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,orig_infos,pAlloc,pP);
+    for (uint32_t p=0;p<N;p++)
+        if (is_lib[p] && dyn_mv[p]) dyn_rw[p]->viewMask = 0;
+    if (res == VK_SUCCESS)
+    {
+        VkGraphicsPipelineCreateInfo *vinfos = malloc(N * sizeof(*vinfos));
+        uint32_t *vidx = malloc(N * sizeof(*vidx));
+        VkPipeline *vP = calloc(N, sizeof(*vP));
+        uint32_t nv = 0;
+        if (vinfos && vidx && vP)
+        {
+            for (uint32_t p=0;p<N;p++)
+            {
+                if (!need_mv[p]) continue;
+                vinfos[nv] = infos[p];
+                if (vinfos[nv].flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT)
+                {
+                    vinfos[nv].flags &= ~VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+                    vinfos[nv].basePipelineHandle = VK_NULL_HANDLE;
+                    vinfos[nv].basePipelineIndex = -1;
+                }
+                vidx[nv] = p;
+                if (dyn_mv[p]) dyn_rw[p]->viewMask = 0x3;
+                nv++;
+            }
+            if (nv)
+            {
+                VkResult vr = sd->real.CreateGraphicsPipelines(sd->real_device,pc,nv,vinfos,pAlloc,vP);
+                for (uint32_t k=0;k<nv;k++)
+                    if (dyn_mv[vidx[k]]) dyn_rw[vidx[k]]->viewMask = 0;
+                for (uint32_t k=0;k<nv;k++)
+                    if (vP[k]) stereo_pipeline_variant_add(pP[vidx[k]], vP[k]);
+                if (vr != VK_SUCCESS)
+                    STEREO_ERR("MV pipeline variant creation failed: %d", (int)vr);
+            }
+        }
+        free(vinfos); free(vidx); free(vP);
+    }
+    free(is_lib); free(need_mv); free(orig_infos);
     STEREO_LOG(
         "[PIPE AFTER DRIVER] res=%d",
         res);
@@ -13729,6 +13893,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     }
     free(original_vs_hash);
     free(tmp_mod); free(tst); free(infos);
+    free(dbg_out); free(dyn_mv); free(dyn_rw);
     return res;
 }
 
