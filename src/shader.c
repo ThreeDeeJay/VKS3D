@@ -3512,8 +3512,6 @@ bool spirv_patch_stereo_vertex(
         .cr                  = id_cr,
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
-        .force_far_depth     = force_far_depth,
-        .procedural_sky      = procedural_sky,
         .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
