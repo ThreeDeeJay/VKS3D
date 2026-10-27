@@ -4122,7 +4122,6 @@ typedef struct
 {
     uint32_t id;
     uint32_t first_param;
-    uint32_t type_id;
 } FsFunctionInfo;
 
 typedef struct
@@ -4155,24 +4154,15 @@ typedef struct
 typedef struct
 {
     uint32_t id;
-    uint32_t sampled_type_id;
-    uint32_t sampled_type;
-    uint32_t dim;
     uint32_t depth;
     uint32_t arrayed;
-    uint32_t ms;
-    uint32_t sampled;
-    uint32_t format;
     bool     patchable;
-    uint32_t pointer_type;
+    uint32_t sampled_type;   /* OpTypeSampledImage id wrapping this image type */
     uint32_t owner_var;
     uint32_t binding;
     uint32_t set;
-    bool     stereo;
-    uint32_t replacement_type; /* existing array image type if reused */
-    uint32_t replacement_pointer_type;
-    uint32_t replacement_sampled_type;
 } FsImageInfo;
+
 
 typedef struct
 {
@@ -4198,11 +4188,6 @@ typedef struct
     //Cached SPIR-V types
     uint32_t float_id;
     uint32_t int_id;
-    uint32_t uint_id;
-    uint32_t v2int_id;
-    uint32_t v2uint_id;
-    uint32_t v3int_id;
-    uint32_t v3uint_id;
     uint32_t v3float_id;
     uint32_t ptr_int_in_id;
     uint32_t vi_var_id;
@@ -4361,16 +4346,6 @@ uint32_t var)
         v->storage,
         v->set,
         v->binding);
-    STEREO_LOG(
-        "FS_BINDING_TYPE var=%u "
-        "storage=%u "
-        "type=%u "
-        "sampledImage=%u "
-        "n_img=%u",
-        v->id,
-        v->storage,
-        v->type,
-        s->n_img);
     /*
      * Input attachments are framebuffer attachments.
      */
@@ -4393,50 +4368,11 @@ uint32_t var)
     bool stereo =
         (v->binding <= 4);
     STEREO_LOG(
-        "FS_BINDING_RESULT "
-        "var=%u "
-        "storage=%u "
-        "set=%u "
-        "binding=%u "
-        "stereo=%u",
+        "FS_BINDING_RESULT var=%u binding=%u stereo=%u",
         var,
-        v->storage,
-        v->set,
         v->binding,
         stereo);
     return stereo;
-}
-
-static uint32_t fs_result_type_of(FsScan *s,
-    const uint32_t *in,
-    size_t in_c,
-    uint32_t result_id)
-{
-    for (size_t i = 5; i < in_c;)
-    {
-        uint32_t wc = in[i] >> 16;
-        uint32_t op = in[i] & 0xffff;
-        if (!wc)
-            break;
-        if ((op == SpvOpCompositeConstruct ||
-             op == SpvOpConstant ||
-             op == SpvOpConstantComposite ||
-             op == SpvOpCompositeExtract ||
-             op == SpvOpVectorShuffle ||
-             op == SpvOpLoad ||
-             op == SpvOpAccessChain ||
-             op == SpvOpCopyObject ||
-             op == SpvOpBitcast ||
-             op == SpvOpPhi ||
-             op == SpvOpImageFetch) &&
-            wc >= 3 &&
-            in[i + 2] == result_id)
-        {
-            return in[i + 1];
-        }
-        i += wc;
-    }
-    return 0;
 }
 
 static bool
@@ -4448,51 +4384,23 @@ fs_should_patch_sample(
     int vi = fs_var_index(s, descriptor_var);
     if (vi < 0)
         return false;
+
     uint32_t binding = s->vars[vi].binding;
-    uint32_t set     = s->vars[vi].set;
-    ///*
-    // * SSAO noise is a mono lookup texture. In the SSAO generator shader
-    // * (35d504ebec7cf2d7) it must not be arrayed or ViewIndex-shifted.
-    // */
-    //if (spv_hash == 0x35d504ebec7cf2d7ULL && binding == 2)
-    //{
-    //    STEREO_LOG(
-    //        "FS_SAMPLE_SKIP_NOISE "
-    //        "hash=%016llx "
-    //        "descriptor=%u "
-    //        "set=%u "
-    //        "binding=%u "
-    //        "storage=%u "
-    //        "type=%u",
-    //        (unsigned long long)spv_hash,
-    //        descriptor_var,
-    //        set,
-    //        binding,
-    //        s->vars[vi].storage,
-    //        s->vars[vi].type);
-    //    STEREO_LOG(
-    //        "FS_NOISE_REASON "
-    //        "hash=%016llx "
-    //        "descriptor=%u "
-    //        "set=%u "
-    //        "binding=%u "
-    //        "reason=SSAO_NOISE_BINDING2",
-    //        (unsigned long long)spv_hash,
-    //        descriptor_var,
-    //        set,
-    //        binding);
-    //    return false;
-    //}
-    STEREO_LOG(
-        "FS_PATCH_DECISION "
-        "hash=%016llx "
-        "descriptor=%u "
-        "set=%u "
-        "binding=%u",
-        (unsigned long long)spv_hash,
-        descriptor_var,
-        set,
-        binding);
+
+    /*
+     * SSAO noise is a mono lookup texture.  In the SSAO generator shader
+     * (35d504ebec7cf2d7) it must not be arrayed or ViewIndex-shifted.
+     */
+    if (spv_hash == 0x35d504ebec7cf2d7ULL && binding == 2)
+    {
+        STEREO_LOG(
+            "FS_SAMPLE_SKIP_NOISE hash=%016llx descriptor=%u binding=%u",
+            (unsigned long long)spv_hash,
+            descriptor_var,
+            binding);
+        return false;
+    }
+
     return fs_binding_is_stereo_attachment(s, descriptor_var);
 }
 
@@ -4518,10 +4426,6 @@ spv_op_name(uint32_t op)
         return "OpImage";
     case SpvOpImageSampleImplicitLod:
         return "OpImageSampleImplicitLod";
-    case SpvOpImageQuerySize:
-        return "OpImageQuerySize";
-    case SpvOpImageQuerySizeLod:
-        return "OpImageQuerySizeLod";
     case SpvOpImageSampleExplicitLod:
         return "OpImageSampleExplicitLod";
     case SpvOpImageSampleDrefImplicitLod:
@@ -4604,22 +4508,12 @@ fs_find_load(
     uint32_t value_id)
 {
     if (!s)
-    {
-        STEREO_LOG(
-            "FS_FIND_LOAD_MISS value=%u",
-            value_id);
         return -1;
-    }
     for (uint32_t i = 0; i < s->n_load; ++i)
     {
         if (s->loads[i].id == value_id)
-        {
             return (int)i;
-        }
     }
-    STEREO_LOG(
-        "FS_FIND_LOAD_MISS value=%u",
-        value_id);
     return -1;
 }
 static int
@@ -4756,144 +4650,21 @@ fs_resolve_load_owner(
 /*═══════════════════════════════════════════════════════════════════════
  * Instruction scanners
  *═══════════════════════════════════════════════════════════════════════*/
-
-static uint32_t
-fs_find_matching_sampled_image(
-    const uint32_t *in,
-    size_t in_c,
-    uint32_t image_type)
-{
-    for (size_t i = 5; i < in_c;)
-    {
-        uint32_t wc = in[i] >> 16;
-        uint32_t op = in[i] & 0xffff;
-        if (!wc || i + wc > in_c)
-            break;
-        if (op == SpvOpTypeSampledImage &&
-            wc >= 3 &&
-            in[i + 2] == image_type)
-        {
-            return in[i + 1];
-        }
-        i += wc;
-    }
-    return 0;
-}
-static uint32_t
-fs_find_matching_image_type(
-    const uint32_t *in,
-    size_t in_c,
-    uint32_t sampled_type,
-    uint32_t dim,
-    uint32_t depth,
-    uint32_t arrayed,
-    uint32_t ms,
-    uint32_t sampled,
-    uint32_t format)
-{
-    for (size_t i = 5; i < in_c;)
-    {
-        uint32_t wc = in[i] >> 16;
-        uint32_t op = in[i] & 0xffff;
-        if (!wc || i + wc > in_c)
-            break;
-        if (op == SpvOpTypeImage &&
-            wc >= 9 &&
-            in[i + 2] == sampled_type &&
-            in[i + 3] == dim &&
-            in[i + 4] == depth &&
-            in[i + 5] == arrayed &&
-            in[i + 6] == ms &&
-            in[i + 7] == sampled &&
-            in[i + 8] == format)
-        {
-            return in[i + 1];
-        }
-        i += wc;
-    }
-    return 0;
-}
-
-static int
-fs_find_matching_array_image(FsScan *s, const FsImageInfo *src)
-{
-    for (uint32_t i = 0; i < s->n_img; ++i)
-    {
-        const FsImageInfo *img = &s->images[i];
-        STEREO_LOG(
-            "FS_MATCH_CHECK cur=%u cand=%u "
-            "sampledImage=%u/%u dim=%u/%u depth=%u/%u "
-            "arr=%u/%u ms=%u/%u sampled=%u/%u fmt=%u/%u",
-            src->id,
-            img->id,
-            src->sampled_type, img->sampled_type,
-            src->dim,          img->dim,
-            src->depth,        img->depth,
-            src->arrayed,      img->arrayed,
-            src->ms,           img->ms,
-            src->sampled,      img->sampled,
-            src->format,       img->format);
-        /* OpTypeSampledImage wrappers may differ while the underlying
-         * OpTypeImage declarations are identical. Ignore wrapper ids. */
-        if (img->id           == src->id)           continue;
-        if (img->dim          != src->dim)          continue;
-        if (img->depth        != src->depth)        continue;
-        if (img->ms           != src->ms)           continue;
-        if (img->sampled      != src->sampled)      continue;
-        if (img->format       != src->format)       continue;
-        if (img->arrayed == 1)
-        {
-            STEREO_LOG(
-                "FS_MATCH_FOUND src=%u reuse=%u",
-                src->id,
-                img->id);
-            return (int)i;
-        }
-    }
-    return -1;
-}
-
-static int
-fs_find_image_by_sampled_image(
-    FsScan *s,
-    uint32_t sampled_image_type)
-{
-    STEREO_LOG(
-        "FS_FIND_IMAGE_BY_SAMPLE target=%u n_img=%u",
-        sampled_image_type,
-        s->n_img);
-    for (uint32_t i = 0; i < s->n_img; ++i)
-    {
-        STEREO_LOG(
-            "FS_FIND_IMAGE_BY_SAMPLE_ENTRY idx=%u img=%u sampled=%u sampled_id=%u",
-            i,
-            s->images[i].id,
-            s->images[i].sampled_type,
-            s->images[i].sampled_type_id);
-        STEREO_LOG(
-            "FS_FIND_COMPARE target=%u sampled=%u sampled_id=%u",
-            sampled_image_type,
-            s->images[i].sampled_type,
-            s->images[i].sampled_type_id);
-        if (s->images[i].sampled_type_id == sampled_image_type)
-            return (int)i;
-    }
-    return -1;
-}
-
-static int
-fs_find_image_by_owner(
-    FsScan *s,
-    uint32_t owner_var)
-{
-    for (uint32_t i = 0; i < s->n_img; ++i)
-    {
-        if (s->images[i].owner_var == owner_var)
-            return (int)i;
-    }
-    return -1;
-}
-
+/*═══════════════════════════════════════════════════════════════════════
+ * Pass 1: Scan global SPIR-V types.
+ *
+ * This pass records:
+ *
+ *   • capabilities
+ *   • entry point location
+ *   • scalar/vector types
+ *   • candidate image types
+ *   • sampled-image types
+ *   • ViewIndex input pointer type
+ *
+ * It intentionally does NOT determine whether an image will actually be
+ * patched.  Descriptor bindings are not known yet.
+ *═══════════════════════════════════════════════════════════════════════*/
 static void
 fs_scan_type_instruction(
     FsScan *s,
@@ -4920,208 +4691,104 @@ fs_scan_type_instruction(
         break;
     case SpvOpTypeInt:
         if (wc >= 4 &&
-            ins[2] == 32)
+            ins[2] == 32 &&
+            ins[3] == 1)
         {
-            if (ins[3] == 1)
-                s->int_id = ins[1];
-            else
-                s->uint_id = ins[1];
-            STEREO_LOG(
-                "FS_TYPE_INT_DECL id=%u signed=%u int=%u uint=%u",
-                ins[1],
-                ins[3],
-                s->int_id,
-                s->uint_id);
+            s->int_id = ins[1];
         }
         break;
     case SpvOpTypeVector:
-        if (wc >= 4)
+        if (wc >= 4 &&
+            s->float_id &&
+            ins[2] == s->float_id &&
+            ins[3] == 3)
         {
-            if (ins[2] == s->int_id)
-            {
-                if (ins[3] == 2)
-                    s->v2int_id = ins[1];
-                else if (ins[3] == 3)
-                    s->v3int_id = ins[1];
-            }
-            else if (ins[2] == s->uint_id)
-            {
-                if (ins[3] == 2)
-                    s->v2uint_id = ins[1];
-                else if (ins[3] == 3)
-                    s->v3uint_id = ins[1];
-            }
-            else if (ins[2] == s->float_id &&
-                     ins[3] == 3)
-            {
-                s->v3float_id = ins[1];
-            }
+            s->v3float_id = ins[1];
         }
         break;
     case SpvOpTypeImage:
     {
-        STEREO_LOG(
-            "FS_SCAN_TYPEIMAGE id=%u sampledType=%u dim=%u depth=%u arrayed=%u ms=%u sampled=%u format=%u",
-            (wc >= 2) ? ins[1] : 0,
-            (wc >= 3) ? ins[2] : 0,
-            (wc >= 4) ? ins[3] : 0,
-            (wc >= 5) ? ins[4] : 0,
-            (wc >= 6) ? ins[5] : 0,
-            (wc >= 7) ? ins[6] : 0,
-            (wc >= 8) ? ins[7] : 0,
-            (wc >= 9) ? ins[8] : 0);
         if (wc < 9)
             break;
-        uint32_t type_id      = ins[1];
-        uint32_t sampled_type = ins[2];
-        uint32_t dim          = ins[3];
-        uint32_t depth        = ins[4];
-        uint32_t arrayed      = ins[5];
-        uint32_t ms           = ins[6];
-        uint32_t sampled      = ins[7];
-        uint32_t format       = ins[8];
+        uint32_t type_id = ins[1];
+        uint32_t dim     = ins[3];
+        uint32_t depth   = ins[4];
+        uint32_t arrayed = ins[5];
+        //STEREO_LOG(
+        //    "FS_IMAGE_TYPE id=%u sampledType=%u dim=%u depth=%u arrayed=%u ms=%u sampled=%u format=%u",
+        //    type_id,
+        //    ins[2],
+        //    dim,
+        //    depth,
+        //    arrayed,
+        //    ins[6],
+        //    ins[7],
+        //    ins[8]);
         if (dim == SpvDim2D &&
+            arrayed == 0 &&
             s->n_img < FS_MAX_IMG)
         {
-            STEREO_LOG(
-                "FS_NEW_IMAGE_SCAN "
-                "idx=%u "
-                "id=%u "
-                "sampled=%u "
-                "dim=%u "
-                "arrayed=%u",
-                s->n_img,
-                type_id,
-                sampled_type,
-                dim,
-                arrayed);
             FsImageInfo *img =
                 &s->images[s->n_img++];
-            STEREO_LOG(
-                "FS_IMAGE_NEW idx=%u imageType=%u n_img=%u",
-                s->n_img - 1,
-                type_id,
-                s->n_img);
             memset(img, 0, sizeof(*img));
-            img->id               = type_id;
-            img->sampled_type     = sampled_type;
-            img->dim              = dim;
-            img->depth            = depth;
-            img->arrayed          = arrayed;
-            img->ms               = ms;
-            img->sampled          = sampled;
-            img->format           = format;
-            img->patchable        = (arrayed == 0);
-            img->stereo           = (arrayed == 0);
-            img->replacement_type = 0;
-            STEREO_LOG(
-                "FS_IMAGE_FIELDS_INIT "
-                "idx=%u "
-                "id=%u "
-                "sampled_type=%u "
-                "dim=%u "
-                "arrayed=%u "
-                "stereo=%u",
-                s->n_img - 1,
-                img->id,
-                img->sampled_type,
-                img->dim,
-                img->arrayed,
-                img->stereo);
-            STEREO_LOG(
-                "FS_NEW_IMAGE_DONE "
-                "idx=%u "
-                "id=%u",
-                s->n_img - 1,
-                img->id);
-            STEREO_LOG(
-                "FS_ARRAY_TYPE_PATCH "
-                "imageType=%u "
-                "sampledType=%u "
-                "arrayed_before=%u "
-                "arrayed_after=%u",
-                type_id,
-                sampled_type,
-                arrayed,
-                1u);
-            STEREO_LOG(
-                "FS_BEFORE_ADD_LOG n_img=%u ptr=%p",
-                s->n_img,
-                (void *)s);
-            STEREO_LOG(
-                "FS_ADD_IMAGE idx=%u n_img=%u id=%u ptr=%p",
-                s->n_img - 1,
-                s->n_img,
-                img->id,
-                (void *)s);
+            img->id             = type_id;
+            img->depth          = depth;
+            img->arrayed        = arrayed;
+            img->patchable      = true;
+            img->sampled_type   = 0;
+            //STEREO_LOG(
+            //    "FS_IMAGE_CANDIDATE type=%u depth=%u index=%u",
+            //    img->id,
+            //    img->depth,
+            //    s->n_img - 1);
         }
-        STEREO_LOG(
-            "FS_IMAGE_TABLE_SIZE n_img=%u",
-            s->n_img);
+        //else
+        //{
+        //    STEREO_LOG(
+        //        "FS_IMAGE_REJECT type=%u dim=%u arrayed=%u",
+        //        type_id,
+        //        dim,
+        //        arrayed);
+        //}
         break;
     }
     case SpvOpTypeSampledImage:
     {
         STEREO_LOG(
-            "FS_SAMPLED_BEGIN sampledType=%u imageType=%u n_img=%u",
-            (wc >= 2) ? ins[1] : 0,
-            (wc >= 3) ? ins[2] : 0,
-            s->n_img);
+            "FS_TYPE_SAMPLED_IMAGE id=%u imageType=%u",
+            ins[1],
+            (wc >= 3) ? ins[2] : 0);
         if (wc < 3)
             break;
-        uint32_t sampled_image_id = ins[1];
-        uint32_t image_type_id    = ins[2];
-        STEREO_LOG(
-            "FS_TYPE_SAMPLED_IMAGE id=%u imageType=%u",
-            sampled_image_id,
-            image_type_id);
-        for (uint32_t ii = 0; ii < s->n_img; ++ii)
+        bool found = false;
+        for (uint32_t i = 0; i < s->n_img; ++i)
         {
-            STEREO_LOG(
-                "FS_SAMPLED_COMPARE idx=%u imageType=%u wanted=%u",
-                ii,
-                s->images[ii].id,
-                image_type_id);
-            if (s->images[ii].id == image_type_id)
+            if (s->images[i].id == ins[2])
             {
+                s->images[i].sampled_type = ins[1];
                 STEREO_LOG(
-                    "FS_SAMPLED_STORE idx=%u image=%u sampled=%u",
-                    ii,
-                    s->images[ii].id,
-                    s->images[ii].sampled_type);
-                /*
-                 * Keep sampled_type as the OpTypeImage component type (%float, etc.).
-                 * Store the OpTypeSampledImage wrapper separately.
-                 */
-                s->images[ii].sampled_type_id = sampled_image_id;
-                STEREO_LOG(
-                    "FS_IMAGE_TYPE_BIND "
-                    "idx=%u "
-                    "imageType=%u "
-                    "sampledType=%u",
-                    ii,
-                    image_type_id,
-                    sampled_image_id);
-                STEREO_LOG(
-                    "FS_TYPE_SAMPLED_IMAGE_MAP imageType=%u sampledImage=%u",
-                    image_type_id,
-                    sampled_image_id);
+                    "FS_TYPE_SAMPLED_IMAGE_MAP imageType=%u sampledType=%u",
+                    s->images[i].id,
+                    s->images[i].sampled_type);
+                found = true;
                 break;
             }
         }
-        if (s->n_si < FS_MAX_SI)
-            s->si_ids[s->n_si++] = sampled_image_id;
+        if (found && s->n_si < FS_MAX_SI)
+        {
+            s->si_ids[s->n_si++] = ins[1];
+            //STEREO_LOG(
+            //    "FS_SAMPLED_IMAGE_LINK sampledType=%u imageType=%u",
+            //    ins[1],
+            //    ins[2]);
+            //STEREO_LOG(
+            //    "FS_SAMPLED_IMAGE_TYPE id=%u imageType=%u",
+            //    ins[1],
+            //    ins[2]);
+        }
         break;
     }
     case SpvOpTypePointer:
-        for (uint32_t img = 0; img < s->n_img; ++img)
-        {
-            STEREO_LOG(
-                "FS_BEFORE_PTR idx=%u image=%u sampled=%u",
-                img,
-                s->images[img].id,
-                s->images[img].sampled_type);
-        }
         STEREO_LOG(
             "FS_TYPE_POINTER id=%u storage=%u target=%u",
             (wc >= 2) ? ins[1] : 0,
@@ -5136,44 +4803,6 @@ fs_scan_type_instruction(
             STEREO_LOG(
                 "FS_PTR_INT_INPUT id=%u",
                 s->ptr_int_in_id);
-        }
-        if (wc >= 4)
-        {
-            for (uint32_t img = 0; img < s->n_img; ++img)
-            {
-                STEREO_LOG(
-                    "FS_PTR_COMPARE "
-                    "idx=%u "
-                    "image=%u "
-                    "sampled_type=%u "
-                    "sampled_type_id=%u "
-                    "ptrTarget=%u",
-                    img,
-                    s->images[img].id,
-                    s->images[img].sampled_type,
-                    s->images[img].sampled_type_id,
-                    ins[3]);
-                if (s->images[img].sampled_type_id == ins[3])
-                {
-                    s->images[img].pointer_type = ins[1];
-                    STEREO_LOG(
-                        "FS_POINTER_BIND "
-                        "idx=%u "
-                        "imageType=%u "
-                        "sampledType=%u "
-                        "pointerType=%u",
-                        img,
-                        s->images[img].id,
-                        s->images[img].sampled_type,
-                        ins[1]);
-                    STEREO_LOG(
-                        "FS_IMAGE_POINTER image=%u sampled=%u pointer=%u",
-                        s->images[img].id,
-                        s->images[img].sampled_type,
-                        s->images[img].pointer_type);
-                    break;
-                }
-            }
         }
         break;
     default:
@@ -5323,6 +4952,7 @@ fs_scan_variable_instruction(
 {
     if (!s || !ins || wc < 4)
         return;
+
     if (s->n_var >= FS_MAX_VARS)
     {
         STEREO_LOG(
@@ -5330,8 +4960,10 @@ fs_scan_variable_instruction(
             ins[2]);
         return;
     }
+
     FsVariableInfo *var = &s->vars[s->n_var++];
     memset(var, 0, sizeof(*var));
+
     var->id       = ins[2];
     var->type     = ins[1];
     var->storage  = ins[3];
@@ -5339,6 +4971,7 @@ fs_scan_variable_instruction(
     var->binding  = 0xffffffffu;
     var->location = 0xffffffffu;
     var->is_projection_ubo = false;
+
     /*
      * Decorations may legally appear before OpVariable.
      * Apply cached DescriptorSet, Binding, and Location values now.
@@ -5348,83 +4981,15 @@ fs_scan_variable_instruction(
         FsDecorationInfo *dec = &s->decorations[i];
         if (dec->target != var->id)
             continue;
+
         if (dec->set != 0xffffffffu)
             var->set = dec->set;
         if (dec->binding != 0xffffffffu)
             var->binding = dec->binding;
         if (dec->location != 0xffffffffu)
             var->location = dec->location;
-        STEREO_LOG(
-            "FS_REGISTER_VAR "
-            "id=%u "
-            "type=%u "
-            "storage=%u "
-            "set=%u "
-            "binding=%u",
-            var->id,
-            var->type,
-            var->storage,
-            var->set,
-            var->binding);
     }
-    STEREO_LOG(
-        "FS_DESCRIPTOR_CREATE "
-        "var=%u "
-        "type=%u "
-        "storage=%u "
-        "set=%u "
-        "binding=%u",
-        var->id,
-        var->type,
-        var->storage,
-        var->set,
-        var->binding);
-    STEREO_LOG(
-        "FS_VAR_TYPE_LOOKUP "
-        "var=%u "
-        "type=%u",
-        var->id,
-        var->type);
 
-    for (uint32_t ii = 0; ii < s->n_img; ++ii)
-    {
-        STEREO_LOG(
-            "FS_IMAGE_TYPE "
-            "idx=%u "
-            "id=%u "
-            "sampledType=%u "
-            "arrayed=%u",
-            ii,
-            s->images[ii].id,
-            s->images[ii].sampled_type,
-            s->images[ii].arrayed);
-    }
-    if (var->storage == SpvStorageClassUniformConstant)
-    {
-        for (uint32_t ii = 0; ii < s->n_img; ++ii)
-        {
-            if (s->images[ii].id == var->type)
-            {
-                STEREO_LOG(
-                    "FS_TYPE_IMAGE "
-                    "var=%u "
-                    "imageType=%u "
-                    "sampledType=%u "
-                    "dim=%u "
-                    "arrayed=%u "
-                    "set=%u "
-                    "binding=%u",
-                    var->id,
-                    s->images[ii].id,
-                    s->images[ii].sampled_type,
-                    s->images[ii].dim,
-                    s->images[ii].arrayed,
-                    var->set,
-                    var->binding);
-                break;
-            }
-        }
-    }
     if (var->storage == SpvStorageClassUniform &&
         var->binding == 4u)
     {
@@ -5436,6 +5001,7 @@ fs_scan_variable_instruction(
             var->set,
             var->binding);
     }
+
     if (var->id == 15)
     {
         STEREO_LOG(
@@ -5446,6 +5012,7 @@ fs_scan_variable_instruction(
             var->binding,
             var->location);
     }
+
     if (var->storage == SpvStorageClassUniform ||
         var->storage == SpvStorageClassUniformConstant)
     {
@@ -5584,14 +5151,11 @@ fs_scan_function(
         function_id;
     fn->first_param =
         s->n_param;
-    fn->type_id =
-        (wc >= 5) ? ins[4] : 0;
     STEREO_LOG(
-        "FS_FUNCTION_REGISTER id=%u index=%u firstParam=%u type=%u",
+        "FS_FUNCTION_REGISTER id=%u index=%u firstParam=%u",
         function_id,
         s->n_function - 1,
-        fn->first_param,
-        fn->type_id);
+        fn->first_param);
     STEREO_LOG(
         "FS_FUNCTION_BEGIN id=%u",
         function_id);
@@ -5628,15 +5192,7 @@ fs_scan_load_instruction(
     uint32_t result_type = ins[1];
     uint32_t result_id   = ins[2];
     uint32_t source_id   = ins[3];
-    STEREO_LOG(
-        "FS_LOAD_SOURCE result=%u variable=%u",
-        ins[2],
-        source_id);
-    STEREO_LOG(
-        "FS_LOAD_INPUT result=%u source=%u type=%u",
-        result_id,
-        source_id,
-        result_type);
+
     uint32_t owner = 0;
     bool have_owner = fs_resolve_load_owner(s, source_id, &owner);
 
@@ -5653,12 +5209,6 @@ fs_scan_load_instruction(
             source_id);
     }
 
-    STEREO_LOG(
-        "FS_LOAD_OWNER_FINAL result=%u source=%u owner=%u resolved=%u",
-        result_id,
-        source_id,
-        owner,
-        have_owner);
     int owner_var_index = fs_var_index(s, owner);
     bool from_projection_ubo =
         (owner_var_index >= 0 &&
@@ -5875,15 +5425,6 @@ fs_track_image_propagation(
     {
         return;
     }
-    STEREO_LOG(
-        "FS_PROP_IMAGE op=%s result=%u source=%u load=%d owner=%u binding=%u sourceOwner=%u",
-        spv_op_name(op),
-        result_id,
-        source_id,
-        src,
-        s->loads[src].owner_var,
-        s->loads[src].binding,
-        s->loads[src].source_id);
     if (s->n_load >= FS_MAX_LOADS)
     {
         STEREO_LOG(
@@ -5896,13 +5437,12 @@ fs_track_image_propagation(
     *dst = s->loads[src];
     dst->id = result_id;
     STEREO_LOG(
-        "FS_PROPAGATE op=%s src=%u dst=%u owner=%u source=%u binding=%u",
+        "FS_PROPAGATE op=%s src=%u dst=%u owner=%u source=%u",
         spv_op_name(op),
         source_id,
         result_id,
         dst->owner_var,
-        dst->source_id,
-        dst->binding);
+        dst->source_id);
 }
 /*
  * Track OpSampledImage ownership.
@@ -5935,13 +5475,6 @@ fs_track_sampled_image(
             s->n_si,
             ins[1]))
     {
-        STEREO_LOG(
-            "FS_SAMPLED_IMAGE_SKIP resultType=%u result=%u image=%u sampler=%u n_si=%u",
-            ins[1],
-            (wc >= 3) ? ins[2] : 0,
-            (wc >= 4) ? ins[3] : 0,
-            (wc >= 5) ? ins[4] : 0,
-            s->n_si);
         return;
     }
     uint32_t result_id  = ins[2];
@@ -5971,22 +5504,6 @@ fs_track_sampled_image(
         &s->loads[s->n_load++];
     *dst = s->loads[src];
     dst->id = result_id;
-    STEREO_LOG(
-        "FS_LOAD_REGISTER "
-        "id=%u "
-        "source=%u "
-        "owner=%u "
-        "binding=%u",
-        dst->id,
-        dst->source_id,
-        dst->owner_var,
-        dst->binding);
-    STEREO_LOG(
-        "FS_SAMPLED_IMAGE_REGISTER result=%u image=%u owner=%u binding=%u",
-        result_id,
-        image_id,
-        dst->owner_var,
-        dst->binding);
     STEREO_LOG(
         "FS_SAMPLED_IMAGE result=%u image=%u sampler=%u owner=%u source=%u",
         result_id,
@@ -6030,7 +5547,6 @@ fs_scan_image_operation(
     case SpvOpImageFetch:
     case SpvOpImageRead:
     case SpvOpImageWrite:
-    case SpvOpImageTexelPointer:
         STEREO_LOG(
             "FS_IMAGE_WRITE image=%u value=%u",
             ins[3],
@@ -6132,18 +5648,8 @@ fs_scan_instruction(
     uint32_t op,
     uint32_t wc)
 {
-    STEREO_LOG(
-        "FS_SCAN_STATE_BEGIN op=%s n_img=%u",
-        spv_op_name(op),
-        s ? s->n_img : 999u);
     if (!s || !ins)
         return;
-    STEREO_LOG(
-        "FS_SCAN op=%s(%u) wc=%u n_img=%u",
-        spv_op_name(op),
-        op,
-        wc,
-        s->n_img);
     /*
      * Diagnostic: log every image operation encountered during
      * the prescan so we know exactly which SPIR-V instructions
@@ -6158,11 +5664,9 @@ fs_scan_instruction(
     case SpvOpImageFetch:
     case SpvOpImageRead:
     case SpvOpImageWrite:
-    case SpvOpImageQuerySizeLod:
         STEREO_LOG(
-            "FS_IMAGE_OP opcode=%u (%s) wc=%u result=%u image=%u",
+            "FS_IMAGE_OP opcode=%u wc=%u result=%u image=%u",
             op,
-            spv_op_name(op),
             wc,
             (wc >= 3) ? ins[2] : 0,
             (wc >= 4) ? ins[3] : 0);
@@ -6190,14 +5694,6 @@ fs_scan_instruction(
             ins,
             op,
             wc);
-        STEREO_LOG(
-            "FS_AFTER_TYPE op=%s n_img=%u",
-            spv_op_name(op),
-            s->n_img);
-        STEREO_LOG(
-            "FS_SCAN_STATE_END op=%s n_img=%u",
-            spv_op_name(op),
-            s->n_img);
         break;
     /*
      * Decorations may appear before OpVariable.
@@ -6279,14 +5775,6 @@ fs_scan_instruction(
                 if (fs_var_index(s, base_id) >= 0)
                     owner = base_id;
             }
-            STEREO_LOG(
-                "FS_LOAD_RECORD "
-                "op=%s "
-                "result=%u "
-                "owner=%u",
-                spv_op_name(op),
-                result_id,
-                owner);
             fs_add_load_mapping(s, result_id, owner);
             STEREO_LOG(
                 "FS_CHAIN result=%u base=%u owner=%u op=%s",
@@ -6303,14 +5791,6 @@ fs_scan_instruction(
         if (wc >= 4)
         {
             uint32_t result_id = ins[2];
-            STEREO_LOG(
-                "FS_COPY_OBJECT "
-                "result=%u "
-                "src=%u "
-                "type=%u",
-                result_id,
-                ins[3],
-                ins[1]);
             uint32_t source_id = ins[3];
             uint32_t owner     = source_id;
             if (!fs_resolve_load_owner(s, source_id, &owner))
@@ -6318,14 +5798,6 @@ fs_scan_instruction(
                 if (fs_var_index(s, source_id) >= 0)
                     owner = source_id;
             }
-            STEREO_LOG(
-                "FS_LOAD_RECORD "
-                "op=%s "
-                "result=%u "
-                "owner=%u",
-                spv_op_name(op),
-                result_id,
-                owner);
             fs_add_load_mapping(s, result_id, owner);
             STEREO_LOG(
                 "FS_PROPAGATE_OBJECT op=%s src=%u dst=%u owner=%u",
@@ -6348,14 +5820,6 @@ fs_scan_instruction(
                 if (fs_var_index(s, source_id) >= 0)
                     owner = source_id;
             }
-            STEREO_LOG(
-                "FS_LOAD_RECORD "
-                "op=%s "
-                "result=%u "
-                "owner=%u",
-                spv_op_name(op),
-                result_id,
-                owner);
             fs_add_load_mapping(s, result_id, owner);
         }
         break;
@@ -6372,55 +5836,18 @@ fs_scan_instruction(
                 if (fs_var_index(s, source_id) >= 0)
                     owner = source_id;
             }
-            STEREO_LOG(
-                "FS_LOAD_RECORD "
-                "op=%s "
-                "result=%u "
-                "owner=%u",
-                spv_op_name(op),
-                result_id,
-                owner);
             fs_add_load_mapping(s, result_id, owner);
         }
         break;
     }
     case SpvOpLoad:
-    {
-        if (wc >= 4)
-        {
-            STEREO_LOG(
-                "FS_LOAD_SCAN "
-                "result=%u "
-                "ptr=%u "
-                "type=%u",
-                ins[2],
-                ins[3],
-                ins[1]);
-        }
         fs_scan_load_instruction(
             s,
             ins,
             wc);
         break;
-    }
     case SpvOpSampledImage:
     {
-        STEREO_LOG(
-            "FS_ENTER_TRACK_SAMPLED resultType=%u result=%u image=%u sampler=%u",
-            (wc >= 2) ? ins[1] : 0,
-            (wc >= 3) ? ins[2] : 0,
-            (wc >= 4) ? ins[3] : 0,
-            (wc >= 5) ? ins[4] : 0);
-        STEREO_LOG(
-            "FS_INPUT_OPSAMPLEDIMAGE "
-            "result=%u "
-            "type=%u "
-            "image=%u "
-            "sampler=%u",
-            (wc >= 3) ? ins[2] : 0,
-            (wc >= 2) ? ins[1] : 0,
-            (wc >= 4) ? ins[3] : 0,
-            (wc >= 5) ? ins[4] : 0);
         if (wc >= 5)
         {
             STEREO_LOG(
@@ -6429,11 +5856,6 @@ fs_scan_instruction(
                 ins[2],
                 ins[3],
                 ins[4]);
-            int src = fs_find_load(s, ins[3]);
-            STEREO_LOG(
-                "FS_SAMPLED_IMAGE_LOOKUP image=%u load=%d",
-                ins[3],
-                src);
         }
         fs_track_sampled_image(
             s,
@@ -6454,12 +5876,13 @@ fs_scan_instruction(
      * This is where depth/normal attachment analysis
      * will eventually feed projection correction.
      */
+    case SpvOpImageSampleImplicitLod:
+    case SpvOpImageSampleExplicitLod:
+    case SpvOpImageSampleDrefImplicitLod:
     case SpvOpImageSampleDrefExplicitLod:
     case SpvOpImageFetch:
     case SpvOpImageRead:
     case SpvOpImageWrite:
-    case SpvOpImageTexelPointer:
-    case SpvOpImageQuerySizeLod:
         fs_scan_image_operation(
             s,
             ins,
@@ -6523,11 +5946,6 @@ fs_prescan(
         s,
         0,
         sizeof(*s));
-    STEREO_LOG(
-        "FS_PRESCAN_MODULE ptr=%p bound=%u words=%zu",
-        (void *)w,
-        w[3],
-        c);
     /*
      * SPIR-V module layout:
      *
@@ -6642,59 +6060,39 @@ fs_prescan(
      * Dump the final ownership graph after fixups.
      */
     fs_dump_scan_summary(s);
-    FsImageInfo original_images[FS_MAX_IMG];
-    uint32_t original_count = s->n_img;
-    STEREO_LOG(
-        "FS_IMAGE_REBUILD original=%u",
-        original_count);
-    memcpy(original_images, s->images,
-           original_count * sizeof(FsImageInfo));
-    s->n_img = 0;
-    for (uint32_t img = 0; img < original_count; ++img)
+    /*
+     * Resolve descriptor ownership for every image type.
+     * This allows spirv_patch_stereo_fs() to know which binding
+     * owns a given OpTypeImage.
+     */
+    for (uint32_t img = 0; img < s->n_img; ++img)
     {
-        const FsImageInfo *src = &original_images[img];
-        bool found = false;
+        FsImageInfo *image = &s->images[img];
+        image->owner_var = UINT32_MAX;
+        image->binding   = UINT32_MAX;
+        image->set       = UINT32_MAX;
         for (uint32_t v = 0; v < s->n_var; ++v)
         {
-            if (src->pointer_type &&
-                s->vars[v].type == src->pointer_type)
+            if (image->sampled_type &&
+                s->vars[v].type == image->sampled_type)
             {
-                if (s->n_img >= FS_MAX_IMG)
-                    break;
-                FsImageInfo *dst = &s->images[s->n_img++];
-                *dst = *src;
-                dst->replacement_type = 0;
-                dst->replacement_pointer_type = 0;
-                dst->replacement_sampled_type = 0;
-                dst->owner_var = s->vars[v].id;
-                dst->binding   = s->vars[v].binding;
-                dst->set       = s->vars[v].set;
-                dst->stereo =
-                    fs_binding_is_stereo_attachment(
-                        s,
-                        dst->owner_var);
+                image->owner_var = s->vars[v].id;
+                image->binding   = s->vars[v].binding;
+                image->set       = s->vars[v].set;
                 STEREO_LOG(
-                    "FS_DUP_IMAGE idx=%u image=%u owner=%u binding=%u stereo=%u",
-                    s->n_img - 1,
-                    dst->id,
-                    dst->owner_var,
-                    dst->binding,
-                    dst->stereo);
-                found = true;
-            }
-        }
-        if (!found)
-        {
-            if (s->n_img >= FS_MAX_IMG)
+                    "FS_IMAGE_OWNER "
+                    "imageType=%u "
+                    "sampledType=%u "
+                    "owner=%u "
+                    "set=%u "
+                    "binding=%u",
+                    image->id,
+                    image->sampled_type,
+                    image->owner_var,
+                    image->set,
+                    image->binding);
                 break;
-            FsImageInfo *dst = &s->images[s->n_img++];
-            *dst = *src;
-            dst->replacement_type = 0;
-            dst->replacement_pointer_type = 0;
-            dst->replacement_sampled_type = 0;
-            dst->owner_var = UINT32_MAX;
-            dst->binding   = UINT32_MAX;
-            dst->set       = UINT32_MAX;
+            }
         }
     }
     for (uint32_t l = 0; l < s->n_load; ++l)
@@ -6721,16 +6119,6 @@ fs_prescan(
                 s->vars[v].set,
                 s->vars[v].binding);
         }
-    }
-    for (uint32_t i = 0; i < s->n_img; ++i)
-    {
-        STEREO_LOG(
-            "FS_IMAGE_FINAL idx=%u id=%u sampledImage=%u owner=%u binding=%u",
-            i,
-            s->images[i].id,
-            s->images[i].sampled_type,
-            s->images[i].owner_var,
-            s->images[i].binding);
     }
     STEREO_LOG(
         "FS_PRESCAN_EXIT");
