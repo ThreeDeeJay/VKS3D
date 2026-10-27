@@ -7471,6 +7471,14 @@ bool spirv_patch_stereo_fs(
         if (emit_vi_decorate &&
             op == SpvOpDecorate)
         {
+            uint32_t d[] =
+            {
+                op_(SpvOpDecorate, 4),
+                new_vi_id,
+                SpvDecorationBuiltIn,
+                SpvBuiltInViewIndex
+            };
+            sb_push_n(&ob, d, 4);
             uint32_t flat[] =
             {
                 op_(SpvOpDecorate, 3),
