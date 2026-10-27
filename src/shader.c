@@ -8095,7 +8095,7 @@ if (fs_dbg) {
 }
 if (!in_mv_rp)
 {
-goto PIPE_DECISION_CONTINUE;
+continue;
 }
 bool is_quad = !ci->pVertexInputState ||
 ci->pVertexInputState->vertexBindingDescriptionCount == 0;
@@ -8106,6 +8106,7 @@ bool vs_background = false;
 bool vs_procedural_sky = false;
 bool vs_pure_quad = false;
 bool vs_uv_quad = false;
+bool vs_screen_quad = false;
 if (has_vs && vs_stage != ~0u) {
 StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
 if (vs_cache) {
@@ -8197,6 +8198,7 @@ vi += iw;
 }
 }
 vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
+vs_screen_quad = is_quad && vm.exec_model == SpvExecVertex && !vm.has_matrix_ops && !vm.proj_found && !vm.has_emit_vertex;
 vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
 vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
 bool vs_z_one_position = false;
@@ -8382,12 +8384,13 @@ bool mono_ui_always_depth_ui_state=ci->pDepthStencilState&&ci->pDepthStencilStat
 bool mono_ui_vs_candidate=sd->stereo.mono_ui&&((mono_ui_depth_disabled&&(vs_screen_space||(mono_ui_menu_background&&vs_quad_fs&&!vm.has_matrix_ops&&!vm.has_direct_position_write)))||(mono_ui_passthrough_vs&&mono_ui_passthrough_pipeline)||(mono_ui_always_depth_vs&&mono_ui_always_depth_ui_state));
 if(mono_ui_gs_candidate||mono_ui_vs_candidate)
 {
-goto PIPE_DECISION_CONTINUE;
+free_spv_provenance(&vm);
+continue;
 }
 free_spv_provenance(&vm);
 }
 }
-if (((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
+if (((vs_fullscreen && !vs_screen_space) || (is_quad && (vs_quad_fs || vs_screen_quad)) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
 !has_ms &&
 !has_gs &&
 !has_tes &&
@@ -8904,7 +8907,8 @@ ci->stageCount > 0 &&
 has_vs &&
 !has_tcs &&
 vs_stage != ~0u &&
-!vs_pure_quad) 
+!vs_pure_quad &&
+!vs_screen_quad) 
 {
 StereoShaderCache inline_e;
 StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
@@ -9011,7 +9015,6 @@ infos[p].renderPass = pipeline_rp;
 continue;
 }
 }
-PIPE_DECISION_CONTINUE:
 for (uint32_t p = 0; p < N; p++) {
 StereoRenderPassInfo *rpi = NULL;
 VkRenderPass pipeline_rp = pCI[p].renderPass;
