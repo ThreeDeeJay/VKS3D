@@ -216,13 +216,31 @@ stereo_CreateDevice(
         base_feats = *pCreateInfo->pEnabledFeatures;
     base_feats.tessellationShader = VK_TRUE;
     bool has_mv_feat = false;
+    bool has_features2 = false;
     {
+        /* Walk the app's feature chain.  Multiview can be enabled through
+         * VkPhysicalDeviceMultiviewFeatures OR VkPhysicalDeviceVulkan11Features;
+         * an app (DXVK, vkd3d, modern engines) that supplies the latter with
+         * multiview=FALSE would otherwise leave ViewIndex == 0 in every view
+         * (both eyes identical).  Also, pEnabledFeatures must be NULL when a
+         * VkPhysicalDeviceFeatures2 is chained. */
         VkBaseOutStructure *node = (VkBaseOutStructure*)pCreateInfo->pNext;
         while (node) {
             if (node->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
-                ((VkPhysicalDeviceMultiviewFeatures*)node)->multiview = VK_TRUE;
+                VkPhysicalDeviceMultiviewFeatures *f = (VkPhysicalDeviceMultiviewFeatures*)node;
+                f->multiview = VK_TRUE;
+                f->multiviewGeometryShader = VK_TRUE;
+                f->multiviewTessellationShader = VK_TRUE;
                 has_mv_feat = true;
-                break;
+            } else if (node->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES) {
+                VkPhysicalDeviceVulkan11Features *f = (VkPhysicalDeviceVulkan11Features*)node;
+                f->multiview = VK_TRUE;
+                f->multiviewGeometryShader = VK_TRUE;
+                f->multiviewTessellationShader = VK_TRUE;
+                has_mv_feat = true;
+            } else if (node->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2) {
+                ((VkPhysicalDeviceFeatures2*)node)->features.tessellationShader = VK_TRUE;
+                has_features2 = true;
             }
             node = node->pNext;
         }
@@ -232,7 +250,7 @@ stereo_CreateDevice(
     VkDeviceCreateInfo dci = *pCreateInfo;
     if (!has_mv_feat)
         dci.pNext = &multiview_feat;
-    dci.pEnabledFeatures = &base_feats;
+    dci.pEnabledFeatures = has_features2 ? NULL : &base_feats;
     VkPhysicalDeviceProperties phys_props;
     sp_si->real.GetPhysicalDeviceProperties(real_physdev, &phys_props);
     uint32_t dev_api = phys_props.apiVersion;

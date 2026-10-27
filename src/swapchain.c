@@ -196,9 +196,12 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
         i,
         (void *)(uintptr_t)sc->stereo_images[i],
         (void *)(uintptr_t)sc->stereo_views_arr[i]);
-    if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
+    if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS &&
+        sd->upgraded_image_count == sd->upgraded_view_count)
     {
         CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
+        sd->upgraded_images[sd->upgraded_image_count++] =
+            sc->stereo_images[i];
         sd->upgraded_views[sd->upgraded_view_count++] =
             sc->stereo_views_arr[i];
     
@@ -1857,9 +1860,18 @@ stereo_DestroyImageView(
             //    imageView,
             //    i);
             uint32_t last = --sd->upgraded_view_count;
+            /* upgraded_views[] and upgraded_images[] are index-paired */
+            bool paired = (sd->upgraded_image_count == sd->upgraded_view_count + 1);
             if (i != last)
                 sd->upgraded_views[i] = sd->upgraded_views[last];
             sd->upgraded_views[last] = VK_NULL_HANDLE;
+            if (paired)
+            {
+                if (i != last)
+                    sd->upgraded_images[i] = sd->upgraded_images[last];
+                sd->upgraded_images[last] = VK_NULL_HANDLE;
+                sd->upgraded_image_count--;
+            }
             //STEREO_LOG(
             //    "[VIEW TRACK COUNT] count=%u",
             //    sd->upgraded_view_count);

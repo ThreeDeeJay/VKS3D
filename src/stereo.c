@@ -221,7 +221,18 @@ void stereo_config_init(StereoConfig *cfg)
     cfg->sky_flatten = cfg_bool("sky_flatten", true);
     cfg->sky_extend = cfg_bool("sky_extend", true);
 
-    cfg->projection = cfg_bool("projection", 1);
+    {
+        int proj = 1; /* default: off-axis */
+        char ps[32];
+        const char *pe = stereo_getenv("STEREO_PROJECTION");
+        if (ini_read_str(g_global_ini, "VKS3D", "projection", ps, sizeof(ps)))
+            proj = (!_stricmp(ps,"parallel")||!_stricmp(ps,"0")||!_stricmp(ps,"false")||!_stricmp(ps,"no")) ? 0 : 1;
+        if (ini_read_str(g_local_ini, "VKS3D", "projection", ps, sizeof(ps)))
+            proj = (!_stricmp(ps,"parallel")||!_stricmp(ps,"0")||!_stricmp(ps,"false")||!_stricmp(ps,"no")) ? 0 : 1;
+        if (pe)
+            proj = (!_stricmp(pe,"parallel")||!_stricmp(pe,"0")||!_stricmp(pe,"false")||!_stricmp(pe,"no")) ? 0 : 1;
+        cfg->projection = proj ? STEREO_PROJECTION_OFF_AXIS : STEREO_PROJECTION_PARALLEL;
+    }
 
     /* ── hotkey steps ── */
     cfg->step_separation  = cfg_float("step_separation",  0.005f);
@@ -662,33 +673,20 @@ StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp) {
         StereoRenderPassInfo *rpi = &dev->render_passes[i];
         if (rpi->handle == rp)
         {
-            const unsigned char *b = (const unsigned char *)rpi;
             STEREO_LOG(
-                "RPINFO_BYTES "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x",
-                b[0],  b[1],  b[2],  b[3],
-                b[4],  b[5],  b[6],  b[7],
-                b[8],  b[9],  b[10], b[11],
-                b[12], b[13], b[14], b[15],
-                b[16], b[17], b[18], b[19],
-                b[20], b[21], b[22], b[23]);
-            STEREO_LOG(
-                "RP_LOOKUP hit handle=%08x mv=%08x has_mv=%u addr=%08x",
-                (unsigned)(uintptr_t)rpi->handle,
-                (unsigned)(uintptr_t)rpi->mv_handle,
+                "RP_LOOKUP hit handle=%p mv=%p has_mv=%u view_mask=0x%X addr=%p",
+                (void *)rpi->handle,
+                (void *)rpi->mv_handle,
                 (unsigned)rpi->has_multiview,
-                (unsigned)(uintptr_t)rpi);
+                (unsigned)rpi->view_mask,
+                (void *)rpi);
             return rpi;
         }
     }
     STEREO_LOG(
-        "RP_LOOKUP miss handle=%p",
-        rp);
+        "RP_LOOKUP miss handle=%p count=%u",
+        (void *)rp,
+        dev->render_pass_count);
     return NULL;
 }
 
