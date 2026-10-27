@@ -7212,34 +7212,6 @@ bool spirv_patch_stereo_fs(
         in_c);
     FsScan s;
     fs_prescan(&s, in, in_c);
-    for (uint32_t i = 0; i < s.n_img; ++i)
-    {
-        STEREO_LOG(
-            "FS_IMAGE_TABLE "
-            "type=%u "
-            "sampledType=%u "
-            "owner=%u "
-            "set=%u "
-            "binding=%u",
-            s.images[i].id,
-            s.images[i].sampled_type,
-            s.images[i].owner_var,
-            s.images[i].set,
-            s.images[i].binding);
-    }
-    for (uint32_t i = 0; i < s.n_var; ++i)
-    {
-        const FsVariableInfo *var = &s.vars[i];
-        if (var->binding != 0xffffffffu)
-        {
-            STEREO_LOG(
-                "FS_DESCRIPTOR_SUMMARY var=%u set=%u binding=%u type=%u",
-                var->id,
-                var->set,
-                var->binding,
-                var->type);
-        }
-    }
     if (s.n_img == 0 || !s.float_id)
     {
         STEREO_LOG(
@@ -7252,15 +7224,196 @@ bool spirv_patch_stereo_fs(
     /* Allocate new IDs above current bound */
     uint32_t nid           = in[3];
     uint32_t new_int_id    = s.int_id        ? s.int_id        : nid++;
+    STEREO_LOG("FS_NID_ALLOC assigned=%u next=%u", new_int_id, nid);
     uint32_t new_v3f_id    = s.v3float_id    ? s.v3float_id    : nid++;
-    uint32_t new_v3i_id    = nid++;
+    STEREO_LOG("FS_NID_ALLOC assigned=%u next=%u", new_v3f_id, nid);
+    uint32_t new_v3i_id    = s.v3int_id ? s.v3int_id : nid++;
+    STEREO_LOG("FS_NID_ALLOC assigned=%u next=%u", new_v3i_id, nid);
+    uint32_t new_v3u_id    = 0;
+    if (s.uint_id)
+        new_v3u_id = s.v3uint_id ? s.v3uint_id : nid++;
+    STEREO_LOG("FS_NID_ALLOC assigned=%u next=%u", new_v3u_id, nid);
     uint32_t new_pin_id    = s.ptr_int_in_id ? s.ptr_int_in_id : nid++;
+    STEREO_LOG("FS_NID_ALLOC assigned=%u next=%u", new_pin_id, nid);
     uint32_t new_vi_id     = s.vi_var_id     ? s.vi_var_id     : nid++;
+    STEREO_LOG("FS_NID_ALLOC assigned=%u next=%u", new_vi_id, nid);
+    uint32_t new_vi_type   = s.int_id ? s.int_id : new_int_id;
     bool     is_new_vi     = (s.vi_var_id == 0);
+    bool     emit_vi_decorate  = is_new_vi;
+    bool     emit_vi_variable  = is_new_vi;
+    STEREO_LOG(
+        "FS_SCAN_SUMMARY int=%u uint=%u v2i=%u v2u=%u v3i=%u v3u=%u",
+        s.int_id,
+        s.uint_id,
+        s.v2int_id,
+        s.v2uint_id,
+        s.v3int_id,
+        s.v3uint_id);
+    for (uint32_t img = 0; img < s.n_img; ++img)
+    {
+        if (!s.images[img].patchable)
+            continue;
+        uint32_t replacement = 0;
+        uint32_t replacement_sampled = 0;
+        for (uint32_t prev = 0; prev < img; ++prev)
+        {
+            if (!s.images[prev].patchable)
+                continue;
+            if (s.images[prev].sampled_type_id != s.images[img].sampled_type_id)
+                continue;
+            if (s.images[prev].dim != s.images[img].dim ||
+                s.images[prev].depth != s.images[img].depth ||
+                s.images[prev].arrayed != s.images[img].arrayed ||
+                s.images[prev].ms != s.images[img].ms ||
+                s.images[prev].sampled != s.images[img].sampled ||
+                s.images[prev].format != s.images[img].format)
+                continue;
+            if (!s.images[prev].replacement_type)
+                continue;
+            if (s.images[img].sampled != 2 &&
+                !s.images[prev].replacement_sampled_type)
+                continue;
+            replacement = s.images[prev].replacement_type;
+            replacement_sampled = s.images[prev].replacement_sampled_type;
+            break;
+        }
+        if (replacement == 0)
+        {
+            replacement = nid++;
+            bool sampled_type_reusable = s.images[img].sampled != 2 && s.images[img].sampled_type_id != 0;
+            for (uint32_t other = 0; other < s.n_img; ++other)
+            {
+                if (other == img || !s.images[other].patchable || s.images[other].sampled_type_id != s.images[img].sampled_type_id)
+                    continue;
+                if (s.images[other].dim != s.images[img].dim || s.images[other].depth != s.images[img].depth || s.images[other].arrayed != s.images[img].arrayed || s.images[other].ms != s.images[img].ms || s.images[other].sampled != s.images[img].sampled || s.images[other].format != s.images[img].format)
+                {
+                    sampled_type_reusable = false;
+                    break;
+                }
+            }
+            if (s.images[img].sampled == 2)
+                replacement_sampled = 0;
+            else if (sampled_type_reusable)
+                replacement_sampled = s.images[img].sampled_type_id;
+            else
+                replacement_sampled = nid++;
+            STEREO_LOG(
+                "FS_REPLACEMENT_ALLOC "
+                "idx=%u "
+                "image=%u "
+                "sampledType=%u "
+                "replacement=%u "
+                "replacementSampled=%u",
+                img,
+                s.images[img].id,
+                s.images[img].sampled_type_id,
+                replacement,
+                replacement_sampled);
+        }
+        else
+        {
+            STEREO_LOG(
+                "FS_REPLACEMENT_REUSE "
+                "idx=%u "
+                "image=%u "
+                "sampledType=%u "
+                "replacement=%u "
+                "replacementSampled=%u",
+                img,
+                s.images[img].id,
+                s.images[img].sampled_type_id,
+                replacement,
+                replacement_sampled);
+        }
+        s.images[img].replacement_type = replacement;
+        s.images[img].replacement_sampled_type = replacement_sampled;
+        STEREO_LOG(
+            "FS_REPLACEMENT_ASSIGN "
+            "idx=%u "
+            "image=%u "
+            "sampledType=%u "
+            "owner=%u "
+            "binding=%u "
+            "replacement=%u "
+            "replacementSampled=%u",
+            img,
+            s.images[img].id,
+            s.images[img].sampled_type,
+            s.images[img].owner_var,
+            s.images[img].binding,
+            s.images[img].replacement_type,
+            s.images[img].replacement_sampled_type);
+        STEREO_LOG(
+            "FS_RESERVE_OWNER image=%u owner=%u binding=%u replacement=%u",
+            s.images[img].id,
+            s.images[img].owner_var,
+            s.images[img].binding,
+            s.images[img].replacement_type);
+        STEREO_LOG(
+            "FS_RESERVE_ARRAY_TYPE old=%u new=%u owner=%u binding=%u",
+            s.images[img].id,
+            s.images[img].replacement_type,
+            s.images[img].owner_var,
+            s.images[img].binding);
+        STEREO_LOG(
+            "IMAGE_RESERVED "
+            "image=%u "
+            "replacementImage=%u "
+            "replacementSampled=%u "
+            "replacementPointer=%u",
+            s.images[img].id,
+            s.images[img].replacement_type,
+            s.images[img].replacement_sampled_type,
+            s.images[img].replacement_pointer_type);
+    }
+    for (uint32_t img = 0; img < s.n_img; ++img)
+    {
+        if (!s.images[img].patchable)
+            continue;
+        uint32_t existing_pointer = 0;
+        if (s.images[img].replacement_sampled_type != 0 && s.images[img].replacement_sampled_type == s.images[img].sampled_type_id)
+        {
+            for (size_t scan = 5; scan < in_c;)
+            {
+                uint32_t sw = in[scan] >> 16;
+                uint32_t sop = in[scan] & 0xffffu;
+                if (!sw || scan + sw > in_c)
+                    break;
+                if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 2] == SpvStorageClassUniformConstant && in[scan + 3] == s.images[img].replacement_sampled_type)
+                {
+                    existing_pointer = in[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+        }
+        s.images[img].replacement_pointer_type = existing_pointer ? existing_pointer : nid++;
+    }
     uint32_t samp_nid      = nid;
-    uint32_t new_bound     = samp_nid + n_patches * 5 + 8;
+    uint32_t qsize_nid     = nid;
+    /*
+     * ImageSample/ImageFetch consume 5 ids.
+     * ImageQuerySizeLod consumes only 4 ids,
+     * but reserving 5 keeps accounting simple.
+     */
+    if (in_c > (UINT32_MAX-nid - n_patches * 10 - 32) / 8)
+        return false;
+    uint32_t new_bound     = nid + n_patches * 10 + 32 + (uint32_t)in_c * 8;
+    STEREO_LOG(
+        "FS_NID_INIT bound=%u nid=%u",
+        new_bound,
+        nid);
     SpvBuf ob;
-    if (!sb_init(&ob, in_c + 60 + (size_t)n_patches * 28)) return false;
+    if (!sb_init(&ob, in_c + 60 + (size_t)n_patches * 28))
+        return false;
+    uint32_t id_bound = new_bound;
+    bool *emitted_type = calloc(id_bound, sizeof(*emitted_type));
+    if (!emitted_type)
+    {
+        free(emitted_type);
+        sb_free(&ob);
+        return false;
+    }
     bool mv_added   = s.has_mv_cap;
     bool ext_done   = false;
     uint32_t spv_version = in[1];
@@ -7275,19 +7428,12 @@ bool spirv_patch_stereo_fs(
     sb_push_n(&ob, in, 5);
     ob.w[3] = new_bound;
     for (size_t i = 5; i < in_c; ) {
-        uint32_t op = in[i] & 0xffff, wc = in[i] >> 16;
-        if (!wc || i + wc > in_c) break;
-        if (in_func &&
-            op >= SpvOpImageSampleImplicitLod &&
-            op <= SpvOpImageSparseTexelsResident)
+        uint32_t op = in[i] & 0xffff; uint32_t wc = in[i] >> 16;
+        if (!wc || i + wc > in_c)
         {
-            STEREO_LOG(
-                "FS_IMAGE_OPCODE op=%u (%s) wc=%u resultType=%u result=%u",
-                op,
-                spv_op_name(op),
-                wc,
-                (wc >= 2) ? in[i + 1] : 0,
-                (wc >= 3) ? in[i + 2] : 0);
+            free(emitted_type);
+            sb_free(&ob);
+            return false;
         }
         /* Emit MultiView capability immediately before the first non-capability. */
         if (!mv_added &&
@@ -7318,15 +7464,75 @@ bool spirv_patch_stereo_fs(
             sb_push_n(&ob, e, 6);
             ext_done = true;
         }
-        /* Modify OpEntryPoint: append new_vi_id to interface if we're adding it */
-        if (op == 15 && !ep_done) {
+        /*
+         * Inject BuiltIn ViewIndex at the beginning of the annotation section,
+         * immediately before the first OpDecorate.
+         */
+        if (emit_vi_decorate &&
+            op == SpvOpDecorate)
+        {
+            uint32_t d[] =
+            {
+                op_(SpvOpDecorate, 4),
+                new_vi_id,
+                SpvDecorationBuiltIn,
+                SpvBuiltInViewIndex
+            };
+            sb_push_n(&ob, d, 4);
+            uint32_t flat[] =
+            {
+                op_(SpvOpDecorate, 3),
+                new_vi_id,
+                SpvDecorationFlat
+            };
+            sb_push_n(&ob, flat, 3);
+            /* only emit once */
+            emit_vi_decorate = false;
+        }
+        if (op == SpvOpDecorate &&
+            wc >= 4)
+        {
+            sb_push_n(&ob, &in[i], wc);
+            i += wc;
+            continue;
+        }
+        if ((op == SpvOpTypeImage && wc >= 9) ||
+            (op == SpvOpTypePointer && wc >= 4))
+        {
+            bool definition_emitted = false;
+            for (size_t scan = 5; scan < ob.n;)
+            {
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
+                    break;
+                if (ob.w[scan + 1] == in[i + 1] &&
+                    ((op == SpvOpTypeImage && sop == SpvOpTypeImage && sw >= 9) ||
+                        (op == SpvOpTypePointer && sop == SpvOpTypePointer && sw >= 4)))
+                {
+                    definition_emitted = true;
+                    break;
+                }
+                scan += sw;
+            }
+            if (definition_emitted)
+            {
+                i += wc;
+                continue;
+            }
+        }
+        if (op == SpvOpEntryPoint && !ep_done) {
             ep_done = true;
-            if (is_new_vi) {
-                sb_push(&ob, ((wc+1)<<16)|15);
+            if (new_vi_id != s.vi_var_id) {
+                sb_push(&ob, ((wc+1)<<16)|SpvOpEntryPoint);
                 sb_push_n(&ob, &in[i+1], wc-1);
                 sb_push(&ob, new_vi_id);
             } else {
                 sb_push_n(&ob, &in[i], wc);
+                if (in[i + 1] < id_bound)
+                {
+                    emitted_type[in[i + 1]] = true;
+                }
             }
             i += wc; continue;
         }
