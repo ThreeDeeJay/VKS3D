@@ -158,7 +158,7 @@ static VkResult create_mv_rp(StereoDevice *sd,
     };
     VkRenderPassCreateInfo mod = *pCI;
     if (pa) mod.pAttachments = pa;
-    mv.pNext = pCI->pNext;
+    mv.pNext = NULL;
     mod.pNext = &mv;
     STEREO_LOG(
         "MV_RP_CREATE subpasses=%u viewMask0=0x%x correlationMask0=0x%x",
