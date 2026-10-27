@@ -196,26 +196,16 @@ static VkResult alloc_alt_stereo_swapchain(StereoDevice *sd, StereoSwapchain *sc
         i,
         (void *)(uintptr_t)sc->stereo_images[i],
         (void *)(uintptr_t)sc->stereo_views_arr[i]);
-    if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS &&
-        sd->upgraded_image_count < MAX_UPGRADED_VIEWS &&
-        sd->upgraded_view_count == sd->upgraded_image_count)
+    if (sd->upgraded_view_count < MAX_UPGRADED_VIEWS)
     {
-        uint32_t track_index = sd->upgraded_view_count;
         CHECK_ARRAY_COUNT(sd->upgraded_view_count, MAX_UPGRADED_VIEWS, "upgraded_view_count");
+        sd->upgraded_views[sd->upgraded_view_count++] =
+            sc->stereo_views_arr[i];
     
         //STEREO_LOG(
         //    "[VIEW TRACK ADD NV3D] view=%p count=%u",
         //    sc->stereo_views_arr[0],
         //    sd->upgraded_view_count);
-        CHECK_ARRAY_COUNT(sd->upgraded_image_count, MAX_UPGRADED_VIEWS, "upgraded_image_count");
-        sd->upgraded_views[track_index] = sc->stereo_views_arr[i];
-        sd->upgraded_images[track_index] = sc->stereo_images[i];
-        sd->upgraded_view_count++;
-        sd->upgraded_image_count++;
-        STEREO_LOG("STEREO_VIEW_IMAGE_MAP view=%p image=%p index=%u",
-            (void *)(uintptr_t)sc->stereo_views_arr[i],
-            (void *)(uintptr_t)sc->stereo_images[i],
-            track_index);
     }
     }
     return VK_SUCCESS;
@@ -1866,22 +1856,13 @@ stereo_DestroyImageView(
             //    "[VIEW TRACK REMOVE] view=%p slot=%u",
             //    imageView,
             //    i);
-            uint32_t last = sd->upgraded_view_count - 1;
+            uint32_t last = --sd->upgraded_view_count;
             if (i != last)
-            {
                 sd->upgraded_views[i] = sd->upgraded_views[last];
-                sd->upgraded_images[i] = sd->upgraded_images[last];
-            }
             sd->upgraded_views[last] = VK_NULL_HANDLE;
             //STEREO_LOG(
             //    "[VIEW TRACK COUNT] count=%u",
             //    sd->upgraded_view_count);
-            sd->upgraded_images[last] = VK_NULL_HANDLE;
-            sd->upgraded_view_count--;
-            if (sd->upgraded_image_count != sd->upgraded_view_count)
-                STEREO_LOG(
-                    "[TRACKING ERROR] view_count=%u image_count=%u after view destroy=%p",
-                    sd->upgraded_view_count, sd->upgraded_image_count, (void *)(uintptr_t)imageView);
             break;
         }
     }
