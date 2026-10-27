@@ -1,50 +1,41 @@
-/*
- * VKS3D.rc — Windows DLL version / metadata resource
- *
- * Compiled into both VKS3D_x64.dll and VKS3D_x86.dll by the CMake build.
- * Version numbers are injected from CMakeLists.txt via configure_file().
- */
 
 #include <winver.h>
-
-/* Version numbers — configured via CMake at build time */
-#define VKS3D_VER_MAJOR     1
-#define VKS3D_VER_MINOR     0
-#define VKS3D_VER_PATCH     @VKS3D_VER_PATCH@
-#define VKS3D_VER_BUILD     @VKS3D_VER_BUILD@
-#define VKS3D_VER_DATE      @VKS3D_VER_DATE@
-#define VKS3D_REPO          @VKS3D_REPO@
-#define VKS3D_BRANCH        @VKS3D_BRANCH@
-#define VKS3D_COMMIT_HASH   @VKS3D_COMMIT_HASH@
-#define VKS3D_COMMIT_TITLE  @VKS3D_COMMIT_TITLE@
-#define VKS3D_BITS          @VKS3D_BITS@
-#define TARGET_NAME         @TARGET_NAME@
-
+#define VKS3D_VER_MAJOR 1
+#define VKS3D_VER_MINOR 0
+#define VKS3D_VER_PATCH @VKS3D_VER_PATCH@
+#define VKS3D_VER_BUILD @VKS3D_VER_BUILD@
+#define VKS3D_VER_DATE @VKS3D_VER_DATE@
+#define VKS3D_REPO @VKS3D_REPO@
+#define VKS3D_BRANCH @VKS3D_BRANCH@
+#define VKS3D_COMMIT_HASH @VKS3D_COMMIT_HASH@
+#define VKS3D_COMMIT_TITLE @VKS3D_COMMIT_TITLE@
+#define VKS3D_BITS @VKS3D_BITS@
+#define TARGET_NAME @TARGET_NAME@
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     VKS3D_VER_MAJOR, VKS3D_VER_MINOR, VKS3D_VER_PATCH, VKS3D_VER_BUILD
-PRODUCTVERSION  VKS3D_VER_MAJOR, VKS3D_VER_MINOR, VKS3D_VER_PATCH, VKS3D_VER_DATE
-FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
-FILEFLAGS       0
-FILEOS          VOS_NT_WINDOWS32
-FILETYPE        VFT_DLL
-FILESUBTYPE     VFT2_UNKNOWN
+FILEVERSION VKS3D_VER_MAJOR, VKS3D_VER_MINOR, VKS3D_VER_PATCH, VKS3D_VER_BUILD
+PRODUCTVERSION VKS3D_VER_MAJOR, VKS3D_VER_MINOR, VKS3D_VER_PATCH, VKS3D_VER_DATE
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_DLL
+FILESUBTYPE VFT2_UNKNOWN
 BEGIN
-    BLOCK "StringFileInfo"
-    BEGIN
-        BLOCK "040904b0"   /* Language: US English, Unicode */
-        BEGIN
-            VALUE "CompanyName",        "@VKS3D_REPO@#@VKS3D_BRANCH@@@VKS3D_COMMIT_HASH@"
-            VALUE "FileDescription",    "@VKS3D_COMMIT_TITLE@"
-            VALUE "FileVersion",        "1.0.@VKS3D_VER_PATCH@.@VKS3D_VER_BUILD@"
-            VALUE "InternalName",       "VKS3D"
-            VALUE "LegalCopyright",     "GPLv3 License"
-            VALUE "OriginalFilename",   "@TARGET_NAME@.dll"
-            VALUE "ProductName",        "VKS3D"
-            VALUE "ProductVersion",     "1.0.@VKS3D_VER_PATCH@.@VKS3D_VER_DATE@"
-        END
-    END
-    BLOCK "VarFileInfo"
-    BEGIN
-        VALUE "Translation", 0x0409, 0x04b0
-    END
+BLOCK "StringFileInfo"
+BEGIN
+BLOCK "040904b0" 
+BEGIN
+VALUE "CompanyName", "@VKS3D_REPO@#@VKS3D_BRANCH@@@VKS3D_COMMIT_HASH@"
+VALUE "FileDescription", "@VKS3D_COMMIT_TITLE@"
+VALUE "FileVersion", "1.0.@VKS3D_VER_PATCH@.@VKS3D_VER_BUILD@"
+VALUE "InternalName", "VKS3D"
+VALUE "LegalCopyright", "GPLv3 License"
+VALUE "OriginalFilename", "@TARGET_NAME@.dll"
+VALUE "ProductName", "VKS3D"
+VALUE "ProductVersion", "1.0.@VKS3D_VER_PATCH@.@VKS3D_VER_DATE@"
+END
+END
+BLOCK "VarFileInfo"
+BEGIN
+VALUE "Translation", 0x0409, 0x04b0
+END
 END

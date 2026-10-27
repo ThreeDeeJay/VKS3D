@@ -6,12 +6,11 @@
 #
 # The Vulkan loader discovers our ICD via the manifest JSON and calls
 # these three functions directly (not via dlsym with version suffix).
-
 {
 global:
-    vk_icdNegotiateLoaderICDInterfaceVersion;
-    vk_icdGetInstanceProcAddr;
-    vk_icdGetPhysicalDeviceProcAddr;
+vk_icdNegotiateLoaderICDInterfaceVersion;
+vk_icdGetInstanceProcAddr;
+vk_icdGetPhysicalDeviceProcAddr;
 local:
-    *;
+*;
 };
