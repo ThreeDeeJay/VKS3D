@@ -7464,18 +7464,15 @@ bool spirv_patch_stereo_fs(
             sb_push_n(&ob, e, 6);
             ext_done = true;
         }
-        if (op == SpvOpEntryPoint && !ep_done) {
+        /* Modify OpEntryPoint: append new_vi_id to interface if we're adding it */
+        if (op == 15 && !ep_done) {
             ep_done = true;
-            if (new_vi_id != s.vi_var_id) {
-                sb_push(&ob, ((wc+1)<<16)|SpvOpEntryPoint);
+            if (is_new_vi) {
+                sb_push(&ob, ((wc+1)<<16)|15);
                 sb_push_n(&ob, &in[i+1], wc-1);
                 sb_push(&ob, new_vi_id);
             } else {
                 sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                {
-                    emitted_type[in[i + 1]] = true;
-                }
             }
             i += wc; continue;
         }
