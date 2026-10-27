@@ -7464,31 +7464,6 @@ bool spirv_patch_stereo_fs(
             sb_push_n(&ob, e, 6);
             ext_done = true;
         }
-        /*
-         * Inject BuiltIn ViewIndex at the beginning of the annotation section,
-         * immediately before the first OpDecorate.
-         */
-        if (emit_vi_decorate &&
-            op == SpvOpDecorate)
-        {
-            uint32_t d[] =
-            {
-                op_(SpvOpDecorate, 4),
-                new_vi_id,
-                SpvDecorationBuiltIn,
-                SpvBuiltInViewIndex
-            };
-            sb_push_n(&ob, d, 4);
-            uint32_t flat[] =
-            {
-                op_(SpvOpDecorate, 3),
-                new_vi_id,
-                SpvDecorationFlat
-            };
-            sb_push_n(&ob, flat, 3);
-            /* only emit once */
-            emit_vi_decorate = false;
-        }
         if (op == SpvOpDecorate &&
             wc >= 4)
         {
