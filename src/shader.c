@@ -7812,6 +7812,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         &patched, &pc2,
                         lo, ro, conv,
                         true,
+                        false,
+                        false,
                         &dbgA))
                 {
                 STEREO_LOG("TES patch failed");
@@ -7971,8 +7973,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     &patched, &pc2,
                     lo, ro, conv,
                     /*inj_vi=*/true,
-                    force_sky_depth,
-                    procedural_sky,
+                    false,
+                    false,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 STEREO_LOG("Pipe %u PathB: VS patch failed",p); continue; }
