@@ -324,11 +324,6 @@ static void do_scan(SpvMod *m, bool p2)
 {
     const uint32_t *w=m->words;
     uint32_t current_function = 0;
-    if(!p2)
-    {
-        m->geometry_location_count=0;
-        m->geometry_input_var_count=0;
-    }
     #define MAT(id)        matrix_value(m, (id))
     #define SETMAT(id,v)   set_matrix_value(m, (id), (v))
     #define PTR(id)        matrix_ptr(m, (id))
@@ -362,32 +357,14 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     uint32_t member_id = w[i + 4];
                     uint32_t member_value = member_id;
-                    (void)spv_resolve_u32_constant(
-                        m,
-                        member_id,
-                        &member_value);
+                    (void)spv_resolve_u32_constant(m, member_id, &member_value);
                     m->proj_access_count++;
                     m->proj_found = VK_TRUE;
-                    /* Only tag matrix members */
-                    switch (member_value)
-                    {
-                        case 0: /* view */
-                        case 1: /* viewI */
-                        case 2: /* projection */
-                        case 3: /* projectionI */
-                        case 4: /* viewProj */
-                        case 5: /* prevViewProj */
-                            SETPROJ(
-                                w[i + 2],
-                                member_value + 1);
-                            if (member_value == 2)
-                                SETVIEW(
-                                    w[i + 2],
-                                    1);
-                            break;
-                        default:
-                            break;
-                    }
+                    /* projection provenance */
+                    SETPROJ(w[i + 2], member_value + 1);
+                    /* separate view provenance */
+                    if (member_value == 2)
+                        SETVIEW(w[i + 2], 1);
                     STEREO_LOG(
                         "PROJ_ACCESS result=%u base=%u index_id=%u member=%u",
                         w[i+2],
@@ -409,12 +386,6 @@ static void do_scan(SpvMod *m, bool p2)
                     SETMAT(
                         w[i + 2],
                         MAT(w[i + 3]) || PTR(w[i + 3]));
-                }
-                if(wc>=4&&is_location0_var(m,w[i+3]))
-                {
-                    if(m->screen_value_count<16)
-                        m->screen_values[m->screen_value_count++]=w[i+2];
-                    STEREO_LOG("SCREEN_LOAD result=%u input=%u",w[i+2],w[i+3]);
                 }
                 if (wc >= 4)
                 {
@@ -442,17 +413,8 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     SETMAT(w[i + 2], MAT(w[i + 3]));
                     if (PROJ(w[i + 3]))
-                    {
-                        STEREO_LOG(
-                            "PROJ_EXTRACT result=%u src=%u member=%u",
-                            w[i + 2],
-                            w[i + 3],
-                            PROJ(w[i + 3]) - 1);
                         SETPROJ(w[i + 2], PROJ(w[i + 3]));
-                    }
                     if (VIEW(w[i + 3]))
-                        SETVIEW(w[i + 2], VIEW(w[i + 3]));
-                    if (VIEW(w[i + 3]) != 0)
                         SETVIEW(w[i + 2], VIEW(w[i + 3]));
                 }
                 break;
@@ -466,11 +428,6 @@ static void do_scan(SpvMod *m, bool p2)
                         SETPROJ(w[i + 2], PROJ(w[i + 3]));
                     if (VIEW(w[i + 3]))
                         SETVIEW(w[i + 2], VIEW(w[i + 3]));
-                }
-                if(wc>=9&&(is_screen_value(m,w[i+3])||is_screen_value(m,w[i+4]))&&(w[i+5]>=2||w[i+6]>=2||w[i+7]>=2||w[i+8]>=2))
-                {
-                    m->screen_has_zw_use=true;
-                    STEREO_LOG("SCREEN_ZW_USE result=%u src0=%u src1=%u selectors=%u,%u,%u,%u",w[i+2],w[i+3],w[i+4],w[i+5],w[i+6],w[i+7],w[i+8]);
                 }
                 break;
             case SpvOpCompositeConstruct:
@@ -504,58 +461,21 @@ static void do_scan(SpvMod *m, bool p2)
             case SpvOpEntryPoint:
                 if(wc>=3){
                     uint32_t e=w[i+1];
-                    STEREO_LOG(
-                        "exec_model=%u",
-                        (int)e);
-                    if(e==SpvExecVertex||e==SpvExecTessEval||e==SpvExecGeometry||e==SpvExecMeshEXT)
+                    if(e==SpvExecVertex||e==SpvExecTessEval||e==SpvExecGeometry)
                     {
                         m->is_patchable=true;
                         m->exec_model=(int)e;
                         m->entry_function = w[i+2];
-                    }
-                    else if (e == SpvExecutionModelRayGenerationKHR)
-                    {
-                        m->exec_model = (int)e;
-                        m->entry_function = w[i + 2];
-                    }
-                }
-                break;
-            case SpvOpExecutionMode:
-                if(wc>=3&&w[i+1]==m->entry_function)
-                {
-                    if(w[i+2]==SpvExecutionModeInputPoints)m->geometry_input_mode=w[i+2];
-                    else if(w[i+2]==SpvExecutionModeOutputTriangleStrip)m->geometry_output_mode=w[i+2];
-                    else if(w[i+2]==SpvExecutionModeOutputVertices&&wc>=4)m->geometry_output_vertices=w[i+3];
-                }
+                    }}
                 break;
             case SpvOpTypeFloat:
                 if(wc==3&&w[i+2]==32) m->ft=w[i+1];
                 break;
             case SpvOpTypeVector:
-                if(wc==4&&w[i+2]==m->ft)
-                {
-                    if(w[i+3]==2)
-                        m->v2t=w[i+1];
-                    else if(w[i+3]==4)
-                        m->v4t=w[i+1];
-                }
+                if(wc==4&&w[i+2]==m->ft&&w[i+3]==4) m->v4t=w[i+1];
                 break;
             case SpvOpTypeInt:
-                if (wc == 4 && w[i + 2] == 32)
-                {
-                    if (w[i + 3] == 1)
-                    {
-                        m->it = w[i + 1];
-                    }
-                    else
-                    {
-                        m->ut = w[i + 1];
-                    }
-                }
-                break;
-            case SpvOpTypeBool:
-                if (wc >= 2 && !m->bt_type)
-                    m->bt_type = w[i + 1];
+                if(wc==4&&w[i+2]==32) m->it=w[i+1];
                 break;
             case SpvOpTypeMatrix:
                 if (wc >= 4)
@@ -597,15 +517,6 @@ static void do_scan(SpvMod *m, bool p2)
                         w[i + 1],
                         w[i + 2],
                         w[i + 3]);
-                    if (m->exec_model == SpvExecMeshEXT &&
-                        w[i + 2] == m->mesh_per_vertex_type)
-                    {
-                        m->mesh_vertices_type = w[i + 1];
-                        STEREO_LOG(
-                            "MESH_VERTICES_ARRAY type=%u elem=%u",
-                            m->mesh_vertices_type,
-                            m->mesh_per_vertex_type);
-                    }
                 }
                 break;
             case SpvOpTypeRuntimeArray:
@@ -629,8 +540,6 @@ static void do_scan(SpvMod *m, bool p2)
             case SpvOpVectorTimesScalar:
             case SpvOpVectorTimesMatrix:
             case SpvOpMatrixTimesScalar:
-                if (op == SpvOpVectorTimesMatrix)
-                    m->has_vector_matrix_ops = true;
                 if (wc >= 5)
                 {
                     if (w[i + 2] < m->value_capacity)
@@ -810,53 +719,17 @@ static void do_scan(SpvMod *m, bool p2)
                         w[i+3]);
                     m->proj_ptr_type = w[i+1];
                 }
-                if (m->exec_model == SpvExecMeshEXT &&
-                    w[i + 2] == SpvStorageOutput &&
-                    w[i + 3] == m->mesh_vertices_type)
-                {
-                    m->mesh_vertices_ptr_type = w[i + 1];
-                    STEREO_LOG(
-                        "MESH_VERTICES_POINTER ptr=%u array_type=%u",
-                        m->mesh_vertices_ptr_type,
-                        m->mesh_vertices_type);
-                }
                 if (w[i + 2] == SpvStorageOutput &&
                 m->v4t &&
                 w[i + 3] == m->v4t)
                 {
                 m->ptr_out_v4 = w[i + 1];
-                if (m->exec_model == SpvExecMeshEXT &&
-                    w[i + 2] == SpvStorageOutput &&
-                    m->mesh_vertices_type &&
-                    w[i + 3] == m->mesh_vertices_type)
-                {
-                    m->mesh_vertices_var = w[i + 2];
-                    m->mesh_vertices_ptr_type = w[i + 1];
-                    STEREO_LOG(
-                        "MESH_VERTICES_POINTER ptr=%u array=%u",
-                        w[i + 1],
-                        m->mesh_vertices_type);
                 }
-                }
-                if (w[i + 2] == SpvStorageInput)
+                if (w[i + 2] == SpvStorageInput &&
+                m->it &&
+                w[i + 3] == m->it)
                 {
-                    STEREO_LOG(
-                        "VS_INPUT_POINTER ptr=%u pointeeType=%u",
-                        w[i + 1],
-                        w[i + 3]);
-                    if (m->v2t &&
-                        w[i + 3] == m->v2t)
-                    {
-                        m->ptr_in_v2 = w[i + 1];
-                    }
-                    if (m->it &&
-                        w[i + 3] == m->it)
-                    {
-                        STEREO_LOG(
-                            "VS_INT_POINTER ptr=%u",
-                            w[i + 1]);
-                        m->ptr_in_int = w[i + 1];
-                    }
+                m->ptr_in_int = w[i + 1];
                 }
                 }
                 break;
@@ -868,21 +741,6 @@ static void do_scan(SpvMod *m, bool p2)
                 {
                     SETPTR(w[i + 2], 1);
                 }
-                if (m->exec_model == SpvExecMeshEXT &&
-                    m->mesh_vertices_type &&
-                    w[i + 3] == SpvStorageOutput &&
-                    PTR(w[i + 1]))
-                {
-                    if (w[i + 1] == m->pos_ptr_type ||
-                        w[i + 1] == m->mesh_vertices_ptr_type)
-                    {
-                        STEREO_LOG(
-                            "MESH_VERTICES_VAR var=%u ptr=%u array=%u",
-                            w[i + 2],
-                            w[i + 1],
-                            m->mesh_vertices_type);
-                    }
-                }
                 if (w[i+1] == m->proj_ptr_type &&
                     w[i+3] == SpvStorageClassUniform)
                 {
@@ -892,28 +750,6 @@ static void do_scan(SpvMod *m, bool p2)
                         w[i+1],
                         m->proj_var);
                     m->proj_var = w[i+2];
-                }
-                if (m->exec_model == SpvExecMeshEXT &&
-                    w[i + 3] == SpvStorageOutput &&
-                    w[i + 1] == m->mesh_vertices_ptr_type)
-                {
-                    m->mesh_vertices_var = w[i + 2];
-                    STEREO_LOG(
-                        "MESH_VERTICES_VAR var=%u ptr=%u",
-                        m->mesh_vertices_var,
-                        m->mesh_vertices_ptr_type);
-                }
-                if (w[i + 3] == SpvStorageInput)
-                {
-                    STEREO_LOG(
-                        "VS_INPUT_VARIABLE var=%u ptr=%u",
-                        w[i + 2],
-                        w[i + 1]);
-                    if (m->ptr_in_v2 &&
-                        w[i + 1] == m->ptr_in_v2)
-                    {
-                        m->has_v2_position_input = true;
-                    }
                 }
                 break;
             case SpvOpDecorate:
@@ -930,15 +766,6 @@ static void do_scan(SpvMod *m, bool p2)
                         m->proj_binding = w[i+3];
                     }
                 }
-                if(wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==0)
-                {
-                    if(m->location0_count<16)
-                        m->location0_vars[m->location0_count++]=w[i+1];
-                }
-                if(wc>=4&&w[i+2]==SpvDecorationLocation&&m->exec_model==SpvExecGeometry&&m->geometry_input_var_count<32)
-                {
-                    m->geometry_input_vars[m->geometry_input_var_count++]=w[i+1];
-                }
                 if(wc>=4&&w[i+2]==SpvDecorationBuiltIn){
                     if(w[i+3]==SpvBuiltInPosition&&!m->pos_is_block)
                         m->pos_var=w[i+1];
@@ -952,28 +779,11 @@ static void do_scan(SpvMod *m, bool p2)
                     w[i+3] == SpvDecorationBuiltIn &&
                     w[i+4] == SpvBuiltInPosition)
                 {
-                    bool known_block = false;
-                    for (uint32_t k = 0; k < m->pos_block_count; ++k)
-                    {
-                        if (m->pos_block_type[k] == w[i+1])
-                            known_block = true;
-                    }
-                    if (!known_block && m->pos_block_count < 8)
+                    if (m->pos_block_count < 8)
                         m->pos_block_type[m->pos_block_count++] = w[i+1];
                     m->pos_member_idx = w[i+2];
                     m->pos_is_block   = true;
                     m->pos_var        = 0;
-                    m->pos_ptr_type   = 0;
-                    if (m->exec_model == SpvExecMeshEXT)
-                    {
-                        m->mesh_per_vertex_type = w[i+1];
-                        m->mesh_position_member = w[i+2];
-                        m->mesh_position_found = true;
-                        STEREO_LOG(
-                            "MESH_POSITION_MEMBER struct=%u member=%u",
-                            m->mesh_per_vertex_type,
-                            m->mesh_position_member);
-                    }
                 }
                 break;
             case SpvOpFunction:
@@ -1031,10 +841,6 @@ static void do_scan(SpvMod *m, bool p2)
         }
         i+=wc;
     }
-    if(m->exec_model==SpvExecGeometry)
-    {
-        STEREO_LOG("GS_SIGNATURE_FINAL entry=%u inputs=%u emits=%u modes=%u,%u vertices=%u",m->entry_function,m->geometry_location_count,m->emit_count,m->geometry_input_mode,m->geometry_output_mode,m->geometry_output_vertices);
-    }
 }
 
 static void count_geometry_inputs(SpvMod *m)
@@ -1081,17 +887,13 @@ static void spv_scan(SpvMod *m)
     /* First pass: discover decorations/types. */
     do_scan(m, false);
     /*
-    * Run again now that block Position info is known.
-    * Some TES shaders declare OpTypePointer before
-    * OpMemberDecorate(BuiltIn Position).
-    */
+     * Run again now that block Position info is known.
+     * Some TES shaders declare OpTypePointer before
+     * OpMemberDecorate(BuiltIn Position).
+     */
     do_scan(m, false);
     if (m->pos_is_block)
-    {
         do_scan(m, true);
-    }
-    if(m->exec_model==SpvExecGeometry)
-        count_geometry_inputs(m);
     STEREO_LOG(
         "SCAN hash=%016llx exec=%u matrix=%u proj=%u dot=%u direct=%u emit=%u pos=%u block=%u",
         (unsigned long long)hash_spv(m->words, m->count),
