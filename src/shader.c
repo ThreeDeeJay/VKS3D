@@ -7469,11 +7469,29 @@ bool spirv_patch_stereo_fs(
          * immediately before the first OpDecorate.
          */
         if (emit_vi_decorate &&
-            op == SpvOpDecorate)
+            (op==SpvOpTypeVoid ||
+             op==SpvOpTypeBool ||
+             op==SpvOpTypeInt ||
+             op==SpvOpTypeFloat ||
+             op==SpvOpTypeVector ||
+             op==SpvOpTypeImage ||
+             op==SpvOpTypeSampler ||
+             op==SpvOpTypeSampledImage ||
+             op==SpvOpTypeArray ||
+             op==SpvOpTypeRuntimeArray ||
+             op==SpvOpTypeStruct ||
+             op==SpvOpTypePointer ||
+             op==SpvOpTypeFunction ||
+             op==SpvOpConstantTrue ||
+             op==SpvOpConstantFalse ||
+             op==SpvOpConstant ||
+             op==SpvOpConstantComposite ||
+             op==SpvOpVariable ||
+             op==SpvOpFunction))
         {
             uint32_t d[] =
             {
-                op_(SpvOpDecorate, 4),
+                (4u << 16) | SpvOpDecorate,
                 new_vi_id,
                 SpvDecorationBuiltIn,
                 SpvBuiltInViewIndex
@@ -7481,7 +7499,7 @@ bool spirv_patch_stereo_fs(
             sb_push_n(&ob, d, 4);
             uint32_t flat[] =
             {
-                op_(SpvOpDecorate, 3),
+                (3u << 16) | SpvOpDecorate,
                 new_vi_id,
                 SpvDecorationFlat
             };
