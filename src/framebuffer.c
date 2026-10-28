@@ -890,7 +890,21 @@ stereo_CmdBeginRenderPass(
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
 {
-    StereoDevice *sd = find_any_device();
+    StereoDevice *sd = NULL;
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
+    {
+        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
+        {
+            if (g_devices[d].cb_track[i].cb == commandBuffer)
+            {
+                sd = &g_devices[d];
+                break;
+            }
+        }
+    }
+    if (!sd) sd = find_any_device();
     if (!sd) return;
     for (uint32_t i = 0; i < sd->cb_track_count; i++)
     {
@@ -899,6 +913,7 @@ stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
             STEREO_LOG("CB_END_RENDER_PASS cb=%p old_rp=%p old_fb=%p",(void*)commandBuffer,(void*)sd->cb_track[i].render_pass,(void*)sd->cb_track[i].framebuffer);
             sd->cb_track[i].render_pass = VK_NULL_HANDLE;
             sd->cb_track[i].framebuffer = VK_NULL_HANDLE;
+            sd->cb_track[i].subpass = 0;
             break;
         }
     }
@@ -1425,7 +1440,21 @@ stereo_CmdDrawIndexed(
         firstIndex,
         vertexOffset,
         firstInstance);
-    StereoDevice *sd = find_any_device();
+    StereoDevice *sd = NULL;
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
+    {
+        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
+        {
+            if (g_devices[d].cb_track[i].cb == commandBuffer)
+            {
+                sd = &g_devices[d];
+                break;
+            }
+        }
+    }
+    if (!sd) sd = find_any_device();
     if (!sd)
         return;
     VkPipeline pipe =
@@ -1507,7 +1536,21 @@ stereo_CmdDraw(
     uint32_t firstInstance)
 {
     STEREO_LOG("CALLED stereo_CmdDraw");
-    StereoDevice *sd = find_any_device();
+    StereoDevice *sd = NULL;
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
+    {
+        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
+        {
+            if (g_devices[d].cb_track[i].cb == commandBuffer)
+            {
+                sd = &g_devices[d];
+                break;
+            }
+        }
+    }
+    if (!sd) sd = find_any_device();
     if (!sd)
         return;
     VkPipeline pipe =
@@ -1571,7 +1614,21 @@ stereo_CmdDrawIndirect(
     uint32_t stride)
 {
     STEREO_LOG("CALLED stereo_CmdDrawIndirect");
-    StereoDevice *sd = find_any_device();
+    StereoDevice *sd = NULL;
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
+    {
+        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
+        {
+            if (g_devices[d].cb_track[i].cb == commandBuffer)
+            {
+                sd = &g_devices[d];
+                break;
+            }
+        }
+    }
+    if (!sd) sd = find_any_device();
     if (!sd)
         return;
     VkPipeline pipe =
@@ -1631,7 +1688,21 @@ stereo_CmdDrawIndexedIndirect(
     uint32_t stride)
 {
     STEREO_LOG("CALLED stereo_CmdDrawIndexedIndirect");
-    StereoDevice *sd = find_any_device();
+    StereoDevice *sd = NULL;
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
+    {
+        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
+        {
+            if (g_devices[d].cb_track[i].cb == commandBuffer)
+            {
+                sd = &g_devices[d];
+                break;
+            }
+        }
+    }
+    if (!sd) sd = find_any_device();
     if (!sd)
         return;
     VkPipeline pipe =
