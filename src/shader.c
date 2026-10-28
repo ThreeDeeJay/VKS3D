@@ -1767,24 +1767,23 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         };
         sb_push_n(out, w, 5);
     }
-    STEREO_LOG("1 force_far_depth=%u", c->force_far_depth);
-    //if (c->force_far_depth)
-    //{
-    //    uint32_t w[] = {
-    //        op_(SpvOpCompositeExtract, 5),
-    //        m->ft,
-    //        pw,
-    //        lp,
-    //        3u
-    //    };
-    //    sb_push_n(out, w, 5);
-    //    STEREO_LOG(
-    //        "VS_FAR_DEPTH_W "
-    //        "w=%u "
-    //        "pos=%u",
-    //        pw,
-    //        lp);
-    //}
+    if (c->force_far_depth)
+    {
+        uint32_t w[] = {
+            op_(SpvOpCompositeExtract, 5),
+            m->ft,
+            pw,
+            lp,
+            3u
+        };
+        sb_push_n(out, w, 5);
+        STEREO_LOG(
+            "VS_FAR_DEPTH_W "
+            "w=%u "
+            "pos=%u",
+            pw,
+            lp);
+    }
     STEREO_LOG(
         "VS_PATCH "
         "mode=%d "
@@ -1873,159 +1872,158 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cl,
         c->cr,
         c->cc);
-    STEREO_LOG("2 force_far_depth=%u", c->force_far_depth);
-    //if (c->force_far_depth)
-    //{
-    //    uint32_t bg_offset = (*nid)++;
-    //    uint32_t bg_x = (*nid)++;
-    //    uint32_t w[] = {
-    //        op_(SpvOpFMul, 5),
-    //        m->ft,
-    //        bg_offset,
-    //        sel,
-    //        c->cc
-    //    };
-    //    sb_push_n(out, w, 5);
-    //    if (c->procedural_sky)
-    //    {
-    //        uint32_t bg_scale = (*nid)++;
-    //        {
-    //            uint32_t w2[] = {
-    //                op_(SpvOpFAdd, 5),
-    //                m->ft,
-    //                bg_scale,
-    //                c->bg_expand,
-    //                c->cf1
-    //            };
-    //            sb_push_n(out, w2, 5);
-    //        }
-    //        {
-    //            uint32_t w3[] = {
-    //                op_(SpvOpFMul, 5),
-    //                m->ft,
-    //                bg_x,
-    //                px,
-    //                bg_scale
-    //            };
-    //            sb_push_n(out, w3, 5);
-    //        }
-    //        {
-    //            uint32_t w4[] = {
-    //                op_(SpvOpFSub, 5),
-    //                m->ft,
-    //                nx2,
-    //                bg_x,
-    //                bg_offset
-    //            };
-    //            sb_push_n(out, w4, 5);
-    //        }
-    //        STEREO_LOG(
-    //            "VS_BACKGROUND "
-    //            "x=%u "
-    //            "x2=%u "
-    //            "convergence=%u "
-    //            "stereo_offset=%u "
-    //            "expand=%u "
-    //            "scale=%u "
-    //            "w=%u",
-    //            px,
-    //            nx2,
-    //            c->cc,
-    //            bg_offset,
-    //            c->bg_expand,
-    //            bg_scale,
-    //            pw);
-    //    }
-    //    else
-    //    {
-    //        if (!m->has_matrix_ops)
-    //        {
-    //            uint32_t bg_scale = (*nid)++;
-    //            {
-    //                uint32_t w2[] = {
-    //                    op_(SpvOpFAdd, 5),
-    //                    m->ft,
-    //                    bg_scale,
-    //                    c->bg_expand,
-    //                    c->cf1
-    //                };
-    //                sb_push_n(out, w2, 5);
-    //            }
-    //            {
-    //                uint32_t w3[] = {
-    //                    op_(SpvOpFMul, 5),
-    //                    m->ft,
-    //                    bg_x,
-    //                    px,
-    //                    bg_scale
-    //                };
-    //                sb_push_n(out, w3, 5);
-    //            }
-    //            {
-    //                uint32_t w4[] = {
-    //                    op_(SpvOpFSub, 5),
-    //                    m->ft,
-    //                    nx2,
-    //                    bg_x,
-    //                    bg_offset
-    //                };
-    //                sb_push_n(out, w4, 5);
-    //            }
-    //            STEREO_LOG(
-    //                "VS_BACKGROUND_FLAT "
-    //                "x=%u "
-    //                "x2=%u "
-    //                "convergence=%u "
-    //                "stereo_offset=%u "
-    //                "expand=%u "
-    //                "scale=%u "
-    //                "w=%u",
-    //                px,
-    //                nx2,
-    //                c->cc,
-    //                bg_offset,
-    //                c->bg_expand,
-    //                bg_scale,
-    //                pw);
-    //        }
-    //        else
-    //        {
-    //            {
-    //                uint32_t w2[] = {
-    //                    op_(SpvOpFMul, 5),
-    //                    m->ft,
-    //                    bg_x,
-    //                    bg_offset,
-    //                    pw
-    //                };
-    //                sb_push_n(out, w2, 5);
-    //            }
-    //            {
-    //                uint32_t w3[] = {
-    //                    op_(SpvOpFSub, 5),
-    //                    m->ft,
-    //                    nx2,
-    //                    px,
-    //                    bg_x
-    //                };
-    //                sb_push_n(out, w3, 5);
-    //            }
-    //            STEREO_LOG(
-    //                "VS_BACKGROUND_FLAT "
-    //                "x=%u "
-    //                "x2=%u "
-    //                "convergence=%u "
-    //                "stereo_offset=%u "
-    //                "w=%u",
-    //                px,
-    //                nx2,
-    //                c->cc,
-    //                bg_offset,
-    //                pw);
-    //        }
-    //    }
-    //}
-    //else
+    if (c->force_far_depth)
+    {
+        uint32_t bg_offset = (*nid)++;
+        uint32_t bg_x = (*nid)++;
+        uint32_t w[] = {
+            op_(SpvOpFMul, 5),
+            m->ft,
+            bg_offset,
+            sel,
+            c->cc
+        };
+        sb_push_n(out, w, 5);
+        if (c->procedural_sky)
+        {
+            uint32_t bg_scale = (*nid)++;
+            {
+                uint32_t w2[] = {
+                    op_(SpvOpFAdd, 5),
+                    m->ft,
+                    bg_scale,
+                    c->bg_expand,
+                    c->cf1
+                };
+                sb_push_n(out, w2, 5);
+            }
+            {
+                uint32_t w3[] = {
+                    op_(SpvOpFMul, 5),
+                    m->ft,
+                    bg_x,
+                    px,
+                    bg_scale
+                };
+                sb_push_n(out, w3, 5);
+            }
+            {
+                uint32_t w4[] = {
+                    op_(SpvOpFSub, 5),
+                    m->ft,
+                    nx2,
+                    bg_x,
+                    bg_offset
+                };
+                sb_push_n(out, w4, 5);
+            }
+            STEREO_LOG(
+                "VS_BACKGROUND "
+                "x=%u "
+                "x2=%u "
+                "convergence=%u "
+                "stereo_offset=%u "
+                "expand=%u "
+                "scale=%u "
+                "w=%u",
+                px,
+                nx2,
+                c->cc,
+                bg_offset,
+                c->bg_expand,
+                bg_scale,
+                pw);
+        }
+        else
+        {
+            if (!m->has_matrix_ops)
+            {
+                uint32_t bg_scale = (*nid)++;
+                {
+                    uint32_t w2[] = {
+                        op_(SpvOpFAdd, 5),
+                        m->ft,
+                        bg_scale,
+                        c->bg_expand,
+                        c->cf1
+                    };
+                    sb_push_n(out, w2, 5);
+                }
+                {
+                    uint32_t w3[] = {
+                        op_(SpvOpFMul, 5),
+                        m->ft,
+                        bg_x,
+                        px,
+                        bg_scale
+                    };
+                    sb_push_n(out, w3, 5);
+                }
+                {
+                    uint32_t w4[] = {
+                        op_(SpvOpFSub, 5),
+                        m->ft,
+                        nx2,
+                        bg_x,
+                        bg_offset
+                    };
+                    sb_push_n(out, w4, 5);
+                }
+                STEREO_LOG(
+                    "VS_BACKGROUND_FLAT "
+                    "x=%u "
+                    "x2=%u "
+                    "convergence=%u "
+                    "stereo_offset=%u "
+                    "expand=%u "
+                    "scale=%u "
+                    "w=%u",
+                    px,
+                    nx2,
+                    c->cc,
+                    bg_offset,
+                    c->bg_expand,
+                    bg_scale,
+                    pw);
+            }
+            else
+            {
+                {
+                    uint32_t w2[] = {
+                        op_(SpvOpFMul, 5),
+                        m->ft,
+                        bg_x,
+                        bg_offset,
+                        pw
+                    };
+                    sb_push_n(out, w2, 5);
+                }
+                {
+                    uint32_t w3[] = {
+                        op_(SpvOpFSub, 5),
+                        m->ft,
+                        nx2,
+                        px,
+                        bg_x
+                    };
+                    sb_push_n(out, w3, 5);
+                }
+                STEREO_LOG(
+                    "VS_BACKGROUND_FLAT "
+                    "x=%u "
+                    "x2=%u "
+                    "convergence=%u "
+                    "stereo_offset=%u "
+                    "w=%u",
+                    px,
+                    nx2,
+                    c->cc,
+                    bg_offset,
+                    pw);
+            }
+        }
+    }
+    else
     {
         uint32_t pw = (*nid)++;
         uint32_t convmag = (*nid)++;
@@ -2105,29 +2103,28 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         sb_push_n(out, w, 6);
     }
     uint32_t final_pos = np;
-    STEREO_LOG("3 force_far_depth=%u", c->force_far_depth);
-    //if (c->force_far_depth)
-    //{
-    //    uint32_t w[] = {
-    //        op_(SpvOpCompositeInsert, 6),
-    //        m->v4t,
-    //        np_far,
-    //        pw,
-    //        np,
-    //        2u
-    //    };
-    //    sb_push_n(out, w, 6);
-    //    final_pos = np_far;
-    //    STEREO_LOG(
-    //        "VS_FAR_DEPTH "
-    //        "pos_in=%u "
-    //        "pos_out=%u "
-    //        "w=%u "
-    //        "z_component=2",
-    //        np,
-    //        np_far,
-    //        pw);
-    //}
+    if (c->force_far_depth)
+    {
+        uint32_t w[] = {
+            op_(SpvOpCompositeInsert, 6),
+            m->v4t,
+            np_far,
+            pw,
+            np,
+            2u
+        };
+        sb_push_n(out, w, 6);
+        final_pos = np_far;
+        STEREO_LOG(
+            "VS_FAR_DEPTH "
+            "pos_in=%u "
+            "pos_out=%u "
+            "w=%u "
+            "z_component=2",
+            np,
+            np_far,
+            pw);
+    }
     STEREO_LOG(
         "PROJ_WRITE pos_var=%u pptr=%u new_pos=%u x=%u view=%u pivot=1/conv",
         m->pos_var,
