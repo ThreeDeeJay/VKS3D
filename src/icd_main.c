@@ -416,8 +416,6 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
             (void*)stereo_CreateGraphicsPipelines);
         return (PFN_vkVoidFunction)stereo_CreateGraphicsPipelines;
     }
-    GDPA_WRAP("vkDestroyPipeline",
-              stereo_DestroyPipeline);
     GDPA_WRAP("vkCreateSwapchainKHR",
               stereo_CreateSwapchainKHR);
     GDPA_WRAP("vkDestroySwapchainKHR",
