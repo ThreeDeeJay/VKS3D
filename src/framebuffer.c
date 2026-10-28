@@ -1113,13 +1113,15 @@ stereo_CmdBindPipeline(
             }
         }
     }
+    VkPipeline mv_variant = VK_NULL_HANDLE;
     if (in_mv)
     {
-        VkPipeline v = stereo_pipeline_mv_variant(pipeline);
-        if (v) use = v;
+        mv_variant = stereo_pipeline_mv_variant(pipeline);
+        if (mv_variant) use = mv_variant;
     }
+    STEREO_LOG("PIPE_BIND_TRACE cb=%p bind_point=%u requested=%p active_rp=%p sub=%u in_mv=%u variant=%p bound=%p",(void*)commandBuffer,(unsigned)pipelineBindPoint,(void*)pipeline,(void*)active_rp,sub,in_mv,(void*)mv_variant,(void*)use);
     }
-    remember_bound_pipeline(sd, commandBuffer, pipeline);
+    remember_bound_pipeline(sd, commandBuffer, use);
     sd->real.CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,
