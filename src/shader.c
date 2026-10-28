@@ -11953,8 +11953,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         dbg_out[i].proj_member_mask     = UINT32_MAX;
         dbg_out[i].proj_var             = UINT32_MAX;
     }
-    if (!tmp_mod||!tst||!infos) {
-        free(tmp_mod); free(tst); free(infos);
+    if (!tmp_mod||!tst||!infos||!dbg_out||!dyn_mv||!dyn_rw) {
+        free(tmp_mod); free(tst); free(infos); free(dbg_out); free(dyn_mv); free(dyn_rw);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));

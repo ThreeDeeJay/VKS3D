@@ -158,6 +158,16 @@ static VkResult create_mv_rp(StereoDevice *sd,
     };
     VkRenderPassCreateInfo mod = *pCI;
     if (pa) mod.pAttachments = pa;
+    const VkBaseInStructure *chain = (const VkBaseInStructure *)pCI->pNext;
+    while (chain)
+    {
+        if (chain->sType == VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO)
+        {
+            free(pa); free(vm); free(cm); free(vo);
+            return VK_INCOMPLETE;
+        }
+        chain = chain->pNext;
+    }
     mv.pNext = pCI->pNext;
     mod.pNext = &mv;
     STEREO_LOG(
