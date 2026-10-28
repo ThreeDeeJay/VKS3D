@@ -13765,7 +13765,20 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 for (uint32_t k=0;k<nv;k++)
                     if (dyn_mv[vidx[k]]) dyn_rw[vidx[k]]->viewMask = 0;
                 for (uint32_t k=0;k<nv;k++)
-                    if (vP[k]) stereo_pipeline_variant_add(pP[vidx[k]], vP[k]);
+                {
+                    if (!vP[k]) continue;
+                    uint32_t p = vidx[k];
+                    stereo_pipeline_variant_add(pP[p], vP[k]);
+                    StereoPipelineInfo *base_info = find_pipeline_info(sd, pP[p]);
+                    StereoPipelineInfo *variant_info = add_pipeline_info(sd);
+                    if (variant_info)
+                    {
+                        if (base_info) *variant_info = *base_info;
+                        variant_info->pipeline = vP[k];
+                        variant_info->mv_renderpass = vinfos[k].renderPass;
+                        variant_info->view_mask = dyn_mv[p] ? 0x3 : variant_info->view_mask;
+                    }
+                }
                 if (vr != VK_SUCCESS)
                     STEREO_ERR("MV pipeline variant creation failed: %d", (int)vr);
             }
@@ -13877,6 +13890,22 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 (void*)pCI[p].renderPass,
                 infos[p].stageCount);
         }
+    }
+    for (uint32_t p=0;p<N;p++)
+    {
+        if (res != VK_SUCCESS || !pP[p]) continue;
+        VkPipeline mv = stereo_pipeline_mv_variant(pP[p]);
+        if (!mv) continue;
+        StereoPipelineInfo *base = find_pipeline_info(sd,pP[p]);
+        if (!base) continue;
+        StereoPipelineInfo copy = *base;
+        StereoPipelineInfo *variant = add_pipeline_info(sd);
+        if (!variant) continue;
+        *variant = copy;
+        variant->pipeline = mv;
+        variant->mv_renderpass = infos[p].renderPass;
+        if (dyn_mv[p] || infos[p].renderPass != pCI[p].renderPass)
+            variant->view_mask = 0x3;
     }
     STEREO_LOG(
         "PIPE_CREATE_END result=%d multiview_pass_exists=%d",
