@@ -1432,6 +1432,15 @@ stereo_CmdDrawIndexed(
         lookup_bound_renderpass(sd, commandBuffer);
     VkFramebuffer fb =
         lookup_bound_framebuffer(sd, commandBuffer);
+    uint32_t cb_flags = 0;
+    for (uint32_t i = 0; i < sd->cb_track_count; i++)
+    {
+        if (sd->cb_track[i].cb == commandBuffer)
+        {
+            cb_flags = sd->cb_track[i].subpass;
+            break;
+        }
+    }
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
     if (info)
@@ -1477,7 +1486,7 @@ stereo_CmdDrawIndexed(
             break;
         }
     }
-    STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
+    STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u cb_flags=0x%X dyn_mv=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,cb_flags,(cb_flags & CB_DYN_MV)!=0,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
