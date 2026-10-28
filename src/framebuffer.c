@@ -1,6 +1,8 @@
 
 #include <string.h>
 #include "stereo_icd.h"
+#define CB_DYN_MV 0x4D560001u
+VkPipeline stereo_pipeline_mv_variant(VkPipeline base);
 StereoDevice* stereo_device_from_command_buffer(VkCommandBuffer cb);
 void remember_begin_renderpass(
 StereoDevice* sd,
@@ -43,7 +45,8 @@ VkRenderPass use_mv = VK_NULL_HANDLE;
 StereoRenderPassInfo *fb_rpi = stereo_rp_lookup(sd, original_rp);
 if (original_rp == VK_NULL_HANDLE) {
 }
-if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
+if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0 &&
+pCreateInfo->pAttachments && !(pCreateInfo->flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT)) {
 bool all = true;
 bool any = false;
 bool only_shading_rate_non_upgraded = true;
@@ -208,6 +211,58 @@ return &g_devices[i];
 }
 return NULL;
 }
+static void cb_track_set(StereoDevice *sd, VkCommandBuffer cb,
+VkRenderPass rp, VkFramebuffer fb, uint32_t sub)
+{
+for (uint32_t i = 0; i < sd->cb_track_count; i++)
+{
+if (sd->cb_track[i].cb == cb)
+{
+sd->cb_track[i].render_pass = rp;
+sd->cb_track[i].framebuffer = fb;
+sd->cb_track[i].subpass = sub;
+return;
+}
+}
+if (sd->cb_track_count >= MAX_CB_TRACK) return;
+uint32_t idx = sd->cb_track_count++;
+sd->cb_track[idx].cb = cb;
+sd->cb_track[idx].pipeline = VK_NULL_HANDLE;
+sd->cb_track[idx].render_pass = rp;
+sd->cb_track[idx].framebuffer = fb;
+sd->cb_track[idx].subpass = sub;
+}
+
+static bool view_is_upgraded(StereoDevice *sd, VkImageView v)
+{
+for (uint32_t k = 0; k < sd->upgraded_view_count; k++)
+if (sd->upgraded_views[k] == v) return true;
+return false;
+}
+
+static bool rendering_all_upgraded(StereoDevice *sd, const VkRenderingInfo *ri)
+{
+uint32_t n = 0;
+for (uint32_t i = 0; i < ri->colorAttachmentCount && ri->pColorAttachments; i++)
+{
+VkImageView v = ri->pColorAttachments[i].imageView;
+if (!v) continue;
+if (!view_is_upgraded(sd, v)) return false;
+n++;
+}
+if (ri->pDepthAttachment && ri->pDepthAttachment->imageView)
+{
+if (!view_is_upgraded(sd, ri->pDepthAttachment->imageView)) return false;
+n++;
+}
+if (ri->pStencilAttachment && ri->pStencilAttachment->imageView)
+{
+if (!view_is_upgraded(sd, ri->pStencilAttachment->imageView)) return false;
+n++;
+}
+return n > 0;
+}
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdBeginRenderPass(
 VkCommandBuffer commandBuffer,
@@ -325,38 +380,10 @@ if (sd->fb_tracks[i].fb == modified.framebuffer)
 break;
 }
 }
-bool cb_found = false;
-for (uint32_t i = 0; i < sd->cb_track_count; i++)
-{
-if (sd->cb_track[i].cb == commandBuffer)
-{
-sd->cb_track[i].render_pass = modified.renderPass;
-sd->cb_track[i].framebuffer = modified.framebuffer;
-cb_found = true;
-break;
-}
-}
-if (!cb_found && sd->cb_track_count < MAX_CB_TRACK)
-{
-uint32_t idx = sd->cb_track_count++;
-sd->cb_track[idx].cb = commandBuffer;
-sd->cb_track[idx].render_pass = modified.renderPass;
-sd->cb_track[idx].framebuffer = modified.framebuffer;
-}
-else if (!cb_found)
-{
-}
+cb_track_set(sd, commandBuffer, modified.renderPass, modified.framebuffer, 0);
 sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
 } else {
-for (uint32_t i = 0; i < sd->cb_track_count; i++)
-{
-if (sd->cb_track[i].cb == commandBuffer)
-{
-sd->cb_track[i].render_pass = pRenderPassBegin->renderPass;
-sd->cb_track[i].framebuffer = pRenderPassBegin->framebuffer;
-break;
-}
-}
+cb_track_set(sd, commandBuffer, pRenderPassBegin->renderPass, pRenderPassBegin->framebuffer, 0);
 sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
 }
 }
@@ -401,12 +428,17 @@ if (!sd->real.CmdBeginRendering)
 return;
 }
 VkRenderingInfo modified = *pRenderingInfo;
+bool dyn_mv = false;
 if (sd->stereo.multiview &&
 !sd->stereo.shader_objects_mono &&
-modified.viewMask == 0)
+modified.viewMask == 0 &&
+rendering_all_upgraded(sd, pRenderingInfo))
 {
 modified.viewMask = 0x3;
+modified.layerCount = 1;
+dyn_mv = true;
 }
+cb_track_set(sd, commandBuffer, VK_NULL_HANDLE, VK_NULL_HANDLE, dyn_mv ? CB_DYN_MV : 0);
 sd->real.CmdBeginRendering(
 commandBuffer,
 &modified);
@@ -428,6 +460,7 @@ break;
 }
 if (!sd || !sd->real.CmdEndRendering)
 return;
+cb_track_set(sd, commandBuffer, VK_NULL_HANDLE, VK_NULL_HANDLE, 0);
 sd->real.CmdEndRendering(commandBuffer);
 }
 VKAPI_ATTR void VKAPI_CALL
@@ -439,8 +472,6 @@ VkPipeline pipeline)
 extern StereoDevice g_devices[];
 extern uint32_t g_device_count;
 StereoDevice *sd = NULL;
-VkRenderPass active_rp = VK_NULL_HANDLE;
-VkFramebuffer active_fb = VK_NULL_HANDLE;
 for (uint32_t i = 0; i < g_device_count; i++)
 {
 if (g_devices[i].real_device)
@@ -451,25 +482,40 @@ break;
 }
 if (!sd)
 return;
+VkPipeline use = pipeline;
+if (pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS)
+{
+VkRenderPass active_rp = VK_NULL_HANDLE;
+uint32_t sub = 0;
 for (uint32_t i = 0; i < sd->cb_track_count; i++)
 {
 if (sd->cb_track[i].cb == commandBuffer)
 {
 active_rp = sd->cb_track[i].render_pass;
-active_fb = sd->cb_track[i].framebuffer;
+sub = sd->cb_track[i].subpass;
 break;
 }
 }
-StereoPipelineInfo *info =
-find_pipeline_info(sd, pipeline);
-remember_bound_pipeline(
-sd,
-commandBuffer,
-pipeline);
-sd->real.CmdBindPipeline(
-commandBuffer,
-pipelineBindPoint,
-pipeline);
+bool in_mv = (sub == CB_DYN_MV);
+if (!in_mv && active_rp)
+{
+for (uint32_t i = 0; i < sd->render_pass_count; i++)
+{
+if (sd->render_passes[i].mv_handle == active_rp)
+{
+in_mv = true;
+break;
+}
+}
+}
+if (in_mv)
+{
+VkPipeline v = stereo_pipeline_mv_variant(pipeline);
+if (v) use = v;
+}
+}
+remember_bound_pipeline(sd, commandBuffer, pipeline);
+sd->real.CmdBindPipeline(commandBuffer, pipelineBindPoint, use);
 }
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdTraceRaysKHR(

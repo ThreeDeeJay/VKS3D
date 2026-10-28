@@ -5,6 +5,7 @@
 VKAPI_ATTR void VKAPI_CALL stereo_CmdBlitImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageBlit *, VkFilter);
 VKAPI_ATTR void VKAPI_CALL stereo_CmdCopyImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageCopy *);
 VKAPI_ATTR void VKAPI_CALL stereo_CmdResolveImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageResolve *);
+VKAPI_ATTR void VKAPI_CALL stereo_DestroyPipeline(VkDevice, VkPipeline, const VkAllocationCallbacks *);
 PFN_vkGetInstanceProcAddr stereo_get_real_pdPA(void);
 stereo_dl_t stereo_get_real_icd_handle(void);
 static PFN_vkVoidFunction get_instance_proc_addr_internal(
@@ -261,6 +262,8 @@ GDPA_WRAP("vkDestroyShaderEXT",
 stereo_DestroyShaderEXT);
 GDPA_WRAP("vkCmdBindShadersEXT",
 stereo_CmdBindShadersEXT);
+GDPA_WRAP("vkDestroyPipeline",
+stereo_DestroyPipeline);
 if (!strcmp(pName, "vkCreateGraphicsPipelines")) {
 return (PFN_vkVoidFunction)stereo_CreateGraphicsPipelines;
 }
