@@ -648,6 +648,7 @@ void stereo_device_free(VkDevice h) {
 /* ── Lookup helpers ─────────────────────────────────────────────────────── */
 
 StereoSwapchain *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc) {
+    if (!sc) return NULL;
     for (uint32_t i = 0; i < dev->swapchain_count; i++) {
         /* DXGI mode: app_handle is a pointer to the StereoSwapchain itself */
         if (dev->swapchains[i].app_handle == sc)    return &dev->swapchains[i];
