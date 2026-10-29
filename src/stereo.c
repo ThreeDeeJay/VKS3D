@@ -403,6 +403,7 @@ g_devices[i] = g_devices[--g_device_count]; break;
 stereo_mutex_unlock(&g_registry_lock);
 }
 StereoSwapchain *stereo_swapchain_lookup(StereoDevice *dev, VkSwapchainKHR sc) {
+if (!sc) return NULL;
 for (uint32_t i = 0; i < dev->swapchain_count; i++) {
 if (dev->swapchains[i].app_handle == sc) return &dev->swapchains[i];
 if (dev->swapchains[i].real_swapchain == sc) return &dev->swapchains[i];

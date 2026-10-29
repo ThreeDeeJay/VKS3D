@@ -200,10 +200,14 @@ VkSwapchainKHR *pSwapchain)
 {
 StereoDevice *sd = stereo_device_from_handle(device);
 if (!sd) return VK_ERROR_DEVICE_LOST;
-if (!sd->stereo.enabled || sd->swapchain_count >= MAX_SWAPCHAINS)
+bool has_free_slot = false;
+for (uint32_t fi = 0; fi < sd->swapchain_count; fi++)
+if (sd->swapchains[fi].app_handle == VK_NULL_HANDLE) { has_free_slot = true; break; }
+if (!sd->stereo.enabled || (sd->swapchain_count >= MAX_SWAPCHAINS && !has_free_slot))
 return sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
 uint32_t app_w = pCreateInfo->imageExtent.width;
 uint32_t app_h = pCreateInfo->imageExtent.height;
+bool slot_is_new = false;
 StereoSwapchain *old_sc = NULL;
 if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
 {
@@ -227,7 +231,11 @@ sc->resize_reused = true;
 }
 else
 {
-sc = &sd->swapchains[sd->swapchain_count];
+uint32_t slot = sd->swapchain_count;
+for (uint32_t fi = 0; fi < sd->swapchain_count; fi++)
+if (sd->swapchains[fi].app_handle == VK_NULL_HANDLE) { slot = fi; break; }
+slot_is_new = (slot == sd->swapchain_count);
+sc = &sd->swapchains[slot];
 memset(sc, 0, sizeof(*sc));
 sc->resize_reused = false;
 }
@@ -269,9 +277,11 @@ sc->stereo_active = true;
 sc->real_swapchain = VK_NULL_HANDLE;
 *pSwapchain = (VkSwapchainKHR)(uintptr_t)sc;
 sc->app_handle = *pSwapchain;
+if (slot_is_new)
+{
 CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
-if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
 sd->swapchain_count++;
+}
 if (sc->barrier_cmds)
 {
 }
@@ -332,9 +342,11 @@ sc->real_swapchain = VK_NULL_HANDLE;
 *pSwapchain = (VkSwapchainKHR)(uintptr_t)sc;
 sc->app_handle = *pSwapchain;
 sd->stereo_w = app_w; sd->stereo_h = app_h;
+if (slot_is_new)
+{
 CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
-if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
 sd->swapchain_count++;
+}
 return VK_SUCCESS;
 }
 if (req == STEREO_PRESENT_DXGI) { STEREO_ERR("DXGI forced but failed"); goto passthrough; }
@@ -353,9 +365,11 @@ sc->real_swapchain = VK_NULL_HANDLE;
 *pSwapchain = (VkSwapchainKHR)(uintptr_t)sc;
 sc->app_handle = *pSwapchain;
 sd->stereo_w = app_w; sd->stereo_h = app_h;
+if (slot_is_new)
+{
 CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
-if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
 sd->swapchain_count++;
+}
 return VK_SUCCESS;
 }
 }
@@ -373,9 +387,11 @@ sc->dxgi_mode = false;
 sc->stereo_active = true;
 *pSwapchain = (VkSwapchainKHR)(uintptr_t)sc;
 sc->app_handle = *pSwapchain;
+if (slot_is_new)
+{
 CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
-if (!old_sc)
 sd->swapchain_count++;
+}
 sd->stereo_w = app_w;
 sd->stereo_h = app_h;
 return VK_SUCCESS;
@@ -414,9 +430,11 @@ if (res == VK_SUCCESS) {
 sc->real_swapchain = *pSwapchain;
 sc->app_handle = *pSwapchain;
 sc->stereo_active = false;
+if (slot_is_new)
+{
 CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
-if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
 sd->swapchain_count++;
+}
 }
 return res;
 }
@@ -513,6 +531,7 @@ pAllocator);
 sc->real_swapchain = VK_NULL_HANDLE;
 }
 sc->stereo_active = false;
+sc->app_handle = VK_NULL_HANDLE;
 } else {
 sd->real.DestroySwapchainKHR(
 sd->real_device,
@@ -682,6 +701,7 @@ default:
 pr = VK_SUCCESS;
 break;
 }
+if (pr == VK_SUBOPTIMAL_KHR) pr = VK_SUCCESS;
 if (pr != VK_SUCCESS) {
 STEREO_ERR("Present (mode=%d) failed: %d", (int)sc_i->present_mode, pr);
 result = pr;
