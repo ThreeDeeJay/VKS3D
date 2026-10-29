@@ -4374,7 +4374,7 @@ uint32_t var)
     /*
      * Input attachments are framebuffer attachments.
      */
-    if (v->storage == SpvStorageClassInput)
+    for (uint32_t img = 0; img < s->n_img; img++)
     {
         STEREO_LOG(
             "FS_BINDING_INPUT_ATTACHMENT var=%u stereo=1",
