@@ -4404,7 +4404,7 @@ uint32_t var)
         v->set,
         v->binding,
         stereo);
-    return stereo;
+    return false;
 }
 
 static uint32_t fs_result_type_of(FsScan *s,
