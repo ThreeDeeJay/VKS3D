@@ -4423,7 +4423,7 @@ uint32_t var)
      * binding 4 = SSAO/deferred intermediate
      */
     bool stereo =
-        (v->binding <= 10);
+        (v->binding <= 100);
     STEREO_LOG(
         "FS_BINDING_RESULT "
         "var=%u "
