@@ -4374,44 +4374,12 @@ uint32_t var)
     /*
      * Input attachments are framebuffer attachments.
      */
-    for (uint32_t img = 0; img < s->n_img; img++)
+    if (v->storage == SpvStorageClassInput)
     {
-        const FsImageInfo *image = &s->images[img];
-        if (image->owner_var != var)
-            continue;
         STEREO_LOG(
-            "FS_BINDING_IMAGE "
-            "var=%u "
-            "image=%u "
-            "dim=%u "
-            "depth=%u "
-            "arrayed=%u "
-            "ms=%u "
-            "sampled=%u "
-            "format=%u",
-            var,
-            image->id,
-            image->dim,
-            image->depth,
-            image->arrayed,
-            image->ms,
-            image->sampled,
-            image->format);
-        if (image->dim == SpvDimSubpassData)
-        {
-            STEREO_LOG(
-                "FS_BINDING_SUBPASS_ATTACHMENT "
-                "var=%u "
-                "image=%u "
-                "set=%u "
-                "binding=%u "
-                "stereo=1",
-                var,
-                image->id,
-                v->set,
-                v->binding);
-            return true;
-        }
+            "FS_BINDING_INPUT_ATTACHMENT var=%u stereo=1",
+            var);
+        return true;
     }
     /*
      * Deferred rendering attachments:
@@ -4423,7 +4391,7 @@ uint32_t var)
      * binding 4 = SSAO/deferred intermediate
      */
     bool stereo =
-        (v->binding <= 100);
+        (v->binding <= 4);
     STEREO_LOG(
         "FS_BINDING_RESULT "
         "var=%u "
@@ -4436,7 +4404,7 @@ uint32_t var)
         v->set,
         v->binding,
         stereo);
-    return false;
+    return stereo;
 }
 
 static uint32_t fs_result_type_of(FsScan *s,
