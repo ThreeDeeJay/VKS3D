@@ -7,8 +7,6 @@
 
 #include <winver.h>
 
-#pragma code_page(65001)
-
 /* Version numbers — configured via CMake at build time */
 #define VKS3D_VER_MAJOR     1
 #define VKS3D_VER_MINOR     0
