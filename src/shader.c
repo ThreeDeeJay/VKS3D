@@ -4376,6 +4376,9 @@ uint32_t var)
      */
     for (uint32_t img = 0; img < s->n_img; img++)
     {
+        const FsImageInfo *image = &s->images[img];
+        if (image->owner_var != var)
+            continue;
         STEREO_LOG(
             "FS_BINDING_INPUT_ATTACHMENT var=%u stereo=1",
             var);
