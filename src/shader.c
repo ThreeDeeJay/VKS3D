@@ -4380,9 +4380,38 @@ uint32_t var)
         if (image->owner_var != var)
             continue;
         STEREO_LOG(
-            "FS_BINDING_INPUT_ATTACHMENT var=%u stereo=1",
-            var);
-        return true;
+            "FS_BINDING_IMAGE "
+            "var=%u "
+            "image=%u "
+            "dim=%u "
+            "depth=%u "
+            "arrayed=%u "
+            "ms=%u "
+            "sampled=%u "
+            "format=%u",
+            var,
+            image->id,
+            image->dim,
+            image->depth,
+            image->arrayed,
+            image->ms,
+            image->sampled,
+            image->format);
+        if (image->dim == SpvDimSubpassData)
+        {
+            STEREO_LOG(
+                "FS_BINDING_SUBPASS_ATTACHMENT "
+                "var=%u "
+                "image=%u "
+                "set=%u "
+                "binding=%u "
+                "stereo=1",
+                var,
+                image->id,
+                v->set,
+                v->binding);
+            return true;
+        }
     }
     /*
      * Deferred rendering attachments:
