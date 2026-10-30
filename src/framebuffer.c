@@ -887,6 +887,135 @@ stereo_CmdBeginRenderPass(
     }
 }
 
+/* -- vkCmdBeginRenderPass2 / vkCmdBeginRenderPass2KHR ---------------------
+ *
+ * VKD3D-Proton begins every render pass through vkCmdBeginRenderPass2(KHR),
+ * never vkCmdBeginRenderPass.  Without this intercept the app's ORIGINAL
+ * (non-multiview) render pass is begun on a framebuffer that
+ * stereo_CreateFramebuffer built against the MULTIVIEW render pass, and the
+ * pipelines were compiled for the multiview pass too.  Result: incompatible
+ * render pass / framebuffer / pipeline, gl_ViewIndex always 0, layer 1 never
+ * written.
+ *
+ * Same substitution rules as stereo_CmdBeginRenderPass:
+ *   - tracked MV framebuffer  -> its mv_rp (or the begin rp's mv_handle if
+ *                                the app begins it with a different rp)
+ *   - tracked non-MV fb       -> never promoted
+ *   - untracked fb            -> mv_handle of the begin rp, if any
+ * pNext chain (imageless attachments etc.) and VkSubpassBeginInfo are kept.
+ */
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBeginRenderPass2(
+    VkCommandBuffer              commandBuffer,
+    const VkRenderPassBeginInfo *pRenderPassBegin,
+    const VkSubpassBeginInfo    *pSubpassBeginInfo)
+{
+    STEREO_LOG("CALLED stereo_CmdBeginRenderPass2");
+    extern StereoDevice g_devices[];
+    extern uint32_t     g_device_count;
+    StereoDevice *sd       = NULL;
+    VkRenderPass  mv_rp    = VK_NULL_HANDLE;
+    bool          fb_found = false;
+
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
+    {
+        StereoDevice *dev = &g_devices[d];
+        for (uint32_t i = 0; i < dev->fb_track_count; i++)
+        {
+            const StereoFramebufferTrack *t = &dev->fb_tracks[i];
+            if (t->fb != pRenderPassBegin->framebuffer)
+                continue;
+            sd       = dev;
+            fb_found = true;
+            if (t->has_mv && t->mv_rp != VK_NULL_HANDLE)
+            {
+                if (t->rp == pRenderPassBegin->renderPass ||
+                    t->mv_rp == pRenderPassBegin->renderPass)
+                {
+                    mv_rp = t->mv_rp;
+                }
+                else
+                {
+                    StereoRenderPassInfo *lk =
+                        stereo_rp_lookup(dev, pRenderPassBegin->renderPass);
+                    if (lk && lk->has_multiview &&
+                        lk->mv_handle != VK_NULL_HANDLE)
+                        mv_rp = lk->mv_handle;
+                }
+            }
+            break;
+        }
+    }
+    if (!sd)
+    {
+        for (uint32_t d = 0; d < g_device_count; d++)
+        {
+            if (g_devices[d].real_device)
+            {
+                sd = &g_devices[d];
+                break;
+            }
+        }
+    }
+    if (!sd)
+        return;
+    if (!fb_found)
+    {
+        StereoRenderPassInfo *lk =
+            stereo_rp_lookup(sd, pRenderPassBegin->renderPass);
+        if (lk && lk->has_multiview && lk->mv_handle != VK_NULL_HANDLE)
+            mv_rp = lk->mv_handle;
+    }
+
+    VkRenderPassBeginInfo modified = *pRenderPassBegin;
+    if (mv_rp)
+        modified.renderPass = mv_rp;
+
+    STEREO_LOG(
+        "RP2_BEGIN cb=%p fb=%p orig_rp=%p used_rp=%p fb_found=%u mv=%u",
+        (void *)commandBuffer,
+        (void *)pRenderPassBegin->framebuffer,
+        (void *)pRenderPassBegin->renderPass,
+        (void *)modified.renderPass,
+        (unsigned)fb_found,
+        (unsigned)(mv_rp != VK_NULL_HANDLE));
+
+    {
+        bool cb_found = false;
+        for (uint32_t i = 0; i < sd->cb_track_count; i++)
+        {
+            if (sd->cb_track[i].cb == commandBuffer)
+            {
+                sd->cb_track[i].render_pass = modified.renderPass;
+                sd->cb_track[i].framebuffer = modified.framebuffer;
+                cb_found = true;
+                break;
+            }
+        }
+        if (!cb_found && sd->cb_track_count < MAX_CB_TRACK)
+        {
+            uint32_t idx = sd->cb_track_count++;
+            memset(&sd->cb_track[idx], 0, sizeof(sd->cb_track[idx]));
+            sd->cb_track[idx].cb          = commandBuffer;
+            sd->cb_track[idx].render_pass = modified.renderPass;
+            sd->cb_track[idx].framebuffer = modified.framebuffer;
+        }
+    }
+
+    if (sd->real.CmdBeginRenderPass2)
+    {
+        sd->real.CmdBeginRenderPass2(commandBuffer, &modified, pSubpassBeginInfo);
+    }
+    else if (sd->real.CmdBeginRenderPass)
+    {
+        sd->real.CmdBeginRenderPass(
+            commandBuffer,
+            &modified,
+            pSubpassBeginInfo ? pSubpassBeginInfo->contents
+                              : VK_SUBPASS_CONTENTS_INLINE);
+    }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
 {
