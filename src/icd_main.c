@@ -205,6 +205,8 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_CmdBeginRenderPass;
     if (!strcmp(name, "vkCmdBeginRenderPass2") || !strcmp(name, "vkCmdBeginRenderPass2KHR"))
         return (PFN_vkVoidFunction)stereo_CmdBeginRenderPass2;
+    if (!strcmp(name, "vkDestroyRenderPass"))
+        return (PFN_vkVoidFunction)stereo_DestroyRenderPass;
     if (!strcmp(name, "vkCreateRenderPass"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass;
 #ifdef VK_KHR_create_renderpass2
@@ -309,6 +311,8 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CmdBeginRenderPass2);
     GDPA_WRAP("vkCmdBeginRenderPass2KHR",
               stereo_CmdBeginRenderPass2);
+    GDPA_WRAP("vkDestroyRenderPass",
+              stereo_DestroyRenderPass);
     GDPA_WRAP("vkCmdEndRenderPass",
               stereo_CmdEndRenderPass);
     GDPA_WRAP("vkCmdBeginRendering",
