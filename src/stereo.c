@@ -860,12 +860,6 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(CmdBeginRenderPass); L(CmdNextSubpass); L(CmdEndRenderPass);
     L(CmdBeginRendering);
     L(CmdEndRendering);
-    /* RP2 begin: VKD3D-Proton never calls vkCmdBeginRenderPass. Core name first, KHR alias for 1.1 drivers. */
-    sd->real.CmdBeginRenderPass2 = (PFN_vkCmdBeginRenderPass2)
-        g_real_giPA(real_inst, "vkCmdBeginRenderPass2");
-    if (!sd->real.CmdBeginRenderPass2)
-        sd->real.CmdBeginRenderPass2 = (PFN_vkCmdBeginRenderPass2)
-            g_real_giPA(real_inst, "vkCmdBeginRenderPass2KHR");
     L(CmdExecuteCommands);
     L(CreateSwapchainKHR); L(DestroySwapchainKHR);
     L(GetSwapchainImagesKHR); L(AcquireNextImageKHR); L(QueuePresentKHR);
