@@ -652,7 +652,10 @@ stereo_CmdBeginRenderPass(
             lookup ? (void*)lookup->mv_handle : NULL);
         if (fb_has_mv && tracked_rp_match)
         {
-            mv_rp = tracked_mv_rp;
+            mv_rp = (lookup &&
+                     lookup->has_multiview &&
+                     lookup->mv_handle != VK_NULL_HANDLE) ?
+                    lookup->mv_handle : tracked_mv_rp;
             STEREO_LOG(
                 "MV_USE_TRACKED_FB fb=%p original_rp=%p mv_rp=%p",
                 (void*)pRenderPassBegin->framebuffer,
@@ -918,19 +921,18 @@ stereo_CmdBeginRenderPass2(
             fb_found = true;
             if (t->has_mv && t->mv_rp != VK_NULL_HANDLE)
             {
-                if (t->rp == pRenderPassBegin->renderPass ||
-                    t->mv_rp == pRenderPassBegin->renderPass)
-                {
+                /* Prefer the begin rp's own live MV pass: the pass the fb was
+                 * created with may since have been destroyed by the app
+                 * (stereo_DestroyRenderPass destroys the pair).  Compatible
+                 * passes are interchangeable. */
+                StereoRenderPassInfo *lk =
+                    stereo_rp_lookup(dev, pRenderPassBegin->renderPass);
+                if (lk && lk->has_multiview &&
+                    lk->mv_handle != VK_NULL_HANDLE)
+                    mv_rp = lk->mv_handle;
+                else if (t->rp == pRenderPassBegin->renderPass ||
+                         t->mv_rp == pRenderPassBegin->renderPass)
                     mv_rp = t->mv_rp;
-                }
-                else
-                {
-                    StereoRenderPassInfo *lk =
-                        stereo_rp_lookup(dev, pRenderPassBegin->renderPass);
-                    if (lk && lk->has_multiview &&
-                        lk->mv_handle != VK_NULL_HANDLE)
-                        mv_rp = lk->mv_handle;
-                }
             }
             break;
         }
