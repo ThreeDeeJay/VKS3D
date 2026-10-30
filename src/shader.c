@@ -13769,11 +13769,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     if (!vP[k]) continue;
                     uint32_t p = vidx[k];
                     stereo_pipeline_variant_add(pP[p], vP[k]);
-                    StereoPipelineInfo *base_info = find_pipeline_info(sd, pP[p]);
-                    StereoPipelineInfo *variant_info = add_pipeline_info(sd);
-                    if (!vP[k]) continue;
-                    uint32_t p = vidx[k];
-                    stereo_pipeline_variant_add(pP[p], vP[k]);
                 }
                 if (vr != VK_SUCCESS)
                     STEREO_ERR("MV pipeline variant creation failed: %d", (int)vr);
