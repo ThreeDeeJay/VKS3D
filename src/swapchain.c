@@ -307,15 +307,11 @@ stereo_CreateSwapchainKHR(VkDevice device,
         sd->swapchain_count,
         pCreateInfo->oldSwapchain);
     if (!sd) return VK_ERROR_DEVICE_LOST;
-    bool has_free_slot = false;
-    for (uint32_t fi = 0; fi < sd->swapchain_count; fi++)
-        if (sd->swapchains[fi].app_handle == VK_NULL_HANDLE) { has_free_slot = true; break; }
-    if (!sd->stereo.enabled || (sd->swapchain_count >= MAX_SWAPCHAINS && !has_free_slot))
+    if (!sd->stereo.enabled || sd->swapchain_count >= MAX_SWAPCHAINS)
         return sd->real.CreateSwapchainKHR(sd->real_device, pCreateInfo, pAllocator, pSwapchain);
 
     uint32_t app_w = pCreateInfo->imageExtent.width;
     uint32_t app_h = pCreateInfo->imageExtent.height;
-    bool slot_is_new = false;
 
     STEREO_LOG(
         "[CREATE SC] swapchain_count=%u old=%p",
@@ -363,11 +359,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
     }
     else
     {
-    uint32_t slot = sd->swapchain_count;
-    for (uint32_t fi = 0; fi < sd->swapchain_count; fi++)
-        if (sd->swapchains[fi].app_handle == VK_NULL_HANDLE) { slot = fi; break; }
-    slot_is_new = (slot == sd->swapchain_count);
-    sc = &sd->swapchains[slot];
+    sc = &sd->swapchains[sd->swapchain_count];
 
     memset(sc, 0, sizeof(*sc));
     sc->resize_reused = false;
@@ -454,11 +446,9 @@ stereo_CreateSwapchainKHR(VkDevice device,
             sc,
             sc->app_handle,
             *pSwapchain);
-        if (slot_is_new)
-        {
         CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
+        if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
             sd->swapchain_count++;
-        }
 
         STEREO_LOG(
             "[NV3D] RETURNING NV3D SWAPCHAIN handle=%p",
@@ -550,11 +540,9 @@ stereo_CreateSwapchainKHR(VkDevice device,
                 sc->app_handle,
                 *pSwapchain);
             sd->stereo_w = app_w; sd->stereo_h = app_h;
-            if (slot_is_new)
-            {
             CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
+            if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
                 sd->swapchain_count++;
-            }
             STEREO_LOG("DXGI stereo swapchain (external mem): %ux%u  handle=%p",
                        app_w, app_h, (void*)*pSwapchain);
             return VK_SUCCESS;
@@ -581,11 +569,9 @@ try_dx9:
                     sc->app_handle,
                     *pSwapchain);
                 sd->stereo_w = app_w; sd->stereo_h = app_h;
-                if (slot_is_new)
-                {
                 CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
+                if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
                     sd->swapchain_count++;
-                }
                 STEREO_LOG("DX9 stereo swapchain: %ux%u  handle=%p", app_w, app_h, (void*)*pSwapchain);
                 return VK_SUCCESS;
             }
@@ -619,11 +605,9 @@ try_dx9:
                     sc->real_swapchain,
                     (int)sc->stereo_active,
                     sd->swapchain_count);
-                if (slot_is_new)
-                {
                 CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
+                if (!old_sc)
                     sd->swapchain_count++;
-                }
                 STEREO_LOG(
                     "[CREATE SC GPU FINAL] sc=%p app=%p real=%p active=%d count=%u",
                     sc,
@@ -724,11 +708,9 @@ passthrough:
         sc->real_swapchain = *pSwapchain;
         sc->app_handle     = *pSwapchain;
         sc->stereo_active  = false;
-        if (slot_is_new)
-        {
         CHECK_ARRAY_COUNT(sd->swapchain_count, MAX_SWAPCHAINS, "swapchain_count");
+        if (pCreateInfo->oldSwapchain == VK_NULL_HANDLE)
             sd->swapchain_count++;
-        }
     }
     return res;
 }
@@ -929,7 +911,6 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
         /* leave structure in table */
         sc->stereo_active = false;
-        sc->app_handle = VK_NULL_HANDLE;
 
     } else {
     //STEREO_LOG(
@@ -1244,7 +1225,6 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
             pr = VK_SUCCESS;
             break;
         }
-        if (pr == VK_SUBOPTIMAL_KHR) pr = VK_SUCCESS;
         if (pr != VK_SUCCESS) {
             STEREO_ERR("Present (mode=%d) failed: %d", (int)sc_i->present_mode, pr);
             result = pr;
