@@ -47,6 +47,7 @@ jobs:
 
     - name: Get current commit hash and counts
       run: |
+        echo "PullRequest=$(gh pr list --state merged --limit 1 --json number --jq ".[0].number")" >> $env:GITHUB_ENV
         echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
         echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
@@ -122,6 +123,7 @@ jobs:
         -DVKS3D_BUILD_TESTS=OFF
         -DVKS3D_BUILD_DEMO=OFF
         -DSTEREO_BUILD_DEMO=OFF
+        -DVKS3D_VER_MINOR=${{env.PullRequest}}
         -DVKS3D_VER_PATCH=${{env.CommitCount}}
         -DVKS3D_VER_BUILD=${{env.AttemptCount}}
         -DVKS3D_VER_DATE=${{env.BuildDate}}

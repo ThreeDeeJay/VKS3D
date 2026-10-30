@@ -9,7 +9,7 @@
 
 /* Version numbers — configured via CMake at build time */
 #define VKS3D_VER_MAJOR     1
-#define VKS3D_VER_MINOR     0
+#define VKS3D_VER_MINOR     @VKS3D_VER_MINOR@
 #define VKS3D_VER_PATCH     @VKS3D_VER_PATCH@
 #define VKS3D_VER_BUILD     @VKS3D_VER_BUILD@
 #define VKS3D_VER_DATE      @VKS3D_VER_DATE@
