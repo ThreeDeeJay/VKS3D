@@ -53,7 +53,12 @@ jobs:
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
         echo "CommitTitle=$(git show --pretty=format:%s -s HEAD)" >> $env:GITHUB_ENV
         echo "AttemptCount=${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_ENV
-        echo "BuildDate=$(git show -s --date=format:'%Y%m%d' --format=%cd)" >> $env:GITHUB_ENV
+        echo "CommitDateYear=$(git show -s --date=format:'%Y' --format=%cd)" >> $env:GITHUB_ENV
+        echo "CommitDateMonth=$(git show -s --date=format:'%m' --format=%cd)" >> $env:GITHUB_ENV
+        echo "CommitDateDay=$(git show -s --date=format:'%d' --format=%cd)" >> $env:GITHUB_ENV
+        echo "CommitTimeHour=$(git show -s --date=format:'%H' --format=%cd)" >> $env:GITHUB_ENV
+        echo "CommitTimeMinute=$(git show -s --date=format:'%M' --format=%cd)" >> $env:GITHUB_ENV
+        echo "CommitTimeSecond=$(git show -s --date=format:'%S' --format=%cd)" >> $env:GITHUB_ENV
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
@@ -126,7 +131,12 @@ jobs:
         -DVKS3D_VER_MINOR=${{env.PullRequest}}
         -DVKS3D_VER_PATCH=${{env.CommitCount}}
         -DVKS3D_VER_BUILD=${{env.AttemptCount}}
-        -DVKS3D_VER_DATE=${{env.BuildDate}}
+        -DVKS3D_COMMIT_DATE_YEAR="${{env.CommitDateYear}}
+        -DVKS3D_COMMIT_DATE_MONTH="${{env.CommitDateMonth}}
+        -DVKS3D_COMMIT_DATE_DAY="${{env.CommitDateDay}}
+        -DVKS3D_COMMIT_TIME_HOUR="${{env.CommitTimeHour}}
+        -DVKS3D_COMMIT_TIME_MINUTE="${{env.CommitTimeMinute}}
+        -DVKS3D_COMMIT_TIME_SECOND="${{env.CommitTimeSecond}}
         -DVKS3D_REPO=${{github.repository}}
         -DVKS3D_BRANCH=${{env.Branch}}
         -DVKS3D_COMMIT_HASH=${{env.CommitHashShort}}
