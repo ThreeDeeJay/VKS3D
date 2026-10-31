@@ -154,7 +154,7 @@ static VkResult create_mv_rp(StereoDevice *sd,
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
         .pNext = NULL, .subpassCount = sc, .pViewMasks = vm,
         .dependencyCount = pCI->dependencyCount, .pViewOffsets = vo,
-        .correlationMaskCount = 0, .pCorrelationMasks = NULL,
+        .correlationMaskCount = sc, .pCorrelationMasks = cm,
     };
     VkRenderPassCreateInfo mod = *pCI;
     if (pa) mod.pAttachments = pa;
@@ -512,8 +512,8 @@ stereo_CreateRenderPass2KHR(
             VkRenderPassCreateInfo2 mv2 = *pCreateInfo;
             if (pa2) mv2.pAttachments = pa2;
             mv2.pSubpasses = subs;
-            mv2.correlatedViewMaskCount = 0;
-            mv2.pCorrelatedViewMasks    = NULL;
+            mv2.correlatedViewMaskCount = sc;
+            mv2.pCorrelatedViewMasks    = corr;
             VkRenderPass mv = VK_NULL_HANDLE;
             VkResult mv2_res = sd->real.CreateRenderPass2KHR(sd->real_device, &mv2, pAllocator, &mv);
             STEREO_LOG("RP2_MV_CREATE_RESULT rp=%p mv=%p result=%d attachments=%u subpasses=%u", (void*)*pRenderPass, (void*)mv, (int)mv2_res, ac, sc);
