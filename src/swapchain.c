@@ -1233,6 +1233,41 @@ stereo_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
     return result;
 }
 
+/* -- vkWaitForPresentKHR (VK_KHR_present_wait) ----------------------------
+ *
+ * VKD3D-Proton >= 2.10 runs a waiter thread that calls vkWaitForPresentKHR on
+ * the swapchain handle it was given.  For stereo swapchains that handle is
+ * VKS3D's own StereoSwapchain*, so letting the call fall through to the real
+ * driver dereferenced a bogus VkSwapchainKHR (0xC0000005 in the waiter thread
+ * right after the first present).
+ *
+ * Stereo swapchains: presents are already CPU-throttled (AcquireNextImageKHR
+ * waits on barrier_fences[0] from the previous compose submit), so there is
+ * nothing to wait for -> report the id as presented.
+ * Passthrough swapchains: forward to the real swapchain handle.
+ */
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_WaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain,
+    uint64_t presentId, uint64_t timeout)
+{
+    STEREO_LOG("CALLED stereo_WaitForPresentKHR sc=%p id=%llu timeout=%llu",
+        (void *)(uintptr_t)swapchain,
+        (unsigned long long)presentId,
+        (unsigned long long)timeout);
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd)
+        return VK_ERROR_DEVICE_LOST;
+    StereoSwapchain *sc = stereo_swapchain_lookup(sd, swapchain);
+    if (sc && sc->stereo_active)
+        return VK_SUCCESS;
+    if (!sd->real.WaitForPresentKHR)
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    VkSwapchainKHR real = sc ? sc->real_swapchain : swapchain;
+    if (real == VK_NULL_HANDLE)
+        return VK_ERROR_OUT_OF_DATE_KHR;
+    return sd->real.WaitForPresentKHR(sd->real_device, real, presentId, timeout);
+}
+
 /* ── stereo_CreateImage / stereo_CreateImageView ────────────────────────── */
 
 static bool is_depth_format(VkFormat fmt)
