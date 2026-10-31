@@ -167,6 +167,17 @@ stereo_GetPhysicalDeviceSparseImageFormatProperties(
 
 /* ── Extension / layer enumeration ──────────────────────────────────────── */
 
+/* Device extensions VKS3D hides from the app.  Both take a VkSwapchainKHR
+ * (vkSetLatencySleepModeNV / vkLatencySleepNV / vkSetLatencyMarkerNV /
+ * vkGetLatencyTimingsNV / vkReleaseSwapchainImagesEXT, VkSwapchainPresentFenceInfoEXT)
+ * and VKS3D's app-visible swapchain handle is its own StereoSwapchain*, so
+ * VKD3D-Proton >= 2.12 crashed the driver right after swapchain creation. */
+static bool stereo_hidden_dev_ext(const char *n)
+{
+    return !strcmp(n, "VK_NV_low_latency2") ||
+           !strcmp(n, "VK_EXT_swapchain_maintenance1");
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_EnumerateDeviceExtensionProperties(
     VkPhysicalDevice pd, const char *pLayerName,
@@ -174,7 +185,37 @@ stereo_EnumerateDeviceExtensionProperties(
 {
     STEREO_LOG("CALLED stereo_EnumerateDeviceExtensionProperties");
     LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
-    return _si->real.EnumerateDeviceExtensionProperties(_real, pLayerName, pCount, pProps);
+    if (pLayerName)
+        return _si->real.EnumerateDeviceExtensionProperties(_real, pLayerName, pCount, pProps);
+    uint32_t n = 0;
+    VkResult r = _si->real.EnumerateDeviceExtensionProperties(_real, NULL, &n, NULL);
+    if (r != VK_SUCCESS)
+        return r;
+    VkExtensionProperties *all = n ? malloc(n * sizeof(*all)) : NULL;
+    if (n && !all)
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    r = _si->real.EnumerateDeviceExtensionProperties(_real, NULL, &n, all);
+    if (r != VK_SUCCESS && r != VK_INCOMPLETE) {
+        free(all);
+        return r;
+    }
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (stereo_hidden_dev_ext(all[i].extensionName))
+            continue;
+        all[kept++] = all[i];
+    }
+    if (!pProps) {
+        *pCount = kept;
+        free(all);
+        return VK_SUCCESS;
+    }
+    uint32_t w = (*pCount < kept) ? *pCount : kept;
+    if (w)
+        memcpy(pProps, all, w * sizeof(*all));
+    *pCount = w;
+    free(all);
+    return (w < kept) ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
