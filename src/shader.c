@@ -4207,6 +4207,8 @@ typedef struct
     uint32_t replacement_sampled_type;
     uint32_t runtime_array_type;
     uint32_t descriptor_pointer_type;
+    uint32_t replacement_runtime_array_type;
+    uint32_t replacement_descriptor_pointer_type;
 } FsImageInfo;
 
 typedef struct
@@ -6720,8 +6722,10 @@ fs_prescan(
         bool found = false;
         for (uint32_t v = 0; v < s->n_var; ++v)
         {
-            if (src->pointer_type &&
-                s->vars[v].type == src->pointer_type)
+            if ((src->pointer_type &&
+                s->vars[v].type == src->pointer_type) ||
+                (src->descriptor_pointer_type &&
+                    s->vars[v].type == src->descriptor_pointer_type))
             {
                 if (s->n_img >= FS_MAX_IMG)
                     break;
@@ -6730,6 +6734,8 @@ fs_prescan(
                 dst->replacement_type = 0;
                 dst->replacement_pointer_type = 0;
                 dst->replacement_sampled_type = 0;
+                dst->replacement_runtime_array_type = 0;
+                dst->replacement_descriptor_pointer_type = 0;
                 dst->owner_var = s->vars[v].id;
                 dst->binding   = s->vars[v].binding;
                 dst->set       = s->vars[v].set;
@@ -6756,6 +6762,8 @@ fs_prescan(
             dst->replacement_type = 0;
             dst->replacement_pointer_type = 0;
             dst->replacement_sampled_type = 0;
+            dst->replacement_runtime_array_type = 0;
+            dst->replacement_descriptor_pointer_type = 0;
             dst->owner_var = UINT32_MAX;
             dst->binding   = UINT32_MAX;
             dst->set       = UINT32_MAX;
