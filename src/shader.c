@@ -8742,32 +8742,6 @@ bool spirv_patch_stereo_fs(
             }
             i += wc; continue;
         }
-        if (op == SpvOpTypeRuntimeArray &&
-            wc >= 3)
-        {
-            int img = -1;
-            for (uint32_t j = 0; j < s.n_img; ++j)
-            {
-                if (!s.images[j].stereo ||
-                    !s.images[j].replacement_type ||
-                    s.images[j].id != in[i + 2])
-                    continue;
-                img = (int)j;
-                break;
-            }
-            if (img >= 0)
-            {
-                uint32_t w[3];
-                memcpy(w, &in[i], sizeof(w));
-                w[2] = s.images[img].replacement_type;
-                sb_push_n(&ob, w, wc);
-                if (w[1] < id_bound)
-                    emitted_type[w[1]] = true;
-                STEREO_LOG("FS_RUNTIME_ARRAY_PATCH result=%u oldElement=%u newElement=%u image=%u", w[1], in[i + 2], w[2], s.images[img].id);
-                i += wc;
-                continue;
-            }
-        }
         if (op == SpvOpTypeArray &&
             wc >= 4)
         {
