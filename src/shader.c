@@ -7428,6 +7428,48 @@ bool spirv_patch_stereo_fs(
         }
         s.images[img].replacement_pointer_type = existing_pointer ? existing_pointer : nid++;
     }
+    for (uint32_t img = 0; img < s.n_img; ++img)
+    {
+        if (!s.images[img].patchable ||
+            !s.images[img].stereo ||
+            !s.images[img].runtime_array_type ||
+            !s.images[img].descriptor_pointer_type ||
+            !s.images[img].replacement_type)
+            continue;
+        for (uint32_t prev = 0; prev < img; ++prev)
+        {
+            if (s.images[prev].runtime_array_type == s.images[img].runtime_array_type &&
+                s.images[prev].replacement_runtime_array_type)
+            {
+                s.images[img].replacement_runtime_array_type =
+                s.images[prev].replacement_runtime_array_type;
+                break;
+            }
+        }
+        if (!s.images[img].replacement_runtime_array_type)
+            s.images[img].replacement_runtime_array_type = nid++;
+        for (uint32_t prev = 0; prev < img; ++prev)
+        {
+            if (s.images[prev].descriptor_pointer_type == s.images[img].descriptor_pointer_type &&
+                s.images[prev].replacement_descriptor_pointer_type &&
+                s.images[prev].replacement_runtime_array_type ==
+                s.images[img].replacement_runtime_array_type)
+            {
+                s.images[img].replacement_descriptor_pointer_type =
+                s.images[prev].replacement_descriptor_pointer_type;
+                break;
+            }
+        }
+        if (!s.images[img].replacement_descriptor_pointer_type)
+            s.images[img].replacement_descriptor_pointer_type = nid++;
+        STEREO_LOG(
+            "FS_DESCRIPTOR_REPLACEMENT_ALLOC image=%u runtimeArray=%u replacementRuntimeArray=%u descriptorPointer=%u replacementDescriptorPointer=%u",
+            s.images[img].id,
+            s.images[img].runtime_array_type,
+            s.images[img].replacement_runtime_array_type,
+            s.images[img].descriptor_pointer_type,
+            s.images[img].replacement_descriptor_pointer_type);
+    }
     uint32_t samp_nid      = nid;
     uint32_t qsize_nid     = nid;
     /*
