@@ -865,6 +865,9 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     if (!sd->real.CmdBeginRenderPass2)
         sd->real.CmdBeginRenderPass2 = (PFN_vkCmdBeginRenderPass2)
             g_real_giPA(real_inst, "vkCmdBeginRenderPass2KHR");
+    /* VK_KHR_present_wait: NULL unless the app enabled it on this device. */
+    sd->real.WaitForPresentKHR = (PFN_vkWaitForPresentKHR)
+        g_real_giPA(real_inst, "vkWaitForPresentKHR");
     L(CmdExecuteCommands);
     L(CreateSwapchainKHR); L(DestroySwapchainKHR);
     L(GetSwapchainImagesKHR); L(AcquireNextImageKHR); L(QueuePresentKHR);
