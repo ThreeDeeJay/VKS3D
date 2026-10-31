@@ -4172,6 +4172,8 @@ typedef struct
     uint32_t replacement_type; /* existing array image type if reused */
     uint32_t replacement_pointer_type;
     uint32_t replacement_sampled_type;
+    uint32_t runtime_array_type;
+    uint32_t descriptor_pointer_type;
 } FsImageInfo;
 
 typedef struct
@@ -5113,6 +5115,22 @@ fs_scan_type_instruction(
             s->si_ids[s->n_si++] = sampled_image_id;
         break;
     }
+    case SpvOpTypeRuntimeArray:
+        if (wc >= 3)
+        {
+            for (uint32_t img = 0; img < s->n_img; ++img)
+            {
+                if (s->images[img].id != ins[2])
+                    continue;
+                s->images[img].runtime_array_type = ins[1];
+                STEREO_LOG(
+                    "FS_RUNTIME_ARRAY_BIND image=%u runtimeArray=%u",
+                    ins[2],
+                    ins[1]);
+                break;
+            }
+        }
+        break;
     case SpvOpTypePointer:
         for (uint32_t img = 0; img < s->n_img; ++img)
         {
@@ -5139,6 +5157,18 @@ fs_scan_type_instruction(
         }
         if (wc >= 4)
         {
+            for (uint32_t img = 0; img < s->n_img; ++img)
+            {
+                if (s->images[img].runtime_array_type != ins[3])
+                    continue;
+                s->images[img].descriptor_pointer_type = ins[1];
+                STEREO_LOG(
+                    "FS_DESCRIPTOR_POINTER_BIND image=%u runtimeArray=%u pointer=%u storage=%u",
+                    s->images[img].id,
+                    ins[3],
+                    ins[1],
+                    ins[2]);
+            }
             for (uint32_t img = 0; img < s->n_img; ++img)
             {
                 STEREO_LOG(
@@ -6184,6 +6214,7 @@ fs_scan_instruction(
     case SpvOpTypeVector:
     case SpvOpTypeImage:
     case SpvOpTypeSampledImage:
+    case SpvOpTypeRuntimeArray:
     case SpvOpTypePointer:
         fs_scan_type_instruction(
             s,
