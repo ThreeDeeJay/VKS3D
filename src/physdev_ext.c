@@ -584,6 +584,133 @@ stereo_GetPhysicalDeviceSurfaceCapabilities2EXT(
     return fn(_real, surface, pSurfaceCaps);
 }
 
+/* -- Extensions added/promoted after the original stub set ------------------
+* The loader/apps obtain these through vk_icdGetInstanceProcAddr.  Before these
+* stubs existed icd_main.c fell back to the REAL driver's raw pointer, which then
+* received VKS3D's StereoPhysdev* wrapper instead of the real VkPhysicalDevice
+* (VKD3D-Proton 3.x: device rejected / crash during device selection).
+* Only the VkPhysicalDevice handle is translated; every other argument is
+* forwarded untouched, hence the void* parameters. */
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceCalibrateableTimeDomainsKHR(
+    VkPhysicalDevice pd, uint32_t *pCount, void *pDomains)
+{
+    STEREO_LOG("CALLED stereo_GetPhysicalDeviceCalibrateableTimeDomainsKHR");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t *, void *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR");
+    if (!fn) fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pCount, pDomains);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceFragmentShadingRatesKHR(
+    VkPhysicalDevice pd, uint32_t *pCount, void *pRates)
+{
+    STEREO_LOG("CALLED stereo_GetPhysicalDeviceFragmentShadingRatesKHR");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t *, void *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceFragmentShadingRatesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pCount, pRates);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
+    VkPhysicalDevice pd, uint32_t *pCount, void *pProps)
+{
+    STEREO_LOG("CALLED stereo_GetPhysicalDeviceCooperativeMatrixPropertiesKHR");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t *, void *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(
+    VkPhysicalDevice pd, uint32_t *pCount, void *pProps)
+{
+    STEREO_LOG("CALLED stereo_GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t *, void *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceVideoCapabilitiesKHR(
+    VkPhysicalDevice pd, const void *pVideoProfile, void *pCapabilities)
+{
+    STEREO_LOG("CALLED stereo_GetPhysicalDeviceVideoCapabilitiesKHR");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, const void *, void *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceVideoCapabilitiesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pVideoProfile, pCapabilities);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceVideoFormatPropertiesKHR(
+    VkPhysicalDevice pd, const void *pFormatInfo, uint32_t *pCount, void *pProps)
+{
+    STEREO_LOG("CALLED stereo_GetPhysicalDeviceVideoFormatPropertiesKHR");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, const void *, uint32_t *, void *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceVideoFormatPropertiesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pFormatInfo, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(
+    VkPhysicalDevice pd, const void *pQualityInfo, void *pProps)
+{
+    STEREO_LOG("CALLED stereo_GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, const void *, void *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pQualityInfo, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetPhysicalDeviceOpticalFlowImageFormatsNV(
+    VkPhysicalDevice pd, const void *pFormatInfo, uint32_t *pCount, void *pProps)
+{
+    STEREO_LOG("CALLED stereo_GetPhysicalDeviceOpticalFlowImageFormatsNV");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, const void *, uint32_t *, void *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceOpticalFlowImageFormatsNV");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, pFormatInfo, pCount, pProps);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_AcquireWinrtDisplayNV(VkPhysicalDevice pd, VkDisplayKHR display)
+{
+    STEREO_LOG("CALLED stereo_AcquireWinrtDisplayNV");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, VkDisplayKHR);
+    PFN fn = (PFN)ext_fn(_si, "vkAcquireWinrtDisplayNV");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, display);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+stereo_GetWinrtDisplayNV(VkPhysicalDevice pd, uint32_t deviceRelativeId, VkDisplayKHR *pDisplay)
+{
+    STEREO_LOG("CALLED stereo_GetWinrtDisplayNV");
+    LOOKUP_PD_R(pd, VK_ERROR_INITIALIZATION_FAILED);
+    typedef VkResult (VKAPI_PTR *PFN)(VkPhysicalDevice, uint32_t, VkDisplayKHR *);
+    PFN fn = (PFN)ext_fn(_si, "vkGetWinrtDisplayNV");
+    if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return fn(_real, deviceRelativeId, pDisplay);
+}
+
 /* ── Generic physdev trampoline for unknown extensions ───────────────────────
  * Called for any vkGetPhysicalDevice* / vkEnumerateDevice* function that
  * has no explicit wrapper stub.  We store the real function pointer paired

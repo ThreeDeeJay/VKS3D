@@ -123,6 +123,17 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     PD_FN(GetPhysicalDeviceCalibrateableTimeDomainsEXT)
 #endif
     PD_FN(GetPhysicalDeviceMultisamplePropertiesEXT)
+    /* KHR/NV additions: must be wrapped, never the real driver's raw pointer */
+    PD_FN(GetPhysicalDeviceCalibrateableTimeDomainsKHR)
+    PD_FN(GetPhysicalDeviceFragmentShadingRatesKHR)
+    PD_FN(GetPhysicalDeviceCooperativeMatrixPropertiesKHR)
+    PD_FN(GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV)
+    PD_FN(GetPhysicalDeviceVideoCapabilitiesKHR)
+    PD_FN(GetPhysicalDeviceVideoFormatPropertiesKHR)
+    PD_FN(GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR)
+    PD_FN(GetPhysicalDeviceOpticalFlowImageFormatsNV)
+    PD_FN(AcquireWinrtDisplayNV)
+    PD_FN(GetWinrtDisplayNV)
     /* ── NV / NVX vendor extensions ── */
     PD_FN(GetPhysicalDeviceExternalImageFormatPropertiesNV)
     PD_FN(GetPhysicalDeviceGeneratedCommandsPropertiesNVX)
@@ -246,7 +257,11 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
                 StereoInstance *si, const char *name);
             PFN_vkVoidFunction t = stereo_physdev_trampoline_lookup(si, name);
             if (t) return t;
-            /* Fall through to instance-level lookup below */
+            /* NEVER hand out the real driver's raw pointer for a physdev-level
+             * function: the caller passes VKS3D's StereoPhysdev* wrapper and the
+             * real driver would dereference it as its own VkPhysicalDevice. */
+            STEREO_LOG("GIPA physdev '%s' has no wrapper stub -> NULL", name);
+            return NULL;
         }
         PFN_vkVoidFunction fn =
             si->real_get_instance_proc_addr(si->real_instance, name);
@@ -313,6 +328,19 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CmdBeginRenderPass2);
     GDPA_WRAP("vkDestroyRenderPass",
               stereo_DestroyRenderPass);
+    if (!strcmp(pName, "vkWaitForPresentKHR")) {
+    /* Only expose the wrapper if the real device actually has VK_KHR_present_wait enabled. */
+        extern StereoDevice g_devices[];
+        extern uint32_t g_device_count;
+        for (uint32_t wi = 0; wi < g_device_count; wi++) {
+            if (g_devices[wi].real_device == device &&
+                g_devices[wi].real.GetDeviceProcAddr) {
+                if (g_devices[wi].real.GetDeviceProcAddr(g_devices[wi].real_device, pName))
+                    return (PFN_vkVoidFunction)stereo_WaitForPresentKHR;
+                return NULL;
+            }
+        }
+    }
     GDPA_WRAP("vkCmdEndRenderPass",
               stereo_CmdEndRenderPass);
     GDPA_WRAP("vkCmdBeginRendering",
