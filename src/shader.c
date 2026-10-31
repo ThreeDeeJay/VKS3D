@@ -9090,6 +9090,16 @@ bool spirv_patch_stereo_fs(
                     replacement_load_type != 0 &&
                     w[1] != replacement_load_type)
                 {
+                        STEREO_LOG(
+                            "FS_LOAD_PATCH "
+                            "result=%u "
+                            "oldType=%u "
+                            "newType=%u "
+                            "binding=%u",
+                            w[2],
+                            w[1],
+                            replacement_load_type,
+                            image->binding);
                         w[1] = replacement_load_type;
                         load_rewritten = true;
                 }
