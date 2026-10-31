@@ -7,8 +7,14 @@ Set VKS3D_DIR=%~dp0
 Set VKS3D_BUILDS=%~dp0\Builds\dev
 Set VKS3D_SKIP_SHADER_PATCHES=
 Set VKS3D_SHADER_OBJECTS_MONO=
+set DLLPath=%~dp0VKS3D_x64.dll
+for /f "tokens=4 delims==." %%V in (
+  'wmic datafile where name^="!DLLPath:\=\\!" get version /value 2^>Nul'
+) do Set "VKS3DVersion=%%V"
 
 For %%A in (%*) do (
+    Set "DumpPath=%~dp0Dump/%%~nA + VKS3D v!VKS3DVersion!"
+    Set "DumpPath=!DumpPath:\=/!"
     If exist "%%~A\*.dll" (
         copy /y "%%~A\*.dll" "!VKS3D_DIR!"
         If !ErrorLevel! NEQ 0 (
@@ -33,8 +39,8 @@ For %%A in (%*) do (
                 Set Run=%%~dpA%%~nxA.asm
             ) else (
                 pushD "%%~dpA"
-                Set VKD3D_LOG_FILE=%~dp0VKS3D\%%~nA\%%~nA+VKD3D.log
-                Set VKD3D_SHADER_DUMP_PATH=%~dp0VKS3D\%%~nA
+                Set VKD3D_LOG_FILE=!DumpPath!/%%~nA+VKD3D.log
+                Set VKD3D_SHADER_DUMP_PATH=!DumpPath!
                 Set VKD3D_VULKAN_DEVICE=0
                 Set VKD3D_FRAME_RATE=
                 Set DXVK_STATE_CACHE=0 
@@ -50,18 +56,18 @@ For %%A in (%*) do (
                 Set WINE_D3D_CONFIG=
                 Set VKS3D_DISABLE_SHADER_PATCH=
                 Set VKS3D_SHADER_OBJECTS_MONO=
-                Set STEREO_LOGFILE_PATH=%~dp0VKS3D\%%~nA\%%~nA+VKS3D.log
-                Set VKS3D_DUMP_SPIRV=%~dp0VKS3D\%%~nA
+                Set STEREO_LOGFILE_PATH=!DumpPath!/%%~nA+VKS3D.log
+                Set VKS3D_DUMP_SPIRV=!DumpPath!
                 Set VKS3D_SKIP_SHADER_PATCHES=
-                if not exist "%~dp0VKS3D\%%~nA" (
-                    mkdir "%~dp0VKS3D\%%~nA"
-                ) else (
-                    del /S /Q "%~dp0VKS3D\%%~nA\*.spv" 1>>NUL 2>&1
-                    del /S /Q "%~dp0VKS3D\%%~nA\*.asm" 1>>NUL 2>&1
-                    del /S /Q "%~dp0VKS3D\%%~nA\%%~nA+VKS3D.log" 1>>NUL 2>&1
-                    del /S /Q "%~dp0VKS3D\%%~nA\%%~nA+VKS3D_spirv-val_error.log" 1>>NUL 2>&1
+                if not exist "!DumpPath!" (
+                    mkdir "!DumpPath!"
+                    ) else (
+                    del /S /Q "!DumpPath!/*.spv" 1>>NUL 2>&1
+                    del /S /Q "!DumpPath!/*.asm" 1>>NUL 2>&1
+                    del /S /Q "!DumpPath!/%%~nA+VKS3D.log" 1>>NUL 2>&1
+                    del /S /Q "!DumpPath!/%%~nA+VKS3D_spirv-val_error.log" 1>>NUL 2>&1
                     If !ErrorLevel! NEQ 0 (
-                        Echo Error deleting "%~dp0VKS3D\%%~nA\*"
+                        Echo Error deleting "!DumpPath!/*"
                         Pause
                         )
                     )
@@ -77,11 +83,11 @@ For %%A in (%*) do (
                     echo %%~nA reported non-zero return code ^(!ErrorLevel!^). Re-running without launch parameters.
                     "%%~dpA%%~nxA"
                 )
-                If exist "%~dp0VKS3D\%%~nA\%%~nA+VKS3D.log" (Start "" "%~dp0VKS3D\%%~nA\%%~nA+VKS3D.log")
+                If exist "!DumpPath!/%%~nA+VKS3D.log" (Start "" "!DumpPath!/%%~nA+VKS3D.log")
                 If defined VKS3D_DUMP_SPIRV (
-                    If exist "%~dp0VKS3D\%%~nA/*.spv" (
+                    If exist "!DumpPath!/*.spv" (
                         If exist "!VULKAN_SDK!\Bin\*.exe" (
-                            pushD "%~dp0VKS3D\%%~nA"
+                            pushD "!DumpPath!"
                             Set /A Warnings=0
                             Set /A Errors=0
                             For %%S in (*.spv) do (
@@ -96,7 +102,7 @@ For %%A in (%*) do (
                                             "!VULKAN_SDK!\Bin\spirv-dis.exe" "!ShaderFile:+=-!" -o "!ShaderFile:+=-!.asm"
                                             If exist "!ShaderFile:+=-!.asm" (
                                                 If not "!ShaderFile!"=="!ShaderFile:+=!" (
-                                                    Echo "%%~nxS">>"%~dp0VKS3D\%%~nA\%%~nA+VKS3D_spirv-val_error.log"
+                                                    Echo "%%~nxS">>"!DumpPath!/%%~nA+VKS3D_spirv-val_error.log"
                                                     If exist "!ShaderFile!.asm" (
                                                         Set /A Warnings=!Warnings!+1
                                                     ) else (
@@ -114,15 +120,15 @@ REM                                        Pause
                                 )
                             )
                         ) else (
-                        If not exist "%~dp0VKS3D\%%~nA/*" (
-                            rmdir /s /q "%~dp0VKS3D\%%~nA"
+                        If not exist "!DumpPath!/*" (
+                            rmdir /s /q "!DumpPath!"
                             )
                         )
                     ) else (
-                    If not exist "%~dp0VKS3D\%%~nA/*.log" (
-                        If not exist "%~dp0VKS3D\%%~nA/*.spv" (
-                            If not exist "%~dp0VKS3D\%%~nA/*.asm" (
-                                rmdir /s /q "%~dp0VKS3D\%%~nA"
+                    If not exist "!DumpPath!/*.log" (
+                        If not exist "!DumpPath!/*.spv" (
+                            If not exist "!DumpPath!/*.asm" (
+                                rmdir /s /q "!DumpPath!"
                                 )
                             )
                         )
