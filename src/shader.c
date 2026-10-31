@@ -9058,6 +9058,8 @@ bool spirv_patch_stereo_fs(
                     {
                         img = (int)j;
                         replacement_load_type = image->replacement_type;
+                        pointer_type = image->replacement_pointer_type;
+                        pointer_target = replacement_load_type;
                         break;
                     }
                     if (image->replacement_sampled_type &&
@@ -9067,6 +9069,8 @@ bool spirv_patch_stereo_fs(
                     {
                         img = (int)j;
                         replacement_load_type = image->replacement_sampled_type;
+                        pointer_type = image->replacement_pointer_type;
+                        pointer_target = replacement_load_type;
                         break;
                     }
                 }
@@ -9086,7 +9090,6 @@ bool spirv_patch_stereo_fs(
                     replacement_load_type != 0 &&
                     w[1] != replacement_load_type)
                 {
-                    FsImageInfo *image = &s.images[img];
                         STEREO_LOG(
                             "FS_LOAD_PATCH "
                             "result=%u "
