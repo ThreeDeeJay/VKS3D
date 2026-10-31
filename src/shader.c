@@ -8870,8 +8870,11 @@ bool spirv_patch_stereo_fs(
                 FsImageInfo *image = &s.images[j];
                 if (!image->stereo ||
                     !image->replacement_type ||
-                    !image->replacement_pointer_type ||
-                    image->id != pointer_target)
+                    !image->replacement_pointer_type)
+                    continue;
+                if (image->id != pointer_target &&
+                    image->replacement_type != pointer_target &&
+                    image->owner_var != in[i + 3])
                     continue;
                 replacement_pointer = image->replacement_pointer_type;
                 break;
