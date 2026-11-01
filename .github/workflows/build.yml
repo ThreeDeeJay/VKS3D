@@ -151,15 +151,11 @@ jobs:
     #- name: List files
     #  run: ls -R
 
-    - name: Deploy
-      run: curl --verbose --ssl-revoke-best-effort --create-dirs -L "https://github.com/${{github.repository}}/commit/${{env.CommitHash}}/checks/${{github.job}}/logs" -o "build/${{matrix.Configuration}}/Build-${{matrix.Settings.Name}}.log"
-
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ${{env.Title}}-${{matrix.Settings.Name}}-${{matrix.Configuration}}
         path: |
-          build/${{matrix.Configuration}}/Build-${{matrix.Settings.Name}}.log
           build/${{matrix.Configuration}}/VKS3D_${{matrix.Settings.Architecture}}.dll
           build/${{matrix.Configuration}}/vks3d_diag.exe
           build/tests/${{matrix.Configuration}}/test_stereo_math.exe
@@ -212,11 +208,8 @@ jobs:
           cp "scripts\install.bat" "Release/Install.bat"
           cp "scripts\uninstall.bat" "Release/Uninstall.bat"
           cp "scripts\debug.cmd" "Release/debug.cmd"
-          mkdir "Release/Docs"
-          cp "LICENSE" "Release/Docs/License.txt"
-          cp "README.md" "Release/Docs/ReadMe.txt"
-          cp "Artifacts\Win32\Release\Build-Win32.log" "Release/Docs/Build-Win32.log"
-          cp "Artifacts\Win64\Release\Build-Win64.log" "Release/Docs/Build-Win64.log"
+          cp "LICENSE" "Release/License.txt"
+          cp "README.md" "Release/ReadMe.txt"
   
       - name: Compress artifacts
         if: github.event_name == 'push'
