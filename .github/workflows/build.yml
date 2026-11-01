@@ -71,7 +71,7 @@ jobs:
       shell: cmd
       run: |
         curl --ssl-revoke-best-effort --fail -L "https://sdk.lunarg.com/sdk/download/${{matrix.Settings.VulkanVersion}}/windows/VulkanSDK-${{matrix.Settings.VulkanVersion}}-Installer.exe" -o "VulkanSDK.exe" || true
-        curl --ssl-revoke-best-effort --fail -L "https://sdk.lunarg.com/sdk/download/${{matrix.Settings.VulkanVersion}}/windows/vulkansdk-windows-${{matrix.Settings.Architecture}}-${{matrix.Settings.VulkanVersion}}.exe" -o "VulkanSDK.exe" || true
+        curl --ssl-revoke-best-effort --fail -L "https://sdk.lunarg.com/sdk/download/${{matrix.Settings.VulkanVersion}}/windows/vulkansdk-windows-X64-${{matrix.Settings.VulkanVersion}}.exe" -o "VulkanSDK.exe" || true
         VulkanSDK.exe --accept-licenses --default-answer --confirm-command install com.lunarg.vulkan.32bit
     - name: Set VULKAN_SDK
       shell: pwsh
