@@ -182,6 +182,7 @@ jobs:
           echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
           echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
           echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+          echo "CommitTitle=$(git show --pretty=format:%s -s HEAD)" >> $env:GITHUB_ENV
           echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
 
       - name: Download Win32
@@ -224,7 +225,8 @@ jobs:
       - name: Release - latest_${{env.Branch}}
         if: github.event_name == 'push'
         run: |
-          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
+          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "${{env.CommitCount}}
+          Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
           Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
           gh release upload latest_${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
   
