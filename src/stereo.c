@@ -868,6 +868,12 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     /* VK_KHR_present_wait: NULL unless the app enabled it on this device. */
     sd->real.WaitForPresentKHR = (PFN_vkWaitForPresentKHR)
         g_real_giPA(real_inst, "vkWaitForPresentKHR");
+    sd->real.CmdCopyImage2 = (PFN_vkCmdCopyImage2)g_real_giPA(real_inst, "vkCmdCopyImage2");
+    if (!sd->real.CmdCopyImage2)
+        sd->real.CmdCopyImage2 = (PFN_vkCmdCopyImage2)g_real_giPA(real_inst, "vkCmdCopyImage2KHR");
+    sd->real.CmdBlitImage2 = (PFN_vkCmdBlitImage2)g_real_giPA(real_inst, "vkCmdBlitImage2");
+    if (!sd->real.CmdBlitImage2)
+        sd->real.CmdBlitImage2 = (PFN_vkCmdBlitImage2)g_real_giPA(real_inst, "vkCmdBlitImage2KHR");
     L(CmdExecuteCommands);
     L(CreateSwapchainKHR); L(DestroySwapchainKHR);
     L(GetSwapchainImagesKHR); L(AcquireNextImageKHR); L(QueuePresentKHR);
