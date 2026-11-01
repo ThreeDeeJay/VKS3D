@@ -1268,6 +1268,28 @@ stereo_WaitForPresentKHR(VkDevice device, VkSwapchainKHR swapchain,
     return sd->real.WaitForPresentKHR(sd->real_device, real, presentId, timeout);
 }
 
+/* -- vkDestroyImage -----------------------------------------------------------
+ * Image handles are recycled by the driver.  intercepted_* / upgraded_images
+ * are keyed by handle, so stale entries would make a later mono image look
+ * "upgraded" (wrong view type, wrong layer-1 copies). */
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks *pAllocator)
+{
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd)
+        return;
+    if (image != VK_NULL_HANDLE)
+    {
+        stereo_mutex_lock(&sd->lock);
+        remove_tracked_image(sd->intercepted_depth, &sd->intercepted_depth_count, image);
+        remove_tracked_image(sd->intercepted_color, &sd->intercepted_color_count, image);
+        remove_tracked_image(sd->intercepted_storage, &sd->intercepted_storage_count, image);
+        remove_tracked_image(sd->upgraded_images, &sd->upgraded_image_count, image);
+        stereo_mutex_unlock(&sd->lock);
+    }
+    sd->real.DestroyImage(sd->real_device, image, pAllocator);
+}
+
 /* ── stereo_CreateImage / stereo_CreateImageView ────────────────────────── */
 
 static bool is_depth_format(VkFormat fmt)
