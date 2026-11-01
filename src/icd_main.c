@@ -328,6 +328,27 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CmdBeginRenderPass2);
     GDPA_WRAP("vkDestroyRenderPass",
               stereo_DestroyRenderPass);
+    GDPA_WRAP("vkDestroyImage",
+              stereo_DestroyImage);
+    GDPA_WRAP("vkCmdCopyImage",
+              stereo_CmdCopyImage);
+    GDPA_WRAP("vkCmdBlitImage",
+              stereo_CmdBlitImage);
+    if (!strcmp(pName, "vkCmdCopyImage2") || !strcmp(pName, "vkCmdCopyImage2KHR") ||
+        !strcmp(pName, "vkCmdBlitImage2") || !strcmp(pName, "vkCmdBlitImage2KHR")) {
+        /* Only expose the wrapper if the real device exposes the function. */
+        extern StereoDevice g_devices[];
+        extern uint32_t g_device_count;
+        for (uint32_t ci = 0; ci < g_device_count; ci++) {
+            if (g_devices[ci].real_device == device &&
+                g_devices[ci].real.GetDeviceProcAddr) {
+                if (!g_devices[ci].real.GetDeviceProcAddr(g_devices[ci].real_device, pName))
+                    return NULL;
+                return (PFN_vkVoidFunction)(strstr(pName, "Copy") ?
+                    (void *)stereo_CmdCopyImage2 : (void *)stereo_CmdBlitImage2);
+            }
+        }
+    }
     if (!strcmp(pName, "vkWaitForPresentKHR")) {
     /* Only expose the wrapper if the real device actually has VK_KHR_present_wait enabled. */
         extern StereoDevice g_devices[];

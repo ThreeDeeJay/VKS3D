@@ -435,6 +435,8 @@ typedef struct RealDeviceDispatch {
     PFN_vkCmdEndRenderPass           CmdEndRenderPass;
     PFN_vkCmdBeginRenderPass2        CmdBeginRenderPass2;
     PFN_vkWaitForPresentKHR          WaitForPresentKHR;
+    PFN_vkCmdCopyImage2              CmdCopyImage2;
+    PFN_vkCmdBlitImage2              CmdBlitImage2;
     PFN_vkCmdBeginRendering          CmdBeginRendering;
     PFN_vkCmdEndRendering            CmdEndRendering;
     PFN_vkCmdExecuteCommands         CmdExecuteCommands;
@@ -798,6 +800,11 @@ VKAPI_ATTR void     VKAPI_CALL stereo_CmdEndRenderPass(VkCommandBuffer commandBu
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRenderPass2(VkCommandBuffer, const VkRenderPassBeginInfo *, const VkSubpassBeginInfo *);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyRenderPass(VkDevice, VkRenderPass, const VkAllocationCallbacks *);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_WaitForPresentKHR(VkDevice, VkSwapchainKHR, uint64_t, uint64_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImage(VkDevice, VkImage, const VkAllocationCallbacks *);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdCopyImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageCopy *);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBlitImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageBlit *, VkFilter);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdCopyImage2(VkCommandBuffer, const VkCopyImageInfo2 *);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBlitImage2(VkCommandBuffer, const VkBlitImageInfo2 *);
 /* Physical-device-level wrappers for functions promoted/added after the original stub set.
  * Pointer params are void* on purpose: the stubs only translate the VkPhysicalDevice handle. */
 VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceCalibrateableTimeDomainsKHR(VkPhysicalDevice, uint32_t*, void*);
