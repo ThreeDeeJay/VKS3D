@@ -9010,15 +9010,15 @@ bool spirv_patch_stereo_fs(
             if (replacement_pointer && in[i + 1] != replacement_pointer)
             {
                 uint32_t replacement_target = 0;
-                for (size_t scan = 5; scan < in_c;)
+                for (size_t scan = 5; scan < ob.n;)
                 {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (!sw || scan + sw > in_c)
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
                         break;
-                    if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 1] == replacement_pointer)
+                    if (sop == SpvOpTypePointer && sw >= 4 && ob.w[scan + 1] == replacement_pointer)
                     {
-                        replacement_target = in[scan + 3];
+                        replacement_target = ob.w[scan + 3];
                         break;
                     }
                     scan += sw;
