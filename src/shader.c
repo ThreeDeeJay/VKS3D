@@ -7259,7 +7259,7 @@ bool spirv_patch_stereo_fs(
         {
             if (!s.images[prev].patchable)
                 continue;
-            if (s.images[prev].sampled_type_id != s.images[img].sampled_type_id)
+            if (s.images[prev].sampled_type != s.images[img].sampled_type)
                 continue;
             if (s.images[prev].dim != s.images[img].dim ||
                 s.images[prev].depth != s.images[img].depth ||
@@ -8853,15 +8853,15 @@ bool spirv_patch_stereo_fs(
             if (replacement_pointer && in[i + 1] != replacement_pointer)
             {
                 uint32_t replacement_target = 0;
-                for (size_t scan = 5; scan < in_c;)
+                for (size_t scan = 5; scan < ob.n;)
                 {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (!sw || scan + sw > in_c)
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
                         break;
-                    if (sop == SpvOpTypePointer && sw >= 4 && in[scan + 1] == replacement_pointer)
+                    if (sop == SpvOpTypePointer && sw >= 4 && ob.w[scan + 1] == replacement_pointer)
                     {
-                        replacement_target = in[scan + 3];
+                        replacement_target = ob.w[scan + 3];
                         break;
                     }
                     scan += sw;
@@ -9492,13 +9492,31 @@ bool spirv_patch_stereo_fs(
                             in[scan + 2] == image_id)
                         {
                             uint32_t ptr = in[scan + 3];
+                            uint32_t descriptor_id = ptr;
+                            for (size_t ps = 5; ps < in_c;)
+                            {
+                                uint32_t pw = in[ps] >> 16;
+                                uint32_t pop = in[ps] & 0xffffu;
+                                if (!pw || ps + pw > in_c)
+                                    break;
+                                if ((pop == SpvOpAccessChain ||
+                                    pop == SpvOpInBoundsAccessChain ||
+                                    pop == SpvOpPtrAccessChain) &&
+                                    pw >= 4 &&
+                                    in[ps + 2] == ptr)
+                                {
+                                    descriptor_id = in[ps + 3];
+                                    break;
+                                }
+                                ps += pw;
+                            }
                             for (uint32_t vv = 0; vv < s.n_var; ++vv)
                             {
-                                if (s.vars[vv].id != ptr)
+                                if (s.vars[vv].id != descriptor_id)
                                     continue;
                                 if (s.vars[vv].storage != SpvStorageClassUniformConstant)
                                     continue;
-                                descriptor_var = ptr;
+                                descriptor_var = descriptor_id;
                                 STEREO_LOG(
                                     "FS_SAMPLE_SAMPLEDIMAGE_DESCRIPTOR "
                                     "sampledImage=%u "

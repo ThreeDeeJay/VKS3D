@@ -16,8 +16,6 @@ jobs:
   Build:
     name: ${{matrix.Settings.Name}}-${{matrix.Configuration}}
     runs-on: windows-2022
-    env:
-      VULKAN_SDK: 'C:\VulkanSDK\1.3.296.0'
     strategy:
       matrix:
         Configuration: [Release]
@@ -26,13 +24,17 @@ jobs:
             Name: "Win64",
             Platform: "x64",
             Architecture: "x64",
-            Bits: "64"
+            Bits: "64",
+            VulkanVersion: "1.4.363.0",
+            VulkanSDKInstallerParameters: ""
           }
         - {
             Name: "Win32",
             Platform: "Win32",
             Architecture: "x86",
-            Bits: "32"
+            Bits: "32",
+            VulkanVersion: "1.3.296.0",
+            VulkanSDKInstallerParameters: "com.lunarg.vulkan.32bit"
           }
 
     steps:
@@ -64,19 +66,19 @@ jobs:
       id: cache-vulkan-sdk
       uses: actions/cache@v5
       with:
-        path: "C:\\VulkanSDK\\1.3.296.0"
-        key: VulkanSDK-1.3.296.0
+        path: "C:\\VulkanSDK\\${{matrix.Settings.VulkanVersion}}"
+        key: VulkanSDK-${{matrix.Settings.VulkanVersion}}
     - name: Install Vulkan SDK
       if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
       shell: cmd
       run: |
-        curl --ssl-revoke-best-effort -L "https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/VulkanSDK-1.3.296.0-Installer.exe" -o "VulkanSDK.exe"
-        VulkanSDK.exe --accept-licenses --default-answer --confirm-command install com.lunarg.vulkan.32bit
+        curl --ssl-revoke-best-effort --fail -L "https://sdk.lunarg.com/sdk/download/${{matrix.Settings.VulkanVersion}}/windows/VulkanSDK-${{matrix.Settings.VulkanVersion}}-Installer.exe" -o "VulkanSDK.exe" || true
+        curl --ssl-revoke-best-effort --fail -L "https://sdk.lunarg.com/sdk/download/${{matrix.Settings.VulkanVersion}}/windows/vulkansdk-windows-X64-${{matrix.Settings.VulkanVersion}}.exe" -o "VulkanSDK.exe" || true
+        VulkanSDK.exe --accept-licenses --default-answer --confirm-command install ${{matrix.Settings.VulkanSDKInstallerParameters}}
     - name: Set VULKAN_SDK
       shell: pwsh
       run: |
-        $val = 'C:\VulkanSDK\1.3.296.0'
-        [System.IO.File]::AppendAllText($env:GITHUB_ENV, "VULKAN_SDK=$val" + [Environment]::NewLine)
+        [System.IO.File]::AppendAllText($env:GITHUB_ENV, "VULKAN_SDK=C:\VulkanSDK\${{matrix.Settings.VulkanVersion}}" + [Environment]::NewLine)
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.0.2
@@ -180,6 +182,7 @@ jobs:
           echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
           echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
           echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+          echo "CommitTitle=$(git show --pretty=format:%s -s HEAD)" >> $env:GITHUB_ENV
           echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
 
       - name: Download Win32
@@ -222,7 +225,8 @@ jobs:
       - name: Release - latest_${{env.Branch}}
         if: github.event_name == 'push'
         run: |
-          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
+          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "${{env.CommitTitle}}
+          Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
           Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
           gh release upload latest_${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
   
