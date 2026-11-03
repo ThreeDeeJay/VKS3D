@@ -7298,7 +7298,7 @@ bool spirv_patch_stereo_fs(
         {
             if (!s.images[prev].patchable)
                 continue;
-            if (s.images[prev].sampled_type_id != s.images[img].sampled_type_id)
+            if (s.images[prev].sampled_type != s.images[img].sampled_type)
                 continue;
             if (s.images[prev].dim != s.images[img].dim ||
                 s.images[prev].depth != s.images[img].depth ||
