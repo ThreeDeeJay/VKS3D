@@ -7874,22 +7874,13 @@ bool spirv_patch_stereo_fs(
                         break;
                     if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == target_type)
                     {
-                        bool target_is_stereo_replacement = false;
-                        for (uint32_t img = 0; img < s.n_img; ++img)
-                        {
-                            if (s.images[img].stereo && s.images[img].replacement_type == target_type)
-                            {
-                                target_is_stereo_replacement = true;
-                                break;
-                            }
-                        }
-                        if (!target_is_stereo_replacement)
+                        if (!(target_type < id_bound && emitted_type[target_type]))
                         {
                             sb_push_n(&ob, &in[scan], sw);
                             if (target_type < id_bound)
                                 emitted_type[target_type] = true;
-                            target_defined = true;
                         }
+                        target_defined = true;
                         break;
                     }
                     scan += sw;
