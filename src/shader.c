@@ -7464,6 +7464,49 @@ bool spirv_patch_stereo_fs(
             sb_push_n(&ob, e, 6);
             ext_done = true;
         }
+        /*
+         * Inject BuiltIn ViewIndex at the beginning of the annotation section,
+         * immediately before the first OpDecorate.
+         */
+        if (emit_vi_decorate &&
+            (op==SpvOpTypeVoid ||
+             op==SpvOpTypeBool ||
+             op==SpvOpTypeInt ||
+             op==SpvOpTypeFloat ||
+             op==SpvOpTypeVector ||
+             op==SpvOpTypeImage ||
+             op==SpvOpTypeSampler ||
+             op==SpvOpTypeSampledImage ||
+             op==SpvOpTypeArray ||
+             op==SpvOpTypeRuntimeArray ||
+             op==SpvOpTypeStruct ||
+             op==SpvOpTypePointer ||
+             op==SpvOpTypeFunction ||
+             op==SpvOpConstantTrue ||
+             op==SpvOpConstantFalse ||
+             op==SpvOpConstant ||
+             op==SpvOpConstantComposite ||
+             op==SpvOpVariable ||
+             op==SpvOpFunction))
+        {
+            uint32_t d[] =
+            {
+                (4u << 16) | SpvOpDecorate,
+                new_vi_id,
+                SpvDecorationBuiltIn,
+                SpvBuiltInViewIndex
+            };
+            sb_push_n(&ob, d, 4);
+            uint32_t flat[] =
+            {
+                (3u << 16) | SpvOpDecorate,
+                new_vi_id,
+                SpvDecorationFlat
+            };
+            sb_push_n(&ob, flat, 3);
+            /* only emit once */
+            emit_vi_decorate = false;
+        }
         if (op == SpvOpDecorate &&
             wc >= 4)
         {
@@ -7498,16 +7541,12 @@ bool spirv_patch_stereo_fs(
         }
         if (op == SpvOpEntryPoint && !ep_done) {
             ep_done = true;
-            if (new_vi_id != s.vi_var_id) {
+            if (is_new_vi) {
                 sb_push(&ob, ((wc+1)<<16)|SpvOpEntryPoint);
                 sb_push_n(&ob, &in[i+1], wc-1);
                 sb_push(&ob, new_vi_id);
             } else {
                 sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                {
-                    emitted_type[in[i + 1]] = true;
-                }
             }
             i += wc; continue;
         }
@@ -8665,13 +8704,10 @@ bool spirv_patch_stereo_fs(
             continue;
         }
         /* Inject new types + gl_ViewIndex variable before first OpFunction */
-        if (op==SpvOpFunction && !types_done) {
-            types_done=true;
-            in_func=true;
-            if (emit_vi_decorate) {
-                uint32_t w[]={(4u<<16)|SpvOpDecorate,new_vi_id,SpvDecorationBuiltIn,SpvBuiltInViewIndex};
-                sb_push_n(&ob,w,4);
-                emit_vi_decorate=false;}
+        if (op == SpvOpFunction && !types_done) {
+            types_done = true;
+            in_func    = true;
+            /* BuiltIn decoration is emitted earlier in the annotation section. */
             if (!s.int_id) {
                 uint32_t w[]={(4u<<16)|SpvOpTypeInt, new_int_id, 32, 1};
                 sb_push_n(&ob,w,4); }
@@ -12154,7 +12190,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
             }
         }
-        if (!in_mv_rp)
+        bool is_quad = !ci->pVertexInputState ||
+        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
+        if (!in_mv_rp && !is_quad)
         {
             STEREO_LOG(
                 "Pipe %u: rp=%p not multiview (VS=%d TES=%d stages=%u)",
@@ -12163,14 +12201,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 has_vs,
                 has_tes,
                 ci->stageCount);
-            /* IMPORTANT:
-             * Do NOT patch renderpass-based multiview logic for clearly mono pipelines
-             * BUT still allow FS quad / UI heuristics to run later
-             */
             goto PIPE_DECISION_CONTINUE;
         }
-        bool is_quad = !ci->pVertexInputState ||
-                       ci->pVertexInputState->vertexBindingDescriptionCount == 0;
         bool vs_fullscreen = false;
         bool vs_quad_fs = false;
         bool vs_screen_space = false;
@@ -12476,13 +12508,13 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        if (((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
+        if (((is_quad && has_fs) || (vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
             !has_tcs &&
-            in_mv_rp &&
             ci->stageCount > 0 &&
+            has_fs &&
             fs_stage != ~0u)
         {
             /* Find FS stage */
