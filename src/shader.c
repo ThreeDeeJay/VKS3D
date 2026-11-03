@@ -7848,6 +7848,9 @@ bool spirv_patch_stereo_fs(
             uint32_t storage = in[i + 2];
             uint32_t target_type = in[i + 3];
             bool target_defined = target_type < id_bound && emitted_type[target_type];
+            STEREO_LOG(
+                "FS_POINTER_ORDER pointer=%u target=%u storage=%u emitted=%u ob_words=%zu",
+                pointer_id, target_type, storage, (target_type < id_bound) ? emitted_type[target_type] : 0, ob.n);
             if (!target_defined)
             {
                 for (size_t scan = 5; scan < ob.n;)
@@ -7952,6 +7955,9 @@ bool spirv_patch_stereo_fs(
                     }
                     scan += sw;
                 }
+                STEREO_LOG(
+                    "FS_REPLACEMENT_POINTER_ORDER oldPointer=%u newPointer=%u target=%u targetEmitted=%u pointerEmitted=%u pointerOriginal=%u",
+                    pointer_id, image->replacement_pointer_type, replacement_target, (replacement_target < id_bound) ? emitted_type[replacement_target] : 0, emitted_type[image->replacement_pointer_type], pointer_is_original);
                 if (pointer_is_original || emitted_type[image->replacement_pointer_type])
                     continue;
                 bool replacement_target_defined = replacement_target < id_bound && emitted_type[replacement_target];
@@ -7984,6 +7990,9 @@ bool spirv_patch_stereo_fs(
                     replacement_target,
                     image->id,
                     image->binding);
+                STEREO_LOG(
+                    "FS_REPLACEMENT_POINTER_EMIT_ORDER pointer=%u target=%u targetDefined=%u",
+                    image->replacement_pointer_type, replacement_target, replacement_target_defined);
                 sb_push_n(&ob, w, 4);
                 emitted_type[image->replacement_pointer_type] = true;
             }
