@@ -8092,6 +8092,22 @@ bool spirv_patch_stereo_fs(
                 in[i + 1],
                 img_idx,
                 s.n_img);
+            STEREO_LOG(
+                "FS_IMAGE_STATE "
+                "idx=%d "
+                "patchable=%u "
+                "stereo=%u "
+                "replacement=%u "
+                "replacementSampled=%u "
+                "emitted=%u "
+                "bound=%u",
+                img_idx,
+                img_idx >= 0 ? s.images[img_idx].patchable : 0,
+                img_idx >= 0 ? s.images[img_idx].stereo : 0,
+                img_idx >= 0 ? s.images[img_idx].replacement_type : 0,
+                img_idx >= 0 ? s.images[img_idx].replacement_sampled_type : 0,
+                s.images[img_idx >= 0 ? img_idx : 0].replacement_type < id_bound ? emitted_type[s.images[img_idx >= 0 ? img_idx : 0].replacement_type] : 0,
+                id_bound);
             if (img_idx >= 0)
             {
                 FsImageInfo *img = &s.images[img_idx];
