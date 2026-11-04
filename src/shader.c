@@ -7763,25 +7763,6 @@ bool spirv_patch_stereo_fs(
             uint32_t pointer_id = in[i + 1];
             uint32_t storage = in[i + 2];
             uint32_t target_type = in[i + 3];
-            bool pointer_already_emitted = false;
-            for (size_t scan = 5; scan < ob.n;)
-            {
-                uint32_t sw = ob.w[scan] >> 16;
-                uint32_t sop = ob.w[scan] & 0xffffu;
-                if (!sw || scan + sw > ob.n)
-                    break;
-                if (sop == SpvOpTypePointer && sw >= 4 && ob.w[scan + 1] == pointer_id)
-                {
-                    pointer_already_emitted = true;
-                    break;
-                }
-                scan += sw;
-            }
-            if (pointer_already_emitted)
-            {
-                i += wc;
-                continue;
-            }
             bool target_defined = target_type < id_bound && emitted_type[target_type];
             if (!target_defined)
             {
@@ -7871,18 +7852,15 @@ bool spirv_patch_stereo_fs(
                 }
                 if (pointer_is_original || emitted_type[image->replacement_pointer_type])
                     continue;
-                bool replacement_target_defined = false;
-                for (size_t scan = 5; scan < ob.n;)
+                bool replacement_target_defined = replacement_target < id_bound && emitted_type[replacement_target];
+                for (size_t scan = 5; !replacement_target_defined && scan < ob.n;)
                 {
                     uint32_t sw = ob.w[scan] >> 16;
                     uint32_t sop = ob.w[scan] & 0xffffu;
                     if (!sw || scan + sw > ob.n)
                         break;
                     if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == replacement_target)
-                    {
                         replacement_target_defined = true;
-                        break;
-                    }
                     scan += sw;
                 }
                 if (!replacement_target_defined)
@@ -7909,28 +7887,6 @@ bool spirv_patch_stereo_fs(
             }
             i += wc;
             continue;
-        }
-        if (op == SpvOpTypeImage && wc >= 9)
-        {
-            bool image_already_emitted = false;
-            for (size_t scan = 5; scan < ob.n;)
-            {
-                uint32_t sw = ob.w[scan] >> 16;
-                uint32_t sop = ob.w[scan] & 0xffffu;
-                if (!sw || scan + sw > ob.n)
-                    break;
-                if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == in[i + 1])
-                {
-                    image_already_emitted = true;
-                    break;
-                }
-                scan += sw;
-            }
-            if (image_already_emitted)
-            {
-                i += wc;
-                continue;
-            }
         }
         /* Patch OpTypeImage: Dim=2D Arrayed=0 → Arrayed=1 (in-place word change) */
         if (op == SpvOpTypeImage &&
@@ -8675,21 +8631,7 @@ bool spirv_patch_stereo_fs(
                             image->binding);
                         continue;
                     }
-                    bool replacement_target_emitted = false;
-                    for (size_t scan = 5; scan < ob.n;)
-                    {
-                        uint32_t sw = ob.w[scan] >> 16;
-                        uint32_t sop = ob.w[scan] & 0xffffu;
-                        if (!sw || scan + sw > ob.n)
-                            break;
-                        if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == replacement_target)
-                        {
-                            replacement_target_emitted = true;
-                            break;
-                        }
-                        scan += sw;
-                    }
-                    if (!replacement_target_emitted)
+                    if (!emitted_type[replacement_target])
                     {
                         for (size_t scan = 5; scan < in_c;)
                         {
@@ -8708,21 +8650,7 @@ bool spirv_patch_stereo_fs(
                             scan += sw;
                         }
                     }
-                    bool replacement_pointer_emitted = false;
-                    for (size_t scan = 5; scan < ob.n;)
-                    {
-                        uint32_t sw = ob.w[scan] >> 16;
-                        uint32_t sop = ob.w[scan] & 0xffffu;
-                        if (!sw || scan + sw > ob.n)
-                            break;
-                        if (sop == SpvOpTypePointer && sw >= 4 && ob.w[scan + 1] == replacement_pointer)
-                        {
-                            replacement_pointer_emitted = true;
-                            break;
-                        }
-                        scan += sw;
-                    }
-                    if (!replacement_pointer_emitted)
+                    if (!emitted_type[image->replacement_pointer_type])
                     {
                         STEREO_LOG(
                             "FS_VAR_SKIP_POINTER_NOT_EMITTED "
