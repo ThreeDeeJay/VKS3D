@@ -8015,15 +8015,18 @@ bool spirv_patch_stereo_fs(
                 }
                 if (pointer_is_original || emitted_type[image->replacement_pointer_type])
                     continue;
-                bool replacement_target_defined = replacement_target < id_bound && emitted_type[replacement_target];
-                for (size_t scan = 5; !replacement_target_defined && scan < ob.n;)
+                bool replacement_target_defined = false;
+                for (size_t scan = 5; scan < ob.n;)
                 {
                     uint32_t sw = ob.w[scan] >> 16;
                     uint32_t sop = ob.w[scan] & 0xffffu;
                     if (!sw || scan + sw > ob.n)
                         break;
                     if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == replacement_target)
+                    {
                         replacement_target_defined = true;
+                        break;
+                    }
                     scan += sw;
                 }
                 if (!replacement_target_defined)
