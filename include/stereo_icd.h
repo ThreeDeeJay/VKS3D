@@ -433,7 +433,6 @@ typedef struct RealDeviceDispatch {
     PFN_vkCmdBeginRenderPass         CmdBeginRenderPass;
     PFN_vkCmdNextSubpass             CmdNextSubpass;
     PFN_vkCmdEndRenderPass           CmdEndRenderPass;
-    PFN_vkCmdBeginRenderPass2        CmdBeginRenderPass2;
     PFN_vkCmdBeginRendering          CmdBeginRendering;
     PFN_vkCmdEndRendering            CmdEndRendering;
     PFN_vkCmdExecuteCommands         CmdExecuteCommands;
@@ -794,7 +793,6 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateFramebuffer(VkDevice, const VkFrameb
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyFramebuffer(VkDevice, VkFramebuffer, const VkAllocationCallbacks *);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRenderPass(VkCommandBuffer, const VkRenderPassBeginInfo *, VkSubpassContents);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer);
-VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRenderPass2(VkCommandBuffer, const VkRenderPassBeginInfo *, const VkSubpassBeginInfo *);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRenderingInfo);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdEndRendering(VkCommandBuffer commandBuffer);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImage(VkDevice, const VkImageCreateInfo*, const VkAllocationCallbacks*, VkImage*);
@@ -844,9 +842,6 @@ VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer,
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
-VKAPI_ATTR void     VKAPI_CALL stereo_CmdBlitImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageBlit *, VkFilter);
-VKAPI_ATTR void     VKAPI_CALL stereo_CmdCopyImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageCopy *);
-VKAPI_ATTR void     VKAPI_CALL stereo_CmdResolveImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageResolve *);
 
 /* shader.c */
 StereoPipelineInfo *
