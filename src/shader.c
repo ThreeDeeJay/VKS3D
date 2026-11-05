@@ -12027,7 +12027,7 @@ stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
         _snprintf(
             dp,
             sizeof(dp) - 1,
-            "%s\\%016llx.spv",
+            "%s\\%016llx-xs.spv",
             dump,
             (unsigned long long)h);
         FILE *f = fopen(dp, "rb");
