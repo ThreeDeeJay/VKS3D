@@ -529,3 +529,50 @@ stereo_CreateRenderPass2KHR(
     return VK_SUCCESS;
 }
 #endif
+
+/* ── vkDestroyRenderPass ────────────────────────────────────────────────────
+*
+* VKD3D-Proton (and others) create and destroy render passes continuously;
+* the driver then recycles the same VkRenderPass handle values.  The table
+* in sd->render_passes is keyed by the app's handle, so entries MUST be
+* removed on destroy.  Otherwise a recycled handle matches a stale entry
+* (and the CreateRenderPass dedupe reuses its stale mv_handle), giving
+* pipelines/framebuffers a multiview pass with a different layout than the
+* pass the app actually described -> VK_ERROR_DEVICE_LOST.
+* The paired multiview pass is destroyed together with the original.
+*/
+VKAPI_ATTR void VKAPI_CALL
+stereo_DestroyRenderPass(
+    VkDevice                     device,
+    VkRenderPass                 renderPass,
+    const VkAllocationCallbacks *pAllocator)
+{
+    STEREO_LOG("CALLED stereo_DestroyRenderPass rp=%p", (void *)renderPass);
+    StereoDevice *sd = stereo_device_from_handle(device);
+    if (!sd)
+        return;
+    if (renderPass == VK_NULL_HANDLE)
+        return;
+
+    VkRenderPass mv = VK_NULL_HANDLE;
+    stereo_mutex_lock(&sd->lock);
+    for (uint32_t i = 0; i < sd->render_pass_count; i++)
+    {
+        if (sd->render_passes[i].handle == renderPass)
+        {
+            mv = sd->render_passes[i].mv_handle;
+            uint32_t last = --sd->render_pass_count;
+            if (i != last)
+                sd->render_passes[i] = sd->render_passes[last];
+            memset(&sd->render_passes[last], 0, sizeof(sd->render_passes[last]));
+            break;
+        }
+    }
+    stereo_mutex_unlock(&sd->lock);
+
+    sd->real.DestroyRenderPass(sd->real_device, renderPass, pAllocator);
+    if (mv != VK_NULL_HANDLE && mv != renderPass)
+        sd->real.DestroyRenderPass(sd->real_device, mv, pAllocator);
+    STEREO_LOG("RP_DESTROY rp=%p mv=%p remaining=%u",
+        (void *)renderPass, (void *)mv, sd->render_pass_count);
+}
