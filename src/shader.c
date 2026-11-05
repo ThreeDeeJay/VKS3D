@@ -161,6 +161,12 @@ typedef struct
     bool has_vector_matrix_ops;
     bool has_direct_position_write;
     bool has_v2_position_input;
+    /* VS reads a Uniform/StorageBuffer/PushConstant variable (matrices, often via dp4 helper
+     * functions that leave no OpMatrixTimes/OpDot) and has user vertex attributes. */
+    bool has_buffer_var;
+    bool has_vertex_attr;
+    uint32_t loc_ids[64];
+    uint32_t loc_id_count;
     /* Matrix provenance tracking */
     uint32_t location0_vars[16];
     uint32_t location0_count;
@@ -328,6 +334,9 @@ static void do_scan(SpvMod *m, bool p2)
     {
         m->geometry_location_count=0;
         m->geometry_input_var_count=0;
+        m->has_buffer_var=false;
+        m->has_vertex_attr=false;
+        m->loc_id_count=0;
     }
     #define MAT(id)        matrix_value(m, (id))
     #define SETMAT(id,v)   set_matrix_value(m, (id), (v))
@@ -861,6 +870,24 @@ static void do_scan(SpvMod *m, bool p2)
                 }
                 break;
             case SpvOpVariable:
+                if (wc >= 4)
+                {
+                    if (w[i + 3] == SpvStorageClassUniform ||
+                        w[i + 3] == SpvStorageClassStorageBuffer ||
+                        w[i + 3] == SpvStorageClassPushConstant)
+                        m->has_buffer_var = true;
+                    if (w[i + 3] == SpvStorageInput)
+                    {
+                        for (uint32_t lk = 0; lk < m->loc_id_count; ++lk)
+                        {
+                            if (m->loc_ids[lk] == w[i + 2])
+                            {
+                                m->has_vertex_attr = true;
+                                break;
+                            }
+                        }
+                    }
+                }
                 if (wc >= 4 &&
                     w[i + 1] < m->value_capacity &&
                     w[i + 2] < m->value_capacity &&
@@ -917,6 +944,12 @@ static void do_scan(SpvMod *m, bool p2)
                 }
                 break;
             case SpvOpDecorate:
+                if (wc >= 4 &&
+                    w[i+2] == SpvDecorationLocation &&
+                    m->loc_id_count < 64)
+                {
+                    m->loc_ids[m->loc_id_count++] = w[i+1];
+                }
                 if (wc >= 4)
                 {
                     if (w[i+2] == SpvDecorationDescriptorSet &&
@@ -12086,6 +12119,28 @@ static const VkShaderModuleCreateInfo *stereo_stage_inline_spv(const VkPipelineS
     return NULL;
 }
 
+/* Stage SPIR-V: cached shader module if known, else the inline
+ * VkShaderModuleCreateInfo chained into the stage (DXVK GPL / module-less stages).
+ * tmp is caller storage; the returned pointer is valid for the caller's scope. */
+static StereoShaderCache *
+stereo_stage_spv(StereoDevice *sd, const VkPipelineShaderStageCreateInfo *st,
+    StereoShaderCache *tmp)
+{
+    StereoShaderCache *e = cache_find(sd, st->module);
+    if (e)
+        return e;
+    const VkShaderModuleCreateInfo *smci = stereo_stage_inline_spv(st);
+    if (smci && smci->pCode && smci->codeSize >= 20 && (smci->codeSize & 3) == 0)
+    {
+        memset(tmp, 0, sizeof(*tmp));
+        tmp->spv        = (uint32_t *)smci->pCode;
+        tmp->words      = smci->codeSize / 4;
+        tmp->exec_model = -1;
+        return tmp;
+    }
+    return NULL;
+}
+
 /* ── vkCreateGraphicsPipelines ───────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
@@ -12464,7 +12519,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool vs_pure_quad = false;
         bool vs_uv_quad = false;
         if (has_vs && vs_stage != ~0u) {
-            StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
+            StereoShaderCache vs_inline_tmp;
+            StereoShaderCache *vs_cache = stereo_stage_spv(sd,&ci->pStages[vs_stage],&vs_inline_tmp);
             if (vs_cache) {
                 SpvMod vm = {0};
                 vm.words = vs_cache->spv;
@@ -12558,8 +12614,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         }
                     }
                     STEREO_LOG("VS_OUTPUT_RESULT location=%u has_user=%u has_v3=%u",vs_location_id,vs_has_user_output,vs_has_v3_user_output);
-                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
-                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
+                    /* A VS with user vertex attributes that reads a uniform/storage buffer is
+                     * real geometry even when no OpMatrixTimes/OpDot is visible (dp4 helper
+                     * functions, e.g. DXVK dxbc output): never a fullscreen quad. */
+                    bool vs_attr_buffer = vm.has_buffer_var && vm.has_vertex_attr;
+                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer;
+                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
                     bool vs_z_one_position = false;
                     uint32_t vs_position_ptr = 0;
@@ -12761,7 +12821,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        if (((vs_fullscreen && !vs_screen_space) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
+        if ((((is_quad && vs_fullscreen && !vs_screen_space)) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
