@@ -77,7 +77,14 @@ static const char **stereo_filter_extensions(
     uint32_t total = 0;
 
     for (uint32_t i = 0; i < app_ext_count; i++)
+    {
+        /* hidden in stereo_EnumerateDeviceExtensionProperties; never forward */
+        if (app_exts[i] &&
+            (!strcmp(app_exts[i], "VK_NV_low_latency2") ||
+             !strcmp(app_exts[i], "VK_EXT_swapchain_maintenance1")))
+            continue;
         merged[total++] = app_exts[i];
+    }
 
     for (uint32_t e = 0; e < STEREO_CANDIDATE_EXT_COUNT; e++) {
         const char *ext = STEREO_CANDIDATE_EXTS[e];
