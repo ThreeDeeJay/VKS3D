@@ -307,11 +307,13 @@ stereo_CreateSwapchainKHR(VkDevice device,
     uint32_t app_w = pCreateInfo->imageExtent.width;
     uint32_t app_h = pCreateInfo->imageExtent.height;
 
+    uint32_t image_count = pCreateInfo->minImageCount;
+    if (image_count < 2) image_count = 2;
     STEREO_LOG(
-        "[CREATE SC] swapchain_count=%u old=%p",
+        "[CREATE SC] swapchain_count=%u old=%p image_count=%u",
         sd->swapchain_count,
-        pCreateInfo->oldSwapchain);
-
+        pCreateInfo->oldSwapchain,
+        image_count);
     StereoSwapchain *old_sc = NULL;
 
     if (pCreateInfo->oldSwapchain != VK_NULL_HANDLE)
@@ -400,7 +402,7 @@ stereo_CreateSwapchainKHR(VkDevice device,
         STEREO_LOG("[NV3D] init succeeded");
 
         VkResult nvres =
-            alloc_alt_stereo_swapchain(sd, sc);
+            alloc_alt_stereo_swapchain(sd, sc, image_count);
 
         if (nvres == VK_SUCCESS)
         {
@@ -548,7 +550,7 @@ try_dx9:
     if (req == STEREO_PRESENT_AUTO || req == STEREO_PRESENT_DX9) {
         if (!sd->d3d11_ok) dxgi_device_init(sd);
         if (sc->hwnd && dx9_init(sd, sc)) {
-            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            VkResult res = alloc_alt_stereo_swapchain(sd, sc, image_count);
             if (res == VK_SUCCESS) res = alt_cpu_staging_init(sd, sc); /* DX9 needs CPU staging */
             if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
                 sc->present_mode  = STEREO_PRESENT_DX9;
@@ -580,11 +582,12 @@ try_dx9:
         req == STEREO_PRESENT_INTERLACED) {
         STEREO_LOG("[SBS] gpu_compose_sc_init surface=%p", (void*)(uintptr_t)pCreateInfo->surface);
         STEREO_LOG(
-            "[CREATE SC GPU] hwnd=%p surface=%p",
+            "[CREATE SC GPU] hwnd=%p surface=%p image_count=%u",
             sc->hwnd,
-            pCreateInfo->surface);
+            pCreateInfo->surface,
+            image_count);
         if (sc->hwnd && gpu_compose_sc_init(sd, sc, pCreateInfo->surface)) {
-            VkResult res = alloc_alt_stereo_swapchain(sd, sc);
+            VkResult res = alloc_alt_stereo_swapchain(sd, sc, image_count);
             /* No CPU staging — GPU blit reads directly from stereo_images[0] */
             if (res == VK_SUCCESS && setup_barrier_resources(sd, sc)) {
                 sc->present_mode  = req;
