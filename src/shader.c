@@ -1138,6 +1138,22 @@ static void spv_scan(SpvMod *m)
         m->pos_is_block);
 }
 
+/* Vertex shader that has user vertex attributes but never reads a uniform/storage/push
+ * buffer and has no matrix/dot math: it cannot apply a camera/projection transform, so
+ * its vertices are already in clip/screen space (HUD, text, menu sprites).  Works on any
+ * module without hash/binding knowledge; world geometry always reads transform data. */
+static bool spv_vs_unprojected_attr_only(const SpvMod *m)
+{
+    return m->exec_model == SpvExecVertex &&
+           m->has_vertex_attr &&
+           !m->has_buffer_var &&
+           !m->has_matrix_ops &&
+           !m->has_vector_matrix_ops &&
+           m->dot_count == 0 &&
+           !m->proj_found &&
+           !m->has_emit_vertex;
+}
+
 uint64_t hash_spv(const uint32_t *data, size_t words)
 {
     uint64_t h = 1469598103934665603ULL; // FNV offset basis
@@ -3126,7 +3142,7 @@ bool spirv_patch_stereo_vertex(
      */
     if(cfg&&cfg->mono_ui)
     {
-        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.screen_value_count<=4)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex&&!m.has_matrix_ops&&!m.has_vector_matrix_ops)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_matrix_ops);
+        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.screen_value_count<=4)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex&&!m.has_matrix_ops&&!m.has_vector_matrix_ops)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_matrix_ops)||spv_vs_unprojected_attr_only(&m);
         if(ui_candidate)
         {
             STEREO_LOG("VERTEX_UI_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u vmatrix=%u direct=%u emit=%u proj=%u dots=%u gs_in=%u gs_out=%u gs_vertices=%u",(unsigned long long)spv_hash,m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_vector_matrix_ops,m.has_direct_position_write,m.emit_count,m.proj_found,m.dot_count,m.geometry_input_mode,m.geometry_output_mode,m.geometry_output_vertices);
@@ -12791,7 +12807,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 bool mono_ui_gs_pipeline_state=ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&ci->pVertexInputState&&ci->pVertexInputState->vertexBindingDescriptionCount==1&&ci->pVertexInputState->vertexAttributeDescriptionCount==7;
                 bool mono_ui_gs_candidate=sd->stereo.mono_ui&&has_gs&&mono_ui_gs_signature&&mono_ui_gs_pipeline_state;
                 bool mono_ui_always_depth_ui_state=ci->pDepthStencilState&&ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable&&ci->pDepthStencilState->depthCompareOp==VK_COMPARE_OP_ALWAYS&&ci->pInputAssemblyState&&ci->pInputAssemblyState->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-                bool mono_ui_vs_candidate=sd->stereo.mono_ui&&((mono_ui_depth_disabled&&(vs_screen_space||(mono_ui_menu_background&&vs_quad_fs&&!vm.has_matrix_ops&&!vm.has_direct_position_write)))||(mono_ui_passthrough_vs&&mono_ui_passthrough_pipeline)||(mono_ui_always_depth_vs&&mono_ui_always_depth_ui_state));
+                bool mono_ui_unprojected_vs=spv_vs_unprojected_attr_only(&vm);
+                STEREO_LOG("MONO_UI_UNPROJECTED hash=%016llx unprojected=%u buffer_var=%u vertex_attr=%u matrix=%u dots=%u depth_disabled=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),mono_ui_unprojected_vs,vm.has_buffer_var,vm.has_vertex_attr,vm.has_matrix_ops,vm.dot_count,mono_ui_depth_disabled);
+                bool mono_ui_vs_candidate=sd->stereo.mono_ui&&((mono_ui_depth_disabled&&(vs_screen_space||(mono_ui_menu_background&&vs_quad_fs&&!vm.has_matrix_ops&&!vm.has_direct_position_write)||mono_ui_unprojected_vs))||(mono_ui_passthrough_vs&&mono_ui_passthrough_pipeline)||(mono_ui_always_depth_vs&&mono_ui_always_depth_ui_state));
                 STEREO_LOG("PIPELINE_UI_GATE hash=%016llx gs_hash=%016llx mono_ui=%u has_gs=%u gs_inputs=%u gs_signature=%u gs_state=%u gs_skip=%u vs_skip=%u depth_test=%u depth_write=%u bindings=%u attrs=%u screen_space=%u menu_bg=%u quad_fs=%u matrix=%u direct_pos=%u passthrough_vs=%u passthrough_pipeline=%u alpha_blend=%u always_depth_vs=%d always_depth_pipeline=%d always_depth_attrs=%d depth_compare=%d cull=%d blend0=%d index_attrs=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),(unsigned long long)gs_hash,sd->stereo.mono_ui,has_gs,gs_input_count,mono_ui_gs_signature,mono_ui_gs_pipeline_state,mono_ui_gs_candidate,mono_ui_vs_candidate,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:0,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0,vs_screen_space,mono_ui_menu_background,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write,mono_ui_passthrough_vs,mono_ui_passthrough_pipeline,mono_ui_alpha_blend,mono_ui_always_depth_vs,mono_ui_always_depth_pipeline,mono_ui_always_depth_attrs,ci->pDepthStencilState?ci->pDepthStencilState->depthCompareOp:-1,ci->pRasterizationState?ci->pRasterizationState->cullMode:VK_CULL_MODE_FLAG_BITS_MAX_ENUM,ci->pColorBlendState&&ci->pColorBlendState->pAttachments&&ci->pColorBlendState->attachmentCount>0?ci->pColorBlendState->pAttachments[0].blendEnable:-1,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0);
                 if(mono_ui_gs_candidate||mono_ui_vs_candidate)
                 {
