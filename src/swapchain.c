@@ -1137,13 +1137,12 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
             pImageIndex);
     }
 
-    uint32_t idx = sc->acquire_idx++ % sc->image_count;
     /* Wait for the previous frame's GPU work (DXGI barrier or GPU blit) to
      * complete before allowing the app to render into stereo_images[0] again.
      * barrier_fences[0] starts SIGNALED so the very first acquire never blocks. */
-    if (sc->barrier_fences && sc->barrier_fences[idx]) {
+    if (sc->barrier_fences && sc->barrier_fences[0]) {
         VkResult wres = sd->real.WaitForFences(
-            sd->real_device, 1, &sc->barrier_fences[idx], VK_TRUE, timeout);
+            sd->real_device, 1, &sc->barrier_fences[0], VK_TRUE, timeout);
         if (wres != VK_SUCCESS) return wres;
     }
 
@@ -1156,7 +1155,7 @@ stereo_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
         };
         if (sd->gfx_queue) sd->real.QueueSubmit(sd->gfx_queue, 1, &sig, fence);
     }
-    *pImageIndex = idx;
+    *pImageIndex = 0;
     return VK_SUCCESS;
 }
 
