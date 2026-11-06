@@ -140,7 +140,7 @@ static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = sc->barrier_pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = sc->image_count,
+        .commandBufferCount = 1,
     };
     if (sd->real.AllocateCommandBuffers(sd->real_device, &cbai, sc->barrier_cmds)
             != VK_SUCCESS) return false;
@@ -148,12 +148,8 @@ static bool setup_barrier_resources(StereoDevice *sd, StereoSwapchain *sc)
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,  /* starts signaled → first acquire never blocks */
     };
-    for (uint32_t i = 0; i < sc->image_count; i++)
-    {
-        if (sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[i])
-            != VK_SUCCESS) return false;
-    }
-    return true;
+    return sd->real.CreateFence(sd->real_device, &fci, NULL, &sc->barrier_fences[0])
+           == VK_SUCCESS;
 }
 
 /* ── Allocate stereo render target (2-layer image + view, no CPU staging) ─ */
