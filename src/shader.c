@@ -10360,7 +10360,6 @@ stereo_CreateShadersEXT(
                 sd->stereo.convergence,
                 true,
                 false,
-                false,
                 NULL);
         } else if (ci->stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
             ok = spirv_patch_stereo_fs(
