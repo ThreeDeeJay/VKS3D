@@ -2882,13 +2882,42 @@ bool spirv_patch_stereo_vertex(
     //        return false;
     //    }
     //}
-    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u loc0_count=%u screen_count=%u zw=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
-        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input, m.location0_count,m.screen_value_count ,m.screen_has_zw_use,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
+    STEREO_LOG("VS_CLASSIFY hash=%016llx matrix=%u direct_pos=%u v2_pos=%u dot=%u emit=%u viewindex=%u pos=%u block=%u",
+        (unsigned long long)spv_hash,m.has_matrix_ops,m.has_direct_position_write,m.has_v2_position_input,m.dot_count,m.emit_count,m.has_viewindex_builtin,m.pos_var,m.pos_is_block);
 
-    if(stereo_skip_shader_patch(spv_hash))
     {
-        free_spv_provenance(&m);
-        return false;
+        static bool skip_list_init;
+        static char skip_list[1024];
+        if (!skip_list_init)
+        {
+            const char *env =
+                stereo_getenv("VKS3D_SKIP_SHADER_PATCHES");
+            if (env)
+            {
+                strncpy(skip_list, env, sizeof(skip_list) - 1);
+                skip_list[sizeof(skip_list) - 1] = '\0';
+            }
+            skip_list_init = true;
+        }
+        if (skip_list[0])
+        {
+            char hashstr[17];
+            snprintf(
+                hashstr,
+                sizeof(hashstr),
+                "%016llx",
+                (unsigned long long)spv_hash);
+            if (strchr(skip_list, '*') ||
+                strstr(skip_list, hashstr))
+            {
+                STEREO_LOG(
+                    "SKIP_SHADER_PATCH hash=%s reason=%s",
+                    hashstr,
+                    strchr(skip_list, '*') ? "wildcard" : "hash");
+                free_spv_provenance(&m);
+                return false;
+            }
+        }
     }
     /*
      * Reject known monoscopic screen-space/UI shaders.
@@ -2899,12 +2928,25 @@ bool spirv_patch_stereo_vertex(
      * Use the quad/vertex-binding test together with the direct
      * position test to identify screen-space shaders.
      */
-    if(cfg&&cfg->mono_ui)
-    {
-        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.screen_value_count<=4)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex&&!m.has_matrix_ops&&!m.has_vector_matrix_ops)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_matrix_ops);
-        if(ui_candidate)
+    if (cfg && cfg->mono_ui) {
+        bool ui_candidate =
+        dbg &&
+        m.pos_is_block &&
+        !m.has_matrix_ops &&
+        m.has_v2_position_input &&
+        !m.has_emit_vertex &&
+        m.exec_model == SpvExecVertex;
+        if (ui_candidate)
         {
-            STEREO_LOG("VERTEX_UI_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u vmatrix=%u direct=%u emit=%u proj=%u dots=%u gs_in=%u gs_out=%u gs_vertices=%u",(unsigned long long)spv_hash,m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_vector_matrix_ops,m.has_direct_position_write,m.emit_count,m.proj_found,m.dot_count,m.geometry_input_mode,m.geometry_output_mode,m.geometry_output_vertices);
+            STEREO_LOG(
+                "SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u matrix=%u direct=%u emit=%u",
+                (unsigned long long)spv_hash,
+                (unsigned)m.exec_model,
+                m.pos_var,
+                m.pos_is_block,
+                m.has_matrix_ops,
+                m.has_direct_position_write,
+                m.has_emit_vertex);
             free_spv_provenance(&m);
             return false;
         }
@@ -2999,6 +3041,24 @@ bool spirv_patch_stereo_vertex(
             free_spv_provenance(&m);
             return false;
         }
+        if (cfg && cfg->mono_ui &&
+            m.pos_is_block &&
+            !m.has_matrix_ops &&
+            m.has_v2_position_input)
+        {
+            STEREO_LOG(
+                "SCREENSPACE_SKIP hash=%016llx exec=%u pos=%u block=%u matrix=%u v2pos=%u direct=%u emit=%u",
+                (unsigned long long)spv_hash,
+                (unsigned)m.exec_model,
+                m.pos_var,
+                m.pos_is_block,
+                m.has_matrix_ops,
+                m.has_v2_position_input,
+                m.has_direct_position_write,
+                m.has_emit_vertex);
+            free_spv_provenance(&m);
+            return false;
+        }
     }
     if (!m.is_patchable)
     {
@@ -3061,26 +3121,11 @@ bool spirv_patch_stereo_vertex(
     {
         id_new_bt = nid++;
     }
-    uint32_t bt_for_types =
-    m.bt ?
-    m.bt :
-    (m.bt_type ? m.bt_type : id_new_bt);
-    uint32_t id_v4bt = 0;
-    bool new_v4bt = false;
-    if (bt_for_types)
-        id_v4bt = spirv_find_vector_type(in,in_c,bt_for_types,4);
-    if (!id_v4bt && m.v4t && bt_for_types)
-    {
-        id_v4bt = nid++;
-        new_v4bt = true;
-    }
     uint32_t id_cz = nid++;
     uint32_t id_cf0 = nid++;
-    uint32_t id_cf1 = nid++;
     uint32_t id_cl = nid++;
     uint32_t id_cr = nid++;
     uint32_t id_cc = nid++;
-    uint32_t id_bg_expand = nid++;
     STEREO_LOG(
         "VS_NEW_IDS "
         "bound=%u "
@@ -3090,10 +3135,8 @@ bool spirv_patch_stereo_vertex(
         "new_it=%u "
         "inj_view=%u "
         "new_bool=%u "
-        "bg_expand=%u "
         "cz=%u "
         "cf0=%u "
-        "cf1=%u "
         "cl=%u "
         "cr=%u "
         "cc=%u",
@@ -3104,10 +3147,8 @@ bool spirv_patch_stereo_vertex(
         id_new_it,
         id_inj_view,
         id_new_bt,
-        id_bg_expand,
         id_cz,
         id_cf0,
-        id_cf1,
         id_cl,
         id_cr,
         id_cc);
@@ -3179,17 +3220,6 @@ bool spirv_patch_stereo_vertex(
         };
         sb_push_n(&te, w, 2);
     }
-    if (new_v4bt)
-    {
-        uint32_t w[] =
-        {
-            op_(SpvOpTypeVector, 4),
-            id_v4bt,
-            bt_for_types,
-            4
-        };
-        sb_push_n(&te, w, 4);
-    }
     if (m.it)
     {
         uint32_t w[] =
@@ -3211,18 +3241,6 @@ bool spirv_patch_stereo_vertex(
         };
         float z = 0.0f;
         memcpy(&w[3], &z, sizeof(z));
-        sb_push_n(&te, w, 4);
-    }
-    {
-        uint32_t w[4] =
-        {
-            op_(SpvOpConstant, 4),
-            m.ft,
-            id_cf1,
-            0
-        };
-        float one = 1.0f;
-        memcpy(&w[3], &one, sizeof(one));
         sb_push_n(&te, w, 4);
     }
     {
@@ -3256,18 +3274,6 @@ bool spirv_patch_stereo_vertex(
             0
         };
         memcpy(&w[3], &conv, sizeof(conv));
-        sb_push_n(&te, w, 4);
-    }
-    {
-        uint32_t w[4] =
-        {
-            op_(SpvOpConstant, 4),
-            m.ft,
-            id_bg_expand,
-            0
-        };
-        float bg_expand = fmaxf(fabsf(lo * conv), fabsf(ro * conv));
-        memcpy(&w[3], &bg_expand, sizeof(bg_expand));
         sb_push_n(&te, w, 4);
     }
     STEREO_LOG(
@@ -3317,14 +3323,11 @@ bool spirv_patch_stereo_vertex(
         .bt                  = bt,
         .cz                  = id_cz,
         .cf0                 = id_cf0,
-        .cf1                 = id_cf1,
         .cl                  = id_cl,
         .cr                  = id_cr,
         .cc                  = id_cc,
         .projection_mode     = projection_mode,
         .force_far_depth     = force_far_depth,
-        .procedural_sky      = procedural_sky,
-        .bg_expand           = id_bg_expand,
         .lo_dbg              = lo,
         .ro_dbg              = ro,
         .dbg                 = dbg
@@ -3353,13 +3356,6 @@ bool spirv_patch_stereo_vertex(
                 in[i + 1],
                 in[i + 3]);
         }
-        if (opx == SpvOpTypeSampledImage && wcx >= 3)
-        {
-            STEREO_LOG(
-                "VS_SAMPLED_IMAGE_IN result=%u imageType=%u",
-                in[i + 1],
-                in[i + 2]);
-        }
         if (!ins_ann &&
             (opx == SpvOpTypeVoid ||
              opx == SpvOpTypeBool ||
@@ -3387,14 +3383,14 @@ bool spirv_patch_stereo_vertex(
         }
         if (opx == SpvOpFunction)
         {
-            if (!ins_t)
-                ins_t = i;
             in_entry_function =
                 (wcx >= 4 &&
                  in[i + 2] ==
                  (m.position_function ?
                   m.position_function :
                   m.entry_function));
+            if (in_entry_function)
+                ins_t = i;
         }
         if (in_entry_function &&
             opx == SpvOpReturn)
@@ -3564,175 +3560,6 @@ bool spirv_patch_stereo_vertex(
                 &nid);
             body_done = true;
         }
-        if (opx == SpvOpConstantComposite && wcx >= 4)
-        {
-            bool has_spec_operand = false;
-            for (uint32_t operand = 3; operand < wcx && !has_spec_operand; ++operand)
-            {
-                uint32_t operand_id = in[i + operand];
-                for (size_t scan = 5; scan < in_c;)
-                {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (!sw || scan + sw > in_c)
-                        break;
-                    if ((sop == SpvOpSpecConstantTrue || sop == SpvOpSpecConstantFalse || sop == SpvOpSpecConstant || sop == SpvOpSpecConstantComposite || sop == SpvOpSpecConstantOp) && sw >= 3 && in[scan + 2] == operand_id)
-                    {
-                        has_spec_operand = true;
-                        break;
-                    }
-                    scan += sw;
-                }
-            }
-            if (has_spec_operand)
-            {
-                sb_push(&ob, ((wcx << 16) | SpvOpSpecConstantComposite));
-                sb_push_n(&ob, &in[i + 1], wcx - 1);
-                i += wcx;
-                continue;
-            }
-        }
-        if (opx == SpvOpSelect &&
-            wcx >= 6 &&
-            id_v4bt &&
-            in[i + 1] == m.v4t)
-        {
-            uint32_t cond = in[i + 3];
-            uint32_t cond_type =
-            spirv_get_value_type(
-                in,
-                in_c,
-                cond);
-            if (cond_type == bt_for_types)
-            {
-                uint32_t vec_cond = nid++;
-                uint32_t cw[] =
-                {
-                    op_(SpvOpCompositeConstruct, 7),
-                    id_v4bt,
-                    vec_cond,
-                    cond,
-                    cond,
-                    cond,
-                    cond
-                };
-                sb_push_n(&ob, cw, 7);
-                uint32_t sw[] =
-                {
-                    op_(SpvOpSelect, 6),
-                    in[i + 1],
-                    in[i + 2],
-                    vec_cond,
-                    in[i + 4],
-                    in[i + 5]
-                };
-                sb_push_n(&ob, sw, 6);
-                STEREO_LOG(
-                    "VS_PATCH_SELECT "
-                    "result=%u "
-                    "cond=%u "
-                    "condType=%u "
-                    "vecCond=%u "
-                    "vecType=%u",
-                    in[i + 2],
-                    cond,
-                    cond_type,
-                    vec_cond,
-                    id_v4bt);
-                i += wcx;
-                continue;
-            }
-        }
-        if (opx == SpvOpStore &&
-            wcx >= 3)
-        {
-            uint32_t ptr_id = in[i + 1];
-            uint32_t obj_id = in[i + 2];
-            uint32_t ptr_type =
-            spirv_get_pointer_pointee_type(
-                in,
-                in_c,
-                ptr_id);
-            uint32_t obj_type =
-            spirv_get_value_type(
-                in,
-                in_c,
-                obj_id);
-            STEREO_LOG(
-                "VS_PATCH_STORE_CHECK "
-                "ptr=%u "
-                "ptrType=%u "
-                "obj=%u "
-                "objType=%u",
-                ptr_id,
-                ptr_type,
-                obj_id,
-                obj_type);
-            if (ptr_type &&
-                obj_type &&
-                ptr_type != obj_type)
-            {
-                STEREO_LOG(
-                    "VS_PATCH_STORE_TYPE "
-                    "ptr=%u "
-                    "ptrType=%u "
-                    "obj=%u "
-                    "objType=%u",
-                    ptr_id,
-                    ptr_type,
-                    obj_id,
-                    obj_type);
-                if (obj_type == m.v4t &&
-                    spirv_is_vector_type(
-                        in,
-                        in_c,
-                        ptr_type,
-                        m.ft,
-                        3))
-                {
-                    uint32_t repaired = nid++;
-                    uint32_t rw[] =
-                    {
-                        op_(SpvOpVectorShuffle, 8),
-                        ptr_type,
-                        repaired,
-                        obj_id,
-                        obj_id,
-                        0,
-                        1,
-                        2
-                    };
-                    sb_push_n(
-                        &ob,
-                        rw,
-                        8);
-                    uint32_t sw[] =
-                    {
-                        op_(SpvOpStore, 3),
-                        ptr_id,
-                        repaired
-                    };
-                    sb_push_n(
-                        &ob,
-                        sw,
-                        3);
-                    STEREO_LOG(
-                        "VS_PATCH_STORE_REPAIR "
-                        "ptr=%u "
-                        "ptrType=%u "
-                        "obj=%u "
-                        "objType=%u "
-                        "repaired=%u",
-                        ptr_id,
-                        ptr_type,
-                        obj_id,
-                        obj_type,
-                        repaired);
-                    i += wcx;
-                    continue;
-                }
-            }
-        }
         sb_push_n(
             &ob,
             &in[i],
@@ -3785,13 +3612,6 @@ bool spirv_patch_stereo_vertex(
                 opj,
                 spv_op_name(opj),
                 ob.w[j + 1]);
-        }
-        if (opj == SpvOpTypeSampledImage && wcj >= 3)
-        {
-            STEREO_LOG(
-                "VS_SAMPLED_IMAGE_OUT result=%u imageType=%u",
-                ob.w[j + 1],
-                ob.w[j + 2]);
         }
         if (!wcj || j + wcj > ob.n)
             break;
@@ -3861,17 +3681,6 @@ bool spirv_patch_stereo_vertex(
                     ob.w[j + 1],
                     ob.w[j + 3]);
             }
-        }
-        if (op == SpvOpStore && wc >= 3)
-        {
-            STEREO_LOG(
-                "OUT_STORE "
-                "ptr=%u "
-                "value=%u "
-                "targetPos=%u",
-                ob.w[j + 1],
-                ob.w[j + 2],
-                m.pos_var);
         }
         if (!wc || j + wc > ob.n)
             break;
