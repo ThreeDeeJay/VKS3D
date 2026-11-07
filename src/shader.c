@@ -8394,7 +8394,21 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             /* Emit the reserved cloned array type after its component type is defined. */
-            if (new_array_type == 0 || (new_array_type < id_bound && emitted_type[new_array_type]))
+            bool replacement_image_emitted = false;
+            for (size_t scan = 5; scan < ob.n;)
+            {
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
+                    break;
+                if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == new_array_type)
+                {
+                    replacement_image_emitted = true;
+                    break;
+                }
+                scan += sw;
+            }
+            if (new_array_type == 0 || replacement_image_emitted)
             {
                 i += wc;
                 continue;
