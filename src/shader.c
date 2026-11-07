@@ -12503,7 +12503,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool vs_pure_quad = false;
         bool vs_uv_quad = false;
         if (has_vs && vs_stage != ~0u) {
-            StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
+            StereoShaderCache vs_inline_tmp;
+            StereoShaderCache *vs_cache = stereo_stage_spv(sd,&ci->pStages[vs_stage],&vs_inline_tmp);
             if (vs_cache) {
                 SpvMod vm = {0};
                 vm.words = vs_cache->spv;
@@ -12600,8 +12601,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     /* A VS with user vertex attributes that reads a uniform/storage buffer is
                      * real geometry even when no OpMatrixTimes/OpDot is visible (dp4 helper
                      * functions, e.g. DXVK dxbc output): never a fullscreen quad. */
-                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write;
-                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input;
+                    bool vs_attr_buffer = vm.has_buffer_var && vm.has_vertex_attr;
+                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer;
+                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
                     bool vs_z_one_position = false;
                     uint32_t vs_position_ptr = 0;
@@ -12712,7 +12714,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                             ci2 += cw;
                         }
                     }
-                    vs_background = vs_quad_fs && vs_has_user_output;
+                    vs_background =
+                    (vs_quad_fs && vs_has_v3_user_output && !vm.has_v2_position_input && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable)
+                    || (vs_quad_fs && vs_has_user_output && !vm.has_v2_position_input && vs_z_one_position && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable)
+                    || (vs_has_user_output && vm.has_matrix_ops && !vm.has_direct_position_write && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pDepthStencilState && !ci->pDepthStencilState->depthWriteEnable && ((!ci->pDepthStencilState->depthTestEnable && ci->pRasterizationState && ci->pRasterizationState->cullMode == VK_CULL_MODE_NONE) || (ci->pRasterizationState && (ci->pRasterizationState->cullMode & VK_CULL_MODE_FRONT_BIT))));
                     vs_uv_quad = vs_quad_fs && vs_has_user_output && !vs_has_v3_user_output && !vm.has_v2_position_input && !vm.has_direct_position_write && vm.location0_count == 2 && vm.screen_value_count == 2 && !vs_z_one_position;
                     vs_procedural_sky = vs_background && vs_quad_fs && !vs_z_one_position;
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
@@ -12800,7 +12805,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        if ((vs_fullscreen || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
+        if ((((is_quad && vs_fullscreen && !vs_screen_space)) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
@@ -13654,14 +13659,31 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
+            bool procedural_sky = vs_procedural_sky && sd->stereo.sky_extend;
+            bool flatten_sky = vs_background && !vs_procedural_sky && sd->stereo.sky_flatten;
+            bool force_sky_depth = flatten_sky || procedural_sky;
+            STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u uv_quad=%u",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                vs_background,
+                procedural_sky,
+                flatten_sky,
+                vs_quad_fs,
+                vs_procedural_sky && !vs_quad_fs,
+                vs_uv_quad);
+            if (vs_uv_quad)
+            {
+                STEREO_LOG("PATHB_SKIP_UV_QUAD hash=%016llx",
+                    (unsigned long long)hash_spv(e->spv, e->words));
+                continue;
+            }
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
                     e->spv, e->words,
                     &patched, &pc2,
                     lo, ro, conv,
                     /*inj_vi=*/true,
-                    false,
-                    false,
+                    force_sky_depth,
+                    procedural_sky,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
