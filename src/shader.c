@@ -1872,7 +1872,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         c->cl,
         c->cr,
         c->cc);
-    if (c->force_far_depth)
+    if (c->projection_mode == STEREO_PROJECTION_PARALLEL)
     {
         uint32_t bg_offset = (*nid)++;
         uint32_t bg_x = (*nid)++;
