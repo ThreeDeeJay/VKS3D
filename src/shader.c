@@ -12602,6 +12602,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                      * real geometry even when no OpMatrixTimes/OpDot is visible (dp4 helper
                      * functions, e.g. DXVK dxbc output): never a fullscreen quad. */
                     bool vs_attr_buffer = vm.has_buffer_var && vm.has_vertex_attr;
+                    STEREO_LOG("VS_INPUT_CLASS hash=%016llx has_vertex_attr=%u has_buffer_var=%u attr_buffer=%u loc_ids=%u pipeline_attrs=%u pipeline_bindings=%u",
+                        (unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),
+                        vm.has_vertex_attr,
+                        vm.has_buffer_var,
+                        vs_attr_buffer,
+                        vm.loc_id_count,
+                        ci->pVertexInputState ? ci->pVertexInputState->vertexAttributeDescriptionCount : 0,
+                        ci->pVertexInputState ? ci->pVertexInputState->vertexBindingDescriptionCount : 0);
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
