@@ -801,7 +801,6 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass(VkDevice, const VkRenderP
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateRenderPass2KHR(VkDevice, const VkRenderPassCreateInfo2*, const VkAllocationCallbacks*, VkRenderPass*);
 #endif
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateGraphicsPipelines(VkDevice, VkPipelineCache, uint32_t, const VkGraphicsPipelineCreateInfo*, const VkAllocationCallbacks*, VkPipeline*);
-VKAPI_ATTR void     VKAPI_CALL stereo_DestroyPipeline(VkDevice, VkPipeline, const VkAllocationCallbacks *);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShaderModule(VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyShaderModule(VkDevice, VkShaderModule, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateShadersEXT(VkDevice, uint32_t, const VkShaderCreateInfoEXT*, const VkAllocationCallbacks*, VkShaderEXT*);
@@ -843,9 +842,6 @@ VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndirect(VkCommandBuffer, VkBuffer,
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdDrawIndexedIndirect(VkCommandBuffer, VkBuffer, VkDeviceSize, uint32_t, uint32_t);
 VKAPI_ATTR void     VKAPI_CALL stereo_UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
-VKAPI_ATTR void     VKAPI_CALL stereo_CmdBlitImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageBlit *, VkFilter);
-VKAPI_ATTR void     VKAPI_CALL stereo_CmdCopyImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageCopy *);
-VKAPI_ATTR void     VKAPI_CALL stereo_CmdResolveImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageResolve *);
 
 /* shader.c */
 StereoPipelineInfo *

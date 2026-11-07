@@ -15,8 +15,6 @@
 #include <string.h>
 #include "stereo_icd.h"
 
-#define CB_DYN_MV 0x4D560001u
-VkPipeline stereo_pipeline_mv_variant(VkPipeline base);
 StereoDevice* stereo_device_from_command_buffer(VkCommandBuffer cb);
 
 void remember_begin_renderpass(
@@ -101,8 +99,7 @@ stereo_CreateFramebuffer(
                    pFramebuffer);
     }
 
-    if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0 &&
-        pCreateInfo->pAttachments && !(pCreateInfo->flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT)) {
+    if (sd->stereo.enabled && sd->stereo.multiview && pCreateInfo->attachmentCount > 0) {
         bool all = true;
         bool any = false;
         bool only_shading_rate_non_upgraded = true;
@@ -447,58 +444,6 @@ find_any_device(void)
     }
 
     return NULL;
-}
-
-static void cb_track_set(StereoDevice *sd, VkCommandBuffer cb,
-    VkRenderPass rp, VkFramebuffer fb, uint32_t sub)
-{
-    for (uint32_t i = 0; i < sd->cb_track_count; i++)
-    {
-        if (sd->cb_track[i].cb == cb)
-        {
-            sd->cb_track[i].render_pass = rp;
-            sd->cb_track[i].framebuffer = fb;
-            sd->cb_track[i].subpass = sub;
-            return;
-        }
-    }
-    if (sd->cb_track_count >= MAX_CB_TRACK) return;
-    uint32_t idx = sd->cb_track_count++;
-    sd->cb_track[idx].cb = cb;
-    sd->cb_track[idx].pipeline = VK_NULL_HANDLE;
-    sd->cb_track[idx].render_pass = rp;
-    sd->cb_track[idx].framebuffer = fb;
-    sd->cb_track[idx].subpass = sub;
-}
-
-static bool view_is_upgraded(StereoDevice *sd, VkImageView v)
-{
-    for (uint32_t k = 0; k < sd->upgraded_view_count; k++)
-        if (sd->upgraded_views[k] == v) return true;
-    return false;
-}
-
-static bool rendering_all_upgraded(StereoDevice *sd, const VkRenderingInfo *ri)
-{
-    uint32_t n = 0;
-    for (uint32_t i = 0; i < ri->colorAttachmentCount && ri->pColorAttachments; i++)
-    {
-        VkImageView v = ri->pColorAttachments[i].imageView;
-        if (!v) continue;
-        if (!view_is_upgraded(sd, v)) return false;
-        n++;
-    }
-    if (ri->pDepthAttachment && ri->pDepthAttachment->imageView)
-    {
-        if (!view_is_upgraded(sd, ri->pDepthAttachment->imageView)) return false;
-        n++;
-    }
-    if (ri->pStencilAttachment && ri->pStencilAttachment->imageView)
-    {
-        if (!view_is_upgraded(sd, ri->pStencilAttachment->imageView)) return false;
-        n++;
-    }
-    return n > 0;
 }
 
 /* ── vkCmdBeginRenderPass ───────────────────────────────────────────────── */
@@ -858,7 +803,43 @@ stereo_CmdBeginRenderPass(
             (void*)commandBuffer,
             (void*)sd,
             (void*)sd->real_device);
-        cb_track_set(sd, commandBuffer, modified.renderPass, modified.framebuffer, 0);
+        bool cb_found = false;
+        for (uint32_t i = 0; i < sd->cb_track_count; i++)
+        {
+            if (sd->cb_track[i].cb == commandBuffer)
+            {
+                sd->cb_track[i].render_pass = modified.renderPass;
+                sd->cb_track[i].framebuffer = modified.framebuffer;
+                cb_found = true;
+                STEREO_LOG(
+                    "CB_TRACK_UPDATE cb=%p rp=%p fb=%p",
+                    (void*)commandBuffer,
+                    (void*)modified.renderPass,
+                    (void*)modified.framebuffer);
+                break;
+            }
+        }
+        if (!cb_found && sd->cb_track_count < MAX_CB_TRACK)
+        {
+            uint32_t idx = sd->cb_track_count++;
+            sd->cb_track[idx].cb = commandBuffer;
+            sd->cb_track[idx].render_pass = modified.renderPass;
+            sd->cb_track[idx].framebuffer = modified.framebuffer;
+            STEREO_LOG(
+                "CB_TRACK_CREATE cb=%p idx=%u rp=%p fb=%p",
+                (void*)commandBuffer,
+                idx,
+                (void*)modified.renderPass,
+                (void*)modified.framebuffer);
+        }
+        else if (!cb_found)
+        {
+            STEREO_LOG(
+                "CB_TRACK_OVERFLOW cb=%p count=%u max=%u",
+                (void*)commandBuffer,
+                sd->cb_track_count,
+                MAX_CB_TRACK);
+        }
         sd->real.CmdBeginRenderPass(commandBuffer, &modified, contents);
     } else {
         STEREO_LOG(
@@ -874,6 +855,15 @@ stereo_CmdBeginRenderPass(
             (void*)commandBuffer,
             (void*)sd,
             (void*)sd->real_device);
+        for (uint32_t i = 0; i < sd->cb_track_count; i++)
+        {
+            if (sd->cb_track[i].cb == commandBuffer)
+            {
+                sd->cb_track[i].render_pass = pRenderPassBegin->renderPass;
+                sd->cb_track[i].framebuffer = pRenderPassBegin->framebuffer;
+                break;
+            }
+        }
         STEREO_LOG(
             "BEGIN_PASS_DRIVER original=%p framebuffer=%p",
             (void*)pRenderPassBegin->renderPass,
@@ -882,7 +872,6 @@ stereo_CmdBeginRenderPass(
             "[RP BEGIN MONO] fb=%p rp=%p",
             (void*)pRenderPassBegin->framebuffer,
             (void*)pRenderPassBegin->renderPass);
-        cb_track_set(sd, commandBuffer, pRenderPassBegin->renderPass, pRenderPassBegin->framebuffer, 0);
         sd->real.CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
 }
@@ -890,21 +879,7 @@ stereo_CmdBeginRenderPass(
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
 {
-    StereoDevice *sd = NULL;
-    extern StereoDevice g_devices[];
-    extern uint32_t g_device_count;
-    for (uint32_t d = 0; d < g_device_count && !sd; d++)
-    {
-        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
-        {
-            if (g_devices[d].cb_track[i].cb == commandBuffer)
-            {
-                sd = &g_devices[d];
-                break;
-            }
-        }
-    }
-    if (!sd) sd = find_any_device();
+    StereoDevice *sd = find_any_device();
     if (!sd) return;
     for (uint32_t i = 0; i < sd->cb_track_count; i++)
     {
@@ -913,7 +888,6 @@ stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
             STEREO_LOG("CB_END_RENDER_PASS cb=%p old_rp=%p old_fb=%p",(void*)commandBuffer,(void*)sd->cb_track[i].render_pass,(void*)sd->cb_track[i].framebuffer);
             sd->cb_track[i].render_pass = VK_NULL_HANDLE;
             sd->cb_track[i].framebuffer = VK_NULL_HANDLE;
-            sd->cb_track[i].subpass = 0;
             break;
         }
     }
@@ -987,15 +961,11 @@ stereo_CmdBeginRendering(
     //        pRenderingInfo->pDepthAttachment->storeOp);
     //}
     VkRenderingInfo modified = *pRenderingInfo;
-    bool dyn_mv = false;
     if (sd->stereo.multiview &&
         !sd->stereo.shader_objects_mono &&
-        modified.viewMask == 0 &&
-        rendering_all_upgraded(sd, pRenderingInfo))
+        modified.viewMask == 0)
     {
         modified.viewMask = 0x3;
-        modified.layerCount = 1;
-        dyn_mv = true;
         //STEREO_LOG(
         //    "BEGIN_RENDERING_UPGRADE viewMask 0x0->0x3 layerCount=%u colors=%u",
         //    modified.layerCount,
@@ -1012,7 +982,6 @@ stereo_CmdBeginRendering(
     //    sd->real.CmdBeginRendering,
     //    modified.viewMask,
     //    modified.layerCount);
-    cb_track_set(sd, commandBuffer, VK_NULL_HANDLE, VK_NULL_HANDLE, dyn_mv ? CB_DYN_MV : 0);
     sd->real.CmdBeginRendering(
         commandBuffer,
         &modified);
@@ -1046,7 +1015,6 @@ stereo_CmdEndRendering(
     //STEREO_LOG(
     //    "END_RENDERING FORWARD real=%p",
     //    sd->real.CmdEndRendering);
-    cb_track_set(sd, commandBuffer, VK_NULL_HANDLE, VK_NULL_HANDLE, 0);
     sd->real.CmdEndRendering(commandBuffer);
 }
 
@@ -1062,6 +1030,9 @@ stereo_CmdBindPipeline(
 
     StereoDevice *sd = NULL;
 
+    VkRenderPass active_rp = VK_NULL_HANDLE;
+    VkFramebuffer active_fb = VK_NULL_HANDLE;
+
     for (uint32_t i = 0; i < g_device_count; i++)
     {
         if (g_devices[i].real_device)
@@ -1072,20 +1043,22 @@ stereo_CmdBindPipeline(
     }
     if (!sd)
     return;
-    VkPipeline use = pipeline;
-    if (pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS)
-    {
-    VkRenderPass active_rp = VK_NULL_HANDLE;
-    uint32_t sub = 0;
+
     for (uint32_t i = 0; i < sd->cb_track_count; i++)
     {
         if (sd->cb_track[i].cb == commandBuffer)
         {
             active_rp = sd->cb_track[i].render_pass;
-            sub = sd->cb_track[i].subpass;
+            active_fb = sd->cb_track[i].framebuffer;
             break;
         }
     }
+    StereoPipelineInfo *info =
+        find_pipeline_info(sd, pipeline);
+    remember_bound_pipeline(
+        sd,
+        commandBuffer,
+        pipeline);
     //STEREO_LOG(
     //    "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
     //    (void *)pipeline,
@@ -1116,31 +1089,10 @@ stereo_CmdBindPipeline(
     //        (void*)active_fb,
     //        (void*)active_rp);
     //}
-    bool in_mv = (sub == CB_DYN_MV);
-    if (!in_mv && active_rp)
-    {
-        for (uint32_t i = 0; i < sd->render_pass_count; i++)
-        {
-            if (sd->render_passes[i].mv_handle == active_rp)
-            {
-                in_mv = true;
-                break;
-            }
-        }
-    }
-    VkPipeline mv_variant = VK_NULL_HANDLE;
-    if (in_mv)
-    {
-        mv_variant = stereo_pipeline_mv_variant(pipeline);
-        if (mv_variant) use = mv_variant;
-    }
-    STEREO_LOG("PIPE_BIND_TRACE cb=%p bind_point=%u requested=%p active_rp=%p sub=%u in_mv=%u variant=%p bound=%p",(void*)commandBuffer,(unsigned)pipelineBindPoint,(void*)pipeline,(void*)active_rp,sub,in_mv,(void*)mv_variant,(void*)use);
-    }
-    remember_bound_pipeline(sd, commandBuffer, use);
     sd->real.CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,
-        use);
+        pipeline);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1440,21 +1392,7 @@ stereo_CmdDrawIndexed(
         firstIndex,
         vertexOffset,
         firstInstance);
-    StereoDevice *sd = NULL;
-    extern StereoDevice g_devices[];
-    extern uint32_t g_device_count;
-    for (uint32_t d = 0; d < g_device_count && !sd; d++)
-    {
-        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
-        {
-            if (g_devices[d].cb_track[i].cb == commandBuffer)
-            {
-                sd = &g_devices[d];
-                break;
-            }
-        }
-    }
-    if (!sd) sd = find_any_device();
+    StereoDevice *sd = find_any_device();
     if (!sd)
         return;
     VkPipeline pipe =
@@ -1463,15 +1401,6 @@ stereo_CmdDrawIndexed(
         lookup_bound_renderpass(sd, commandBuffer);
     VkFramebuffer fb =
         lookup_bound_framebuffer(sd, commandBuffer);
-    uint32_t cb_flags = 0;
-    for (uint32_t i = 0; i < sd->cb_track_count; i++)
-    {
-        if (sd->cb_track[i].cb == commandBuffer)
-        {
-            cb_flags = sd->cb_track[i].subpass;
-            break;
-        }
-    }
     StereoPipelineInfo *info =
         find_pipeline_info(sd, pipe);
     if (info)
@@ -1517,7 +1446,7 @@ stereo_CmdDrawIndexed(
             break;
         }
     }
-    STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u cb_flags=0x%X dyn_mv=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,cb_flags,(cb_flags & CB_DYN_MV)!=0,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
+    STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
@@ -1536,21 +1465,7 @@ stereo_CmdDraw(
     uint32_t firstInstance)
 {
     STEREO_LOG("CALLED stereo_CmdDraw");
-    StereoDevice *sd = NULL;
-    extern StereoDevice g_devices[];
-    extern uint32_t g_device_count;
-    for (uint32_t d = 0; d < g_device_count && !sd; d++)
-    {
-        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
-        {
-            if (g_devices[d].cb_track[i].cb == commandBuffer)
-            {
-                sd = &g_devices[d];
-                break;
-            }
-        }
-    }
-    if (!sd) sd = find_any_device();
+    StereoDevice *sd = find_any_device();
     if (!sd)
         return;
     VkPipeline pipe =
@@ -1614,21 +1529,7 @@ stereo_CmdDrawIndirect(
     uint32_t stride)
 {
     STEREO_LOG("CALLED stereo_CmdDrawIndirect");
-    StereoDevice *sd = NULL;
-    extern StereoDevice g_devices[];
-    extern uint32_t g_device_count;
-    for (uint32_t d = 0; d < g_device_count && !sd; d++)
-    {
-        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
-        {
-            if (g_devices[d].cb_track[i].cb == commandBuffer)
-            {
-                sd = &g_devices[d];
-                break;
-            }
-        }
-    }
-    if (!sd) sd = find_any_device();
+    StereoDevice *sd = find_any_device();
     if (!sd)
         return;
     VkPipeline pipe =
@@ -1688,21 +1589,7 @@ stereo_CmdDrawIndexedIndirect(
     uint32_t stride)
 {
     STEREO_LOG("CALLED stereo_CmdDrawIndexedIndirect");
-    StereoDevice *sd = NULL;
-    extern StereoDevice g_devices[];
-    extern uint32_t g_device_count;
-    for (uint32_t d = 0; d < g_device_count && !sd; d++)
-    {
-        for (uint32_t i = 0; i < g_devices[d].cb_track_count; i++)
-        {
-            if (g_devices[d].cb_track[i].cb == commandBuffer)
-            {
-                sd = &g_devices[d];
-                break;
-            }
-        }
-    }
-    if (!sd) sd = find_any_device();
+    StereoDevice *sd = find_any_device();
     if (!sd)
         return;
     VkPipeline pipe =
@@ -2475,112 +2362,4 @@ stereo_CmdSetVertexInputEXT(
         pVertexBindingDescriptions,
         vertexAttributeDescriptionCount,
         pVertexAttributeDescriptions);
-}
-
-static bool stereo_img_is_src(StereoDevice *sd, VkImage img)
-{
-    for (uint32_t i = 0; i < sd->intercepted_color_count; i++)
-        if (sd->intercepted_color[i] == img) return true;
-    for (uint32_t i = 0; i < sd->upgraded_image_count; i++)
-        if (sd->upgraded_images[i] == img) return true;
-    return false;
-}
-
-static bool stereo_img_is_swapchain(StereoDevice *sd, VkImage img)
-{
-    for (uint32_t s = 0; s < sd->swapchain_count; s++)
-    {
-        StereoSwapchain *sc = &sd->swapchains[s];
-        if (!sc->stereo_active || !sc->stereo_images) continue;
-        for (uint32_t i = 0; i < sc->image_count; i++)
-            if (sc->stereo_images[i] == img) return true;
-    }
-    return false;
-}
-
-/* A presenter copying an upgraded 2-layer render target into the stereo
-* swapchain image with 1-layer regions only fills layer 0 (left eye).
-* Widen those regions to both layers. */
-VKAPI_ATTR void VKAPI_CALL
-stereo_CmdBlitImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage dst, VkImageLayout dl, uint32_t n, const VkImageBlit *r, VkFilter flt)
-{
-    StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdBlitImage) return;
-    VkImageBlit *w = NULL;
-    if (n && sd->stereo.enabled && stereo_img_is_src(sd, src) && stereo_img_is_swapchain(sd, dst))
-    {
-        w = malloc(sizeof(VkImageBlit) * n);
-        if (w)
-        {
-            memcpy(w, r, sizeof(VkImageBlit) * n);
-            for (uint32_t i = 0; i < n; i++)
-            {
-                if (w[i].srcSubresource.layerCount == 1 && w[i].dstSubresource.layerCount == 1 &&
-                    w[i].srcSubresource.baseArrayLayer == 0 && w[i].dstSubresource.baseArrayLayer == 0)
-                {
-                    w[i].srcSubresource.layerCount = 2;
-                    w[i].dstSubresource.layerCount = 2;
-                }
-                r = w;
-            }
-        }
-    }
-    sd->real.CmdBlitImage(cb, src, sl, dst, dl, n, r, flt);
-    free(w);
-}
-
-VKAPI_ATTR void VKAPI_CALL
-stereo_CmdCopyImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage dst, VkImageLayout dl, uint32_t n, const VkImageCopy *r)
-{
-    StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdCopyImage) return;
-    VkImageCopy *w = NULL;
-    if (n && sd->stereo.enabled && stereo_img_is_src(sd, src) && stereo_img_is_swapchain(sd, dst))
-    {
-        w = malloc(sizeof(VkImageCopy) * n);
-        if (w)
-        {
-            memcpy(w, r, sizeof(VkImageCopy) * n);
-            for (uint32_t i = 0; i < n; i++)
-            {
-                if (w[i].srcSubresource.layerCount == 1 && w[i].dstSubresource.layerCount == 1 &&
-                    w[i].srcSubresource.baseArrayLayer == 0 && w[i].dstSubresource.baseArrayLayer == 0)
-                {
-                    w[i].srcSubresource.layerCount = 2;
-                    w[i].dstSubresource.layerCount = 2;
-                }
-                r = w;
-            }
-        }
-    }
-    sd->real.CmdCopyImage(cb, src, sl, dst, dl, n, r);
-    free(w);
-}
-
-VKAPI_ATTR void VKAPI_CALL
-stereo_CmdResolveImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage dst, VkImageLayout dl, uint32_t n, const VkImageResolve *r)
-{
-    StereoDevice *sd = find_any_device();
-    if (!sd || !sd->real.CmdResolveImage) return;
-    VkImageResolve *w = NULL;
-    if (n && sd->stereo.enabled && stereo_img_is_src(sd, src) && stereo_img_is_swapchain(sd, dst))
-    {
-        w = malloc(sizeof(VkImageResolve) * n);
-        if (w)
-        {
-            memcpy(w, r, sizeof(VkImageResolve) * n);
-            for (uint32_t i = 0; i < n; i++)
-            {
-                if (w[i].srcSubresource.layerCount == 1 && w[i].dstSubresource.layerCount == 1 &&
-                    w[i].srcSubresource.baseArrayLayer == 0 && w[i].dstSubresource.baseArrayLayer == 0)
-                {
-                    w[i].srcSubresource.layerCount = 2;
-                    w[i].dstSubresource.layerCount = 2;
-                }
-                r = w;
-            }
-        }
-    }
-    sd->real.CmdResolveImage(cb, src, sl, dst, dl, n, r);
-    free(w);
 }

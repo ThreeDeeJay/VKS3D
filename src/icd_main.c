@@ -339,12 +339,6 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_CreateRayTracingPipelinesKHR);
     GDPA_WRAP("vkCmdTraceRaysKHR",
               stereo_CmdTraceRaysKHR);
-    GDPA_WRAP("vkCmdBlitImage",
-              stereo_CmdBlitImage);
-    GDPA_WRAP("vkCmdCopyImage",
-              stereo_CmdCopyImage);
-    GDPA_WRAP("vkCmdResolveImage",
-              stereo_CmdResolveImage);
     GDPA_WRAP("vkCreateShaderModule",
               stereo_CreateShaderModule);
     GDPA_WRAP("vkDestroyShaderModule",
@@ -416,8 +410,6 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
             (void*)stereo_CreateGraphicsPipelines);
         return (PFN_vkVoidFunction)stereo_CreateGraphicsPipelines;
     }
-    GDPA_WRAP("vkDestroyPipeline",
-              stereo_DestroyPipeline);
     GDPA_WRAP("vkCreateSwapchainKHR",
               stereo_CreateSwapchainKHR);
     GDPA_WRAP("vkDestroySwapchainKHR",
