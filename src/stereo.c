@@ -859,6 +859,21 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(CmdBeginRenderPass); L(CmdNextSubpass); L(CmdEndRenderPass);
     L(CmdBeginRendering);
     L(CmdEndRendering);
+    /* RP2 begin: VKD3D-Proton never calls vkCmdBeginRenderPass. Core name first, KHR alias for 1.1 drivers. */
+    sd->real.CmdBeginRenderPass2 = (PFN_vkCmdBeginRenderPass2)
+        g_real_giPA(real_inst, "vkCmdBeginRenderPass2");
+    if (!sd->real.CmdBeginRenderPass2)
+        sd->real.CmdBeginRenderPass2 = (PFN_vkCmdBeginRenderPass2)
+            g_real_giPA(real_inst, "vkCmdBeginRenderPass2KHR");
+    /* VK_KHR_present_wait: NULL unless the app enabled it on this device. */
+    sd->real.WaitForPresentKHR = (PFN_vkWaitForPresentKHR)
+        g_real_giPA(real_inst, "vkWaitForPresentKHR");
+    sd->real.CmdCopyImage2 = (PFN_vkCmdCopyImage2)g_real_giPA(real_inst, "vkCmdCopyImage2");
+    if (!sd->real.CmdCopyImage2)
+        sd->real.CmdCopyImage2 = (PFN_vkCmdCopyImage2)g_real_giPA(real_inst, "vkCmdCopyImage2KHR");
+    sd->real.CmdBlitImage2 = (PFN_vkCmdBlitImage2)g_real_giPA(real_inst, "vkCmdBlitImage2");
+    if (!sd->real.CmdBlitImage2)
+        sd->real.CmdBlitImage2 = (PFN_vkCmdBlitImage2)g_real_giPA(real_inst, "vkCmdBlitImage2KHR");
     L(CmdExecuteCommands);
     L(CreateSwapchainKHR); L(DestroySwapchainKHR);
     L(GetSwapchainImagesKHR); L(AcquireNextImageKHR); L(QueuePresentKHR);

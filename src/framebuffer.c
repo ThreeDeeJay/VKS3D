@@ -652,7 +652,10 @@ stereo_CmdBeginRenderPass(
             lookup ? (void*)lookup->mv_handle : NULL);
         if (fb_has_mv && tracked_rp_match)
         {
-            mv_rp = tracked_mv_rp;
+            mv_rp = (lookup &&
+                     lookup->has_multiview &&
+                     lookup->mv_handle != VK_NULL_HANDLE) ?
+                    lookup->mv_handle : tracked_mv_rp;
             STEREO_LOG(
                 "MV_USE_TRACKED_FB fb=%p original_rp=%p mv_rp=%p",
                 (void*)pRenderPassBegin->framebuffer,
@@ -876,6 +879,134 @@ stereo_CmdBeginRenderPass(
     }
 }
 
+/* -- vkCmdBeginRenderPass2 / vkCmdBeginRenderPass2KHR ---------------------
+ *
+ * VKD3D-Proton begins every render pass through vkCmdBeginRenderPass2(KHR),
+ * never vkCmdBeginRenderPass.  Without this intercept the app's ORIGINAL
+ * (non-multiview) render pass is begun on a framebuffer that
+ * stereo_CreateFramebuffer built against the MULTIVIEW render pass, and the
+ * pipelines were compiled for the multiview pass too.  Result: incompatible
+ * render pass / framebuffer / pipeline, gl_ViewIndex always 0, layer 1 never
+ * written.
+ *
+ * Same substitution rules as stereo_CmdBeginRenderPass:
+ *   - tracked MV framebuffer  -> its mv_rp (or the begin rp's mv_handle if
+ *                                the app begins it with a different rp)
+ *   - tracked non-MV fb       -> never promoted
+ *   - untracked fb            -> mv_handle of the begin rp, if any
+ * pNext chain (imageless attachments etc.) and VkSubpassBeginInfo are kept.
+ */
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBeginRenderPass2(
+    VkCommandBuffer              commandBuffer,
+    const VkRenderPassBeginInfo *pRenderPassBegin,
+    const VkSubpassBeginInfo    *pSubpassBeginInfo)
+{
+    STEREO_LOG("CALLED stereo_CmdBeginRenderPass2");
+    extern StereoDevice g_devices[];
+    extern uint32_t     g_device_count;
+    StereoDevice *sd       = NULL;
+    VkRenderPass  mv_rp    = VK_NULL_HANDLE;
+    bool          fb_found = false;
+
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
+    {
+        StereoDevice *dev = &g_devices[d];
+        for (uint32_t i = 0; i < dev->fb_track_count; i++)
+        {
+            const StereoFramebufferTrack *t = &dev->fb_tracks[i];
+            if (t->fb != pRenderPassBegin->framebuffer)
+                continue;
+            sd       = dev;
+            fb_found = true;
+            if (t->has_mv && t->mv_rp != VK_NULL_HANDLE)
+            {
+                /* Prefer the begin rp's own live MV pass: the pass the fb was
+                 * created with may since have been destroyed by the app
+                 * (stereo_DestroyRenderPass destroys the pair).  Compatible
+                 * passes are interchangeable. */
+                StereoRenderPassInfo *lk =
+                    stereo_rp_lookup(dev, pRenderPassBegin->renderPass);
+                if (lk && lk->has_multiview &&
+                    lk->mv_handle != VK_NULL_HANDLE)
+                    mv_rp = lk->mv_handle;
+                else if (t->rp == pRenderPassBegin->renderPass ||
+                         t->mv_rp == pRenderPassBegin->renderPass)
+                    mv_rp = t->mv_rp;
+            }
+            break;
+        }
+    }
+    if (!sd)
+    {
+        for (uint32_t d = 0; d < g_device_count; d++)
+        {
+            if (g_devices[d].real_device)
+            {
+                sd = &g_devices[d];
+                break;
+            }
+        }
+    }
+    if (!sd)
+        return;
+    if (!fb_found)
+    {
+        StereoRenderPassInfo *lk =
+            stereo_rp_lookup(sd, pRenderPassBegin->renderPass);
+        if (lk && lk->has_multiview && lk->mv_handle != VK_NULL_HANDLE)
+            mv_rp = lk->mv_handle;
+    }
+
+    VkRenderPassBeginInfo modified = *pRenderPassBegin;
+    if (mv_rp)
+        modified.renderPass = mv_rp;
+
+    STEREO_LOG(
+        "RP2_BEGIN cb=%p fb=%p orig_rp=%p used_rp=%p fb_found=%u mv=%u",
+        (void *)commandBuffer,
+        (void *)pRenderPassBegin->framebuffer,
+        (void *)pRenderPassBegin->renderPass,
+        (void *)modified.renderPass,
+        (unsigned)fb_found,
+        (unsigned)(mv_rp != VK_NULL_HANDLE));
+
+    {
+        bool cb_found = false;
+        for (uint32_t i = 0; i < sd->cb_track_count; i++)
+        {
+            if (sd->cb_track[i].cb == commandBuffer)
+            {
+                sd->cb_track[i].render_pass = modified.renderPass;
+                sd->cb_track[i].framebuffer = modified.framebuffer;
+                cb_found = true;
+                break;
+            }
+        }
+        if (!cb_found && sd->cb_track_count < MAX_CB_TRACK)
+        {
+            uint32_t idx = sd->cb_track_count++;
+            memset(&sd->cb_track[idx], 0, sizeof(sd->cb_track[idx]));
+            sd->cb_track[idx].cb          = commandBuffer;
+            sd->cb_track[idx].render_pass = modified.renderPass;
+            sd->cb_track[idx].framebuffer = modified.framebuffer;
+        }
+    }
+
+    if (sd->real.CmdBeginRenderPass2)
+    {
+        sd->real.CmdBeginRenderPass2(commandBuffer, &modified, pSubpassBeginInfo);
+    }
+    else if (sd->real.CmdBeginRenderPass)
+    {
+        sd->real.CmdBeginRenderPass(
+            commandBuffer,
+            &modified,
+            pSubpassBeginInfo ? pSubpassBeginInfo->contents
+                              : VK_SUBPASS_CONTENTS_INLINE);
+    }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
 {
@@ -892,6 +1023,235 @@ stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
         }
     }
     sd->real.CmdEndRenderPass(commandBuffer);
+}
+
+/* -- copy/blit into stereo swapchain images ----------------------------------
+ *
+ * VKD3D-Proton >= 3.0.1 presents with vkCmdCopyImage/vkCmdBlitImage from its
+ * back buffer straight into the swapchain image (no blit render pass any more).
+ * Those commands only touch layer 0, so the right eye (layer 1) stayed black.
+ * For every region that writes layer 0 of a stereo swapchain image, add the same
+ * region for layer 1 (source layer 1 too when the source is an upgraded
+ * 2-layer image, otherwise the mono source is duplicated). */
+static bool stereo_img_in(const VkImage *arr, uint32_t n, VkImage img)
+{
+    for (uint32_t i = 0; i < n; i++)
+        if (arr[i] == img)
+            return true;
+    return false;
+}
+
+static bool stereo_is_swapchain_image(StereoDevice *sd, VkImage img)
+{
+    for (uint32_t s = 0; s < sd->swapchain_count; s++)
+    {
+        StereoSwapchain *sc = &sd->swapchains[s];
+        if (!sc->stereo_active || !sc->stereo_images)
+            continue;
+        for (uint32_t i = 0; i < sc->image_count; i++)
+            if (sc->stereo_images[i] == img)
+                return true;
+    }
+    return false;
+}
+
+static bool stereo_is_layered_image(StereoDevice *sd, VkImage img)
+{
+    return stereo_is_swapchain_image(sd, img) ||
+           stereo_img_in(sd->intercepted_color, sd->intercepted_color_count, img) ||
+           stereo_img_in(sd->upgraded_images, sd->upgraded_image_count, img);
+}
+
+static void stereo_copy_barrier(StereoDevice *sd, VkCommandBuffer cb, bool before)
+{
+    VkMemoryBarrier mb = {
+        .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = before ? VK_ACCESS_MEMORY_WRITE_BIT : VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = before ? (VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT)
+                                : (VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT),
+    };
+    sd->real.CmdPipelineBarrier(
+        cb,
+        before ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_TRANSFER_BIT,
+        before ? VK_PIPELINE_STAGE_TRANSFER_BIT     : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0, 1, &mb, 0, NULL, 0, NULL);
+}
+
+static bool stereo_dup_layer1(bool layered,
+    const VkImageSubresourceLayers *src, const VkImageSubresourceLayers *dst)
+{
+    return dst->baseArrayLayer == 0 && dst->layerCount == 1 &&
+           src->layerCount == 1 && (!layered || src->baseArrayLayer == 0);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdCopyImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage, VkImageLayout srcImageLayout,
+    VkImage dstImage, VkImageLayout dstImageLayout,
+    uint32_t regionCount, const VkImageCopy *pRegions)
+{
+    STEREO_LOG("CALLED stereo_CmdCopyImage");
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdCopyImage)
+        return;
+    VkImageCopy *r = NULL;
+    uint32_t n = 0;
+    if (sd->stereo.enabled && regionCount && pRegions &&
+        stereo_is_swapchain_image(sd, dstImage) &&
+        (r = malloc((size_t)regionCount * 2 * sizeof(*r))) != NULL)
+    {
+        bool layered = stereo_is_layered_image(sd, srcImage);
+        for (uint32_t i = 0; i < regionCount; i++)
+        {
+            r[n++] = pRegions[i];
+            if (stereo_dup_layer1(layered, &pRegions[i].srcSubresource, &pRegions[i].dstSubresource))
+            {
+                VkImageCopy e = pRegions[i];
+                e.dstSubresource.baseArrayLayer = 1;
+                if (layered)
+                    e.srcSubresource.baseArrayLayer = 1;
+                r[n++] = e;
+            }
+        }
+        STEREO_LOG("COPY_STEREO src=%p dst=%p layered=%u regions=%u->%u",
+                   (void *)(uintptr_t)srcImage, (void *)(uintptr_t)dstImage,
+                   (unsigned)layered, regionCount, n);
+        stereo_copy_barrier(sd, commandBuffer, true);
+        sd->real.CmdCopyImage(commandBuffer, srcImage, srcImageLayout,
+                              dstImage, dstImageLayout, n, r);
+        stereo_copy_barrier(sd, commandBuffer, false);
+        free(r);
+        return;
+    }
+    sd->real.CmdCopyImage(commandBuffer, srcImage, srcImageLayout,
+                          dstImage, dstImageLayout, regionCount, pRegions);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBlitImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage, VkImageLayout srcImageLayout,
+    VkImage dstImage, VkImageLayout dstImageLayout,
+    uint32_t regionCount, const VkImageBlit *pRegions, VkFilter filter)
+{
+    STEREO_LOG("CALLED stereo_CmdBlitImage");
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdBlitImage)
+        return;
+    VkImageBlit *r = NULL;
+    uint32_t n = 0;
+    if (sd->stereo.enabled && regionCount && pRegions &&
+        stereo_is_swapchain_image(sd, dstImage) &&
+        (r = malloc((size_t)regionCount * 2 * sizeof(*r))) != NULL)
+    {
+        bool layered = stereo_is_layered_image(sd, srcImage);
+        for (uint32_t i = 0; i < regionCount; i++)
+        {
+            r[n++] = pRegions[i];
+            if (stereo_dup_layer1(layered, &pRegions[i].srcSubresource, &pRegions[i].dstSubresource))
+            {
+                VkImageBlit e = pRegions[i];
+                e.dstSubresource.baseArrayLayer = 1;
+                if (layered)
+                    e.srcSubresource.baseArrayLayer = 1;
+                r[n++] = e;
+            }
+        }
+        STEREO_LOG("BLIT_STEREO src=%p dst=%p layered=%u regions=%u->%u",
+                   (void *)(uintptr_t)srcImage, (void *)(uintptr_t)dstImage,
+                   (unsigned)layered, regionCount, n);
+        stereo_copy_barrier(sd, commandBuffer, true);
+        sd->real.CmdBlitImage(commandBuffer, srcImage, srcImageLayout,
+                              dstImage, dstImageLayout, n, r, filter);
+        stereo_copy_barrier(sd, commandBuffer, false);
+        free(r);
+        return;
+    }
+    sd->real.CmdBlitImage(commandBuffer, srcImage, srcImageLayout,
+                          dstImage, dstImageLayout, regionCount, pRegions, filter);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdCopyImage2(VkCommandBuffer commandBuffer, const VkCopyImageInfo2 *pInfo)
+{
+    STEREO_LOG("CALLED stereo_CmdCopyImage2");
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdCopyImage2 || !pInfo)
+        return;
+    VkImageCopy2 *r = NULL;
+    uint32_t n = 0;
+    if (sd->stereo.enabled && pInfo->regionCount && pInfo->pRegions &&
+        stereo_is_swapchain_image(sd, pInfo->dstImage) &&
+        (r = malloc((size_t)pInfo->regionCount * 2 * sizeof(*r))) != NULL)
+    {
+        bool layered = stereo_is_layered_image(sd, pInfo->srcImage);
+        for (uint32_t i = 0; i < pInfo->regionCount; i++)
+        {
+            r[n++] = pInfo->pRegions[i];
+            if (stereo_dup_layer1(layered, &pInfo->pRegions[i].srcSubresource, &pInfo->pRegions[i].dstSubresource))
+            {
+                VkImageCopy2 e = pInfo->pRegions[i];
+                e.dstSubresource.baseArrayLayer = 1;
+                if (layered)
+                    e.srcSubresource.baseArrayLayer = 1;
+                r[n++] = e;
+            }
+        }
+        STEREO_LOG("COPY2_STEREO src=%p dst=%p layered=%u regions=%u->%u",
+                   (void *)(uintptr_t)pInfo->srcImage, (void *)(uintptr_t)pInfo->dstImage,
+                   (unsigned)layered, pInfo->regionCount, n);
+        VkCopyImageInfo2 mod = *pInfo;
+        mod.regionCount = n;
+        mod.pRegions    = r;
+        stereo_copy_barrier(sd, commandBuffer, true);
+        sd->real.CmdCopyImage2(commandBuffer, &mod);
+        stereo_copy_barrier(sd, commandBuffer, false);
+        free(r);
+        return;
+    }
+    sd->real.CmdCopyImage2(commandBuffer, pInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBlitImage2(VkCommandBuffer commandBuffer, const VkBlitImageInfo2 *pInfo)
+{
+    STEREO_LOG("CALLED stereo_CmdBlitImage2");
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdBlitImage2 || !pInfo)
+        return;
+    VkImageBlit2 *r = NULL;
+    uint32_t n = 0;
+    if (sd->stereo.enabled && pInfo->regionCount && pInfo->pRegions &&
+        stereo_is_swapchain_image(sd, pInfo->dstImage) &&
+        (r = malloc((size_t)pInfo->regionCount * 2 * sizeof(*r))) != NULL)
+    {
+        bool layered = stereo_is_layered_image(sd, pInfo->srcImage);
+        for (uint32_t i = 0; i < pInfo->regionCount; i++)
+        {
+            r[n++] = pInfo->pRegions[i];
+            if (stereo_dup_layer1(layered, &pInfo->pRegions[i].srcSubresource, &pInfo->pRegions[i].dstSubresource))
+            {
+                VkImageBlit2 e = pInfo->pRegions[i];
+                e.dstSubresource.baseArrayLayer = 1;
+                if (layered)
+                    e.srcSubresource.baseArrayLayer = 1;
+                r[n++] = e;
+            }
+        }
+        STEREO_LOG("BLIT2_STEREO src=%p dst=%p layered=%u regions=%u->%u",
+                   (void *)(uintptr_t)pInfo->srcImage, (void *)(uintptr_t)pInfo->dstImage,
+                   (unsigned)layered, pInfo->regionCount, n);
+        VkBlitImageInfo2 mod = *pInfo;
+        mod.regionCount = n;
+        mod.pRegions    = r;
+        stereo_copy_barrier(sd, commandBuffer, true);
+        sd->real.CmdBlitImage2(commandBuffer, &mod);
+        stereo_copy_barrier(sd, commandBuffer, false);
+        free(r);
+        return;
+    }
+    sd->real.CmdBlitImage2(commandBuffer, pInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
