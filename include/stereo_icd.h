@@ -508,6 +508,17 @@ typedef struct StereoSwapchain {
     uint32_t    comp_sc_count;
     VkSemaphore comp_acquire_sem;   /* image-available semaphore     */
     VkSemaphore comp_blit_done_sem; /* blit-complete semaphore       */
+    /* Multi-image swapchains: the app is told app_image_count images (>= its
+     * minImageCount); image_count of them are really allocated (1 for modes that
+     * can only own a single render target; the rest alias image 0). */
+    uint32_t    app_image_count;
+    uint32_t    req_image_count;    /* internal image count requested before allocation */
+    uint32_t    present_idx;        /* internal image being presented (QueuePresent)    */
+    uint32_t    cur_idx;            /* internal image most recently acquired            */
+    VkSemaphore *comp_acquire_sems; /* per internal image: real-SC acquire semaphore    */
+    uint32_t    comp_acquire_sem_count;
+    VkSemaphore *comp_blit_sems;    /* per real-SC image: blit-done / present semaphore */
+    uint32_t    comp_blit_sem_count;
     VkImage          *sbs_images;
     uint32_t          sbs_width;
     StereoPresentMode present_mode;

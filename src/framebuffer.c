@@ -1581,7 +1581,7 @@ stereo_CmdTraceRaysKHR(
         STEREO_LOG("RT_TRACE_END");
         return;
     }
-    VkImage dst_image = sc->stereo_images[0];
+    VkImage dst_image = sc->stereo_images[sc->cur_idx % sc->image_count];
     STEREO_LOG(
         "RT_TRACE_COPY_BEGIN src=%p dst=%p width=%u height=%u layers=%u",
         (void *)(uintptr_t)rt_image,
