@@ -121,6 +121,8 @@ jobs:
     #  run: Get-ChildItem -Path "." -File -Recurse | Select-Object FullName
 
     - name: Configure
+      env:
+        VKS3D_COMMIT_TITLE: ${{env.CommitTitle}}
       run: >
         cmake
         -A "${{matrix.Settings.Platform}}"
@@ -142,7 +144,7 @@ jobs:
         -DVKS3D_REPO=${{github.repository}}
         -DVKS3D_BRANCH=${{env.Branch}}
         -DVKS3D_COMMIT_HASH=${{env.CommitHashShort}}
-        -DVKS3D_COMMIT_TITLE='${{env.CommitTitle}}'
+        -DVKS3D_COMMIT_TITLE="$VKS3D_COMMIT_TITLE"
         -DVKS3D_BITS=${{matrix.Settings.Bits}}
 
     - name: Build
