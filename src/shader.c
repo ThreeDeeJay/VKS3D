@@ -7794,28 +7794,13 @@ bool spirv_patch_stereo_fs(
                         break;
                     if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == in[i + 2])
                     {
-                        uint32_t original_sampled = in[scan + 7];
-                        for (size_t target = 5; target < in_c;)
-                        {
-                            uint32_t tw = in[target] >> 16;
-                            uint32_t top = in[target] & 0xffffu;
-                            if (!tw || target + tw > in_c)
-                                break;
-                            if (top == SpvOpTypeImage && tw >= 9 && in[target + 1] == replacement_image)
-                            {
-                                compatible_image_type =
-                                original_sampled != 2 &&
-                                in[target + 7] != 2 &&
-                                in[scan + 2] == in[target + 2] &&
-                                in[scan + 3] == in[target + 3] &&
-                                in[scan + 5] == in[target + 5] &&
-                                in[scan + 6] == in[target + 6] &&
-                                in[scan + 7] == in[target + 7] &&
-                                in[scan + 8] == in[target + 8];
-                                break;
-                            }
-                            target += tw;
-                        }
+                        compatible_image_type =
+                            image->sampled != 2 &&
+                            in[scan + 2] == image->sampled_type &&
+                            in[scan + 3] == image->dim &&
+                            in[scan + 6] == image->ms &&
+                            in[scan + 7] == image->sampled &&
+                            in[scan + 8] == image->format;
                         break;
                     }
                     scan += sw;
