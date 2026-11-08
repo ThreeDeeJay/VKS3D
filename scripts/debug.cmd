@@ -63,6 +63,7 @@ If not "%~1"=="" (
                     Set VKD3D_LOG_FILE=!DumpPath!/%%~nA+VKD3D.log
                     Set VKD3D_SHADER_CACHE_PATH=0
                     Set VKD3D_VULKAN_DEVICE=0
+                    Set STEREO_LOGFILE_PATH=!DumpPath!/%%~nA+VKS3D.log
                     Set VKS3D_LOG_FILE_PATH=!DumpPath!/%%~nA+VKS3D.log
                     Set VKS3D_DUMP_SPIRV=!DumpPath!
                     if not exist "!DumpPath!" (
@@ -148,6 +149,7 @@ If not "%~1"=="" (
     Echo [93mNo drag and drop input specified.
     Echo [94mEnabling temporary logging and shader dumping for games that fail to dump them via drag and drop...
     setx VKS3D_DUMP_SPIRV "%~dp0Dump" 1>>NUL 2>&1
+    setx STEREO_LOGFILE_PATH "%~dp0Dump\VKS3D.log" 1>>NUL 2>&1
     setx VKS3D_LOG_FILE_PATH "%~dp0Dump\VKS3D.log" 1>>NUL 2>&1
     Echo [92mDone.
     Echo.
@@ -188,6 +190,7 @@ If not "%~1"=="" (
         )
     )
     setx VKS3D_DUMP_SPIRV "" 1>>NUL 2>&1
+    setx STEREO_LOGFILE_PATH "" 1>>NUL 2>&1
     setx VKS3D_LOG_FILE_PATH "" 1>>NUL 2>&1
 )
 
