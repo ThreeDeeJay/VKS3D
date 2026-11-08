@@ -7794,20 +7794,47 @@ bool spirv_patch_stereo_fs(
                         break;
                     if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == in[i + 2])
                     {
-                        compatible_image_type =
-                        image->sampled != 2 &&
-                        in[scan + 2] == image->sampled_type &&
-                        in[scan + 3] == image->dim &&
-                        in[scan + 6] == image->ms &&
-                        in[scan + 7] == image->sampled &&
-                        in[scan + 8] == image->format;
+                        uint32_t original_sampled = in[scan + 7];
+                        for (size_t target = 5; target < in_c;)
+                        {
+                            uint32_t tw = in[target] >> 16;
+                            uint32_t top = in[target] & 0xffffu;
+                            if (!tw || target + tw > in_c)
+                                break;
+                            if (top == SpvOpTypeImage && tw >= 9 && in[target + 1] == replacement_image)
+                            {
+                                compatible_image_type =
+                                original_sampled != 2 &&
+                                in[target + 7] != 2 &&
+                                in[scan + 2] == in[target + 2] &&
+                                in[scan + 3] == in[target + 3] &&
+                                in[scan + 6] == in[target + 6] &&
+                                in[scan + 7] == in[target + 7] &&
+                                in[scan + 8] == in[target + 8];
+                                break;
+                            }
+                            target += tw;
+                        }
                         break;
                     }
                     scan += sw;
                 }
                 bool replacement_pointer_emitted = false;
-                if (image->replacement_pointer_type < id_bound)
-                    replacement_pointer_emitted = emitted_type[image->replacement_pointer_type];
+                for (size_t scan = 5; scan < ob.n;)
+                {
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
+                        break;
+                    if (sop == SpvOpTypePointer && sw >= 4 &&
+                        ob.w[scan + 2] == SpvStorageClassUniformConstant &&
+                        ob.w[scan + 3] == replacement_image)
+                    {
+                        replacement_pointer_emitted = true;
+                        break;
+                    }
+                    scan += sw;
+                }
                 if (!replacement_sampled_exists && compatible_image_type && replacement_pointer_emitted)
                 {
                     sampled_words[2] = replacement_image;
