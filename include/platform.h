@@ -401,16 +401,16 @@ static inline char *stereo_find_opengl_driver_icd(void)
 
 /* ── Logging ─────────────────────────────────────────────────────────────── */
 /*
- * Logging is opt-in via the environment variable STEREO_LOGFILE_PATH.
+ * Logging is opt-in via the environment variable VKS3D_LOG_FILE_PATH.
  *
- * If STEREO_LOGFILE_PATH is NOT set  →  all STEREO_LOG / STEREO_ERR calls
+ * If VKS3D_LOG_FILE_PATH is NOT set  →  all STEREO_LOG / STEREO_ERR calls
  *                                        compile to no-ops (zero overhead).
  *
- * If STEREO_LOGFILE_PATH is set to a file path  →  every log line is written
+ * If VKS3D_LOG_FILE_PATH is set to a file path  →  every log line is written
  *   to that file AND to OutputDebugStringA (visible in Sysinternals DebugView
  *   and the VS debugger output window).
  *
- * Special values for STEREO_LOGFILE_PATH:
+ * Special values for VKS3D_LOG_FILE_PATH:
  *   "debugview"  →  OutputDebugStringA only, no file
  *   any path     →  file (truncated on each DLL load) + OutputDebugStringA
  *
@@ -436,7 +436,7 @@ static int g_vks3d_log_initialized = 0;
 
 /*
  * vks3d_log_open — must be called from DllMain DLL_PROCESS_ATTACH.
- * Reads STEREO_LOGFILE_PATH WITHOUT using the CRT getenv() (which may not
+ * Reads VKS3D_LOG_FILE_PATH WITHOUT using the CRT getenv() (which may not
  * be ready) and WITHOUT heap allocation.
  */
 static inline void vks3d_log_open(void)
@@ -445,9 +445,9 @@ static inline void vks3d_log_open(void)
     if (g_vks3d_log_initialized) return;
     g_vks3d_log_initialized = 1;
 
-    /* Read STEREO_LOGFILE_PATH using the Win32 API directly */
+    /* Read VKS3D_LOG_FILE_PATH using the Win32 API directly */
     char path[MAX_PATH];
-    DWORD n = GetEnvironmentVariableA("STEREO_LOGFILE_PATH", path, MAX_PATH);
+    DWORD n = GetEnvironmentVariableA("VKS3D_LOG_FILE_PATH", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) {
         /* Variable not set (or too long) — logging disabled */
         g_vks3d_log_enabled = 0;
