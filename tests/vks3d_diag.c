@@ -202,9 +202,9 @@ int main(void)
         result_pass("STEREO_CONV (convergence)", buf);
     }
     {
-        const char *v = getenv("STEREO_LOGFILE_PATH");
-        if (v) result_pass("STEREO_LOGFILE_PATH (logging active)", v);
-        else   result_warn("STEREO_LOGFILE_PATH", "not set -- no VKS3D log output");
+        const char *v = getenv("VKS3D_LOG_FILE_PATH");
+        if (v) result_pass("VKS3D_LOG_FILE_PATH (logging active)", v);
+        else   result_warn("VKS3D_LOG_FILE_PATH", "not set -- no VKS3D log output");
     }
 
     /* ---- VKS3D registration ---------------------------------------------- */
