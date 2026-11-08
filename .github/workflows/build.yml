@@ -225,16 +225,16 @@ jobs:
       - name: Release - latest_${{env.Branch}}
         if: github.event_name == 'push'
         run: |
-          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes '${{env.CommitTitle}}
+          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title "${{env.Title}} r${{env.CommitCount}}@${{env.CommitHashShort}}" --notes "${{env.CommitTitle}}
           Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
-          Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}'
+          Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}"
           gh release upload latest_${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
   
       - name: Release - archive-${{env.Branch}}
         if: github.event_name == 'push'
         run: |
-          gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes 'Latest build: https://github.com/${{github.repository}}/releases/latest_${{env.Branch}}
-          Build logs: https://github.com/${{github.repository}}/actions' || true
-          gh release edit archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes 'Latest build: https://github.com/${{github.repository}}/releases/latest_${{env.Branch}}
-          Build logs: https://github.com/${{github.repository}}/actions' || true
+          gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest_${{env.Branch}}
+          Build logs: https://github.com/${{github.repository}}/actions" || true
+          gh release edit archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes "Latest build: https://github.com/${{github.repository}}/releases/latest_${{env.Branch}}
+          Build logs: https://github.com/${{github.repository}}/actions" || true
           gh release upload archive-${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
