@@ -8881,19 +8881,8 @@ bool spirv_patch_stereo_fs(
                         }
                     }
                     bool replacement_pointer_emitted = false;
-                    for (size_t scan = 5; scan < ob.n;)
-                    {
-                        uint32_t sw = ob.w[scan] >> 16;
-                        uint32_t sop = ob.w[scan] & 0xffffu;
-                        if (!sw || scan + sw > ob.n)
-                            break;
-                        if (sop == SpvOpTypePointer && sw >= 4 && ob.w[scan + 1] == replacement_pointer)
-                        {
-                            replacement_pointer_emitted = true;
-                            break;
-                        }
-                        scan += sw;
-                    }
+                    if (image->replacement_pointer_type < id_bound)
+                        replacement_pointer_emitted = emitted_type[image->replacement_pointer_type];
                     if (!replacement_pointer_emitted)
                     {
                         STEREO_LOG(
