@@ -17,7 +17,7 @@ App → Vulkan Loader → VKS3D_x64.dll → Real GPU ICD (nvoglv64.dll / amdvlk6
 
 ## Diagnostics / Verbose Logging
 
-Logging is **opt-in** via the `STEREO_LOGFILE_PATH` environment variable.
+Logging is **opt-in** via the `VKS3D_LOG_FILE_PATH` environment variable.
 When the variable is **not set**, all logging compiles to no-ops and there
 is zero runtime overhead.
 
@@ -34,12 +34,12 @@ intact even if the process crashes.
 
 **Example** (PowerShell, before running vulkaninfo):
 ```powershell
-$env:STEREO_LOGFILE_PATH = "$env:TEMP\vks3d.log"
+$env:VKS3D_LOG_FILE_PATH = "$env:TEMP\vks3d.log"
 vulkaninfo
 notepad $env:TEMP\vks3d.log
 ```
 
-**DebugView** (Sysinternals): set `STEREO_LOGFILE_PATH=debugview` and filter on `[VKS3D`.
+**DebugView** (Sysinternals): set `VKS3D_LOG_FILE_PATH=debugview` and filter on `[VKS3D`.
 
 ### What's logged
 

@@ -1138,6 +1138,22 @@ static void spv_scan(SpvMod *m)
         m->pos_is_block);
 }
 
+/* Vertex shader that has user vertex attributes but never reads a uniform/storage/push
+ * buffer and has no matrix/dot math: it cannot apply a camera/projection transform, so
+ * its vertices are already in clip/screen space (HUD, text, menu sprites).  Works on any
+ * module without hash/binding knowledge; world geometry always reads transform data. */
+static bool spv_vs_unprojected_attr_only(const SpvMod *m)
+{
+    return m->exec_model == SpvExecVertex &&
+           m->has_vertex_attr &&
+           !m->has_buffer_var &&
+           !m->has_matrix_ops &&
+           !m->has_vector_matrix_ops &&
+           m->dot_count == 0 &&
+           !m->proj_found &&
+           !m->has_emit_vertex;
+}
+
 uint64_t hash_spv(const uint32_t *data, size_t words)
 {
     uint64_t h = 1469598103934665603ULL; // FNV offset basis
@@ -3126,7 +3142,7 @@ bool spirv_patch_stereo_vertex(
      */
     if(cfg&&cfg->mono_ui)
     {
-        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.screen_value_count<=4)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex&&!m.has_matrix_ops&&!m.has_vector_matrix_ops)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_matrix_ops);
+        bool ui_candidate=(m.exec_model==SpvExecVertex&&m.pos_is_block&&!m.has_matrix_ops&&!m.has_vector_matrix_ops&&m.has_v2_position_input&&m.dot_count<=2&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.screen_value_count<=4)||(m.exec_model==SpvExecVertex&&m.location0_count>0&&m.screen_value_count>0&&!m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_direct_position_write)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&!m.has_emit_vertex&&!m.has_matrix_ops&&!m.has_vector_matrix_ops)||(m.exec_model==SpvExecVertex&&m.proj_found&&m.dot_count==2&&m.location0_count>0&&m.screen_value_count>0&&m.screen_has_zw_use&&!m.has_emit_vertex&&m.has_matrix_ops)||spv_vs_unprojected_attr_only(&m);
         if(ui_candidate)
         {
             STEREO_LOG("VERTEX_UI_SKIP hash=%016llx exec=%u pos=%u block=%u v2pos=%u loc0_count=%u screen_count=%u zw=%u matrix=%u vmatrix=%u direct=%u emit=%u proj=%u dots=%u gs_in=%u gs_out=%u gs_vertices=%u",(unsigned long long)spv_hash,m.exec_model,m.pos_var,m.pos_is_block,m.has_v2_position_input,m.location0_count,m.screen_value_count,m.screen_has_zw_use,m.has_matrix_ops,m.has_vector_matrix_ops,m.has_direct_position_write,m.emit_count,m.proj_found,m.dot_count,m.geometry_input_mode,m.geometry_output_mode,m.geometry_output_vertices);
@@ -7794,41 +7810,45 @@ bool spirv_patch_stereo_fs(
                         break;
                     if (sop == SpvOpTypeImage && sw >= 9 && in[scan + 1] == in[i + 2])
                     {
-                        uint32_t original_sampled = in[scan + 7];
-                        for (size_t target = 5; target < in_c;)
-                        {
-                            uint32_t tw = in[target] >> 16;
-                            uint32_t top = in[target] & 0xffffu;
-                            if (!tw || target + tw > in_c)
-                                break;
-                            if (top == SpvOpTypeImage && tw >= 9 && in[target + 1] == replacement_image)
-                            {
-                                compatible_image_type =
-                                original_sampled != 2 &&
-                                in[target + 7] != 2 &&
-                                in[scan + 2] == in[target + 2] &&
-                                in[scan + 3] == in[target + 3] &&
-                                in[scan + 5] == in[target + 5] &&
-                                in[scan + 6] == in[target + 6] &&
-                                in[scan + 7] == in[target + 7] &&
-                                in[scan + 8] == in[target + 8];
-                                break;
-                            }
-                            target += tw;
-                        }
+                        compatible_image_type =
+                        image->sampled != 2 &&
+                        in[scan + 2] == image->sampled_type &&
+                        in[scan + 3] == image->dim &&
+                        in[scan + 6] == image->ms &&
+                        in[scan + 7] == image->sampled &&
+                        in[scan + 8] == image->format;
                         break;
                     }
                     scan += sw;
                 }
-                bool patch_original_sampled_type = image->replacement_sampled_type == sampled_id && image->sampled != 2;
-                if (!replacement_sampled_exists && (compatible_image_type || patch_original_sampled_type))
+                bool replacement_pointer_emitted = false;
+                if (image->replacement_pointer_type < id_bound)
+                    replacement_pointer_emitted = emitted_type[image->replacement_pointer_type];
+                bool pointer_uses_sampled_type = false;
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (!sw || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpTypePointer && sw >= 4 &&
+                        in[scan + 2] == SpvStorageClassUniformConstant &&
+                        in[scan + 3] == sampled_id)
+                    {
+                        pointer_uses_sampled_type = true;
+                        break;
+                    }
+                    scan += sw;
+                }
+                if (!replacement_sampled_exists && compatible_image_type &&
+                    (replacement_pointer_emitted || pointer_uses_sampled_type))
                 {
                     sampled_words[2] = replacement_image;
                     STEREO_LOG("FS_PATCH_SAMPLED_IMAGE sampled=%u oldImage=%u newImage=%u", sampled_id, in[i + 2], replacement_image);
                 }
                 else
                 {
-                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_KEEP sampled=%u targetImage=%u existingSampled=%u compatible=%u", sampled_id, replacement_image, existing_sampled_id, compatible_image_type);
+                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_KEEP sampled=%u targetImage=%u existingSampled=%u compatible=%u pointerEmitted=%u", sampled_id, replacement_image, existing_sampled_id, compatible_image_type, replacement_pointer_emitted);
                 }
                 break;
             }
@@ -8378,7 +8398,21 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             /* Emit the reserved cloned array type after its component type is defined. */
-            if (new_array_type == 0 || (new_array_type < id_bound && emitted_type[new_array_type]))
+            bool replacement_image_emitted = false;
+            for (size_t scan = 5; scan < ob.n;)
+            {
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
+                    break;
+                if (sop == SpvOpTypeImage && sw >= 9 && ob.w[scan + 1] == new_array_type)
+                {
+                    replacement_image_emitted = true;
+                    break;
+                }
+                scan += sw;
+            }
+            if (new_array_type == 0 || replacement_image_emitted)
             {
                 i += wc;
                 continue;
@@ -10113,7 +10147,7 @@ bool spirv_patch_stereo_fs(
                 uint32_t sop = in[scan] & 0xffffu;
                 if (sw == 0 || scan + sw > in_c)
                     break;
-                if (sw >= 3 && in[scan + 2] == in[i + 3])
+                if (sop == SpvOpLoad && sw >= 4 && in[scan + 2] == in[i + 3])
                 {
                     sampled_type = in[scan + 1];
                     break;
@@ -10122,20 +10156,38 @@ bool spirv_patch_stereo_fs(
             }
             if (sampled_type)
             {
-                for (size_t scan = 5; scan < in_c;)
+                for (size_t scan = 5; scan < ob.n;)
                 {
-                    uint32_t sw = in[scan] >> 16;
-                    uint32_t sop = in[scan] & 0xffffu;
-                    if (sw == 0 || scan + sw > in_c)
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > ob.n)
                         break;
-                    if (sop == SpvOpTypeSampledImage &&
-                        sw >= 3 &&
-                        in[scan + 1] == sampled_type)
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 &&
+                        ob.w[scan + 1] == sampled_type)
                     {
-                        sampled_image_type = in[scan + 2];
+                        sampled_image_type = ob.w[scan + 2];
                         break;
                     }
                     scan += sw;
+                }
+                if (sampled_image_type)
+                {
+                    w[1] = sampled_image_type;
+                    STEREO_LOG(
+                        "FS_OPIMAGE_USE_SAMPLED_TYPE "
+                        "result=%u "
+                        "sampledImage=%u "
+                        "sampledType=%u "
+                        "imageType=%u",
+                        w[2],
+                        in[i + 3],
+                        sampled_type,
+                        sampled_image_type);
+                    sb_push_n(&ob, w, wc);
+                    if (w[1] < id_bound)
+                        emitted_type[w[1]] = true;
+                    i += wc;
+                    continue;
                 }
             }
             STEREO_LOG(
@@ -12027,7 +12079,7 @@ stereo_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCI,
         _snprintf(
             dp,
             sizeof(dp) - 1,
-            "%s\\%016llx.spv",
+            "%s\\%016llx-_s.spv",
             dump,
             (unsigned long long)h);
         FILE *f = fopen(dp, "rb");
@@ -12791,7 +12843,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 bool mono_ui_gs_pipeline_state=ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&ci->pVertexInputState&&ci->pVertexInputState->vertexBindingDescriptionCount==1&&ci->pVertexInputState->vertexAttributeDescriptionCount==7;
                 bool mono_ui_gs_candidate=sd->stereo.mono_ui&&has_gs&&mono_ui_gs_signature&&mono_ui_gs_pipeline_state;
                 bool mono_ui_always_depth_ui_state=ci->pDepthStencilState&&ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable&&ci->pDepthStencilState->depthCompareOp==VK_COMPARE_OP_ALWAYS&&ci->pInputAssemblyState&&ci->pInputAssemblyState->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-                bool mono_ui_vs_candidate=sd->stereo.mono_ui&&((mono_ui_depth_disabled&&(vs_screen_space||(mono_ui_menu_background&&vs_quad_fs&&!vm.has_matrix_ops&&!vm.has_direct_position_write)))||(mono_ui_passthrough_vs&&mono_ui_passthrough_pipeline)||(mono_ui_always_depth_vs&&mono_ui_always_depth_ui_state));
+                bool mono_ui_unprojected_vs=spv_vs_unprojected_attr_only(&vm);
+                STEREO_LOG("MONO_UI_UNPROJECTED hash=%016llx unprojected=%u buffer_var=%u vertex_attr=%u matrix=%u dots=%u depth_disabled=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),mono_ui_unprojected_vs,vm.has_buffer_var,vm.has_vertex_attr,vm.has_matrix_ops,vm.dot_count,mono_ui_depth_disabled);
+                bool mono_ui_vs_candidate=sd->stereo.mono_ui&&((mono_ui_depth_disabled&&(vs_screen_space||(mono_ui_menu_background&&vs_quad_fs&&!vm.has_matrix_ops&&!vm.has_direct_position_write)||mono_ui_unprojected_vs))||(mono_ui_passthrough_vs&&mono_ui_passthrough_pipeline)||(mono_ui_always_depth_vs&&mono_ui_always_depth_ui_state));
                 STEREO_LOG("PIPELINE_UI_GATE hash=%016llx gs_hash=%016llx mono_ui=%u has_gs=%u gs_inputs=%u gs_signature=%u gs_state=%u gs_skip=%u vs_skip=%u depth_test=%u depth_write=%u bindings=%u attrs=%u screen_space=%u menu_bg=%u quad_fs=%u matrix=%u direct_pos=%u passthrough_vs=%u passthrough_pipeline=%u alpha_blend=%u always_depth_vs=%d always_depth_pipeline=%d always_depth_attrs=%d depth_compare=%d cull=%d blend0=%d index_attrs=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),(unsigned long long)gs_hash,sd->stereo.mono_ui,has_gs,gs_input_count,mono_ui_gs_signature,mono_ui_gs_pipeline_state,mono_ui_gs_candidate,mono_ui_vs_candidate,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:0,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0,vs_screen_space,mono_ui_menu_background,vs_quad_fs,vm.has_matrix_ops,vm.has_direct_position_write,mono_ui_passthrough_vs,mono_ui_passthrough_pipeline,mono_ui_alpha_blend,mono_ui_always_depth_vs,mono_ui_always_depth_pipeline,mono_ui_always_depth_attrs,ci->pDepthStencilState?ci->pDepthStencilState->depthCompareOp:-1,ci->pRasterizationState?ci->pRasterizationState->cullMode:VK_CULL_MODE_FLAG_BITS_MAX_ENUM,ci->pColorBlendState&&ci->pColorBlendState->pAttachments&&ci->pColorBlendState->attachmentCount>0?ci->pColorBlendState->pAttachments[0].blendEnable:-1,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:0);
                 if(mono_ui_gs_candidate||mono_ui_vs_candidate)
                 {
