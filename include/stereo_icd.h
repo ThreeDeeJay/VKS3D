@@ -433,6 +433,10 @@ typedef struct RealDeviceDispatch {
     PFN_vkCmdBeginRenderPass         CmdBeginRenderPass;
     PFN_vkCmdNextSubpass             CmdNextSubpass;
     PFN_vkCmdEndRenderPass           CmdEndRenderPass;
+    PFN_vkCmdBeginRenderPass2        CmdBeginRenderPass2;
+    PFN_vkWaitForPresentKHR          WaitForPresentKHR;
+    PFN_vkCmdCopyImage2              CmdCopyImage2;
+    PFN_vkCmdBlitImage2              CmdBlitImage2;
     PFN_vkCmdBeginRendering          CmdBeginRendering;
     PFN_vkCmdEndRendering            CmdEndRendering;
     PFN_vkCmdExecuteCommands         CmdExecuteCommands;
@@ -504,6 +508,17 @@ typedef struct StereoSwapchain {
     uint32_t    comp_sc_count;
     VkSemaphore comp_acquire_sem;   /* image-available semaphore     */
     VkSemaphore comp_blit_done_sem; /* blit-complete semaphore       */
+    /* Multi-image swapchains: the app is told app_image_count images (>= its
+     * minImageCount); image_count of them are really allocated (1 for modes that
+     * can only own a single render target; the rest alias image 0). */
+    uint32_t    app_image_count;
+    uint32_t    req_image_count;    /* internal image count requested before allocation */
+    uint32_t    present_idx;        /* internal image being presented (QueuePresent)    */
+    uint32_t    cur_idx;            /* internal image most recently acquired            */
+    VkSemaphore *comp_acquire_sems; /* per internal image: real-SC acquire semaphore    */
+    uint32_t    comp_acquire_sem_count;
+    VkSemaphore *comp_blit_sems;    /* per real-SC image: blit-done / present semaphore */
+    uint32_t    comp_blit_sem_count;
     VkImage          *sbs_images;
     uint32_t          sbs_width;
     StereoPresentMode present_mode;
@@ -793,6 +808,26 @@ VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateFramebuffer(VkDevice, const VkFrameb
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyFramebuffer(VkDevice, VkFramebuffer, const VkAllocationCallbacks *);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRenderPass(VkCommandBuffer, const VkRenderPassBeginInfo *, VkSubpassContents);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRenderPass2(VkCommandBuffer, const VkRenderPassBeginInfo *, const VkSubpassBeginInfo *);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyRenderPass(VkDevice, VkRenderPass, const VkAllocationCallbacks *);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_WaitForPresentKHR(VkDevice, VkSwapchainKHR, uint64_t, uint64_t);
+VKAPI_ATTR void     VKAPI_CALL stereo_DestroyImage(VkDevice, VkImage, const VkAllocationCallbacks *);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdCopyImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageCopy *);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBlitImage(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t, const VkImageBlit *, VkFilter);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdCopyImage2(VkCommandBuffer, const VkCopyImageInfo2 *);
+VKAPI_ATTR void     VKAPI_CALL stereo_CmdBlitImage2(VkCommandBuffer, const VkBlitImageInfo2 *);
+/* Physical-device-level wrappers for functions promoted/added after the original stub set.
+ * Pointer params are void* on purpose: the stubs only translate the VkPhysicalDevice handle. */
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceCalibrateableTimeDomainsKHR(VkPhysicalDevice, uint32_t*, void*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceFragmentShadingRatesKHR(VkPhysicalDevice, uint32_t*, void*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceCooperativeMatrixPropertiesKHR(VkPhysicalDevice, uint32_t*, void*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(VkPhysicalDevice, uint32_t*, void*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice, const void*, void*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice, const void*, uint32_t*, void*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(VkPhysicalDevice, const void*, void*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetPhysicalDeviceOpticalFlowImageFormatsNV(VkPhysicalDevice, const void*, uint32_t*, void*);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_AcquireWinrtDisplayNV(VkPhysicalDevice, VkDisplayKHR);
+VKAPI_ATTR VkResult VKAPI_CALL stereo_GetWinrtDisplayNV(VkPhysicalDevice, uint32_t, VkDisplayKHR*);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRenderingInfo);
 VKAPI_ATTR void     VKAPI_CALL stereo_CmdEndRendering(VkCommandBuffer commandBuffer);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateImage(VkDevice, const VkImageCreateInfo*, const VkAllocationCallbacks*, VkImage*);

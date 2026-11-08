@@ -156,7 +156,9 @@ VkResult alt_alloc_stereo_image(StereoDevice *sd, StereoSwapchain *sc,
         .samples       = VK_SAMPLE_COUNT_1_BIT,
         .tiling        = VK_IMAGE_TILING_OPTIMAL,
         .usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                         VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                         VK_IMAGE_USAGE_SAMPLED_BIT,
         .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
@@ -974,8 +976,27 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         "[GPU Compose] real swapchain image_count=%u",
         sc->comp_sc_count);
     VkSemaphoreCreateInfo sinfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_acquire_sem);
-    sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_blit_done_sem);
+    /* Per internal image acquire semaphores (reused only after that image's compose
+     * fence signalled) and per real-swapchain-image present semaphores (reused only
+     * after the real swapchain hands that image out again). */
+    sc->comp_acquire_sem_count = sc->req_image_count ? sc->req_image_count : 1;
+    sc->comp_blit_sem_count    = sc->comp_sc_count;
+    sc->comp_acquire_sems = calloc(sc->comp_acquire_sem_count, sizeof(VkSemaphore));
+    sc->comp_blit_sems    = calloc(sc->comp_blit_sem_count, sizeof(VkSemaphore));
+    if (!sc->comp_acquire_sems || !sc->comp_blit_sems) {
+        free(sc->comp_acquire_sems); sc->comp_acquire_sems = NULL;
+        free(sc->comp_blit_sems);    sc->comp_blit_sems    = NULL;
+        sc->comp_acquire_sem_count = sc->comp_blit_sem_count = 0;
+        free(sc->comp_sc_images);
+        sc->comp_sc_images = NULL;
+        sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
+        sc->real_swapchain = VK_NULL_HANDLE;
+        return false;
+    }
+    for (uint32_t k = 0; k < sc->comp_acquire_sem_count; k++)
+        sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_acquire_sems[k]);
+    for (uint32_t k = 0; k < sc->comp_blit_sem_count; k++)
+        sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_blit_sems[k]);
 
     STEREO_LOG("[GPU Compose] init: sc=%p  %u images  %ux%u  %s",
                (void*)sc->real_swapchain, sc->comp_sc_count,
@@ -994,6 +1015,14 @@ void gpu_compose_sc_destroy(StereoDevice *sd, StereoSwapchain *sc)
         sd->real.DestroySemaphore(sd->real_device, sc->comp_blit_done_sem, NULL);
         sc->comp_blit_done_sem = VK_NULL_HANDLE;
     }
+    for (uint32_t k = 0; sc->comp_acquire_sems && k < sc->comp_acquire_sem_count; k++)
+        if (sc->comp_acquire_sems[k])
+            sd->real.DestroySemaphore(sd->real_device, sc->comp_acquire_sems[k], NULL);
+    for (uint32_t k = 0; sc->comp_blit_sems && k < sc->comp_blit_sem_count; k++)
+        if (sc->comp_blit_sems[k])
+            sd->real.DestroySemaphore(sd->real_device, sc->comp_blit_sems[k], NULL);
+    free(sc->comp_acquire_sems); sc->comp_acquire_sems = NULL; sc->comp_acquire_sem_count = 0;
+    free(sc->comp_blit_sems);    sc->comp_blit_sems    = NULL; sc->comp_blit_sem_count    = 0;
     free(sc->comp_sc_images);
     sc->comp_sc_images = NULL;
     sc->comp_sc_count  = 0;
@@ -1009,16 +1038,21 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         return VK_ERROR_INITIALIZATION_FAILED;
 
     /* Acquire output swapchain image */
+    uint32_t slot = sc->present_idx % (sc->image_count ? sc->image_count : 1);
+    VkSemaphore acq_sem = (sc->comp_acquire_sems && slot < sc->comp_acquire_sem_count)
+        ? sc->comp_acquire_sems[slot] : sc->comp_acquire_sem;
     uint32_t img_idx = 0;
     VkResult res = sd->real.AcquireNextImageKHR(
         sd->real_device, sc->real_swapchain, UINT64_MAX,
-        sc->comp_acquire_sem, VK_NULL_HANDLE, &img_idx);
+        acq_sem, VK_NULL_HANDLE, &img_idx);
     if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) {
         STEREO_ERR("[GPU Compose] AcquireNextImageKHR: %d", res); return res;
     }
 
-    VkCommandBuffer cmd = sc->barrier_cmds[0];
-    VkImage src = sc->stereo_images[0];
+    VkSemaphore blit_sem = (sc->comp_blit_sems && img_idx < sc->comp_blit_sem_count)
+        ? sc->comp_blit_sems[img_idx] : sc->comp_blit_done_sem;
+    VkCommandBuffer cmd = sc->barrier_cmds[slot];
+    VkImage src = sc->stereo_images[slot];
     STEREO_LOG(
         "COMPOSE_SRC sc=%p src=%p img_idx=%u",
         (void *)sc,
@@ -1118,10 +1152,10 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         wsems[i] = wait_sems[i];
         wmsk[i]  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
-    wsems[wait_sem_count] = sc->comp_acquire_sem;
+    wsems[wait_sem_count] = acq_sem;
     wmsk [wait_sem_count] = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
-    sd->real.ResetFences(sd->real_device, 1, &sc->barrier_fences[0]);
+    sd->real.ResetFences(sd->real_device, 1, &sc->barrier_fences[slot]);
 
     VkSubmitInfo sub = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -1131,9 +1165,9 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         .commandBufferCount   = 1,
         .pCommandBuffers      = &cmd,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores    = &sc->comp_blit_done_sem,
+        .pSignalSemaphores    = &blit_sem,
     };
-    res = sd->real.QueueSubmit(queue, 1, &sub, sc->barrier_fences[0]);
+    res = sd->real.QueueSubmit(queue, 1, &sub, sc->barrier_fences[slot]);
     free(wsems); free(wmsk);
     if (res != VK_SUCCESS) { STEREO_ERR("[GPU Compose] QueueSubmit: %d", res); return res; }
 
@@ -1141,7 +1175,7 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
     VkPresentInfoKHR pi = {
         .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores    = &sc->comp_blit_done_sem,
+        .pWaitSemaphores    = &blit_sem,
         .swapchainCount     = 1,
         .pSwapchains        = &sc->real_swapchain,
         .pImageIndices      = &img_idx,
