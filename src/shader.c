@@ -1343,7 +1343,7 @@ typedef struct {
     bool force_far_depth;
     bool procedural_sky;
     uint32_t dyn_ptr_t;     /* PhysicalStorageBuffer ptr-to-vec4 type; 0 = baked constants */
-    uint32_t dyn_addr_c0;   /* uvec2 constant: UBO address      -> {left,right,conv,invconv} */
+    uint32_t dyn_addr_c0;   /* uvec2 constant: UBO address      -> {left,right,conv,invconv} (OpBitcast uvec2 -> PSB ptr) */
     uint32_t dyn_addr_c1;   /* uvec2 constant: UBO address + 16 -> {proj,bg_expand,..}      */
     StereoDebugCtx *dbg;
 } BodyCtx;
@@ -1739,7 +1739,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         uint32_t v0 = (*nid)++, v1 = (*nid)++;
         uint32_t dl = (*nid)++, dr = (*nid)++, dc = (*nid)++, db = (*nid)++;
         {
-            uint32_t w[] = { op_(SpvOpConvertUToPtr, 4), c->dyn_ptr_t, p0, c->dyn_addr_c0 };
+            uint32_t w[] = { op_(SpvOpBitcast, 4), c->dyn_ptr_t, p0, c->dyn_addr_c0 };
             sb_push_n(out, w, 4);
         }
         {
@@ -1747,7 +1747,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
             sb_push_n(out, w, 6);
         }
         {
-            uint32_t w[] = { op_(SpvOpConvertUToPtr, 4), c->dyn_ptr_t, p1, c->dyn_addr_c1 };
+            uint32_t w[] = { op_(SpvOpBitcast, 4), c->dyn_ptr_t, p1, c->dyn_addr_c1 };
             sb_push_n(out, w, 4);
         }
         {
