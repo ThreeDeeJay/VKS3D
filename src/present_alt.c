@@ -1200,8 +1200,8 @@ static uint32_t sample_hotkeys(void)
     uint32_t mask = 0;
     if (GetAsyncKeyState(VK_F3) & 0x8000) mask |= (1u << HOT_DEC_SEP);
     if (GetAsyncKeyState(VK_F4) & 0x8000) mask |= (1u << HOT_INC_SEP);
-    if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_DEC_CONV);
-    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_INC_CONV);
+    if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_INC_CONV);
+    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_DEC_CONV);
     if (GetAsyncKeyState(VK_F7) & 0x8000) mask |= (1u << HOT_SAVE);
     return mask;
 }
