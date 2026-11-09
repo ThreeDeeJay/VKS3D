@@ -1229,8 +1229,9 @@ void hotkeys_poll(StereoDevice *sd)
 
     ULONGLONG now = GetTickCount64();
     double rate = hotkey_repeat_rate;
-    if (GetAsyncKeyState(VK_SHIFT) & 0x8000) rate *= 10.0;
-    if (GetAsyncKeyState(VK_MENU) & 0x8000) rate /= 10.0;
+    float step_multiplier = 1.0f;
+    if (GetAsyncKeyState(VK_SHIFT) & 0x8000) step_multiplier *= 10.0f;
+    if (GetAsyncKeyState(VK_MENU) & 0x8000) step_multiplier /= 10.0f;
     for (uint32_t i = 0; i < 4; i++) {
         if (!(cur & repeat_bits[i])) {
             repeat_start[i] = 0;
@@ -1268,23 +1269,23 @@ void hotkeys_poll(StereoDevice *sd)
     bool changed = false;
 
     if (steps[HOT_DEC_SEP]) {
-        cfg->separation -= cfg->step_separation * (float)steps[HOT_DEC_SEP];
+        cfg->separation -= cfg->step_separation * step_multiplier * (float)steps[HOT_DEC_SEP];
         if (cfg->separation < 0.0f) cfg->separation = 0.0f;
         changed = true;
         STEREO_LOG("[Hotkey] Separation → %.4f", cfg->separation);
     }
     if (steps[HOT_INC_SEP]) {
-        cfg->separation += cfg->step_separation * (float)steps[HOT_INC_SEP];
+        cfg->separation += cfg->step_separation * step_multiplier * (float)steps[HOT_INC_SEP];
         changed = true;
         STEREO_LOG("[Hotkey] Separation → %.4f", cfg->separation);
     }
     if (steps[HOT_DEC_CONV]) {
-        cfg->convergence -= cfg->step_convergence * (float)steps[HOT_DEC_CONV];
+        cfg->convergence -= cfg->step_convergence * step_multiplier * (float)steps[HOT_DEC_CONV];
         changed = true;
         STEREO_LOG("[Hotkey] Convergence → %.4f", cfg->convergence);
     }
     if (steps[HOT_INC_CONV]) {
-        cfg->convergence += cfg->step_convergence * (float)steps[HOT_INC_CONV];
+        cfg->convergence += cfg->step_convergence * step_multiplier * (float)steps[HOT_INC_CONV];
         changed = true;
         STEREO_LOG("[Hotkey] Convergence → %.4f", cfg->convergence);
     }
