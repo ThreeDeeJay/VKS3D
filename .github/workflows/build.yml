@@ -196,16 +196,16 @@ jobs:
       - name: Deploy
         run: |
           mkdir "Release"
-          cp "Artifacts\Win32\Release\VKS3D_x86.dll" "Release/VKS3D_x86.dll"
-          cp "Artifacts\Win64\Release\VKS3D_x64.dll" "Release/VKS3D_x64.dll"
-          cp "manifest\VKS3D_x86.json" "Release/VKS3D_x86.json"
-          cp "manifest\VKS3D_x64.json" "Release/VKS3D_x64.json"
-          cp "vks3d.ini" "Release/vks3d.ini"
-          cp "scripts\VKS3D_Install.bat" "Release/VKS3D_Install.bat"
-          cp "scripts\VKS3D_Uninstall.bat" "Release/VKS3D_Uninstall.bat"
-          cp "scripts\VKS3D_Debug.cmd" "Release/VKS3D_Debug.cmd"
-          cp "LICENSE" "Release/VKS3D_License.txt"
-          cp "README.md" "Release/VKS3D_ReadMe.txt"
+          mv "Artifacts\Win32\VKS3D_x86.dll" "Release/VKS3D_x86.dll"
+          mv "Artifacts\Win64\VKS3D_x64.dll" "Release/VKS3D_x64.dll"
+          mv "manifest\VKS3D_x86.json" "Release/VKS3D_x86.json"
+          mv "manifest\VKS3D_x64.json" "Release/VKS3D_x64.json"
+          mv "VKS3D.ini" "Release/VKS3D.ini"
+          mv "scripts\VKS3D_Install.bat" "Release/VKS3D_Install.bat"
+          mv "scripts\VKS3D_Uninstall.bat" "Release/VKS3D_Uninstall.bat"
+          mv "scripts\VKS3D_Debug.cmd" "Release/VKS3D_Debug.cmd"
+          mv "LICENSE" "Release/VKS3D_License.txt"
+          mv "README.md" "Release/VKS3D_ReadMe.txt"
           curl -L "https://raw.githubusercontent.com/oneup03/NV3D-Lib/refs/heads/main/LICENSE" -o "Release/License_NV3D-Lib.txt"
   
       - name: Compress artifacts
