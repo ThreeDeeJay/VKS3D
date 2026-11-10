@@ -13068,7 +13068,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        if ((vs_fullscreen || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
+        if ((((is_quad && vs_fullscreen && !vs_screen_space)) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
             !has_ms &&
             !has_gs &&
             !has_tes &&
@@ -13847,6 +13847,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 e->words,
                 (void*)ci->pStages[vs_stage].module);
             STEREO_LOG(
+                "VS_PIPE_STATE hash=%016llx topology=%u cull=%u front=%u depth_test=%u depth_write=%u depth_compare=%u",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                ci->pInputAssemblyState ? ci->pInputAssemblyState->topology : UINT32_MAX,
+                ci->pRasterizationState ? ci->pRasterizationState->cullMode : UINT32_MAX,
+                ci->pRasterizationState ? ci->pRasterizationState->frontFace : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthTestEnable : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthWriteEnable : UINT32_MAX,
+                ci->pDepthStencilState ? ci->pDepthStencilState->depthCompareOp : UINT32_MAX);
+            STEREO_LOG(
                 "VS_CONTEXT hash=%016llx rp=%p mv=%d color=%p depth=%d",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 (void*)ci->renderPass,
@@ -13913,14 +13922,31 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 false,
                 false
             };
+            bool procedural_sky = vs_procedural_sky && sd->stereo.sky_extend;
+            bool flatten_sky = vs_background && !vs_procedural_sky && sd->stereo.sky_flatten;
+            bool force_sky_depth = flatten_sky || procedural_sky;
+            STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u uv_quad=%u",
+                (unsigned long long)hash_spv(e->spv, e->words),
+                vs_background,
+                procedural_sky,
+                flatten_sky,
+                vs_quad_fs,
+                vs_procedural_sky && !vs_quad_fs,
+                vs_uv_quad);
+            if (vs_uv_quad)
+            {
+                STEREO_LOG("PATHB_SKIP_UV_QUAD hash=%016llx",
+                    (unsigned long long)hash_spv(e->spv, e->words));
+                continue;
+            }
             if (!spirv_patch_stereo_vertex(
                     &sd->stereo,
                     e->spv, e->words,
                     &patched, &pc2,
                     lo, ro, conv,
                     /*inj_vi=*/true,
-                    false,
-                    false,
+                    force_sky_depth,
+                    procedural_sky,
                     dbgB)) {
                 STEREO_LOG("PATHB_RESULT p=%u hash=%016llx PATCH_FAILED",p,(unsigned long long)hash_spv(e->spv, e->words));
                 continue;
