@@ -1196,16 +1196,114 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
 static double hotkey_repeat_rate = 10.0;
 #define HOTKEY_REPEAT_DELAY_MS 250
 
-static uint32_t sample_hotkeys(void)
+#define HOT_MOD_CTRL  1u
+#define HOT_MOD_SHIFT 2u
+#define HOT_MOD_ALT   4u
+
+typedef struct HotkeyBinding {
+    int key;
+    uint32_t modifiers;
+} HotkeyBinding;
+
+static int hotkey_parse_vk(const char *name)
 {
-    SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
-    if (!(ctrl & 0x8000)) return 0;
+    static const struct { const char *name; int vk; } keys[] = {
+        {"VK_BACK", VK_BACK}, {"VK_TAB", VK_TAB}, {"VK_RETURN", VK_RETURN},
+        {"VK_PAUSE", VK_PAUSE}, {"VK_CAPITAL", VK_CAPITAL}, {"VK_ESCAPE", VK_ESCAPE},
+        {"VK_SPACE", VK_SPACE}, {"VK_PRIOR", VK_PRIOR}, {"VK_NEXT", VK_NEXT},
+        {"VK_END", VK_END}, {"VK_HOME", VK_HOME}, {"VK_LEFT", VK_LEFT},
+        {"VK_UP", VK_UP}, {"VK_RIGHT", VK_RIGHT}, {"VK_DOWN", VK_DOWN},
+        {"VK_INSERT", VK_INSERT}, {"VK_DELETE", VK_DELETE},
+        {"VK_CONTROL", VK_CONTROL}, {"VK_LCONTROL", VK_LCONTROL}, {"VK_RCONTROL", VK_RCONTROL},
+        {"VK_SHIFT", VK_SHIFT}, {"VK_LSHIFT", VK_LSHIFT}, {"VK_RSHIFT", VK_RSHIFT},
+        {"VK_MENU", VK_MENU}, {"VK_LMENU", VK_LMENU}, {"VK_RMENU", VK_RMENU},
+        {"VK_LWIN", VK_LWIN}, {"VK_RWIN", VK_RWIN},
+        {"VK_OEM_PLUS", VK_OEM_PLUS}, {"VK_OEM_MINUS", VK_OEM_MINUS},
+        {"VK_OEM_COMMA", VK_OEM_COMMA}, {"VK_OEM_PERIOD", VK_OEM_PERIOD}
+    };
+    if (!name || strncmp(name, "VK_", 3) != 0) return 0;
+    if (name[3] >= 'A' && name[3] <= 'Z' && name[4] == '\0') return name[3];
+    if (name[3] >= '0' && name[3] <= '9' && name[4] == '\0') return name[3];
+    if (name[3] == 'F') {
+        char *end = NULL;
+        long n = strtol(name + 4, &end, 10);
+        if (end && *end == '\0' && n >= 1 && n <= 24) return VK_F1 + (int)n - 1;
+    }
+    for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++)
+        if (strcmp(name, keys[i].name) == 0) return keys[i].vk;
+    return 0;
+}
+
+static uint32_t hotkey_modifier_flag(int vk)
+{
+    if (vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL) return HOT_MOD_CTRL;
+    if (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) return HOT_MOD_SHIFT;
+    if (vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU) return HOT_MOD_ALT;
+    return 0;
+}
+
+static HotkeyBinding hotkey_parse(const char *text)
+{
+    HotkeyBinding binding = {0, 0};
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s", text ? text : "");
+    char *context = NULL;
+    char *token = strtok_s(buf, "+", &context);
+    int values[8];
+    uint32_t count = 0;
+    while (token && count < 8) {
+        while (*token == ' ' || *token == '\t') token++;
+        char *end = token + strlen(token);
+        while (end > token && (end[-1] == ' ' || end[-1] == '\t')) *--end = '\0';
+        int vk = hotkey_parse_vk(token);
+        if (!vk) return (HotkeyBinding){0, 0};
+        values[count++] = vk;
+        token = strtok_s(NULL, "+", &context);
+    }
+    if (count == 1) {
+        binding.key = values[0];
+        return binding;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t flag = hotkey_modifier_flag(values[i]);
+        if (flag) binding.modifiers |= flag;
+        else binding.key = values[i];
+    }
+    return binding;
+}
+
+static bool hotkey_key_down(int vk)
+{
+    if (vk == VK_CONTROL)
+        return (GetAsyncKeyState(VK_CONTROL) | GetAsyncKeyState(VK_LCONTROL) | GetAsyncKeyState(VK_RCONTROL)) & 0x8000;
+    if (vk == VK_SHIFT)
+        return (GetAsyncKeyState(VK_SHIFT) | GetAsyncKeyState(VK_LSHIFT) | GetAsyncKeyState(VK_RSHIFT)) & 0x8000;
+    if (vk == VK_MENU)
+        return (GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LMENU) | GetAsyncKeyState(VK_RMENU)) & 0x8000;
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+static bool hotkey_binding_down(const HotkeyBinding *binding)
+{
+    if (!binding->key) return false;
+    if ((binding->modifiers & HOT_MOD_CTRL) && !hotkey_key_down(VK_CONTROL)) return false;
+    if ((binding->modifiers & HOT_MOD_SHIFT) && !hotkey_key_down(VK_SHIFT)) return false;
+    if ((binding->modifiers & HOT_MOD_ALT) && !hotkey_key_down(VK_MENU)) return false;
+    return hotkey_key_down(binding->key);
+}
+
+static uint32_t sample_hotkeys(const StereoConfig *cfg)
+{
+    HotkeyBinding bindings[5] = {
+        hotkey_parse(cfg->hotkey_separation_decrease),
+        hotkey_parse(cfg->hotkey_separation_increase),
+        hotkey_parse(cfg->hotkey_convergence_decrease),
+        hotkey_parse(cfg->hotkey_convergence_increase),
+        hotkey_parse(cfg->hotkey_save_settings)
+    };
     uint32_t mask = 0;
-    if (GetAsyncKeyState(VK_F3) & 0x8000) mask |= (1u << HOT_DEC_SEP);
-    if (GetAsyncKeyState(VK_F4) & 0x8000) mask |= (1u << HOT_INC_SEP);
-    if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_INC_CONV);
-    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_DEC_CONV);
-    if (GetAsyncKeyState(VK_F7) & 0x8000) mask |= (1u << HOT_SAVE);
+    for (uint32_t i = 0; i < 5; i++)
+        if (hotkey_binding_down(&bindings[i])) mask |= (1u << i);
     return mask;
 }
 
@@ -1222,7 +1320,7 @@ void hotkeys_poll(StereoDevice *sd)
         1u << HOT_INC_CONV
     };
     uint32_t steps[4] = {0, 0, 0, 0};
-    uint32_t cur = sample_hotkeys();
+    uint32_t cur = sample_hotkeys(&sd->stereo);
     uint32_t prev = sd->hotkey_prev;
     uint32_t rise = cur & ~prev;
     sd->hotkey_prev = cur;
@@ -1230,8 +1328,10 @@ void hotkeys_poll(StereoDevice *sd)
     ULONGLONG now = GetTickCount64();
     double rate = hotkey_repeat_rate;
     float step_multiplier = 1.0f;
-    if ((GetAsyncKeyState(VK_SHIFT) | GetAsyncKeyState(VK_LSHIFT) | GetAsyncKeyState(VK_RSHIFT)) & 0x8000) step_multiplier *= 10.0f;
-    if ((GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LMENU) | GetAsyncKeyState(VK_RMENU)) & 0x8000) step_multiplier /= 10.0f;
+    HotkeyBinding rate_increase = hotkey_parse(sd->stereo.hotkey_rate_increase_modifier);
+    HotkeyBinding rate_decrease = hotkey_parse(sd->stereo.hotkey_rate_decrease_modifier);
+    if (hotkey_binding_down(&rate_increase)) step_multiplier *= 10.0f;
+    if (hotkey_binding_down(&rate_decrease)) step_multiplier /= 10.0f;
     for (uint32_t i = 0; i < 4; i++) {
         if (!(cur & repeat_bits[i])) {
             repeat_start[i] = 0;
