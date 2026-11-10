@@ -1380,12 +1380,12 @@ void hotkeys_poll(StereoDevice *sd)
         STEREO_LOG("[Hotkey] Separation → %.4f", cfg->separation);
     }
     if (steps[HOT_DEC_CONV]) {
-        if (cfg->convergence < 0.0f) cfg->convergence += cfg->step_convergence * step_multiplier * (float)steps[HOT_DEC_CONV];
+        if (cfg->convergence < 1.0f) cfg->convergence += cfg->step_convergence * step_multiplier * (float)steps[HOT_DEC_CONV];
         changed = true;
         STEREO_LOG("[Hotkey] Convergence → %.4f", cfg->convergence);
     }
     if (steps[HOT_INC_CONV]) {
-        if (cfg->convergence < 0.0f) cfg->convergence -= cfg->step_convergence * step_multiplier * (float)steps[HOT_INC_CONV];
+        if (cfg->convergence > 0.0f) cfg->convergence -= cfg->step_convergence * step_multiplier * (float)steps[HOT_INC_CONV];
         changed = true;
         STEREO_LOG("[Hotkey] Convergence → %.4f", cfg->convergence);
     }
