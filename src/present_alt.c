@@ -1198,24 +1198,13 @@ static double hotkey_repeat_rate = 10.0;
 
 static uint32_t sample_hotkeys(void)
 {
-    static uint32_t prev_diag = UINT32_MAX;
     SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
-    SHORT lctrl = GetAsyncKeyState(VK_LCONTROL);
-    SHORT rctrl = GetAsyncKeyState(VK_RCONTROL);
-    SHORT f6 = GetAsyncKeyState(VK_F6);
-    SHORT lshift = GetAsyncKeyState(VK_LSHIFT);
-    SHORT rshift = GetAsyncKeyState(VK_RSHIFT);
-    uint32_t diag = ((ctrl & 0x8000) ? 1u : 0u) | ((lctrl & 0x8000) ? 2u : 0u) | ((rctrl & 0x8000) ? 4u : 0u) | ((f6 & 0x8000) ? 8u : 0u) | ((lshift & 0x8000) ? 16u : 0u) | ((rshift & 0x8000) ? 32u : 0u);
-    if (diag != prev_diag) {
-        STEREO_LOG("[Hotkey] Ctrl+F6 state: ctrl=%d lctrl=%d rctrl=%d f6=%d leftShift=%d rightShift=%d", !!(ctrl & 0x8000), !!(lctrl & 0x8000), !!(rctrl & 0x8000), !!(f6 & 0x8000), !!(lshift & 0x8000), !!(rshift & 0x8000));
-        prev_diag = diag;
-    }
     if (!(ctrl & 0x8000)) return 0;
     uint32_t mask = 0;
     if (GetAsyncKeyState(VK_F3) & 0x8000) mask |= (1u << HOT_DEC_SEP);
     if (GetAsyncKeyState(VK_F4) & 0x8000) mask |= (1u << HOT_INC_SEP);
     if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_INC_CONV);
-    if (f6 & 0x8000) mask |= (1u << HOT_DEC_CONV);
+    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_DEC_CONV);
     if (GetAsyncKeyState(VK_F7) & 0x8000) mask |= (1u << HOT_SAVE);
     return mask;
 }
@@ -1241,23 +1230,8 @@ void hotkeys_poll(StereoDevice *sd)
     ULONGLONG now = GetTickCount64();
     double rate = hotkey_repeat_rate;
     float step_multiplier = 1.0f;
-    static bool prev_lshift = false, prev_rshift = false;
-    SHORT ls = GetAsyncKeyState(VK_LSHIFT);
-    SHORT rs = GetAsyncKeyState(VK_RSHIFT);
-    SHORT gs = GetAsyncKeyState(VK_SHIFT);
-    bool lshift = ((ls | GetKeyState(VK_LSHIFT)) & 0x8000) != 0;
-    bool rshift = (rs & 0x8000) != 0;
-    bool gshift = (gs & 0x8000) != 0;
-    if (lshift != prev_lshift || rshift != prev_rshift) {
-        STEREO_LOG("[Hotkey] Shift state: left=%d right=%d generic=%d", lshift, rshift, gshift);
-        prev_lshift = lshift;
-        prev_rshift = rshift;
-    }
-    if (lshift || rshift || gshift) step_multiplier *= 10.0f;
+    if ((GetAsyncKeyState(VK_SHIFT) | GetAsyncKeyState(VK_LSHIFT) | GetAsyncKeyState(VK_RSHIFT)) & 0x8000) step_multiplier *= 10.0f;
     if ((GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LMENU) | GetAsyncKeyState(VK_RMENU)) & 0x8000) step_multiplier /= 10.0f;
-    if (cur & (1u << HOT_DEC_CONV)) {
-        STEREO_LOG("[Hotkey] DEC_CONV modifier: left=%d right=%d generic=%d multiplier=%.1f", lshift, rshift, gshift, step_multiplier);
-    }
     for (uint32_t i = 0; i < 4; i++) {
         if (!(cur & repeat_bits[i])) {
             repeat_start[i] = 0;
