@@ -1,3 +1,10 @@
+@echo off
+
+PushD "%~dp0"
+If not "%*"=="" (
+    Call VKS3D_Debug.cmd %*
+)
+
 <# :
 @echo off
 setx DXVK_STATE_CACHE "0" 1>>NUL 2>&1
