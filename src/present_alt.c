@@ -1198,8 +1198,9 @@ static double hotkey_repeat_rate = 10.0;
 
 static uint32_t sample_hotkeys(void)
 {
-    SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
-    if (!(ctrl & 0x8000)) return 0;
+    SHORT lctrl = GetAsyncKeyState(VK_LCONTROL);
+    SHORT rctrl = GetAsyncKeyState(VK_RCONTROL);
+    if (!((lctrl | rctrl) & 0x8000)) return 0;
     uint32_t mask = 0;
     if (GetAsyncKeyState(VK_F3) & 0x8000) mask |= (1u << HOT_DEC_SEP);
     if (GetAsyncKeyState(VK_F4) & 0x8000) mask |= (1u << HOT_INC_SEP);
