@@ -60,11 +60,11 @@ If not "%~1"=="" (
                     pushD "%%~dpA"
                     Set DXVK_STATE_CACHE=0
                     Set DXVK_LOG_PATH=!DumpPath!
-                    Set VKD3D_LOG_FILE=!DumpPath!/%%~nA+VKD3D.log
+                    Set VKD3D_LOG_FILE=!DumpPath!/VKD3D.log
                     Set VKD3D_SHADER_CACHE_PATH=0
                     Set VKD3D_VULKAN_DEVICE=0
-                    Set STEREO_LOGFILE_PATH=!DumpPath!/%%~nA+VKS3D.log
-                    Set VKS3D_LOG_FILE_PATH=!DumpPath!/%%~nA+VKS3D.log
+                    Set STEREO_LOGFILE_PATH=!DumpPath!/VKS3D.log
+                    Set VKS3D_LOG_FILE_PATH=!DumpPath!/VKS3D.log
                     Set VKS3D_DUMP_SPIRV=!DumpPath!
                     if not exist "!DumpPath!" (
                         mkdir "!DumpPath!"
@@ -91,7 +91,6 @@ If not "%~1"=="" (
                        echo %%~nA reported non-zero return code ^(!ErrorLevel!^). Re-running without launch parameters.
                        "%%~dpA%%~nxA" 
                    )
-                    If exist "!DumpPath!/%%~nA+VKS3D.log" (Start "" "!DumpPath!/%%~nA+VKS3D.log")
                     If defined VKS3D_DUMP_SPIRV (
                         If exist "!DumpPath!/*.spv" (
                             If exist "!VULKAN_SDK!\Bin\*.exe" (
@@ -146,26 +145,28 @@ If not "%~1"=="" (
         )
     )
 ) else (
+    Set "DumpPath=%~dp0VKS3D_Dump"
+    Set "DumpPath=!DumpPath:/=\!"
     Echo [93mNo drag and drop input specified.
     Echo [94mEnabling temporary logging and shader dumping for games that fail to dump them via drag and drop...
-    setx VKS3D_DUMP_SPIRV "%~dp0VKS3D_Dump" 1>>NUL 2>&1
-    setx STEREO_LOGFILE_PATH "%~dp0VKS3D_Dump\VKS3D.log" 1>>NUL 2>&1
-    setx VKS3D_LOG_FILE_PATH "%~dp0VKS3D_Dump\VKS3D.log" 1>>NUL 2>&1
-    setx DXVK_LOG_PATH "%~dp0VKS3D_Dump" 1>>NUL 2>&1
-    setx VKD3D_SHADER_DUMP_PATH "%~dp0VKS3D_Dump" 1>>NUL 2>&1
-    setx VKD3D_LOG_FILE "%~dp0VKS3D_Dump\VKD3D.log" 1>>NUL 2>&1
-    If not exist "%~dp0VKS3D_Dump" (MkDir "%~dp0VKS3D_Dump")
+    setx VKS3D_DUMP_SPIRV "!DumpPath!" 1>>NUL 2>&1
+    setx STEREO_LOGFILE_PATH "!DumpPath!\VKS3D.log" 1>>NUL 2>&1
+    setx VKS3D_LOG_FILE_PATH "!DumpPath!\VKS3D.log" 1>>NUL 2>&1
+    setx DXVK_LOG_PATH "!DumpPath!" 1>>NUL 2>&1
+    setx VKD3D_SHADER_DUMP_PATH "!DumpPath!" 1>>NUL 2>&1
+    setx VKD3D_LOG_FILE "!DumpPath!\VKD3D.log" 1>>NUL 2>&1
+    If not exist "!DumpPath!" (MkDir "!DumpPath!")
     Echo [92mDone.
     Echo.
     Echo [96mPress Enter after running and closing a game using Vulkan ^(native or wrapped to it^) to validate the shader dumps from:
-    Echo "%~dp0VKS3D_Dump\*.spv"
+    Echo "!DumpPath!\*.spv"
     Echo Then dumping and logging will be disabled, or you can just close this window now to keep them enabled
     Echo [93m^(not recommended to do permanently^).
     pause >Nul
     Echo [0m
-    If exist "%~dp0VKS3D_Dump\*.spv" (
+    If exist "!DumpPath!\*.spv" (
         If exist "!VULKAN_SDK!\Bin\*.exe" (
-            pushD "%~dp0VKS3D_Dump"
+            pushD "!DumpPath!"
             Set /A Warnings=0
             Set /A Errors=0
             For %%S in (*.spv) do (
@@ -197,6 +198,12 @@ If not "%~1"=="" (
         )
     )
 )
+If not defined Run (
+    If exist "!DumpPath!\VKS3D.log" (
+        Set "Run=!DumpPath!\VKS3D.log"
+    )
+)
+
 If "!ValidationStarted!"=="True" (
     Echo.
     Echo Patched shader dump report:
