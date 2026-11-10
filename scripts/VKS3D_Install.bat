@@ -15,7 +15,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$d=$env:VKS3D_DIR; $
 pause & exit /b
 #>
 # ============================================================================
-# VKS3D — Vulkan Stereoscopic ICD Installer  (self-contained in install.bat)
+# VKS3D — Vulkan Stereoscopic ICD Installer  (self-contained in VKS3D_Install.bat)
 # ============================================================================
 $ErrorActionPreference = "Stop"
 $InstallDir = $env:VKS3D_DIR
@@ -72,7 +72,7 @@ foreach ($entry in $Entries) {
 }
 
 Write-Host "Now you can just copy VKS3D's JSON+DLL+INI to any game folder to load it independently of other portable installations."
-Write-Host "No need to run this script again unless you've run VKS3D's Uninstall.bat script."
+Write-Host "No need to run this script again unless you've run VKS3D_Uninstall.bat script."
 Write-Host ""
 Write-Host "Press Enter to install in system-wide mode instead (all games would load VKS3D from this folder)" -ForegroundColor Cyan
 Read-Host
@@ -117,5 +117,5 @@ foreach ($entry in $Entries) {
 
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
-Write-Host "VKS3D is the sole active Vulkan ICD. Run uninstall.bat to restore others." -ForegroundColor Cyan
+Write-Host "VKS3D is the sole active Vulkan ICD. Run VKS3D_Uninstall.bat to restore others." -ForegroundColor Cyan
 Write-Host ""

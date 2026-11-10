@@ -157,10 +157,6 @@ jobs:
         name: ${{env.Title}}-${{matrix.Settings.Name}}-${{matrix.Configuration}}
         path: |
           build/${{matrix.Configuration}}/VKS3D_${{matrix.Settings.Architecture}}.dll
-          build/${{matrix.Configuration}}/vks3d_diag.exe
-          build/tests/${{matrix.Configuration}}/test_stereo_math.exe
-          build/tests/${{matrix.Configuration}}/test_spirv_patch.exe
-          build/tests/${{matrix.Configuration}}/VKS3D_demo.exe
 
   Release:
     name: Release
@@ -205,11 +201,11 @@ jobs:
           cp "manifest\VKS3D_x86.json" "Release/VKS3D_x86.json"
           cp "manifest\VKS3D_x64.json" "Release/VKS3D_x64.json"
           cp "vks3d.ini" "Release/vks3d.ini"
-          cp "scripts\install.bat" "Release/Install.bat"
-          cp "scripts\uninstall.bat" "Release/Uninstall.bat"
-          cp "scripts\debug.cmd" "Release/debug.cmd"
-          cp "LICENSE" "Release/License.txt"
-          cp "README.md" "Release/ReadMe.txt"
+          cp "scripts\VKS3D_Install.bat" "Release/VKS3D_Install.bat"
+          cp "scripts\VKS3D_Uninstall.bat" "Release/VKS3D_Uninstall.bat"
+          cp "scripts\VKS3D_Debug.cmd" "Release/VKS3D_Debug.cmd"
+          cp "LICENSE" "Release/VKS3D_License.txt"
+          cp "README.md" "Release/VKS3D_ReadMe.txt"
           curl -L "https://raw.githubusercontent.com/oneup03/NV3D-Lib/refs/heads/main/LICENSE" -o "Release/License_NV3D-Lib.txt"
   
       - name: Compress artifacts
