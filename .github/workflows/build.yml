@@ -206,8 +206,7 @@ jobs:
           mv "scripts\VKS3D_Debug.cmd" "Release/VKS3D_Debug.cmd"
           mv "LICENSE" "Release/VKS3D_License.txt"
           mv "README.md" "Release/VKS3D_ReadMe.txt"
-          gh api repos/${{github.repository}}/releases/tags/stable --jq .body > "VKS3D_ReadMe.md" || true
-          python "scripts\VKS3D_Release_Notes.py" > "Release/VKS3D_ReadMe.txt" || true
+          gh api repos/${{github.repository}}/releases/tags/stable --jq .body > "Release/VKS3D_ReadMe.txt" || true
           curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/oneup03/NV3D-Lib/refs/heads/main/LICENSE" -o "Release/VKS3D_License_NV3D-Lib.txt"
   
       - name: Compress artifacts
