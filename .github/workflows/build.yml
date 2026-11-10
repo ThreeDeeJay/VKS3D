@@ -210,6 +210,7 @@ jobs:
           cp "scripts\debug.cmd" "Release/debug.cmd"
           cp "LICENSE" "Release/License.txt"
           cp "README.md" "Release/ReadMe.txt"
+          curl -L "https://raw.githubusercontent.com/oneup03/NV3D-Lib/refs/heads/main/LICENSE" -o "Release/License_NV3D-Lib.txt"
   
       - name: Compress artifacts
         if: github.event_name == 'push'
