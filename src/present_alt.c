@@ -1244,6 +1244,9 @@ void hotkeys_poll(StereoDevice *sd)
     }
     if (lshift || rshift || gshift) step_multiplier *= 10.0f;
     if ((GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LMENU) | GetAsyncKeyState(VK_RMENU)) & 0x8000) step_multiplier /= 10.0f;
+    if (cur & (1u << HOT_DEC_CONV)) {
+        STEREO_LOG("[Hotkey] DEC_CONV modifier: left=%d right=%d generic=%d multiplier=%.1f", lshift, rshift, gshift, step_multiplier);
+    }
     for (uint32_t i = 0; i < 4; i++) {
         if (!(cur & repeat_bits[i])) {
             repeat_start[i] = 0;
