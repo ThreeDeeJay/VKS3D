@@ -93,6 +93,7 @@ Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $Inst
 Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "debug.cmd")
 Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "Portable.reg")
 Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "Install.bat")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "License_NV3D-Lib.txt")
 
 # Schedule self-deletion and cleanup.vbs deletion using a vbscript trick to avoid batch file reference errors
 $BatchPath = Join-Path $InstallDir "Uninstall.bat"
