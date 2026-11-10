@@ -216,6 +216,7 @@ typedef struct StereoConfig {
     StereoProjectionMode    projection;
     float                   step_separation;
     float                   step_convergence;
+    uint64_t                dyn_addr;   /* device address of StereoUBO (0 = bake offsets into shaders) */
 } StereoConfig;
 
 void stereo_config_init(StereoConfig *cfg);
@@ -435,6 +436,7 @@ typedef struct RealDeviceDispatch {
     PFN_vkCmdEndRenderPass           CmdEndRenderPass;
     PFN_vkCmdBeginRenderPass2        CmdBeginRenderPass2;
     PFN_vkWaitForPresentKHR          WaitForPresentKHR;
+    PFN_vkGetBufferDeviceAddress     GetBufferDeviceAddress;
     PFN_vkCmdCopyImage2              CmdCopyImage2;
     PFN_vkCmdBlitImage2              CmdBlitImage2;
     PFN_vkCmdBeginRendering          CmdBeginRendering;
@@ -699,8 +701,9 @@ typedef struct StereoUBO {
     float convergence;
     float inv_convergence;
     float projection_mode;
-    float _pad[3];
-} StereoUBO;
+    float bg_expand;   /* max(|left*conv|, |right*conv|) for sky/background widening */
+    float _pad[2];
+} StereoUBO;   /* 32 bytes: read by patched shaders as 2 x vec4 through buffer device address */
 
 /* -- Object lookup helpers ------------------------------------------------- */
 StereoInstance  *stereo_instance_from_handle(VkInstance h);

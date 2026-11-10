@@ -1193,6 +1193,9 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
 #define HOT_INC_CONV  3
 #define HOT_SAVE      4
 
+static double hotkey_repeat_rate = 10.0;
+#define HOTKEY_REPEAT_DELAY_MS 250
+
 static uint32_t sample_hotkeys(void)
 {
     SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
@@ -1200,41 +1203,89 @@ static uint32_t sample_hotkeys(void)
     uint32_t mask = 0;
     if (GetAsyncKeyState(VK_F3) & 0x8000) mask |= (1u << HOT_DEC_SEP);
     if (GetAsyncKeyState(VK_F4) & 0x8000) mask |= (1u << HOT_INC_SEP);
-    if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_DEC_CONV);
-    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_INC_CONV);
+    if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_INC_CONV);
+    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_DEC_CONV);
     if (GetAsyncKeyState(VK_F7) & 0x8000) mask |= (1u << HOT_SAVE);
     return mask;
 }
 
 void hotkeys_poll(StereoDevice *sd)
 {
-    uint32_t cur  = sample_hotkeys();
+    static ULONGLONG repeat_start[4] = {0, 0, 0, 0};
+    static ULONGLONG repeat_last[4] = {0, 0, 0, 0};
+    static bool repeat_started[4] = {false, false, false, false};
+    static double repeat_accum[4] = {0.0, 0.0, 0.0, 0.0};
+    uint32_t repeat_bits[4] = {
+        1u << HOT_DEC_SEP,
+        1u << HOT_INC_SEP,
+        1u << HOT_DEC_CONV,
+        1u << HOT_INC_CONV
+    };
+    uint32_t steps[4] = {0, 0, 0, 0};
+    uint32_t cur = sample_hotkeys();
     uint32_t prev = sd->hotkey_prev;
     uint32_t rise = cur & ~prev;
     sd->hotkey_prev = cur;
-    if (!rise) return;
 
+    ULONGLONG now = GetTickCount64();
+    double rate = hotkey_repeat_rate;
+    float step_multiplier = 1.0f;
+    if ((GetAsyncKeyState(VK_SHIFT) | GetAsyncKeyState(VK_LSHIFT) | GetAsyncKeyState(VK_RSHIFT)) & 0x8000) step_multiplier *= 10.0f;
+    if ((GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LMENU) | GetAsyncKeyState(VK_RMENU)) & 0x8000) step_multiplier /= 10.0f;
+    for (uint32_t i = 0; i < 4; i++) {
+        if (!(cur & repeat_bits[i])) {
+            repeat_start[i] = 0;
+            repeat_last[i] = 0;
+            repeat_started[i] = false;
+            repeat_accum[i] = 0.0;
+            continue;
+        }
+        if (rise & repeat_bits[i]) {
+            steps[i] = 1;
+            repeat_start[i] = now + HOTKEY_REPEAT_DELAY_MS;
+            repeat_last[i] = 0;
+            repeat_started[i] = false;
+            repeat_accum[i] = 0.0;
+            continue;
+        }
+        if (!repeat_started[i]) {
+            if (now < repeat_start[i]) continue;
+            double elapsed = (double)(now - repeat_start[i]);
+            double earned = elapsed * rate / 1000.0;
+            uint32_t extra = (uint32_t)earned;
+            steps[i] = 1 + extra;
+            repeat_accum[i] = earned - (double)extra;
+            repeat_last[i] = now;
+            repeat_started[i] = true;
+        } else {
+            double elapsed = (double)(now - repeat_last[i]);
+            repeat_last[i] = now;
+            repeat_accum[i] += elapsed * rate / 1000.0;
+            steps[i] = (uint32_t)repeat_accum[i];
+            repeat_accum[i] -= (double)steps[i];
+        }
+    }
     StereoConfig *cfg = &sd->stereo;
     bool changed = false;
 
-    if (rise & (1u << HOT_DEC_SEP)) {
-        cfg->separation -= cfg->step_separation;
+    if (steps[HOT_DEC_SEP]) {
+        cfg->separation -= cfg->step_separation * step_multiplier * (float)steps[HOT_DEC_SEP];
         if (cfg->separation < 0.0f) cfg->separation = 0.0f;
         changed = true;
         STEREO_LOG("[Hotkey] Separation → %.4f", cfg->separation);
     }
-    if (rise & (1u << HOT_INC_SEP)) {
-        cfg->separation += cfg->step_separation;
+    if (steps[HOT_INC_SEP]) {
+        cfg->separation += cfg->step_separation * step_multiplier * (float)steps[HOT_INC_SEP];
         changed = true;
         STEREO_LOG("[Hotkey] Separation → %.4f", cfg->separation);
     }
-    if (rise & (1u << HOT_DEC_CONV)) {
-        cfg->convergence -= cfg->step_convergence;
+    if (steps[HOT_DEC_CONV]) {
+        cfg->convergence -= cfg->step_convergence * step_multiplier * (float)steps[HOT_DEC_CONV];
         changed = true;
         STEREO_LOG("[Hotkey] Convergence → %.4f", cfg->convergence);
     }
-    if (rise & (1u << HOT_INC_CONV)) {
-        cfg->convergence += cfg->step_convergence;
+    if (steps[HOT_INC_CONV]) {
+        cfg->convergence += cfg->step_convergence * step_multiplier * (float)steps[HOT_INC_CONV];
         changed = true;
         STEREO_LOG("[Hotkey] Convergence → %.4f", cfg->convergence);
     }

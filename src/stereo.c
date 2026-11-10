@@ -868,6 +868,9 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     /* VK_KHR_present_wait: NULL unless the app enabled it on this device. */
     sd->real.WaitForPresentKHR = (PFN_vkWaitForPresentKHR)
         g_real_giPA(real_inst, "vkWaitForPresentKHR");
+    sd->real.GetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)g_real_giPA(real_inst, "vkGetBufferDeviceAddress");
+    if (!sd->real.GetBufferDeviceAddress)
+        sd->real.GetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)g_real_giPA(real_inst, "vkGetBufferDeviceAddressKHR");
     sd->real.CmdCopyImage2 = (PFN_vkCmdCopyImage2)g_real_giPA(real_inst, "vkCmdCopyImage2");
     if (!sd->real.CmdCopyImage2)
         sd->real.CmdCopyImage2 = (PFN_vkCmdCopyImage2)g_real_giPA(real_inst, "vkCmdCopyImage2KHR");

@@ -142,18 +142,24 @@ If not "%~1"=="" (
                     Echo %%~nA
                     Echo.
                 )
-)
-)
-)
+            )
+        )
+    )
 ) else (
     Echo [93mNo drag and drop input specified.
     Echo [94mEnabling temporary logging and shader dumping for games that fail to dump them via drag and drop...
     setx VKS3D_DUMP_SPIRV "%~dp0Dump" 1>>NUL 2>&1
     setx STEREO_LOGFILE_PATH "%~dp0Dump\VKS3D.log" 1>>NUL 2>&1
     setx VKS3D_LOG_FILE_PATH "%~dp0Dump\VKS3D.log" 1>>NUL 2>&1
+    setx DXVK_LOG_PATH "%~dp0Dump" 1>>NUL 2>&1
+    setx VKD3D_SHADER_DUMP_PATH "%~dp0Dump" 1>>NUL 2>&1
+    setx VKD3D_LOG_FILE "%~dp0Dump\VKD3D.log" 1>>NUL 2>&1
     Echo [92mDone.
     Echo.
-    Echo [96mPress Enter after running and closing a game using Vulkan to validate "%~dp0Dump\*.spv" shader dumps, then disable log/shader dumping.
+    Echo [96mPress Enter after running and closing a game using Vulkan ^(native or wrapped to it^) to validate the shader dumps from:
+    Echo "%~dp0Dump\*.spv"
+    Echo Then dumping and logging will be disabled, or you can just close this window now to keep them enabled
+    Echo [93m^(not recommended to do permanently^).
     pause >Nul
     Echo [0m
     If exist "%~dp0Dump\*.spv" (
@@ -189,23 +195,28 @@ If not "%~1"=="" (
             )
         )
     )
-    setx VKS3D_DUMP_SPIRV "" 1>>NUL 2>&1
-    setx STEREO_LOGFILE_PATH "" 1>>NUL 2>&1
-    setx VKS3D_LOG_FILE_PATH "" 1>>NUL 2>&1
 )
-
 If "!ValidationStarted!"=="True" (
     Echo.
     Echo Patched shader dump report:
     If !Warnings! GTR 0 (Echo [93mWarnings:  !Warnings!) else (Echo [92mWarnings:  !Warnings!)
     If !Errors!   GTR 0 (Echo [91mErrors:    !Errors!)   else (Echo [92mErrors:    !Errors!)
-    If defined Run (
-        Echo [96mPress any key to open "!Run!"
-    ) else (
-        Echo [96mPress any key to exit.
-    )
-    pause >Nul
-    If defined ShaderFile (pause >Nul)
-    If defined Run ("!Run!")
 )
+Echo [0m
+Echo Disabling logging and dumping...
+setx VKS3D_DUMP_SPIRV "" 1>>NUL 2>&1
+setx STEREO_LOGFILE_PATH "" 1>>NUL 2>&1
+setx VKS3D_LOG_FILE_PATH "" 1>>NUL 2>&1
+setx DXVK_LOG_PATH "" 1>>NUL 2>&1
+setx VKD3D_SHADER_DUMP_PATH "" 1>>NUL 2>&1
+setx VKD3D_LOG_FILE "" 1>>NUL 2>&1
+Echo [92mDone
+If defined Run (
+    Echo [96mPress any key to open "!Run!"
+) else (
+    Echo [96mPress any key to exit.
+)
+pause >Nul
+If defined ShaderFile (pause >Nul)
+If defined Run ("!Run!")
 exit
