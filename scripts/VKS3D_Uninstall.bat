@@ -15,7 +15,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$d=$env:VKS3D_DIR; $
 exit /b 0
 #>
 # ============================================================================
-# VKS3D — Vulkan Stereoscopic ICD Uninstaller  (self-contained in uninstall.bat)
+# VKS3D — Vulkan Stereoscopic ICD Uninstaller  (self-contained in VKS3D_Uninstall.bat)
 # ============================================================================
 $ErrorActionPreference = "Stop"
 $InstallDir = $env:VKS3D_DIR
@@ -82,20 +82,10 @@ Write-Host ""
 Write-Host "Press Enter to delete the VKS3D files from the current folder."
 Read-Host
 
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "ReadMe.txt")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "License.txt")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x86.json")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x64.json")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x86.dll")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D_x64.dll")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "vks3d.ini")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "debug.cmd")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "Portable.reg")
-Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "Install.bat")
+Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D*")
 
 # Schedule self-deletion and cleanup.vbs deletion using a vbscript trick to avoid batch file reference errors
-$BatchPath = Join-Path $InstallDir "Uninstall.bat"
+$BatchPath = Join-Path $InstallDir "VKS3D_Uninstall.bat"
 $VbsPath = Join-Path $InstallDir "cleanup.vbs"
 $VbsCode = @"
 Set fso = CreateObject("Scripting.FileSystemObject")
