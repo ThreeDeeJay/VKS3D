@@ -1230,8 +1230,20 @@ void hotkeys_poll(StereoDevice *sd)
     ULONGLONG now = GetTickCount64();
     double rate = hotkey_repeat_rate;
     float step_multiplier = 1.0f;
-    if ((GetAsyncKeyState(0xA0) & 0x8000) || (GetAsyncKeyState(0xA1) & 0x8000)) step_multiplier *= 10.0f;
-    if ((GetAsyncKeyState(0xA4) & 0x8000) || (GetAsyncKeyState(0xA5) & 0x8000)) step_multiplier /= 10.0f;
+    static bool prev_lshift = false, prev_rshift = false;
+    SHORT ls = GetAsyncKeyState(VK_LSHIFT);
+    SHORT rs = GetAsyncKeyState(VK_RSHIFT);
+    SHORT gs = GetAsyncKeyState(VK_SHIFT);
+    bool lshift = ((ls | GetKeyState(VK_LSHIFT)) & 0x8000) != 0;
+    bool rshift = (rs & 0x8000) != 0;
+    bool gshift = (gs & 0x8000) != 0;
+    if (lshift != prev_lshift || rshift != prev_rshift) {
+        STEREO_LOG("[Hotkey] Shift state: left=%d right=%d generic=%d", lshift, rshift, gshift);
+        prev_lshift = lshift;
+        prev_rshift = rshift;
+    }
+    if (lshift || rshift || gshift) step_multiplier *= 10.0f;
+    if ((GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LMENU) | GetAsyncKeyState(VK_RMENU)) & 0x8000) step_multiplier /= 10.0f;
     for (uint32_t i = 0; i < 4; i++) {
         if (!(cur & repeat_bits[i])) {
             repeat_start[i] = 0;
