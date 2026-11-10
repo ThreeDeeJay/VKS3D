@@ -1198,13 +1198,24 @@ static double hotkey_repeat_rate = 10.0;
 
 static uint32_t sample_hotkeys(void)
 {
+    static uint32_t prev_diag = UINT32_MAX;
     SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
+    SHORT lctrl = GetAsyncKeyState(VK_LCONTROL);
+    SHORT rctrl = GetAsyncKeyState(VK_RCONTROL);
+    SHORT f6 = GetAsyncKeyState(VK_F6);
+    SHORT lshift = GetAsyncKeyState(VK_LSHIFT);
+    SHORT rshift = GetAsyncKeyState(VK_RSHIFT);
+    uint32_t diag = ((ctrl & 0x8000) ? 1u : 0u) | ((lctrl & 0x8000) ? 2u : 0u) | ((rctrl & 0x8000) ? 4u : 0u) | ((f6 & 0x8000) ? 8u : 0u) | ((lshift & 0x8000) ? 16u : 0u) | ((rshift & 0x8000) ? 32u : 0u);
+    if (diag != prev_diag) {
+        STEREO_LOG("[Hotkey] Ctrl+F6 state: ctrl=%d lctrl=%d rctrl=%d f6=%d leftShift=%d rightShift=%d", !!(ctrl & 0x8000), !!(lctrl & 0x8000), !!(rctrl & 0x8000), !!(f6 & 0x8000), !!(lshift & 0x8000), !!(rshift & 0x8000));
+        prev_diag = diag;
+    }
     if (!(ctrl & 0x8000)) return 0;
     uint32_t mask = 0;
     if (GetAsyncKeyState(VK_F3) & 0x8000) mask |= (1u << HOT_DEC_SEP);
     if (GetAsyncKeyState(VK_F4) & 0x8000) mask |= (1u << HOT_INC_SEP);
     if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_INC_CONV);
-    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_DEC_CONV);
+    if (f6 & 0x8000) mask |= (1u << HOT_DEC_CONV);
     if (GetAsyncKeyState(VK_F7) & 0x8000) mask |= (1u << HOT_SAVE);
     return mask;
 }
