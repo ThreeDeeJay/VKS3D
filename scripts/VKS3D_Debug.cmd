@@ -154,6 +154,7 @@ If not "%~1"=="" (
     setx DXVK_LOG_PATH "%~dp0VKS3D_Dump" 1>>NUL 2>&1
     setx VKD3D_SHADER_DUMP_PATH "%~dp0VKS3D_Dump" 1>>NUL 2>&1
     setx VKD3D_LOG_FILE "%~dp0VKS3D_Dump\VKD3D.log" 1>>NUL 2>&1
+    If not exist "%~dp0VKS3D_Dump" (MkDir "%~dp0VKS3D_Dump")
     Echo [92mDone.
     Echo.
     Echo [96mPress Enter after running and closing a game using Vulkan ^(native or wrapped to it^) to validate the shader dumps from:
