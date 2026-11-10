@@ -976,8 +976,27 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         "[GPU Compose] real swapchain image_count=%u",
         sc->comp_sc_count);
     VkSemaphoreCreateInfo sinfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-    sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_acquire_sem);
-    sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_blit_done_sem);
+    /* Per internal image acquire semaphores (reused only after that image's compose
+     * fence signalled) and per real-swapchain-image present semaphores (reused only
+     * after the real swapchain hands that image out again). */
+    sc->comp_acquire_sem_count = sc->req_image_count ? sc->req_image_count : 1;
+    sc->comp_blit_sem_count    = sc->comp_sc_count;
+    sc->comp_acquire_sems = calloc(sc->comp_acquire_sem_count, sizeof(VkSemaphore));
+    sc->comp_blit_sems    = calloc(sc->comp_blit_sem_count, sizeof(VkSemaphore));
+    if (!sc->comp_acquire_sems || !sc->comp_blit_sems) {
+        free(sc->comp_acquire_sems); sc->comp_acquire_sems = NULL;
+        free(sc->comp_blit_sems);    sc->comp_blit_sems    = NULL;
+        sc->comp_acquire_sem_count = sc->comp_blit_sem_count = 0;
+        free(sc->comp_sc_images);
+        sc->comp_sc_images = NULL;
+        sd->real.DestroySwapchainKHR(sd->real_device, sc->real_swapchain, NULL);
+        sc->real_swapchain = VK_NULL_HANDLE;
+        return false;
+    }
+    for (uint32_t k = 0; k < sc->comp_acquire_sem_count; k++)
+        sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_acquire_sems[k]);
+    for (uint32_t k = 0; k < sc->comp_blit_sem_count; k++)
+        sd->real.CreateSemaphore(sd->real_device, &sinfo, NULL, &sc->comp_blit_sems[k]);
 
     STEREO_LOG("[GPU Compose] init: sc=%p  %u images  %ux%u  %s",
                (void*)sc->real_swapchain, sc->comp_sc_count,
@@ -996,6 +1015,14 @@ void gpu_compose_sc_destroy(StereoDevice *sd, StereoSwapchain *sc)
         sd->real.DestroySemaphore(sd->real_device, sc->comp_blit_done_sem, NULL);
         sc->comp_blit_done_sem = VK_NULL_HANDLE;
     }
+    for (uint32_t k = 0; sc->comp_acquire_sems && k < sc->comp_acquire_sem_count; k++)
+        if (sc->comp_acquire_sems[k])
+            sd->real.DestroySemaphore(sd->real_device, sc->comp_acquire_sems[k], NULL);
+    for (uint32_t k = 0; sc->comp_blit_sems && k < sc->comp_blit_sem_count; k++)
+        if (sc->comp_blit_sems[k])
+            sd->real.DestroySemaphore(sd->real_device, sc->comp_blit_sems[k], NULL);
+    free(sc->comp_acquire_sems); sc->comp_acquire_sems = NULL; sc->comp_acquire_sem_count = 0;
+    free(sc->comp_blit_sems);    sc->comp_blit_sems    = NULL; sc->comp_blit_sem_count    = 0;
     free(sc->comp_sc_images);
     sc->comp_sc_images = NULL;
     sc->comp_sc_count  = 0;
@@ -1011,16 +1038,21 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         return VK_ERROR_INITIALIZATION_FAILED;
 
     /* Acquire output swapchain image */
+    uint32_t slot = sc->present_idx % (sc->image_count ? sc->image_count : 1);
+    VkSemaphore acq_sem = (sc->comp_acquire_sems && slot < sc->comp_acquire_sem_count)
+        ? sc->comp_acquire_sems[slot] : sc->comp_acquire_sem;
     uint32_t img_idx = 0;
     VkResult res = sd->real.AcquireNextImageKHR(
         sd->real_device, sc->real_swapchain, UINT64_MAX,
-        sc->comp_acquire_sem, VK_NULL_HANDLE, &img_idx);
+        acq_sem, VK_NULL_HANDLE, &img_idx);
     if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) {
         STEREO_ERR("[GPU Compose] AcquireNextImageKHR: %d", res); return res;
     }
 
-    VkCommandBuffer cmd = sc->barrier_cmds[0];
-    VkImage src = sc->stereo_images[0];
+    VkSemaphore blit_sem = (sc->comp_blit_sems && img_idx < sc->comp_blit_sem_count)
+        ? sc->comp_blit_sems[img_idx] : sc->comp_blit_done_sem;
+    VkCommandBuffer cmd = sc->barrier_cmds[slot];
+    VkImage src = sc->stereo_images[slot];
     STEREO_LOG(
         "COMPOSE_SRC sc=%p src=%p img_idx=%u",
         (void *)sc,
@@ -1120,10 +1152,10 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         wsems[i] = wait_sems[i];
         wmsk[i]  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
-    wsems[wait_sem_count] = sc->comp_acquire_sem;
+    wsems[wait_sem_count] = acq_sem;
     wmsk [wait_sem_count] = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
-    sd->real.ResetFences(sd->real_device, 1, &sc->barrier_fences[0]);
+    sd->real.ResetFences(sd->real_device, 1, &sc->barrier_fences[slot]);
 
     VkSubmitInfo sub = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -1133,9 +1165,9 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
         .commandBufferCount   = 1,
         .pCommandBuffers      = &cmd,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores    = &sc->comp_blit_done_sem,
+        .pSignalSemaphores    = &blit_sem,
     };
-    res = sd->real.QueueSubmit(queue, 1, &sub, sc->barrier_fences[0]);
+    res = sd->real.QueueSubmit(queue, 1, &sub, sc->barrier_fences[slot]);
     free(wsems); free(wmsk);
     if (res != VK_SUCCESS) { STEREO_ERR("[GPU Compose] QueueSubmit: %d", res); return res; }
 
@@ -1143,7 +1175,7 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
     VkPresentInfoKHR pi = {
         .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores    = &sc->comp_blit_done_sem,
+        .pWaitSemaphores    = &blit_sem,
         .swapchainCount     = 1,
         .pSwapchains        = &sc->real_swapchain,
         .pImageIndices      = &img_idx,
@@ -1161,6 +1193,9 @@ VkResult gpu_compose_present(StereoDevice *sd, StereoSwapchain *sc,
 #define HOT_INC_CONV  3
 #define HOT_SAVE      4
 
+static double hotkey_repeat_rate = 10.0;
+#define HOTKEY_REPEAT_DELAY_MS 250
+
 static uint32_t sample_hotkeys(void)
 {
     SHORT ctrl = GetAsyncKeyState(VK_CONTROL);
@@ -1168,41 +1203,89 @@ static uint32_t sample_hotkeys(void)
     uint32_t mask = 0;
     if (GetAsyncKeyState(VK_F3) & 0x8000) mask |= (1u << HOT_DEC_SEP);
     if (GetAsyncKeyState(VK_F4) & 0x8000) mask |= (1u << HOT_INC_SEP);
-    if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_DEC_CONV);
-    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_INC_CONV);
+    if (GetAsyncKeyState(VK_F5) & 0x8000) mask |= (1u << HOT_INC_CONV);
+    if (GetAsyncKeyState(VK_F6) & 0x8000) mask |= (1u << HOT_DEC_CONV);
     if (GetAsyncKeyState(VK_F7) & 0x8000) mask |= (1u << HOT_SAVE);
     return mask;
 }
 
 void hotkeys_poll(StereoDevice *sd)
 {
-    uint32_t cur  = sample_hotkeys();
+    static ULONGLONG repeat_start[4] = {0, 0, 0, 0};
+    static ULONGLONG repeat_last[4] = {0, 0, 0, 0};
+    static bool repeat_started[4] = {false, false, false, false};
+    static double repeat_accum[4] = {0.0, 0.0, 0.0, 0.0};
+    uint32_t repeat_bits[4] = {
+        1u << HOT_DEC_SEP,
+        1u << HOT_INC_SEP,
+        1u << HOT_DEC_CONV,
+        1u << HOT_INC_CONV
+    };
+    uint32_t steps[4] = {0, 0, 0, 0};
+    uint32_t cur = sample_hotkeys();
     uint32_t prev = sd->hotkey_prev;
     uint32_t rise = cur & ~prev;
     sd->hotkey_prev = cur;
-    if (!rise) return;
 
+    ULONGLONG now = GetTickCount64();
+    double rate = hotkey_repeat_rate;
+    float step_multiplier = 1.0f;
+    if ((GetAsyncKeyState(VK_SHIFT) | GetAsyncKeyState(VK_LSHIFT) | GetAsyncKeyState(VK_RSHIFT)) & 0x8000) step_multiplier *= 10.0f;
+    if ((GetAsyncKeyState(VK_MENU) | GetAsyncKeyState(VK_LMENU) | GetAsyncKeyState(VK_RMENU)) & 0x8000) step_multiplier /= 10.0f;
+    for (uint32_t i = 0; i < 4; i++) {
+        if (!(cur & repeat_bits[i])) {
+            repeat_start[i] = 0;
+            repeat_last[i] = 0;
+            repeat_started[i] = false;
+            repeat_accum[i] = 0.0;
+            continue;
+        }
+        if (rise & repeat_bits[i]) {
+            steps[i] = 1;
+            repeat_start[i] = now + HOTKEY_REPEAT_DELAY_MS;
+            repeat_last[i] = 0;
+            repeat_started[i] = false;
+            repeat_accum[i] = 0.0;
+            continue;
+        }
+        if (!repeat_started[i]) {
+            if (now < repeat_start[i]) continue;
+            double elapsed = (double)(now - repeat_start[i]);
+            double earned = elapsed * rate / 1000.0;
+            uint32_t extra = (uint32_t)earned;
+            steps[i] = 1 + extra;
+            repeat_accum[i] = earned - (double)extra;
+            repeat_last[i] = now;
+            repeat_started[i] = true;
+        } else {
+            double elapsed = (double)(now - repeat_last[i]);
+            repeat_last[i] = now;
+            repeat_accum[i] += elapsed * rate / 1000.0;
+            steps[i] = (uint32_t)repeat_accum[i];
+            repeat_accum[i] -= (double)steps[i];
+        }
+    }
     StereoConfig *cfg = &sd->stereo;
     bool changed = false;
 
-    if (rise & (1u << HOT_DEC_SEP)) {
-        cfg->separation -= cfg->step_separation;
+    if (steps[HOT_DEC_SEP]) {
+        cfg->separation -= cfg->step_separation * step_multiplier * (float)steps[HOT_DEC_SEP];
         if (cfg->separation < 0.0f) cfg->separation = 0.0f;
         changed = true;
         STEREO_LOG("[Hotkey] Separation → %.4f", cfg->separation);
     }
-    if (rise & (1u << HOT_INC_SEP)) {
-        cfg->separation += cfg->step_separation;
+    if (steps[HOT_INC_SEP]) {
+        cfg->separation += cfg->step_separation * step_multiplier * (float)steps[HOT_INC_SEP];
         changed = true;
         STEREO_LOG("[Hotkey] Separation → %.4f", cfg->separation);
     }
-    if (rise & (1u << HOT_DEC_CONV)) {
-        cfg->convergence -= cfg->step_convergence;
+    if (steps[HOT_DEC_CONV]) {
+        cfg->convergence -= cfg->step_convergence * step_multiplier * (float)steps[HOT_DEC_CONV];
         changed = true;
         STEREO_LOG("[Hotkey] Convergence → %.4f", cfg->convergence);
     }
-    if (rise & (1u << HOT_INC_CONV)) {
-        cfg->convergence += cfg->step_convergence;
+    if (steps[HOT_INC_CONV]) {
+        cfg->convergence += cfg->step_convergence * step_multiplier * (float)steps[HOT_INC_CONV];
         changed = true;
         STEREO_LOG("[Hotkey] Convergence → %.4f", cfg->convergence);
     }

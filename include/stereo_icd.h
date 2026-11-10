@@ -216,6 +216,7 @@ typedef struct StereoConfig {
     StereoProjectionMode    projection;
     float                   step_separation;
     float                   step_convergence;
+    uint64_t                dyn_addr;   /* device address of StereoUBO (0 = bake offsets into shaders) */
 } StereoConfig;
 
 void stereo_config_init(StereoConfig *cfg);
@@ -435,6 +436,7 @@ typedef struct RealDeviceDispatch {
     PFN_vkCmdEndRenderPass           CmdEndRenderPass;
     PFN_vkCmdBeginRenderPass2        CmdBeginRenderPass2;
     PFN_vkWaitForPresentKHR          WaitForPresentKHR;
+    PFN_vkGetBufferDeviceAddress     GetBufferDeviceAddress;
     PFN_vkCmdCopyImage2              CmdCopyImage2;
     PFN_vkCmdBlitImage2              CmdBlitImage2;
     PFN_vkCmdBeginRendering          CmdBeginRendering;
@@ -508,6 +510,17 @@ typedef struct StereoSwapchain {
     uint32_t    comp_sc_count;
     VkSemaphore comp_acquire_sem;   /* image-available semaphore     */
     VkSemaphore comp_blit_done_sem; /* blit-complete semaphore       */
+    /* Multi-image swapchains: the app is told app_image_count images (>= its
+     * minImageCount); image_count of them are really allocated (1 for modes that
+     * can only own a single render target; the rest alias image 0). */
+    uint32_t    app_image_count;
+    uint32_t    req_image_count;    /* internal image count requested before allocation */
+    uint32_t    present_idx;        /* internal image being presented (QueuePresent)    */
+    uint32_t    cur_idx;            /* internal image most recently acquired            */
+    VkSemaphore *comp_acquire_sems; /* per internal image: real-SC acquire semaphore    */
+    uint32_t    comp_acquire_sem_count;
+    VkSemaphore *comp_blit_sems;    /* per real-SC image: blit-done / present semaphore */
+    uint32_t    comp_blit_sem_count;
     VkImage          *sbs_images;
     uint32_t          sbs_width;
     StereoPresentMode present_mode;
@@ -688,8 +701,9 @@ typedef struct StereoUBO {
     float convergence;
     float inv_convergence;
     float projection_mode;
-    float _pad[3];
-} StereoUBO;
+    float bg_expand;   /* max(|left*conv|, |right*conv|) for sky/background widening */
+    float _pad[2];
+} StereoUBO;   /* 32 bytes: read by patched shaders as 2 x vec4 through buffer device address */
 
 /* -- Object lookup helpers ------------------------------------------------- */
 StereoInstance  *stereo_instance_from_handle(VkInstance h);
