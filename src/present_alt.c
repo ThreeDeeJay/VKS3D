@@ -863,7 +863,7 @@ bool gpu_compose_sc_init(StereoDevice *sd, StereoSwapchain *sc, VkSurfaceKHR sur
         .imageFormat      = sc->format,
         .imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
         .imageExtent      = caps.currentExtent,
-        .imageArrayLayers = 1,
+        .imageArrayLayers = 2,
         .imageUsage       = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .preTransform     = pretransform,
