@@ -13078,6 +13078,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             fs_stage != ~0u)
         {
             /* Find FS stage */
+            STEREO_LOG("FS_GATE_ENTER vs=%u fs=%u quad=%u fullscreen=%u quad_fs=%u screen_space=%u",has_vs,has_fs,is_quad,vs_fullscreen,vs_quad_fs,vs_screen_space);
             uint32_t fs_s = ~0u;
             for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
             {
