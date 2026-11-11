@@ -13068,17 +13068,16 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
-        STEREO_LOG("FS_GATE_EVAL vs=%u fs=%u quad=%u fullscreen=%u quad_fs=%u screen_space=%u no_ms=%u no_gs=%u no_tes=%u no_tcs=%u mv=%u stages=%u fs_stage_valid=%u gpl_fs=%u result=%u",has_vs,has_fs,is_quad,vs_fullscreen,vs_quad_fs,vs_screen_space,!has_ms,!has_gs,!has_tes,!has_tcs,in_mv_rp,ci->stageCount,fs_stage != ~0u,(gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0,((((is_quad && vs_fullscreen && !vs_screen_space) || (vs_quad_fs && !vs_fullscreen && !vs_screen_space) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) && !has_ms && !has_gs && !has_tes && !has_tcs && in_mv_rp && ci->stageCount > 0 && fs_stage != ~0u) ? 1u : 0u));
-        bool fs_gate_a = vs_fullscreen;
-        bool fs_gate_b = is_quad && vs_quad_fs;
-        bool fs_gate_c = !has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0;
-        bool fs_gate_stages = !has_ms && !has_gs && !has_tes && !has_tcs;
-        bool fs_gate_final = (fs_gate_a || fs_gate_b || fs_gate_c) && fs_gate_stages && in_mv_rp && ci->stageCount > 0 && fs_stage != ~0u;
-        STEREO_LOG("FS_GATE_ARMS vs=%016llx a=%d b=%d c=%d stages=%d mv=%d count=%u fs_stage=%u result=%d", (unsigned long long)vs_hash, fs_gate_a, fs_gate_b, fs_gate_c, fs_gate_stages, in_mv_rp, ci->stageCount, fs_stage, fs_gate_final);
-        if (fs_gate_final)
+        if ((((is_quad && vs_fullscreen && !vs_screen_space)) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
+            !has_ms &&
+            !has_gs &&
+            !has_tes &&
+            !has_tcs &&
+            in_mv_rp &&
+            ci->stageCount > 0 &&
+            fs_stage != ~0u)
         {
             /* Find FS stage */
-            STEREO_LOG("FS_GATE_ENTER vs=%u fs=%u quad=%u fullscreen=%u quad_fs=%u screen_space=%u",has_vs,has_fs,is_quad,vs_fullscreen,vs_quad_fs,vs_screen_space);
             uint32_t fs_s = ~0u;
             for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
             {
