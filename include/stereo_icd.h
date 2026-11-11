@@ -718,6 +718,7 @@ void             stereo_instance_free(VkInstance h);
 StereoDevice    *stereo_device_alloc(void);
 
 /* -- Forward declarations -------------------------------------------------- */
+static inline const char *stereo_getenv(const char *name);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_CreateInstance(const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
 VKAPI_ATTR void     VKAPI_CALL stereo_DestroyInstance(VkInstance, const VkAllocationCallbacks*);
 VKAPI_ATTR VkResult VKAPI_CALL stereo_EnumeratePhysicalDevices(VkInstance, uint32_t*, VkPhysicalDevice*);
