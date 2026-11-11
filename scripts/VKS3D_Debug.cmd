@@ -15,7 +15,7 @@ set DLLPath=!DLLPath:\=\\!
 Set VKS3D_SKIP_SHADER_PATCHES=
 
 ::Add regular expression pattern between = and " to limit/concentrate logging to improve performance.
-Set "VKS3D_LOG_REGEX_MATCH=FS_"
+Set "VKS3D_LOG_REGEX_MATCH="
 
 for /f "tokens=4 delims==." %%V in (
   'wmic datafile where name^="!DLLPath!" get Version /value 2^>Nul'
