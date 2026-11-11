@@ -1025,6 +1025,124 @@ void dx9_nvapi_early_init(void)
 }
 #endif /* _WIN32 */
 
+#ifdef _WIN32
+/* -- Force VKS3D's static D3D/DXGI/NvAPI imports onto the REAL system DLLs ----------
+ *
+ * NV3D-Lib (statically linked into this DLL) creates a native NVIDIA D3D11 device with
+ * shared textures/fences, a D3D9Ex 3D Vision stereo device and calls NvAPI.  Those are
+ * ordinary imports (d3d9/d3d11/dxgi/d3d12/nvapi), resolved BY NAME.  In a DXVK / dxvk-nvapi
+ * process the app folder holds DXVK's d3d9/d3d11/dxgi (and nvapi64) DLLs, which are already
+ * loaded under those names, so NV3D-Lib silently talked to DXVK ("D3D9Format::NVCS unknown",
+ * "Failed to open shared NT handle") and crashed.
+ *
+ * Fix: delay-load those DLLs and, in the delay-load hook, load them from the system directory
+ * inside a private activation context that redirects the same names (so the system d3d11's own
+ * "dxgi.dll" dependency is also the system one rather than DXVK's).
+ */
+#include <delayimp.h>
+#pragma comment(lib, "delayimp.lib")
+#pragma comment(linker, "/DELAYLOAD:dxgi.dll")
+#pragma comment(linker, "/DELAYLOAD:d3d11.dll")
+#pragma comment(linker, "/DELAYLOAD:d3d9.dll")
+#pragma comment(linker, "/DELAYLOAD:d3d12.dll")
+#ifdef _WIN64
+#pragma comment(linker, "/DELAYLOAD:nvapi64.dll")
+#else
+#pragma comment(linker, "/DELAYLOAD:nvapi.dll")
+#endif
+
+static const char *const k_sysdll_names[] = {
+    "dxgi.dll", "d3d11.dll", "d3d9.dll", "d3d12.dll",
+#ifdef _WIN64
+    "nvapi64.dll",
+#else
+    "nvapi.dll",
+#endif
+    NULL
+};
+
+static INIT_ONCE g_sysdll_once   = INIT_ONCE_STATIC_INIT;
+static HANDLE    g_sysdll_actctx = INVALID_HANDLE_VALUE;
+static char      g_sysdll_dir[MAX_PATH];
+
+static BOOL CALLBACK sysdll_init_once(PINIT_ONCE io, PVOID param, PVOID *ctx)
+{
+    (void)io; (void)param; (void)ctx;
+    UINT n = GetSystemDirectoryA(g_sysdll_dir, MAX_PATH);
+    if (!n || n >= MAX_PATH - 2) {
+        g_sysdll_dir[0] = '\0';
+        return TRUE;
+    }
+    char xml[2048];
+    int  len = snprintf(xml, sizeof(xml),
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\n"
+        "  <assemblyIdentity type=\"win32\" name=\"VKS3D.SystemDlls\" version=\"1.0.0.0\"/>\n");
+    for (int i = 0; k_sysdll_names[i] && len > 0 && len < (int)sizeof(xml) - 256; i++)
+        len += snprintf(xml + len, sizeof(xml) - (size_t)len,
+                        "  <file name=\"%s\" loadFrom=\"%s\\\"/>\n",
+                        k_sysdll_names[i], g_sysdll_dir);
+    if (len > 0 && len < (int)sizeof(xml) - 16)
+        len += snprintf(xml + len, sizeof(xml) - (size_t)len, "</assembly>\n");
+
+    char tmp[MAX_PATH], path[MAX_PATH + 64];
+    if (len > 0 && GetTempPathA(MAX_PATH, tmp)) {
+        snprintf(path, sizeof(path), "%svks3d_sysdll_%lu.manifest",
+                 tmp, (unsigned long)GetCurrentProcessId());
+        HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_TEMPORARY, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            DWORD wr = 0;
+            WriteFile(f, xml, (DWORD)len, &wr, NULL);
+            CloseHandle(f);
+            ACTCTXA ac;
+            memset(&ac, 0, sizeof(ac));
+            ac.cbSize   = sizeof(ac);
+            ac.lpSource = path;
+            g_sysdll_actctx = CreateActCtxA(&ac);
+            DeleteFileA(path);
+        }
+    }
+    STEREO_LOG("[SysDll] sysdir='%s' actctx=%p", g_sysdll_dir, (void *)g_sysdll_actctx);
+    return TRUE;
+}
+
+static FARPROC WINAPI vks3d_dli_hook(unsigned notify, PDelayLoadInfo pdli)
+{
+    if (notify != dliNotePreLoadLibrary || !pdli || !pdli->szDll)
+        return NULL;
+    bool match = false;
+    for (int i = 0; k_sysdll_names[i]; i++)
+        if (!_stricmp(pdli->szDll, k_sysdll_names[i])) { match = true; break; }
+    if (!match)
+        return NULL;
+
+    InitOnceExecuteOnce(&g_sysdll_once, sysdll_init_once, NULL, NULL);
+
+    HMODULE h = NULL;
+    if (g_sysdll_actctx != INVALID_HANDLE_VALUE) {
+        ULONG_PTR cookie = 0;
+        if (ActivateActCtx(g_sysdll_actctx, &cookie)) {
+            h = LoadLibraryA(pdli->szDll);
+            DeactivateActCtx(0, cookie);
+        }
+    }
+    if (!h && g_sysdll_dir[0]) {
+        char full[MAX_PATH + 64];
+        snprintf(full, sizeof(full), "%s\\%s", g_sysdll_dir, pdli->szDll);
+        h = LoadLibraryExA(full, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    }
+    {
+        char where[MAX_PATH] = "<null>";
+        if (h) GetModuleFileNameA(h, where, sizeof(where));
+        STEREO_LOG("[SysDll] delay-load %s -> %s", pdli->szDll, where);
+    }
+    return (FARPROC)h; /* NULL: the default LoadLibrary(szDll) is used */
+}
+
+const PfnDliHook __pfnDliNotifyHook2 = vks3d_dli_hook;
+#endif /* _WIN32 */
+
 /* Helper: strip filename to get directory (no trailing slash) */
 static void dir_of_path(const char *full, char *out, size_t out_size)
 {
