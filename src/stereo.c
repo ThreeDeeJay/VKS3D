@@ -126,6 +126,27 @@ static float cfg_float(const char *key, float def)
     return v;
 }
 
+static void cfg_str(const char *key, const char *def, char *out, size_t out_size)
+{
+    snprintf(out, out_size, "%s", def);
+    char buf[64];
+    if (ini_read_str(g_global_ini, "VKS3D", key, buf, sizeof(buf))) {
+        snprintf(out, out_size, "%s", buf);
+        STEREO_LOG("INI load: [global] %s = %s", key, buf);
+    }
+    if (ini_read_str(g_local_ini, "VKS3D", key, buf, sizeof(buf))) {
+        snprintf(out, out_size, "%s", buf);
+        STEREO_LOG("INI load: [local]  %s = %s", key, buf);
+    }
+    char env_name[64];
+    snprintf(env_name, sizeof(env_name), "STEREO_%s", key);
+    const char *e = stereo_getenv(env_name);
+    if (e) {
+        snprintf(out, out_size, "%s", e);
+        STEREO_LOG("INI load: [env]    %s = %s", env_name, e);
+    }
+}
+
 static int cfg_int(const char *key, int def)
 {
     int v = def;
@@ -226,6 +247,13 @@ void stereo_config_init(StereoConfig *cfg)
     /* ── hotkey steps ── */
     cfg->step_separation  = cfg_float("step_separation",  0.005f);
     cfg->step_convergence = cfg_float("step_convergence", 0.005f);
+    cfg_str("hotkey_separation_decrease", "VK_CONTROL+VK_F3", cfg->hotkey_separation_decrease, sizeof(cfg->hotkey_separation_decrease));
+    cfg_str("hotkey_separation_increase", "VK_CONTROL+VK_F4", cfg->hotkey_separation_increase, sizeof(cfg->hotkey_separation_increase));
+    cfg_str("hotkey_convergence_decrease", "VK_CONTROL+VK_F5", cfg->hotkey_convergence_decrease, sizeof(cfg->hotkey_convergence_decrease));
+    cfg_str("hotkey_convergence_increase", "VK_CONTROL+VK_F6", cfg->hotkey_convergence_increase, sizeof(cfg->hotkey_convergence_increase));
+    cfg_str("hotkey_rate_increase_modifier", "VK_SHIFT", cfg->hotkey_rate_increase_modifier, sizeof(cfg->hotkey_rate_increase_modifier));
+    cfg_str("hotkey_rate_decrease_modifier", "VK_MENU", cfg->hotkey_rate_decrease_modifier, sizeof(cfg->hotkey_rate_decrease_modifier));
+    cfg_str("hotkey_save_settings", "VK_CONTROL+VK_F7", cfg->hotkey_save_settings, sizeof(cfg->hotkey_save_settings));
 
     stereo_config_compute_offsets(cfg);
     STEREO_LOG(

@@ -7,7 +7,15 @@ pushd "%~dp0"
 Set VKS3D_DIR=%~dp0
 set DLLPath=%~dp0VKS3D_x64.dll
 set DLLPath=!DLLPath:\=\\!
+
+::Set comma-separated list of shader hashes to skip.
+::You can drag and drop a game executable into this script to dump shader patches,
+::then you can copy the string before the +vs.spv to skip UI shaders so they're at screen depth.
+::Though it might require trial and error to identify them.
 Set VKS3D_SKIP_SHADER_PATCHES=
+
+::Add regular expression pattern between = and " to limit/concentrate logging to improve performance.
+Set "VKS3D_LOG_REGEX_MATCH="
 
 for /f "tokens=4 delims==." %%V in (
   'wmic datafile where name^="!DLLPath!" get Version /value 2^>Nul'
@@ -86,6 +94,7 @@ If not "%~1"=="" (
                     If exist "%%~dpAvkd3d-proton.cache" (del "%%~dpAvkd3d-proton.cache")
                     If exist "%%~dpA*_dxgi.log" (del "%%~dpA*_dxgi.log")
                     "%%~dpA%%~nxA"
+                    Rem -fullscreen --fullscreen --full-screen --width 1920 --height 1080 /width=1920 /height=1080 -mode 1920x1080x144x32 --benchmark --benchmarkframes 1
                     if !ErrorLevel! NEQ 0 (
                        Echo.
                        echo %%~nA reported non-zero return code ^(!ErrorLevel!^). Re-running without launch parameters.
@@ -152,6 +161,7 @@ If not "%~1"=="" (
     setx VKS3D_DUMP_SPIRV "!DumpPath!" 1>>NUL 2>&1
     setx STEREO_LOGFILE_PATH "!DumpPath!\VKS3D.log" 1>>NUL 2>&1
     setx VKS3D_LOG_FILE_PATH "!DumpPath!\VKS3D.log" 1>>NUL 2>&1
+    setx VKS3D_LOG_REGEX_MATCH "!VKS3D_LOG_REGEX_MATCH!" 1>>NUL 2>&1
     setx DXVK_LOG_PATH "!DumpPath!" 1>>NUL 2>&1
     setx VKD3D_SHADER_DUMP_PATH "!DumpPath!" 1>>NUL 2>&1
     setx VKD3D_LOG_FILE "!DumpPath!\VKD3D.log" 1>>NUL 2>&1
@@ -211,14 +221,17 @@ If "!ValidationStarted!"=="True" (
     If !Errors!   GTR 0 (Echo [91mErrors:    !Errors!)   else (Echo [92mErrors:    !Errors!)
 )
 Echo [0m
-Echo Disabling logging and dumping...
-setx VKS3D_DUMP_SPIRV "" 1>>NUL 2>&1
-setx STEREO_LOGFILE_PATH "" 1>>NUL 2>&1
-setx VKS3D_LOG_FILE_PATH "" 1>>NUL 2>&1
-setx DXVK_LOG_PATH "" 1>>NUL 2>&1
-setx VKD3D_SHADER_DUMP_PATH "" 1>>NUL 2>&1
-setx VKD3D_LOG_FILE "" 1>>NUL 2>&1
-Echo [92mDone
+If "%~1"=="" (
+    Echo Disabling logging and dumping...
+    setx VKS3D_DUMP_SPIRV "" 1>>NUL 2>&1
+    setx STEREO_LOGFILE_PATH "" 1>>NUL 2>&1
+    setx VKS3D_LOG_FILE_PATH "" 1>>NUL 2>&1
+    setx VKS3D_LOG_REGEX_MATCH "" 1>>NUL 2>&1
+    setx DXVK_LOG_PATH "" 1>>NUL 2>&1
+    setx VKD3D_SHADER_DUMP_PATH "" 1>>NUL 2>&1
+    setx VKD3D_LOG_FILE "" 1>>NUL 2>&1
+    Echo [92mDone
+)
 If defined Run (
     Echo [96mPress any key to open "!Run!"
 ) else (
