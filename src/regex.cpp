@@ -2,6 +2,7 @@
 #include <string>
 #include <mutex>
 #include <cstdlib>
+#include "include/platform.h"
 extern "C" {
 const char *stereo_getenv(const char *name);
 }
