@@ -479,7 +479,13 @@ static inline void vks3d_log_open(void)
     /* If CreateFileA fails, OutputDebugStringA still works */
 }
 
-extern int regex_match(const char *msg);
+#ifdef __cplusplus
+extern "C" {
+#endif
+int regex_match(const char *msg);
+#ifdef __cplusplus
+}
+#endif
 static inline void vks3d_log_write(const char *msg)
 {
     if (!regex_match(msg))
