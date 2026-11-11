@@ -1742,16 +1742,16 @@ stereo_CmdDrawIndexed(
     int32_t vertexOffset,
     uint32_t firstInstance)
 {
-    STEREO_LOG("CALLED stereo_CmdDrawIndexed");
-    STEREO_LOG(
-        "DRAW_INDEXED_ARGS cb=%p indexCount=%u instanceCount=%u "
-        "firstIndex=%u vertexOffset=%d firstInstance=%u",
-        (void*)commandBuffer,
-        indexCount,
-        instanceCount,
-        firstIndex,
-        vertexOffset,
-        firstInstance);
+    // STEREO_LOG("CALLED stereo_CmdDrawIndexed");
+    // STEREO_LOG(
+    //     "DRAW_INDEXED_ARGS cb=%p indexCount=%u instanceCount=%u "
+    //     "firstIndex=%u vertexOffset=%d firstInstance=%u",
+    //     (void*)commandBuffer,
+    //     indexCount,
+    //     instanceCount,
+    //     firstIndex,
+    //     vertexOffset,
+    //     firstInstance);
     StereoDevice *sd = find_any_device();
     if (!sd)
         return;
@@ -1765,34 +1765,34 @@ stereo_CmdDrawIndexed(
         find_pipeline_info(sd, pipe);
     if (info)
     {
-        STEREO_LOG(
-            "DRAW_INDEXED pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u cb=%p "
-            "indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
-            (void *)pipe,
-            (void *)rp,
-            (void *)fb,
-            info->is_quad,
-            info->patched_vs,
-            info->patched_fs,
-            (void *)commandBuffer,
-            indexCount,
-            instanceCount,
-            firstIndex,
-            vertexOffset,
-            firstInstance);
+        // STEREO_LOG(
+        //     "DRAW_INDEXED pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u cb=%p "
+        //     "indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
+        //     (void *)pipe,
+        //     (void *)rp,
+        //     (void *)fb,
+        //     info->is_quad,
+        //     info->patched_vs,
+        //     info->patched_fs,
+        //     (void *)commandBuffer,
+        //     indexCount,
+        //     instanceCount,
+        //     firstIndex,
+        //     vertexOffset,
+        //     firstInstance);
     }
     else
     {
-        STEREO_LOG(
-            "DRAW_INDEXED pipe=%p UNKNOWN cb=%p "
-            "indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
-            (void *)pipe,
-            (void *)commandBuffer,
-            indexCount,
-            instanceCount,
-            firstIndex,
-            vertexOffset,
-            firstInstance);
+        // STEREO_LOG(
+        //     "DRAW_INDEXED pipe=%p UNKNOWN cb=%p "
+        //     "indexCount=%u instanceCount=%u firstIndex=%u vertexOffset=%d firstInstance=%u",
+        //     (void *)pipe,
+        //     (void *)commandBuffer,
+        //     indexCount,
+        //     instanceCount,
+        //     firstIndex,
+        //     vertexOffset,
+        //     firstInstance);
     }
     uint32_t rp_view_mask = 0;
     uint32_t rp_has_multiview = 0;
@@ -1806,7 +1806,7 @@ stereo_CmdDrawIndexed(
             break;
         }
     }
-    STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
+    // STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
@@ -1824,7 +1824,7 @@ stereo_CmdDraw(
     uint32_t firstVertex,
     uint32_t firstInstance)
 {
-    STEREO_LOG("CALLED stereo_CmdDraw");
+    // STEREO_LOG("CALLED stereo_CmdDraw");
     StereoDevice *sd = find_any_device();
     if (!sd)
         return;
@@ -1838,27 +1838,27 @@ stereo_CmdDraw(
         find_pipeline_info(sd, pipe);
     if (info)
     {
-        STEREO_LOG(
-            "DRAW pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
-            "verts=%u inst=%u",
-            (void *)pipe,
-            (void *)rp,
-            (void *)fb,
-            info->is_quad,
-            info->patched_vs,
-            info->patched_fs,
-            vertexCount,
-            instanceCount);
+        // STEREO_LOG(
+        //     "DRAW pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
+        //     "verts=%u inst=%u",
+        //     (void *)pipe,
+        //     (void *)rp,
+        //     (void *)fb,
+        //     info->is_quad,
+        //     info->patched_vs,
+        //     info->patched_fs,
+        //     vertexCount,
+        //     instanceCount);
     }
     else
     {
-        STEREO_LOG(
-            "DRAW pipe=%p UNKNOWN",
-            (void *)pipe);
+        // STEREO_LOG(
+        //     "DRAW pipe=%p UNKNOWN",
+        //     (void *)pipe);
     }
-    STEREO_LOG(
-        "DRAW_STEREO cmd=%p",
-        (void*)commandBuffer);
+    // STEREO_LOG(
+    //     "DRAW_STEREO cmd=%p",
+    //     (void*)commandBuffer);
     uint32_t rp_view_mask = 0;
     uint32_t rp_has_multiview = 0;
     for (uint32_t i = 0; i < sd->render_pass_count; i++)
@@ -1871,7 +1871,7 @@ stereo_CmdDraw(
             break;
         }
     }
-    STEREO_LOG("DRAW_TRACE type=DIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u vertex_count=%u instance_count=%u first_vertex=%u first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,vertexCount,instanceCount,firstVertex,firstInstance);
+    // STEREO_LOG("DRAW_TRACE type=DIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u vertex_count=%u instance_count=%u first_vertex=%u first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,vertexCount,instanceCount,firstVertex,firstInstance);
     sd->real.CmdDraw(
         commandBuffer,
         vertexCount,
@@ -1888,7 +1888,7 @@ stereo_CmdDrawIndirect(
     uint32_t drawCount,
     uint32_t stride)
 {
-    STEREO_LOG("CALLED stereo_CmdDrawIndirect");
+    // STEREO_LOG("CALLED stereo_CmdDrawIndirect");
     StereoDevice *sd = find_any_device();
     if (!sd)
         return;
@@ -1902,22 +1902,22 @@ stereo_CmdDrawIndirect(
         find_pipeline_info(sd, pipe);
     if (info)
     {
-        STEREO_LOG(
-            "DRAW_INDIRECT pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
-            "draws=%u",
-            (void *)pipe,
-            (void *)rp,
-            (void *)fb,
-            info->is_quad,
-            info->patched_vs,
-            info->patched_fs,
-            drawCount);
+        // STEREO_LOG(
+        //     "DRAW_INDIRECT pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
+        //     "draws=%u",
+        //     (void *)pipe,
+        //     (void *)rp,
+        //     (void *)fb,
+        //     info->is_quad,
+        //     info->patched_vs,
+        //     info->patched_fs,
+        //     drawCount);
     }
     else
     {
-        STEREO_LOG(
-            "DRAW_INDIRECT pipe=%p UNKNOWN",
-            (void *)pipe);
+        // STEREO_LOG(
+        //     "DRAW_INDIRECT pipe=%p UNKNOWN",
+        //     (void *)pipe);
     }
     uint32_t rp_view_mask = 0;
     uint32_t rp_has_multiview = 0;
@@ -1931,7 +1931,7 @@ stereo_CmdDrawIndirect(
             break;
         }
     }
-    STEREO_LOG("DRAW_TRACE type=INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u buffer=%p view_mask=0x%X has_multiview=%u offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
+    // STEREO_LOG("DRAW_TRACE type=INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u buffer=%p view_mask=0x%X has_multiview=%u offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
     sd->real.CmdDrawIndirect(
         commandBuffer,
         buffer,
@@ -1948,7 +1948,7 @@ stereo_CmdDrawIndexedIndirect(
     uint32_t drawCount,
     uint32_t stride)
 {
-    STEREO_LOG("CALLED stereo_CmdDrawIndexedIndirect");
+    // STEREO_LOG("CALLED stereo_CmdDrawIndexedIndirect");
     StereoDevice *sd = find_any_device();
     if (!sd)
         return;
@@ -1962,22 +1962,22 @@ stereo_CmdDrawIndexedIndirect(
         find_pipeline_info(sd, pipe);
     if (info)
     {
-    STEREO_LOG(
-        "DRAW_INDEXED_INDIRECT pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
-        "draws=%u",
-        (void *)pipe,
-        (void *)rp,
-        (void *)fb,
-        info->is_quad,
-        info->patched_vs,
-        info->patched_fs,
-        drawCount);
+    // STEREO_LOG(
+    //     "DRAW_INDEXED_INDIRECT pipe=%p rp=%p fb=%p quad=%u patched_vs=%u patched_fs=%u "
+    //     "draws=%u",
+    //     (void *)pipe,
+    //     (void *)rp,
+    //     (void *)fb,
+    //     info->is_quad,
+    //     info->patched_vs,
+    //     info->patched_fs,
+    //     drawCount);
     }
     else
     {
-        STEREO_LOG(
-            "DRAW_INDEXED_INDIRECT pipe=%p UNKNOWN",
-            (void *)pipe);
+        // STEREO_LOG(
+        //     "DRAW_INDEXED_INDIRECT pipe=%p UNKNOWN",
+        //     (void *)pipe);
     }
     uint32_t rp_view_mask = 0;
     uint32_t rp_has_multiview = 0;
@@ -1991,7 +1991,7 @@ stereo_CmdDrawIndexedIndirect(
             break;
         }
     }
-    STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
+    // STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
     sd->real.CmdDrawIndexedIndirect(
         commandBuffer,
         buffer,
