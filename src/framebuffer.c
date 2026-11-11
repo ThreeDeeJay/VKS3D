@@ -90,6 +90,8 @@ stereo_CreateFramebuffer(
     /* CRITICAL: snapshot ORIGINAL RP before any modification */
     VkRenderPass original_rp = pCreateInfo->renderPass;
     VkRenderPass use_mv      = VK_NULL_HANDLE;
+    StereoRenderPassInfo *fb_rpi = stereo_rp_lookup(sd, original_rp);
+    STEREO_LOG("FB_RP_DIAG fb=%p rp=%p rpi=%p tracked_rp=%p tracked_mv=%p has_mv=%u view_mask=%u subpasses=%u attachments=%u", (void*)pFramebuffer, (void*)original_rp, (void*)fb_rpi, fb_rpi ? (void*)fb_rpi->handle : NULL, fb_rpi ? (void*)fb_rpi->mv_handle : NULL, fb_rpi ? (unsigned)fb_rpi->has_multiview : 0, fb_rpi ? fb_rpi->view_mask : 0, fb_rpi ? fb_rpi->subpass_count : 0, pCreateInfo->attachmentCount);
     
     /* HARD ASSERT: framebuffer created without renderPass */
     if (original_rp == VK_NULL_HANDLE) {
@@ -139,13 +141,14 @@ stereo_CreateFramebuffer(
             }
             STEREO_LOG(
                 "FB_ATTACHMENT_CLASSIFY att=%u view=%p class=%s upgraded_index=%u "
-                "shading_rate=%u",
+                "shading_rate=%u mv_eligible_so_far=%u",
                 i,
                 (void*)view,
                 found ? "UPGRADED" : "NORMAL",
                 found ? found_index : UINT32_MAX,
                 (has_shading_rate_attachment &&
-                    shading_rate_attachment == i) ? 1u : 0u);
+                    shading_rate_attachment == i) ? 1u : 0u,
+                (unsigned)(all || (has_shading_rate_attachment && any && only_shading_rate_non_upgraded)));
         }
         STEREO_LOG(
             "FB_RP_RESOLVE request=%p rpi=%p handle=%p mv=%p has_mv=%u "
@@ -428,6 +431,21 @@ stereo_DestroyFramebuffer(
         pAllocator);
 }
 
+static StereoDevice *
+find_any_device(void)
+{
+    extern StereoDevice g_devices[];
+    extern uint32_t g_device_count;
+
+    for (uint32_t i = 0; i < g_device_count; i++)
+    {
+        if (g_devices[i].real_device)
+            return &g_devices[i];
+    }
+
+    return NULL;
+}
+
 /* ── vkCmdBeginRenderPass ───────────────────────────────────────────────── */
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdBeginRenderPass(
@@ -634,7 +652,10 @@ stereo_CmdBeginRenderPass(
             lookup ? (void*)lookup->mv_handle : NULL);
         if (fb_has_mv && tracked_rp_match)
         {
-            mv_rp = tracked_mv_rp;
+            mv_rp = (lookup &&
+                     lookup->has_multiview &&
+                     lookup->mv_handle != VK_NULL_HANDLE) ?
+                    lookup->mv_handle : tracked_mv_rp;
             STEREO_LOG(
                 "MV_USE_TRACKED_FB fb=%p original_rp=%p mv_rp=%p",
                 (void*)pRenderPassBegin->framebuffer,
@@ -684,6 +705,18 @@ stereo_CmdBeginRenderPass(
                 (void*)tracked_mv_rp,
                 lookup ? (void*)lookup->mv_handle : NULL,
                 (unsigned)tracked_rp_match);
+            STEREO_LOG(
+                "MV_BLOCKED_DIAG fb=%p begin_rp=%p tracked_rp=%p "
+                "tracked_used=%p lookup=%p lookup_orig=%p lookup_mv=%p "
+                "lookup_has_mv=%u",
+                (void*)pRenderPassBegin->framebuffer,
+                (void*)pRenderPassBegin->renderPass,
+                (void*)tracked_rp,
+                (void*)sd->fb_tracks[fb_track_index].rp_used_at_create,
+                (void*)lookup,
+                lookup ? (void*)lookup->handle : NULL,
+                lookup ? (void*)lookup->mv_handle : NULL,
+                lookup ? (unsigned)lookup->has_multiview : 0);
         }
     }
     else if (lookup &&
@@ -846,6 +879,381 @@ stereo_CmdBeginRenderPass(
     }
 }
 
+/* -- vkCmdBeginRenderPass2 / vkCmdBeginRenderPass2KHR ---------------------
+ *
+ * VKD3D-Proton begins every render pass through vkCmdBeginRenderPass2(KHR),
+ * never vkCmdBeginRenderPass.  Without this intercept the app's ORIGINAL
+ * (non-multiview) render pass is begun on a framebuffer that
+ * stereo_CreateFramebuffer built against the MULTIVIEW render pass, and the
+ * pipelines were compiled for the multiview pass too.  Result: incompatible
+ * render pass / framebuffer / pipeline, gl_ViewIndex always 0, layer 1 never
+ * written.
+ *
+ * Same substitution rules as stereo_CmdBeginRenderPass:
+ *   - tracked MV framebuffer  -> its mv_rp (or the begin rp's mv_handle if
+ *                                the app begins it with a different rp)
+ *   - tracked non-MV fb       -> never promoted
+ *   - untracked fb            -> mv_handle of the begin rp, if any
+ * pNext chain (imageless attachments etc.) and VkSubpassBeginInfo are kept.
+ */
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBeginRenderPass2(
+    VkCommandBuffer              commandBuffer,
+    const VkRenderPassBeginInfo *pRenderPassBegin,
+    const VkSubpassBeginInfo    *pSubpassBeginInfo)
+{
+    STEREO_LOG("CALLED stereo_CmdBeginRenderPass2");
+    extern StereoDevice g_devices[];
+    extern uint32_t     g_device_count;
+    StereoDevice *sd       = NULL;
+    VkRenderPass  mv_rp    = VK_NULL_HANDLE;
+    bool          fb_found = false;
+
+    for (uint32_t d = 0; d < g_device_count && !sd; d++)
+    {
+        StereoDevice *dev = &g_devices[d];
+        for (uint32_t i = 0; i < dev->fb_track_count; i++)
+        {
+            const StereoFramebufferTrack *t = &dev->fb_tracks[i];
+            if (t->fb != pRenderPassBegin->framebuffer)
+                continue;
+            sd       = dev;
+            fb_found = true;
+            if (t->has_mv && t->mv_rp != VK_NULL_HANDLE)
+            {
+                /* Prefer the begin rp's own live MV pass: the pass the fb was
+                 * created with may since have been destroyed by the app
+                 * (stereo_DestroyRenderPass destroys the pair).  Compatible
+                 * passes are interchangeable. */
+                StereoRenderPassInfo *lk =
+                    stereo_rp_lookup(dev, pRenderPassBegin->renderPass);
+                if (lk && lk->has_multiview &&
+                    lk->mv_handle != VK_NULL_HANDLE)
+                    mv_rp = lk->mv_handle;
+                else if (t->rp == pRenderPassBegin->renderPass ||
+                         t->mv_rp == pRenderPassBegin->renderPass)
+                    mv_rp = t->mv_rp;
+            }
+            break;
+        }
+    }
+    if (!sd)
+    {
+        for (uint32_t d = 0; d < g_device_count; d++)
+        {
+            if (g_devices[d].real_device)
+            {
+                sd = &g_devices[d];
+                break;
+            }
+        }
+    }
+    if (!sd)
+        return;
+    if (!fb_found)
+    {
+        StereoRenderPassInfo *lk =
+            stereo_rp_lookup(sd, pRenderPassBegin->renderPass);
+        if (lk && lk->has_multiview && lk->mv_handle != VK_NULL_HANDLE)
+            mv_rp = lk->mv_handle;
+    }
+
+    VkRenderPassBeginInfo modified = *pRenderPassBegin;
+    if (mv_rp)
+        modified.renderPass = mv_rp;
+
+    STEREO_LOG(
+        "RP2_BEGIN cb=%p fb=%p orig_rp=%p used_rp=%p fb_found=%u mv=%u",
+        (void *)commandBuffer,
+        (void *)pRenderPassBegin->framebuffer,
+        (void *)pRenderPassBegin->renderPass,
+        (void *)modified.renderPass,
+        (unsigned)fb_found,
+        (unsigned)(mv_rp != VK_NULL_HANDLE));
+
+    {
+        bool cb_found = false;
+        for (uint32_t i = 0; i < sd->cb_track_count; i++)
+        {
+            if (sd->cb_track[i].cb == commandBuffer)
+            {
+                sd->cb_track[i].render_pass = modified.renderPass;
+                sd->cb_track[i].framebuffer = modified.framebuffer;
+                cb_found = true;
+                break;
+            }
+        }
+        if (!cb_found && sd->cb_track_count < MAX_CB_TRACK)
+        {
+            uint32_t idx = sd->cb_track_count++;
+            memset(&sd->cb_track[idx], 0, sizeof(sd->cb_track[idx]));
+            sd->cb_track[idx].cb          = commandBuffer;
+            sd->cb_track[idx].render_pass = modified.renderPass;
+            sd->cb_track[idx].framebuffer = modified.framebuffer;
+        }
+    }
+
+    if (sd->real.CmdBeginRenderPass2)
+    {
+        sd->real.CmdBeginRenderPass2(commandBuffer, &modified, pSubpassBeginInfo);
+    }
+    else if (sd->real.CmdBeginRenderPass)
+    {
+        sd->real.CmdBeginRenderPass(
+            commandBuffer,
+            &modified,
+            pSubpassBeginInfo ? pSubpassBeginInfo->contents
+                              : VK_SUBPASS_CONTENTS_INLINE);
+    }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdEndRenderPass(VkCommandBuffer commandBuffer)
+{
+    StereoDevice *sd = find_any_device();
+    if (!sd) return;
+    for (uint32_t i = 0; i < sd->cb_track_count; i++)
+    {
+        if (sd->cb_track[i].cb == commandBuffer)
+        {
+            STEREO_LOG("CB_END_RENDER_PASS cb=%p old_rp=%p old_fb=%p",(void*)commandBuffer,(void*)sd->cb_track[i].render_pass,(void*)sd->cb_track[i].framebuffer);
+            sd->cb_track[i].render_pass = VK_NULL_HANDLE;
+            sd->cb_track[i].framebuffer = VK_NULL_HANDLE;
+            break;
+        }
+    }
+    sd->real.CmdEndRenderPass(commandBuffer);
+}
+
+/* -- copy/blit into stereo swapchain images ----------------------------------
+ *
+ * VKD3D-Proton >= 3.0.1 presents with vkCmdCopyImage/vkCmdBlitImage from its
+ * back buffer straight into the swapchain image (no blit render pass any more).
+ * Those commands only touch layer 0, so the right eye (layer 1) stayed black.
+ * For every region that writes layer 0 of a stereo swapchain image, add the same
+ * region for layer 1 (source layer 1 too when the source is an upgraded
+ * 2-layer image, otherwise the mono source is duplicated). */
+static bool stereo_img_in(const VkImage *arr, uint32_t n, VkImage img)
+{
+    for (uint32_t i = 0; i < n; i++)
+        if (arr[i] == img)
+            return true;
+    return false;
+}
+
+static bool stereo_is_swapchain_image(StereoDevice *sd, VkImage img)
+{
+    for (uint32_t s = 0; s < sd->swapchain_count; s++)
+    {
+        StereoSwapchain *sc = &sd->swapchains[s];
+        if (!sc->stereo_active || !sc->stereo_images)
+            continue;
+        for (uint32_t i = 0; i < sc->image_count; i++)
+            if (sc->stereo_images[i] == img)
+                return true;
+    }
+    return false;
+}
+
+static bool stereo_is_layered_image(StereoDevice *sd, VkImage img)
+{
+    return stereo_is_swapchain_image(sd, img) ||
+           stereo_img_in(sd->intercepted_color, sd->intercepted_color_count, img) ||
+           stereo_img_in(sd->upgraded_images, sd->upgraded_image_count, img);
+}
+
+static void stereo_copy_barrier(StereoDevice *sd, VkCommandBuffer cb, bool before)
+{
+    VkMemoryBarrier mb = {
+        .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = before ? VK_ACCESS_MEMORY_WRITE_BIT : VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = before ? (VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT)
+                                : (VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT),
+    };
+    sd->real.CmdPipelineBarrier(
+        cb,
+        before ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_TRANSFER_BIT,
+        before ? VK_PIPELINE_STAGE_TRANSFER_BIT     : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0, 1, &mb, 0, NULL, 0, NULL);
+}
+
+static bool stereo_dup_layer1(bool layered,
+    const VkImageSubresourceLayers *src, const VkImageSubresourceLayers *dst)
+{
+    return dst->baseArrayLayer == 0 && dst->layerCount == 1 &&
+           src->layerCount == 1 && (!layered || src->baseArrayLayer == 0);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdCopyImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage, VkImageLayout srcImageLayout,
+    VkImage dstImage, VkImageLayout dstImageLayout,
+    uint32_t regionCount, const VkImageCopy *pRegions)
+{
+    STEREO_LOG("CALLED stereo_CmdCopyImage");
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdCopyImage)
+        return;
+    VkImageCopy *r = NULL;
+    uint32_t n = 0;
+    if (sd->stereo.enabled && regionCount && pRegions &&
+        stereo_is_swapchain_image(sd, dstImage) &&
+        (r = malloc((size_t)regionCount * 2 * sizeof(*r))) != NULL)
+    {
+        bool layered = stereo_is_layered_image(sd, srcImage);
+        for (uint32_t i = 0; i < regionCount; i++)
+        {
+            r[n++] = pRegions[i];
+            if (stereo_dup_layer1(layered, &pRegions[i].srcSubresource, &pRegions[i].dstSubresource))
+            {
+                VkImageCopy e = pRegions[i];
+                e.dstSubresource.baseArrayLayer = 1;
+                if (layered)
+                    e.srcSubresource.baseArrayLayer = 1;
+                r[n++] = e;
+            }
+        }
+        STEREO_LOG("COPY_STEREO src=%p dst=%p layered=%u regions=%u->%u",
+                   (void *)(uintptr_t)srcImage, (void *)(uintptr_t)dstImage,
+                   (unsigned)layered, regionCount, n);
+        stereo_copy_barrier(sd, commandBuffer, true);
+        sd->real.CmdCopyImage(commandBuffer, srcImage, srcImageLayout,
+                              dstImage, dstImageLayout, n, r);
+        stereo_copy_barrier(sd, commandBuffer, false);
+        free(r);
+        return;
+    }
+    sd->real.CmdCopyImage(commandBuffer, srcImage, srcImageLayout,
+                          dstImage, dstImageLayout, regionCount, pRegions);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBlitImage(
+    VkCommandBuffer commandBuffer,
+    VkImage srcImage, VkImageLayout srcImageLayout,
+    VkImage dstImage, VkImageLayout dstImageLayout,
+    uint32_t regionCount, const VkImageBlit *pRegions, VkFilter filter)
+{
+    STEREO_LOG("CALLED stereo_CmdBlitImage");
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdBlitImage)
+        return;
+    VkImageBlit *r = NULL;
+    uint32_t n = 0;
+    if (sd->stereo.enabled && regionCount && pRegions &&
+        stereo_is_swapchain_image(sd, dstImage) &&
+        (r = malloc((size_t)regionCount * 2 * sizeof(*r))) != NULL)
+    {
+        bool layered = stereo_is_layered_image(sd, srcImage);
+        for (uint32_t i = 0; i < regionCount; i++)
+        {
+            r[n++] = pRegions[i];
+            if (stereo_dup_layer1(layered, &pRegions[i].srcSubresource, &pRegions[i].dstSubresource))
+            {
+                VkImageBlit e = pRegions[i];
+                e.dstSubresource.baseArrayLayer = 1;
+                if (layered)
+                    e.srcSubresource.baseArrayLayer = 1;
+                r[n++] = e;
+            }
+        }
+        STEREO_LOG("BLIT_STEREO src=%p dst=%p layered=%u regions=%u->%u",
+                   (void *)(uintptr_t)srcImage, (void *)(uintptr_t)dstImage,
+                   (unsigned)layered, regionCount, n);
+        stereo_copy_barrier(sd, commandBuffer, true);
+        sd->real.CmdBlitImage(commandBuffer, srcImage, srcImageLayout,
+                              dstImage, dstImageLayout, n, r, filter);
+        stereo_copy_barrier(sd, commandBuffer, false);
+        free(r);
+        return;
+    }
+    sd->real.CmdBlitImage(commandBuffer, srcImage, srcImageLayout,
+                          dstImage, dstImageLayout, regionCount, pRegions, filter);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdCopyImage2(VkCommandBuffer commandBuffer, const VkCopyImageInfo2 *pInfo)
+{
+    STEREO_LOG("CALLED stereo_CmdCopyImage2");
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdCopyImage2 || !pInfo)
+        return;
+    VkImageCopy2 *r = NULL;
+    uint32_t n = 0;
+    if (sd->stereo.enabled && pInfo->regionCount && pInfo->pRegions &&
+        stereo_is_swapchain_image(sd, pInfo->dstImage) &&
+        (r = malloc((size_t)pInfo->regionCount * 2 * sizeof(*r))) != NULL)
+    {
+        bool layered = stereo_is_layered_image(sd, pInfo->srcImage);
+        for (uint32_t i = 0; i < pInfo->regionCount; i++)
+        {
+            r[n++] = pInfo->pRegions[i];
+            if (stereo_dup_layer1(layered, &pInfo->pRegions[i].srcSubresource, &pInfo->pRegions[i].dstSubresource))
+            {
+                VkImageCopy2 e = pInfo->pRegions[i];
+                e.dstSubresource.baseArrayLayer = 1;
+                if (layered)
+                    e.srcSubresource.baseArrayLayer = 1;
+                r[n++] = e;
+            }
+        }
+        STEREO_LOG("COPY2_STEREO src=%p dst=%p layered=%u regions=%u->%u",
+                   (void *)(uintptr_t)pInfo->srcImage, (void *)(uintptr_t)pInfo->dstImage,
+                   (unsigned)layered, pInfo->regionCount, n);
+        VkCopyImageInfo2 mod = *pInfo;
+        mod.regionCount = n;
+        mod.pRegions    = r;
+        stereo_copy_barrier(sd, commandBuffer, true);
+        sd->real.CmdCopyImage2(commandBuffer, &mod);
+        stereo_copy_barrier(sd, commandBuffer, false);
+        free(r);
+        return;
+    }
+    sd->real.CmdCopyImage2(commandBuffer, pInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+stereo_CmdBlitImage2(VkCommandBuffer commandBuffer, const VkBlitImageInfo2 *pInfo)
+{
+    STEREO_LOG("CALLED stereo_CmdBlitImage2");
+    StereoDevice *sd = find_any_device();
+    if (!sd || !sd->real.CmdBlitImage2 || !pInfo)
+        return;
+    VkImageBlit2 *r = NULL;
+    uint32_t n = 0;
+    if (sd->stereo.enabled && pInfo->regionCount && pInfo->pRegions &&
+        stereo_is_swapchain_image(sd, pInfo->dstImage) &&
+        (r = malloc((size_t)pInfo->regionCount * 2 * sizeof(*r))) != NULL)
+    {
+        bool layered = stereo_is_layered_image(sd, pInfo->srcImage);
+        for (uint32_t i = 0; i < pInfo->regionCount; i++)
+        {
+            r[n++] = pInfo->pRegions[i];
+            if (stereo_dup_layer1(layered, &pInfo->pRegions[i].srcSubresource, &pInfo->pRegions[i].dstSubresource))
+            {
+                VkImageBlit2 e = pInfo->pRegions[i];
+                e.dstSubresource.baseArrayLayer = 1;
+                if (layered)
+                    e.srcSubresource.baseArrayLayer = 1;
+                r[n++] = e;
+            }
+        }
+        STEREO_LOG("BLIT2_STEREO src=%p dst=%p layered=%u regions=%u->%u",
+                   (void *)(uintptr_t)pInfo->srcImage, (void *)(uintptr_t)pInfo->dstImage,
+                   (unsigned)layered, pInfo->regionCount, n);
+        VkBlitImageInfo2 mod = *pInfo;
+        mod.regionCount = n;
+        mod.pRegions    = r;
+        stereo_copy_barrier(sd, commandBuffer, true);
+        sd->real.CmdBlitImage2(commandBuffer, &mod);
+        stereo_copy_barrier(sd, commandBuffer, false);
+        free(r);
+        return;
+    }
+    sd->real.CmdBlitImage2(commandBuffer, pInfo);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdBeginRendering(
     VkCommandBuffer commandBuffer,
@@ -854,86 +1262,86 @@ stereo_CmdBeginRendering(
     STEREO_LOG("CALLED stereo_CmdBeginRendering cb=%p info=%p",
         (void*)commandBuffer,
         (void*)pRenderingInfo);
-    STEREO_LOG("BEGIN_RENDERING STEP=1");
+    //STEREO_LOG("BEGIN_RENDERING STEP=1");
     extern StereoDevice g_devices[];
     extern uint32_t g_device_count;
-    STEREO_LOG("BEGIN_RENDERING STEP=2 device_count=%u", g_device_count);
+    //STEREO_LOG("BEGIN_RENDERING STEP=2 device_count=%u", g_device_count);
     StereoDevice *sd = NULL;
     for (uint32_t i = 0; i < g_device_count; i++)
     {
-        STEREO_LOG("BEGIN_RENDERING STEP=3 i=%u real_device=%p",
-            i,
-            (void*)g_devices[i].real_device);
+        //STEREO_LOG("BEGIN_RENDERING STEP=3 i=%u real_device=%p",
+        //    i,
+        //    (void*)g_devices[i].real_device);
         if (g_devices[i].real_device)
         {
             sd = &g_devices[i];
             break;
         }
     }
-    STEREO_LOG("BEGIN_RENDERING STEP=4 sd=%p", (void*)sd);
+    //STEREO_LOG("BEGIN_RENDERING STEP=4 sd=%p", (void*)sd);
     if (!sd)
     {
         STEREO_LOG("BEGIN_RENDERING RETURN reason=no_device");
         return;
     }
-    STEREO_LOG("BEGIN_RENDERING STEP=5 real_CmdBeginRendering=%p",
-        (void*)sd->real.CmdBeginRendering);
+    //STEREO_LOG("BEGIN_RENDERING STEP=5 real_CmdBeginRendering=%p",
+    //    (void*)sd->real.CmdBeginRendering);
     if (!sd->real.CmdBeginRendering)
     {
         STEREO_LOG("BEGIN_RENDERING RETURN reason=no_real_function");
         return;
     }
-    STEREO_LOG("BEGIN_RENDERING STEP=6 viewMask=%u layerCount=%u colorCount=%u depthView=%p",
-        pRenderingInfo->viewMask,
-        pRenderingInfo->layerCount,
-        pRenderingInfo->colorAttachmentCount,
-        pRenderingInfo->pDepthAttachment ?
-        (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView : NULL);
-    if (pRenderingInfo->colorAttachmentCount &&
-        pRenderingInfo->pColorAttachments)
-    {
-        for (uint32_t ci = 0; ci < pRenderingInfo->colorAttachmentCount; ci++)
-        {
-            STEREO_LOG(
-                "BEGIN_RENDERING_COLOR ci=%u view=%p layout=%u loadOp=%u storeOp=%u",
-                ci,
-                (void *)(uintptr_t)pRenderingInfo->pColorAttachments[ci].imageView,
-                pRenderingInfo->pColorAttachments[ci].imageLayout,
-                pRenderingInfo->pColorAttachments[ci].loadOp,
-                pRenderingInfo->pColorAttachments[ci].storeOp);
-        }
-    }
-    if (pRenderingInfo->pDepthAttachment)
-    {
-        STEREO_LOG(
-            "BEGIN_RENDERING_DEPTH view=%p layout=%u loadOp=%u storeOp=%u",
-            (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView,
-            pRenderingInfo->pDepthAttachment->imageLayout,
-            pRenderingInfo->pDepthAttachment->loadOp,
-            pRenderingInfo->pDepthAttachment->storeOp);
-    }
+    //STEREO_LOG("BEGIN_RENDERING STEP=6 viewMask=%u layerCount=%u colorCount=%u depthView=%p",
+    //    pRenderingInfo->viewMask,
+    //    pRenderingInfo->layerCount,
+    //    pRenderingInfo->colorAttachmentCount,
+    //    pRenderingInfo->pDepthAttachment ?
+    //    (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView : NULL);
+    //if (pRenderingInfo->colorAttachmentCount &&
+    //    pRenderingInfo->pColorAttachments)
+    //{
+    //    for (uint32_t ci = 0; ci < pRenderingInfo->colorAttachmentCount; ci++)
+    //    {
+    //        STEREO_LOG(
+    //            "BEGIN_RENDERING_COLOR ci=%u view=%p layout=%u loadOp=%u storeOp=%u",
+    //            ci,
+    //            (void *)(uintptr_t)pRenderingInfo->pColorAttachments[ci].imageView,
+    //            pRenderingInfo->pColorAttachments[ci].imageLayout,
+    //            pRenderingInfo->pColorAttachments[ci].loadOp,
+    //            pRenderingInfo->pColorAttachments[ci].storeOp);
+    //    }
+    //}
+    //if (pRenderingInfo->pDepthAttachment)
+    //{
+    //    STEREO_LOG(
+    //        "BEGIN_RENDERING_DEPTH view=%p layout=%u loadOp=%u storeOp=%u",
+    //        (void *)(uintptr_t)pRenderingInfo->pDepthAttachment->imageView,
+    //        pRenderingInfo->pDepthAttachment->imageLayout,
+    //        pRenderingInfo->pDepthAttachment->loadOp,
+    //        pRenderingInfo->pDepthAttachment->storeOp);
+    //}
     VkRenderingInfo modified = *pRenderingInfo;
     if (sd->stereo.multiview &&
         !sd->stereo.shader_objects_mono &&
         modified.viewMask == 0)
     {
         modified.viewMask = 0x3;
-        STEREO_LOG(
-            "BEGIN_RENDERING_UPGRADE viewMask 0x0->0x3 layerCount=%u colors=%u",
-            modified.layerCount,
-            modified.colorAttachmentCount);
+        //STEREO_LOG(
+        //    "BEGIN_RENDERING_UPGRADE viewMask 0x0->0x3 layerCount=%u colors=%u",
+        //    modified.layerCount,
+        //    modified.colorAttachmentCount);
     }
-    STEREO_LOG(
-        "BEGIN_RENDERING viewMask=0x%x layerCount=%u colors=%u flags=0x%x",
-        modified.viewMask,
-        modified.layerCount,
-        modified.colorAttachmentCount,
-        modified.flags);
-    STEREO_LOG(
-        "BEGIN_RENDERING FORWARD real=%p viewMask=0x%x layers=%u",
-        sd->real.CmdBeginRendering,
-        modified.viewMask,
-        modified.layerCount);
+    //STEREO_LOG(
+    //    "BEGIN_RENDERING viewMask=0x%x layerCount=%u colors=%u flags=0x%x",
+    //    modified.viewMask,
+    //    modified.layerCount,
+    //    modified.colorAttachmentCount,
+    //    modified.flags);
+    //STEREO_LOG(
+    //    "BEGIN_RENDERING FORWARD real=%p viewMask=0x%x layers=%u",
+    //    sd->real.CmdBeginRendering,
+    //    modified.viewMask,
+    //    modified.layerCount);
     sd->real.CmdBeginRendering(
         commandBuffer,
         &modified);
@@ -957,16 +1365,16 @@ stereo_CmdEndRendering(
             break;
         }
     }
-    STEREO_LOG(
-        "END_RENDERING LOOKUP sd=%p real=%p",
-        (void*)sd,
-        sd ? (void*)sd->real.CmdEndRendering : NULL);
+    //STEREO_LOG(
+    //    "END_RENDERING LOOKUP sd=%p real=%p",
+    //    (void*)sd,
+    //    sd ? (void*)sd->real.CmdEndRendering : NULL);
     if (!sd || !sd->real.CmdEndRendering)
         return;
-    STEREO_LOG("END_RENDERING");
-    STEREO_LOG(
-        "END_RENDERING FORWARD real=%p",
-        sd->real.CmdEndRendering);
+    //STEREO_LOG("END_RENDERING");
+    //STEREO_LOG(
+    //    "END_RENDERING FORWARD real=%p",
+    //    sd->real.CmdEndRendering);
     sd->real.CmdEndRendering(commandBuffer);
 }
 
@@ -1011,36 +1419,36 @@ stereo_CmdBindPipeline(
         sd,
         commandBuffer,
         pipeline);
-    STEREO_LOG(
-        "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
-        (void *)pipeline,
-        (void *)active_rp,
-        info ? (void *)info->mv_renderpass : NULL,
-        info ? (void *)info->original_renderpass : NULL);
-    if (info)
-    {
-        STEREO_LOG(
-            "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
-            "orig_rp=%p patched_vs=%u patched_fs=%u "
-            "quad=%u bindings=%u",
-            (void*)pipeline,
-            (void*)active_fb,
-            (void*)active_rp,
-            (void*)info->mv_renderpass,
-            (void*)info->original_renderpass,
-            info->patched_vs,
-            info->patched_fs,
-            info->is_quad,
-            info->vertex_binding_count);
-    }
-    else
-    {
-        STEREO_LOG(
-            "PIPE_BIND pipe=%p UNKNOWN fb=%p rp=%p",
-            (void*)pipeline,
-            (void*)active_fb,
-            (void*)active_rp);
-    }
+    //STEREO_LOG(
+    //    "PIPE_BIND pipe=%p current_rp=%p pipeline_mv_rp=%p pipeline_orig_rp=%p",
+    //    (void *)pipeline,
+    //    (void *)active_rp,
+    //    info ? (void *)info->mv_renderpass : NULL,
+    //    info ? (void *)info->original_renderpass : NULL);
+    //if (info)
+    //{
+    //    STEREO_LOG(
+    //        "PIPE_BIND pipe=%p fb=%p rp=%p mv_rp=%p "
+    //        "orig_rp=%p patched_vs=%u patched_fs=%u "
+    //        "quad=%u bindings=%u",
+    //        (void*)pipeline,
+    //        (void*)active_fb,
+    //        (void*)active_rp,
+    //        (void*)info->mv_renderpass,
+    //        (void*)info->original_renderpass,
+    //        info->patched_vs,
+    //        info->patched_fs,
+    //        info->is_quad,
+    //        info->vertex_binding_count);
+    //}
+    //else
+    //{
+    //    STEREO_LOG(
+    //        "PIPE_BIND pipe=%p UNKNOWN fb=%p rp=%p",
+    //        (void*)pipeline,
+    //        (void*)active_fb,
+    //        (void*)active_rp);
+    //}
     sd->real.CmdBindPipeline(
         commandBuffer,
         pipelineBindPoint,
@@ -1173,7 +1581,7 @@ stereo_CmdTraceRaysKHR(
         STEREO_LOG("RT_TRACE_END");
         return;
     }
-    VkImage dst_image = sc->stereo_images[0];
+    VkImage dst_image = sc->stereo_images[sc->cur_idx % sc->image_count];
     STEREO_LOG(
         "RT_TRACE_COPY_BEGIN src=%p dst=%p width=%u height=%u layers=%u",
         (void *)(uintptr_t)rt_image,
@@ -1325,21 +1733,6 @@ stereo_CmdTraceRaysKHR(
     STEREO_LOG("RT_TRACE_END");
 }
 
-static StereoDevice *
-find_any_device(void)
-{
-    extern StereoDevice g_devices[];
-    extern uint32_t g_device_count;
-
-    for (uint32_t i = 0; i < g_device_count; i++)
-    {
-        if (g_devices[i].real_device)
-            return &g_devices[i];
-    }
-
-    return NULL;
-}
-
 VKAPI_ATTR void VKAPI_CALL
 stereo_CmdDrawIndexed(
     VkCommandBuffer commandBuffer,
@@ -1401,6 +1794,19 @@ stereo_CmdDrawIndexed(
             vertexOffset,
             firstInstance);
     }
+    uint32_t rp_view_mask = 0;
+    uint32_t rp_has_multiview = 0;
+    for (uint32_t i = 0; i < sd->render_pass_count; i++)
+    {
+        StereoRenderPassInfo *rpi = &sd->render_passes[i];
+        if (rpi->handle == rp || rpi->mv_handle == rp)
+        {
+            rp_view_mask = rpi->view_mask;
+            rp_has_multiview = rpi->has_multiview;
+            break;
+        }
+    }
+    STEREO_LOG("DRAW_TRACE type=INDEXED cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u index_count=%u instance_count=%u first_index=%u vertex_offset=%d first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,indexCount,instanceCount,firstIndex,vertexOffset,firstInstance);
     sd->real.CmdDrawIndexed(
         commandBuffer,
         indexCount,
@@ -1453,6 +1859,19 @@ stereo_CmdDraw(
     STEREO_LOG(
         "DRAW_STEREO cmd=%p",
         (void*)commandBuffer);
+    uint32_t rp_view_mask = 0;
+    uint32_t rp_has_multiview = 0;
+    for (uint32_t i = 0; i < sd->render_pass_count; i++)
+    {
+        StereoRenderPassInfo *rpi = &sd->render_passes[i];
+        if (rpi->handle == rp || rpi->mv_handle == rp)
+        {
+            rp_view_mask = rpi->view_mask;
+            rp_has_multiview = rpi->has_multiview;
+            break;
+        }
+    }
+    STEREO_LOG("DRAW_TRACE type=DIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u vertex_count=%u instance_count=%u first_vertex=%u first_instance=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,vertexCount,instanceCount,firstVertex,firstInstance);
     sd->real.CmdDraw(
         commandBuffer,
         vertexCount,
@@ -1500,6 +1919,19 @@ stereo_CmdDrawIndirect(
             "DRAW_INDIRECT pipe=%p UNKNOWN",
             (void *)pipe);
     }
+    uint32_t rp_view_mask = 0;
+    uint32_t rp_has_multiview = 0;
+    for (uint32_t i = 0; i < sd->render_pass_count; i++)
+    {
+        StereoRenderPassInfo *rpi = &sd->render_passes[i];
+        if (rpi->handle == rp || rpi->mv_handle == rp)
+        {
+            rp_view_mask = rpi->view_mask;
+            rp_has_multiview = rpi->has_multiview;
+            break;
+        }
+    }
+    STEREO_LOG("DRAW_TRACE type=INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u buffer=%p view_mask=0x%X has_multiview=%u offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
     sd->real.CmdDrawIndirect(
         commandBuffer,
         buffer,
@@ -1547,6 +1979,19 @@ stereo_CmdDrawIndexedIndirect(
             "DRAW_INDEXED_INDIRECT pipe=%p UNKNOWN",
             (void *)pipe);
     }
+    uint32_t rp_view_mask = 0;
+    uint32_t rp_has_multiview = 0;
+    for (uint32_t i = 0; i < sd->render_pass_count; i++)
+    {
+        StereoRenderPassInfo *rpi = &sd->render_passes[i];
+        if (rpi->handle == rp || rpi->mv_handle == rp)
+        {
+            rp_view_mask = rpi->view_mask;
+            rp_has_multiview = rpi->has_multiview;
+            break;
+        }
+    }
+    STEREO_LOG("DRAW_TRACE type=INDEXED_INDIRECT cb=%p pipe=%p rp=%p fb=%p known=%u quad=%u vs_hash=%016llx patched_vs=%u patched_fs=%u depth_test=%u depth_write=%u depth_compare=%u blend=%u view_mask=0x%X has_multiview=%u buffer=%p offset=%llu draw_count=%u stride=%u",(void*)commandBuffer,(void*)pipe,(void*)rp,(void*)fb,info!=NULL,info?info->is_quad:0,(unsigned long long)(info?info->vs_hash:0),info?info->patched_vs:0,info?info->patched_fs:0,info?info->depth_test_enable:0,info?info->depth_write_enable:0,info?info->depth_compare_op:0,info?info->blend_enable:0,rp_view_mask,rp_has_multiview,(void*)buffer,(unsigned long long)offset,drawCount,stride);
     sd->real.CmdDrawIndexedIndirect(
         commandBuffer,
         buffer,

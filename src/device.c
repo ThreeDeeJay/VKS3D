@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "stereo_icd.h"
 
 /* Forward decls (stereo.c) */
@@ -28,6 +29,7 @@ static const char *STEREO_CANDIDATE_EXTS[] = {
     "VK_KHR_maintenance2",
     "VK_KHR_create_renderpass2",
     "VK_NVX_multiview_per_view_attributes",
+    "VK_KHR_buffer_device_address",   /* patched shaders read live stereo values through the UBO address */
 
     "VK_KHR_external_memory",
     "VK_KHR_external_memory_win32",
@@ -77,7 +79,14 @@ static const char **stereo_filter_extensions(
     uint32_t total = 0;
 
     for (uint32_t i = 0; i < app_ext_count; i++)
+    {
+        /* hidden in stereo_EnumerateDeviceExtensionProperties; never forward */
+        if (app_exts[i] &&
+            (!strcmp(app_exts[i], "VK_NV_low_latency2") ||
+             !strcmp(app_exts[i], "VK_EXT_swapchain_maintenance1")))
+            continue;
         merged[total++] = app_exts[i];
+    }
 
     for (uint32_t e = 0; e < STEREO_CANDIDATE_EXT_COUNT; e++) {
         const char *ext = STEREO_CANDIDATE_EXTS[e];
@@ -117,6 +126,8 @@ void stereo_write_ubo(StereoDevice *sd)
             ? (1.0f / sd->stereo.convergence)
             : 0.0f;
     ubo->projection_mode = (float)sd->stereo.projection;
+    ubo->bg_expand = fmaxf(fabsf(sd->stereo.left_eye_offset  * sd->stereo.convergence),
+                           fabsf(sd->stereo.right_eye_offset * sd->stereo.convergence));
     STEREO_LOG(
         "STEREO_UBO_WRITE left=%f right=%f conv=%f invconv=%f mode=%f",
         sd->stereo.left_eye_offset,
@@ -127,12 +138,13 @@ void stereo_write_ubo(StereoDevice *sd)
 }
 
 /* ── Allocate and bind stereo UBO ───────────────────────────────────────── */
-static VkResult create_stereo_ubo(StereoDevice *sd)
+static VkResult create_stereo_ubo(StereoDevice *sd, bool use_bda)
 {
     VkBufferCreateInfo bci = {
         .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size        = sizeof(StereoUBO),
-        .usage       = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .usage       = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                       (use_bda ? VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT : 0),
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
     VkResult res = sd->real.CreateBuffer(sd->real_device, &bci, NULL, &sd->stereo_ubo);
@@ -145,7 +157,18 @@ static VkResult create_stereo_ubo(StereoDevice *sd)
     uint32_t mem_type = UINT32_MAX;
     VkMemoryPropertyFlags needed =
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    for (uint32_t i = 0; i < mp.memoryTypeCount; i++) {
+    if (use_bda) {
+        /* shaders read this every frame: prefer BAR/device-local host-visible memory */
+        VkMemoryPropertyFlags pref = needed | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        for (uint32_t i = 0; i < mp.memoryTypeCount; i++) {
+            if ((mr.memoryTypeBits & (1u << i)) &&
+                (mp.memoryTypes[i].propertyFlags & pref) == pref) {
+                mem_type = i;
+                break;
+            }
+        }
+    }
+    for (uint32_t i = 0; mem_type == UINT32_MAX && i < mp.memoryTypeCount; i++) {
         if ((mr.memoryTypeBits & (1u << i)) &&
             (mp.memoryTypes[i].propertyFlags & needed) == needed) {
             mem_type = i;
@@ -156,8 +179,13 @@ static VkResult create_stereo_ubo(StereoDevice *sd)
         STEREO_ERR("No suitable memory for stereo UBO");
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
+    VkMemoryAllocateFlagsInfo mafi = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+        .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+    };
     VkMemoryAllocateInfo mai = {
         .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext           = use_bda ? &mafi : NULL,
         .allocationSize  = mr.size,
         .memoryTypeIndex = mem_type,
     };
@@ -172,6 +200,19 @@ static VkResult create_stereo_ubo(StereoDevice *sd)
     if (res != VK_SUCCESS)
         return res;
     stereo_write_ubo(sd);
+    sd->stereo.dyn_addr = 0;
+    if (use_bda && sd->real.GetBufferDeviceAddress) {
+        VkBufferDeviceAddressInfo bai = {
+            .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+            .buffer = sd->stereo_ubo,
+        };
+        VkDeviceAddress a = sd->real.GetBufferDeviceAddress(sd->real_device, &bai);
+        if (a && (a & 15u) == 0) {
+            sd->stereo.dyn_addr = (uint64_t)a;
+            STEREO_LOG("Stereo UBO device address = 0x%llx (dynamic separation/convergence ON)",
+                       (unsigned long long)a);
+        }
+    }
     StereoUBO *ubo = (StereoUBO *)sd->stereo_ubo_map;
     STEREO_LOG("Stereo UBO: left=%.4f right=%.4f conv=%.4f inv_conv=%.4f proj=%u",
                ubo->eye_offset[0],
@@ -233,6 +274,51 @@ stereo_CreateDevice(
     if (!has_mv_feat)
         dci.pNext = &multiview_feat;
     dci.pEnabledFeatures = &base_feats;
+
+    /* Dynamic separation/convergence: patched shaders read the live values from the
+     * stereo UBO through its buffer device address, so no pipeline layout / descriptor
+     * changes and no re-patching are needed when a hotkey changes them.  Needs the
+     * bufferDeviceAddress feature; if unavailable (or VKS3D_STATIC_STEREO=1) the
+     * offsets stay baked into the shaders as before. */
+    VkPhysicalDeviceBufferDeviceAddressFeatures bda_feat = {
+        .sType               = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+        .bufferDeviceAddress = VK_TRUE,
+    };
+    bool bda_on = false;
+    {
+        const char *static_env = stereo_getenv("VKS3D_STATIC_STEREO");
+        bool want_dyn = !(static_env && atoi(static_env) != 0);
+        if (want_dyn && sp_si->stereo.enabled && sp_si->real.GetPhysicalDeviceFeatures2) {
+            VkPhysicalDeviceBufferDeviceAddressFeatures bda_q = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+            };
+            VkPhysicalDeviceFeatures2 f2q = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                .pNext = &bda_q,
+            };
+            sp_si->real.GetPhysicalDeviceFeatures2(real_physdev, &f2q);
+            if (bda_q.bufferDeviceAddress) {
+                bool found = false;
+                for (VkBaseOutStructure *n = (VkBaseOutStructure *)dci.pNext; n; n = n->pNext) {
+                    if (n->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES) {
+                        ((VkPhysicalDeviceVulkan12Features *)n)->bufferDeviceAddress = VK_TRUE;
+                        found = true;
+                        break;
+                    }
+                    if (n->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES) {
+                        ((VkPhysicalDeviceBufferDeviceAddressFeatures *)n)->bufferDeviceAddress = VK_TRUE;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    bda_feat.pNext = (void *)dci.pNext;
+                    dci.pNext = &bda_feat;
+                }
+                bda_on = true;
+            }
+        }
+    }
     VkPhysicalDeviceProperties phys_props;
     sp_si->real.GetPhysicalDeviceProperties(real_physdev, &phys_props);
     uint32_t dev_api = phys_props.apiVersion;
@@ -300,7 +386,7 @@ stereo_CreateDevice(
         }
     }
     if (sd->stereo.enabled) {
-        res = create_stereo_ubo(sd);
+        res = create_stereo_ubo(sd, bda_on);
         if (res != VK_SUCCESS) {
             STEREO_ERR("Failed to create stereo UBO: %d", res);
         }

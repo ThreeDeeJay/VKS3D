@@ -126,6 +126,27 @@ static float cfg_float(const char *key, float def)
     return v;
 }
 
+static void cfg_str(const char *key, const char *def, char *out, size_t out_size)
+{
+    snprintf(out, out_size, "%s", def);
+    char buf[64];
+    if (ini_read_str(g_global_ini, "VKS3D", key, buf, sizeof(buf))) {
+        snprintf(out, out_size, "%s", buf);
+        STEREO_LOG("INI load: [global] %s = %s", key, buf);
+    }
+    if (ini_read_str(g_local_ini, "VKS3D", key, buf, sizeof(buf))) {
+        snprintf(out, out_size, "%s", buf);
+        STEREO_LOG("INI load: [local]  %s = %s", key, buf);
+    }
+    char env_name[64];
+    snprintf(env_name, sizeof(env_name), "STEREO_%s", key);
+    const char *e = stereo_getenv(env_name);
+    if (e) {
+        snprintf(out, out_size, "%s", e);
+        STEREO_LOG("INI load: [env]    %s = %s", env_name, e);
+    }
+}
+
 static int cfg_int(const char *key, int def)
 {
     int v = def;
@@ -226,6 +247,13 @@ void stereo_config_init(StereoConfig *cfg)
     /* ── hotkey steps ── */
     cfg->step_separation  = cfg_float("step_separation",  0.005f);
     cfg->step_convergence = cfg_float("step_convergence", 0.005f);
+    cfg_str("hotkey_separation_decrease", "VK_CONTROL+VK_F3", cfg->hotkey_separation_decrease, sizeof(cfg->hotkey_separation_decrease));
+    cfg_str("hotkey_separation_increase", "VK_CONTROL+VK_F4", cfg->hotkey_separation_increase, sizeof(cfg->hotkey_separation_increase));
+    cfg_str("hotkey_convergence_decrease", "VK_CONTROL+VK_F5", cfg->hotkey_convergence_decrease, sizeof(cfg->hotkey_convergence_decrease));
+    cfg_str("hotkey_convergence_increase", "VK_CONTROL+VK_F6", cfg->hotkey_convergence_increase, sizeof(cfg->hotkey_convergence_increase));
+    cfg_str("hotkey_rate_increase_modifier", "VK_SHIFT", cfg->hotkey_rate_increase_modifier, sizeof(cfg->hotkey_rate_increase_modifier));
+    cfg_str("hotkey_rate_decrease_modifier", "VK_MENU", cfg->hotkey_rate_decrease_modifier, sizeof(cfg->hotkey_rate_decrease_modifier));
+    cfg_str("hotkey_save_settings", "VK_CONTROL+VK_F7", cfg->hotkey_save_settings, sizeof(cfg->hotkey_save_settings));
 
     stereo_config_compute_offsets(cfg);
     STEREO_LOG(
@@ -662,33 +690,20 @@ StereoRenderPassInfo *stereo_rp_lookup(StereoDevice *dev, VkRenderPass rp) {
         StereoRenderPassInfo *rpi = &dev->render_passes[i];
         if (rpi->handle == rp)
         {
-            const unsigned char *b = (const unsigned char *)rpi;
             STEREO_LOG(
-                "RPINFO_BYTES "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x "
-                "%02x %02x %02x %02x",
-                b[0],  b[1],  b[2],  b[3],
-                b[4],  b[5],  b[6],  b[7],
-                b[8],  b[9],  b[10], b[11],
-                b[12], b[13], b[14], b[15],
-                b[16], b[17], b[18], b[19],
-                b[20], b[21], b[22], b[23]);
-            STEREO_LOG(
-                "RP_LOOKUP hit handle=%08x mv=%08x has_mv=%u addr=%08x",
-                (unsigned)(uintptr_t)rpi->handle,
-                (unsigned)(uintptr_t)rpi->mv_handle,
+                "RP_LOOKUP hit handle=%p mv=%p has_mv=%u view_mask=0x%X addr=%p",
+                (void *)rpi->handle,
+                (void *)rpi->mv_handle,
                 (unsigned)rpi->has_multiview,
-                (unsigned)(uintptr_t)rpi);
+                (unsigned)rpi->view_mask,
+                (void *)rpi);
             return rpi;
         }
     }
     STEREO_LOG(
-        "RP_LOOKUP miss handle=%p",
-        rp);
+        "RP_LOOKUP miss handle=%p count=%u",
+        (void *)rp,
+        dev->render_pass_count);
     return NULL;
 }
 
@@ -872,6 +887,24 @@ void stereo_populate_device_dispatch(StereoDevice *sd, VkInstance real_inst)
     L(CmdBeginRenderPass); L(CmdNextSubpass); L(CmdEndRenderPass);
     L(CmdBeginRendering);
     L(CmdEndRendering);
+    /* RP2 begin: VKD3D-Proton never calls vkCmdBeginRenderPass. Core name first, KHR alias for 1.1 drivers. */
+    sd->real.CmdBeginRenderPass2 = (PFN_vkCmdBeginRenderPass2)
+        g_real_giPA(real_inst, "vkCmdBeginRenderPass2");
+    if (!sd->real.CmdBeginRenderPass2)
+        sd->real.CmdBeginRenderPass2 = (PFN_vkCmdBeginRenderPass2)
+            g_real_giPA(real_inst, "vkCmdBeginRenderPass2KHR");
+    /* VK_KHR_present_wait: NULL unless the app enabled it on this device. */
+    sd->real.WaitForPresentKHR = (PFN_vkWaitForPresentKHR)
+        g_real_giPA(real_inst, "vkWaitForPresentKHR");
+    sd->real.GetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)g_real_giPA(real_inst, "vkGetBufferDeviceAddress");
+    if (!sd->real.GetBufferDeviceAddress)
+        sd->real.GetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)g_real_giPA(real_inst, "vkGetBufferDeviceAddressKHR");
+    sd->real.CmdCopyImage2 = (PFN_vkCmdCopyImage2)g_real_giPA(real_inst, "vkCmdCopyImage2");
+    if (!sd->real.CmdCopyImage2)
+        sd->real.CmdCopyImage2 = (PFN_vkCmdCopyImage2)g_real_giPA(real_inst, "vkCmdCopyImage2KHR");
+    sd->real.CmdBlitImage2 = (PFN_vkCmdBlitImage2)g_real_giPA(real_inst, "vkCmdBlitImage2");
+    if (!sd->real.CmdBlitImage2)
+        sd->real.CmdBlitImage2 = (PFN_vkCmdBlitImage2)g_real_giPA(real_inst, "vkCmdBlitImage2KHR");
     L(CmdExecuteCommands);
     L(CreateSwapchainKHR); L(DestroySwapchainKHR);
     L(GetSwapchainImagesKHR); L(AcquireNextImageKHR); L(QueuePresentKHR);

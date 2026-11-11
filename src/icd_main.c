@@ -123,6 +123,17 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
     PD_FN(GetPhysicalDeviceCalibrateableTimeDomainsEXT)
 #endif
     PD_FN(GetPhysicalDeviceMultisamplePropertiesEXT)
+    /* KHR/NV additions: must be wrapped, never the real driver's raw pointer */
+    PD_FN(GetPhysicalDeviceCalibrateableTimeDomainsKHR)
+    PD_FN(GetPhysicalDeviceFragmentShadingRatesKHR)
+    PD_FN(GetPhysicalDeviceCooperativeMatrixPropertiesKHR)
+    PD_FN(GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV)
+    PD_FN(GetPhysicalDeviceVideoCapabilitiesKHR)
+    PD_FN(GetPhysicalDeviceVideoFormatPropertiesKHR)
+    PD_FN(GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR)
+    PD_FN(GetPhysicalDeviceOpticalFlowImageFormatsNV)
+    PD_FN(AcquireWinrtDisplayNV)
+    PD_FN(GetWinrtDisplayNV)
     /* ── NV / NVX vendor extensions ── */
     PD_FN(GetPhysicalDeviceExternalImageFormatPropertiesNV)
     PD_FN(GetPhysicalDeviceGeneratedCommandsPropertiesNVX)
@@ -203,6 +214,10 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
         return (PFN_vkVoidFunction)stereo_DestroyFramebuffer;
     if (!strcmp(name, "vkCmdBeginRenderPass"))
         return (PFN_vkVoidFunction)stereo_CmdBeginRenderPass;
+    if (!strcmp(name, "vkCmdBeginRenderPass2") || !strcmp(name, "vkCmdBeginRenderPass2KHR"))
+        return (PFN_vkVoidFunction)stereo_CmdBeginRenderPass2;
+    if (!strcmp(name, "vkDestroyRenderPass"))
+        return (PFN_vkVoidFunction)stereo_DestroyRenderPass;
     if (!strcmp(name, "vkCreateRenderPass"))
         return (PFN_vkVoidFunction)stereo_CreateRenderPass;
 #ifdef VK_KHR_create_renderpass2
@@ -242,7 +257,11 @@ static PFN_vkVoidFunction get_instance_proc_addr_internal(
                 StereoInstance *si, const char *name);
             PFN_vkVoidFunction t = stereo_physdev_trampoline_lookup(si, name);
             if (t) return t;
-            /* Fall through to instance-level lookup below */
+            /* NEVER hand out the real driver's raw pointer for a physdev-level
+             * function: the caller passes VKS3D's StereoPhysdev* wrapper and the
+             * real driver would dereference it as its own VkPhysicalDevice. */
+            STEREO_LOG("GIPA physdev '%s' has no wrapper stub -> NULL", name);
+            return NULL;
         }
         PFN_vkVoidFunction fn =
             si->real_get_instance_proc_addr(si->real_instance, name);
@@ -303,6 +322,48 @@ stereo_GetDeviceProcAddr(VkDevice device, const char *pName)
               stereo_DestroyFramebuffer);
     GDPA_WRAP("vkCmdBeginRenderPass",
               stereo_CmdBeginRenderPass);
+    GDPA_WRAP("vkCmdBeginRenderPass2",
+              stereo_CmdBeginRenderPass2);
+    GDPA_WRAP("vkCmdBeginRenderPass2KHR",
+              stereo_CmdBeginRenderPass2);
+    GDPA_WRAP("vkDestroyRenderPass",
+              stereo_DestroyRenderPass);
+    GDPA_WRAP("vkDestroyImage",
+              stereo_DestroyImage);
+    GDPA_WRAP("vkCmdCopyImage",
+              stereo_CmdCopyImage);
+    GDPA_WRAP("vkCmdBlitImage",
+              stereo_CmdBlitImage);
+    if (!strcmp(pName, "vkCmdCopyImage2") || !strcmp(pName, "vkCmdCopyImage2KHR") ||
+        !strcmp(pName, "vkCmdBlitImage2") || !strcmp(pName, "vkCmdBlitImage2KHR")) {
+        /* Only expose the wrapper if the real device exposes the function. */
+        extern StereoDevice g_devices[];
+        extern uint32_t g_device_count;
+        for (uint32_t ci = 0; ci < g_device_count; ci++) {
+            if (g_devices[ci].real_device == device &&
+                g_devices[ci].real.GetDeviceProcAddr) {
+                if (!g_devices[ci].real.GetDeviceProcAddr(g_devices[ci].real_device, pName))
+                    return NULL;
+                return (PFN_vkVoidFunction)(strstr(pName, "Copy") ?
+                    (void *)stereo_CmdCopyImage2 : (void *)stereo_CmdBlitImage2);
+            }
+        }
+    }
+    if (!strcmp(pName, "vkWaitForPresentKHR")) {
+    /* Only expose the wrapper if the real device actually has VK_KHR_present_wait enabled. */
+        extern StereoDevice g_devices[];
+        extern uint32_t g_device_count;
+        for (uint32_t wi = 0; wi < g_device_count; wi++) {
+            if (g_devices[wi].real_device == device &&
+                g_devices[wi].real.GetDeviceProcAddr) {
+                if (g_devices[wi].real.GetDeviceProcAddr(g_devices[wi].real_device, pName))
+                    return (PFN_vkVoidFunction)stereo_WaitForPresentKHR;
+                return NULL;
+            }
+        }
+    }
+    GDPA_WRAP("vkCmdEndRenderPass",
+              stereo_CmdEndRenderPass);
     GDPA_WRAP("vkCmdBeginRendering",
               stereo_CmdBeginRendering);
     GDPA_WRAP("vkCmdBeginRenderingKHR",
