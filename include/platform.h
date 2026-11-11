@@ -479,8 +479,17 @@ static inline void vks3d_log_open(void)
     /* If CreateFileA fails, OutputDebugStringA still works */
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+int regex_match(const char *msg);
+#ifdef __cplusplus
+}
+#endif
 static inline void vks3d_log_write(const char *msg)
 {
+    if (!regex_match(msg))
+        return;
     OutputDebugStringA(msg);
     if (g_vks3d_log_handle != INVALID_HANDLE_VALUE) {
         DWORD written;

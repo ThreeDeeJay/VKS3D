@@ -62,6 +62,7 @@ endif()
 
 # ── Source files ─────────────────────────────────────────────────────────────
 set(STEREO_SOURCES
+    src/regex.cpp
     src/icd_main.c
     src/stereo.c
     src/instance.c
