@@ -3,9 +3,6 @@
 #include <mutex>
 #include <cstdlib>
 #include "platform.h"
-extern "C" {
-const char *stereo_getenv(const char *name);
-}
 static std::once_flag g_log_regex_once;
 static std::regex g_log_regex;
 static bool g_log_regex_valid = false;
