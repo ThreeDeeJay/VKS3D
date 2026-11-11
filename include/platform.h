@@ -493,26 +493,26 @@ static inline void vks3d_log_write(const char *msg)
 /* vks3d_logf — printf-style; single fixed buffer to minimise stack use */
 static inline void vks3d_logf(const char *prefix, const char *fmt, ...)
 {
-    // char msg[1024];
-    // int  pos = 0;
-    // int  rem = (int)sizeof(msg) - 1;
-    // /* Write prefix */
-    // if (prefix && prefix[0]) {
-    //     int pn = _snprintf(msg, (size_t)rem, "%s", prefix);
-    //     if (pn > 0) { pos += pn; rem -= pn; }
-    // }
-    // /* Write formatted body */
-    // if (rem > 1) {
-    //     va_list ap;
-    //     va_start(ap, fmt);
-    //     int n = vsnprintf(msg + pos, (size_t)rem, fmt, ap);
-    //     va_end(ap);
-    //     if (n > 0) pos += (n < rem ? n : rem - 1);
-    // }
-    // /* Append newline */
-    // if (pos < (int)sizeof(msg) - 1) msg[pos++] = '\n';
-    // msg[pos] = '\0';
-    // vks3d_log_write(msg);
+    char msg[1024];
+    int  pos = 0;
+    int  rem = (int)sizeof(msg) - 1;
+    /* Write prefix */
+    if (prefix && prefix[0]) {
+        int pn = _snprintf(msg, (size_t)rem, "%s", prefix);
+        if (pn > 0) { pos += pn; rem -= pn; }
+    }
+    /* Write formatted body */
+    if (rem > 1) {
+        va_list ap;
+        va_start(ap, fmt);
+        int n = vsnprintf(msg + pos, (size_t)rem, fmt, ap);
+        va_end(ap);
+        if (n > 0) pos += (n < rem ? n : rem - 1);
+    }
+    /* Append newline */
+    if (pos < (int)sizeof(msg) - 1) msg[pos++] = '\n';
+    msg[pos] = '\0';
+    vks3d_log_write(msg);
 }
 
 /* STEREO_LOG / STEREO_ERR: no-ops when logging is disabled */
