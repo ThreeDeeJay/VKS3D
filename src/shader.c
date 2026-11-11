@@ -12764,8 +12764,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         bool vs_pure_quad = false;
         bool vs_uv_quad = false;
         if (has_vs && vs_stage != ~0u) {
-            StereoShaderCache vs_inline_tmp;
-            StereoShaderCache *vs_cache = stereo_stage_spv(sd,&ci->pStages[vs_stage],&vs_inline_tmp);
+            StereoShaderCache *vs_cache = cache_find(sd,ci->pStages[vs_stage].module);
             if (vs_cache) {
                 SpvMod vm = {0};
                 vm.words = vs_cache->spv;
