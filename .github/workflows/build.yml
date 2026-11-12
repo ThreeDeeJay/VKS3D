@@ -9,7 +9,8 @@ env:
 
 on:
   push:
-    Branches: $Branch
+    branches: $Branch
+    tags-ignore: stable
   workflow_dispatch:
 
 jobs:
