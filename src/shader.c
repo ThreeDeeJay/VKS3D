@@ -7743,16 +7743,7 @@ bool spirv_patch_stereo_fs(
         new_bound,
         nid);
     SpvBuf ob;
-    if (!sb_init(&ob, in_c + 60 + (size_t)n_patches * 28))
-        return false;
-    uint32_t id_bound = new_bound;
-    bool *emitted_type = calloc(id_bound, sizeof(*emitted_type));
-    if (!emitted_type)
-    {
-        free(emitted_type);
-        sb_free(&ob);
-        return false;
-    }
+    if (!sb_init(&ob, in_c + 60 + (size_t)n_patches * 28)) return false;
     bool mv_added   = s.has_mv_cap;
     bool ext_done   = false;
     uint32_t spv_version = in[1];
@@ -7767,12 +7758,19 @@ bool spirv_patch_stereo_fs(
     sb_push_n(&ob, in, 5);
     ob.w[3] = new_bound;
     for (size_t i = 5; i < in_c; ) {
-        uint32_t op = in[i] & 0xffff; uint32_t wc = in[i] >> 16;
-        if (!wc || i + wc > in_c)
+        uint32_t op = in[i] & 0xffff, wc = in[i] >> 16;
+        if (!wc || i + wc > in_c) break;
+        if (in_func &&
+            op >= SpvOpImageSampleImplicitLod &&
+            op <= SpvOpImageSparseTexelsResident)
         {
-            free(emitted_type);
-            sb_free(&ob);
-            return false;
+            STEREO_LOG(
+                "FS_IMAGE_OPCODE op=%u (%s) wc=%u resultType=%u result=%u",
+                op,
+                spv_op_name(op),
+                wc,
+                (wc >= 2) ? in[i + 1] : 0,
+                (wc >= 3) ? in[i + 2] : 0);
         }
         /* Emit MultiView capability immediately before the first non-capability. */
         if (!mv_added &&
