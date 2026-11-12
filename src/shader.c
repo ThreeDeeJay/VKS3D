@@ -12863,8 +12863,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                      * real geometry even when no OpMatrixTimes/OpDot is visible (dp4 helper
                      * functions, e.g. DXVK dxbc output): never a fullscreen quad. */
                     bool vs_attr_buffer = vm.has_buffer_var && vm.has_vertex_attr;
-                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer;
-                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer;
+                    bool vs_attr_buffer_position = vs_attr_buffer && !vm.proj_found;
+                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer_position;
+                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer_position;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
                     bool vs_z_one_position = false;
                     uint32_t vs_position_ptr = 0;
