@@ -7743,7 +7743,16 @@ bool spirv_patch_stereo_fs(
         new_bound,
         nid);
     SpvBuf ob;
-    if (!sb_init(&ob, in_c + 60 + (size_t)n_patches * 28)) return false;
+    if (!sb_init(&ob, in_c + 60 + (size_t)n_patches * 28))
+        return false;
+    uint32_t id_bound = new_bound;
+    bool *emitted_type = calloc(id_bound, sizeof(*emitted_type));
+    if (!emitted_type)
+    {
+        free(emitted_type);
+        sb_free(&ob);
+        return false;
+    }
     bool mv_added   = s.has_mv_cap;
     bool ext_done   = false;
     uint32_t spv_version = in[1];
