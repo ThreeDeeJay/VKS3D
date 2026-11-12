@@ -10705,10 +10705,10 @@ bool spirv_patch_stereo_fs(
             }
             else
             {
-                STEREO_LOG(
-                    "FS_OUTPUT_UNKNOWN target=%u value=%u",
-                    target,
-                    in[i+2]);
+//                STEREO_LOG(
+//                    "FS_OUTPUT_UNKNOWN target=%u value=%u",
+//                    target,
+//                    in[i+2]);
             }
         }
         /* Extend 2D sampling coordinate to 3D for patched loads */
