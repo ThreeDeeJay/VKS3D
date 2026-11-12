@@ -6,6 +6,8 @@
 #include "stereo_icd.h"
 #include "NV3D.hpp"
 
+extern "C" void vks3d_bind_system_d3d_imports(void);
+
 /* ------------------------------------------------------------------------- */
 /* Local helpers                                                             */
 /* ------------------------------------------------------------------------- */
@@ -95,6 +97,9 @@ if (sd->nv3d_ok &&
 }
 
 nv3d_destroy(sd);
+
+/* NV3D-Lib must talk to the real system D3D/DXGI/NvAPI, not DXVK's copies in the app folder */
+vks3d_bind_system_d3d_imports();
 
 NV3D::InterfaceVulkan *iface = nullptr;
 
