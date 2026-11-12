@@ -216,6 +216,13 @@ typedef struct StereoConfig {
     StereoProjectionMode    projection;
     float                   step_separation;
     float                   step_convergence;
+    char                    hotkey_separation_decrease[64];
+    char                    hotkey_separation_increase[64];
+    char                    hotkey_convergence_decrease[64];
+    char                    hotkey_convergence_increase[64];
+    char                    hotkey_rate_increase_modifier[64];
+    char                    hotkey_rate_decrease_modifier[64];
+    char                    hotkey_save_settings[64];
     uint64_t                dyn_addr;   /* device address of StereoUBO (0 = bake offsets into shaders) */
 } StereoConfig;
 
