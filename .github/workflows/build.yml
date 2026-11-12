@@ -226,7 +226,7 @@ jobs:
       - name: Release - latest_${{env.Branch}}
         if: github.event_name == 'push'
         run: |
-          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title "${{env.Title}} v1.${{env.PullRequest}}.${{env.CommitCount}}.${{env.AttemptCount}} | ${{env.CommitTitle}}" --notes '${{env.CommitDescription}}
+          gh release create latest_${{env.Branch}} --repo ${{github.repository}} --target ${{env.CommitHash}} --latest=false --prerelease --title '${{env.Title}} v1.${{env.PullRequest}}.${{env.CommitCount}}.${{env.AttemptCount}} | ${{env.CommitTitle}}' --notes '${{env.CommitDescription}}
           Build archive: https://github.com/${{github.repository}}/releases/tag/archive-${{env.Branch}}
           Build log: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}'
           gh release upload latest_${{env.Branch}} --repo ${{github.repository}} --clobber "Release/${{env.Title}}.zip" "Release/${{env.Title}}_r${{env.CommitCount}}@${{env.CommitHashShort}}.zip"
@@ -234,7 +234,7 @@ jobs:
       - name: Release - archive-${{env.Branch}}
         if: github.event_name == 'push'
         run: |
-          gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes 'Latest build: https://github.com/${{github.repository}}/releases/latest_${{env.Branch}}
+          gh release create archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title '${{env.Title}} ${{env.Branch}} build archive' --notes 'Latest build: https://github.com/${{github.repository}}/releases/latest_${{env.Branch}}
           Build logs: https://github.com/${{github.repository}}/actions' || true
           gh release edit archive-${{env.Branch}} --repo ${{github.repository}} --target ${{env.FirstCommitHash}} --latest=false --prerelease --title "${{env.Title}} ${{env.Branch}} build archive" --notes 'Latest build: https://github.com/${{github.repository}}/releases/latest_${{env.Branch}}
           Build logs: https://github.com/${{github.repository}}/actions' || true

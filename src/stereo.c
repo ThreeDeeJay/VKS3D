@@ -1025,6 +1025,187 @@ void dx9_nvapi_early_init(void)
 }
 #endif /* _WIN32 */
 
+#ifdef _WIN32
+/* -- Bind VKS3D's static D3D/DXGI/NvAPI imports to the REAL system DLLs ---------------
+ *
+ * NV3D-Lib (statically linked into this DLL) creates a native NVIDIA D3D11 device with
+ * shared textures/fences, a D3D9Ex 3D Vision stereo device and calls NvAPI.  Those are
+ * ordinary imports (d3d9/d3d11/dxgi/d3d12/nvapi) resolved BY NAME when VKS3D is loaded.
+ * In a DXVK / dxvk-nvapi process the app folder holds DXVK's d3d9/d3d11/dxgi (and nvapi)
+ * DLLs, so NV3D-Lib silently talked to DXVK ("D3D9Format::NVCS unknown", "Failed to open
+ * shared NT handle") and crashed.
+ *
+ * Fix: right before NV3D-Lib is first used, load each of those DLLs from the system
+ * directory (inside a private activation context that redirects the same names, so the
+ * system d3d11's own "dxgi.dll" dependency is also the system one) and rewrite this
+ * module's import address table entries to the system exports.
+ */
+static const char *const k_sysdll_names[] = {
+    "dxgi.dll", "d3d11.dll", "d3d9.dll", "d3d12.dll",
+#ifdef _WIN64
+    "nvapi64.dll",
+#else
+    "nvapi.dll",
+#endif
+    NULL
+};
+
+static HANDLE g_sysdll_actctx = INVALID_HANDLE_VALUE;
+static char   g_sysdll_dir[MAX_PATH];
+
+static void sysdll_make_actctx(void)
+{
+    UINT n = GetSystemDirectoryA(g_sysdll_dir, MAX_PATH);
+    if (!n || n >= MAX_PATH - 2) {
+        g_sysdll_dir[0] = '\0';
+        return;
+    }
+    char xml[2048];
+    int  len = snprintf(xml, sizeof(xml),
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\n"
+        "  <assemblyIdentity type=\"win32\" name=\"VKS3D.SystemDlls\" version=\"1.0.0.0\"/>\n");
+    for (int i = 0; k_sysdll_names[i] && len > 0 && len < (int)sizeof(xml) - 256; i++)
+        len += snprintf(xml + len, sizeof(xml) - (size_t)len,
+                        "  <file name=\"%s\" loadFrom=\"%s\\\"/>\n",
+                        k_sysdll_names[i], g_sysdll_dir);
+    if (len > 0 && len < (int)sizeof(xml) - 16)
+        len += snprintf(xml + len, sizeof(xml) - (size_t)len, "</assembly>\n");
+
+    char tmp[MAX_PATH], path[MAX_PATH + 64];
+    if (len > 0 && GetTempPathA(MAX_PATH, tmp)) {
+        snprintf(path, sizeof(path), "%svks3d_sysdll_%lu.manifest",
+                 tmp, (unsigned long)GetCurrentProcessId());
+        HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_TEMPORARY, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            DWORD wr = 0;
+            WriteFile(f, xml, (DWORD)len, &wr, NULL);
+            CloseHandle(f);
+            ACTCTXA ac;
+            memset(&ac, 0, sizeof(ac));
+            ac.cbSize   = sizeof(ac);
+            ac.lpSource = path;
+            g_sysdll_actctx = CreateActCtxA(&ac);
+            if (g_sysdll_actctx == INVALID_HANDLE_VALUE)
+                STEREO_ERR("[SysDll] CreateActCtx failed: %lu", (unsigned long)GetLastError());
+            DeleteFileA(path);
+        }
+    }
+    STEREO_LOG("[SysDll] sysdir='%s' actctx=%p", g_sysdll_dir, (void *)g_sysdll_actctx);
+}
+
+static bool sysdll_is_system_path(const char *p)
+{
+    size_t n = strlen(g_sysdll_dir);
+    return n && !_strnicmp(p, g_sysdll_dir, n);
+}
+
+static HMODULE sysdll_load(const char *name)
+{
+    HMODULE h = NULL;
+    char where[MAX_PATH];
+    if (g_sysdll_actctx != INVALID_HANDLE_VALUE) {
+        ULONG_PTR cookie = 0;
+        if (ActivateActCtx(g_sysdll_actctx, &cookie)) {
+            h = LoadLibraryA(name);
+            DWORD err = h ? 0 : GetLastError();
+            DeactivateActCtx(0, cookie);
+            if (!h) STEREO_ERR("[SysDll] actctx LoadLibrary(%s) failed: %lu", name, (unsigned long)err);
+        }
+    }
+    where[0] = '\0';
+    if (h) GetModuleFileNameA(h, where, sizeof(where));
+    if (!h || !sysdll_is_system_path(where)) {
+        if (h) STEREO_LOG("[SysDll] actctx gave '%s' (not system) - trying explicit path", where);
+        if (g_sysdll_dir[0]) {
+            char full[MAX_PATH + 64];
+            snprintf(full, sizeof(full), "%s\\%s", g_sysdll_dir, name);
+            h = LoadLibraryExA(full, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+            if (!h) STEREO_ERR("[SysDll] LoadLibraryEx(%s) failed: %lu", full, (unsigned long)GetLastError());
+        }
+        where[0] = '\0';
+        if (h) GetModuleFileNameA(h, where, sizeof(where));
+    }
+    if (h && !sysdll_is_system_path(where)) {
+        STEREO_ERR("[SysDll] %s resolved to '%s' (not the system DLL) - leaving imports alone", name, where);
+        return NULL;
+    }
+    return h;
+}
+
+/* Called by nv3d_init() before NV3D-Lib touches D3D/DXGI/NvAPI. Idempotent. */
+void vks3d_bind_system_d3d_imports(void)
+{
+    static bool done = false;
+    if (done)
+        return;
+    done = true;
+
+    HMODULE self = NULL;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR)(void *)&vks3d_bind_system_d3d_imports, &self) || !self) {
+        STEREO_ERR("[SysDll] cannot find own module");
+        return;
+    }
+    sysdll_make_actctx();
+
+    BYTE *base = (BYTE *)self;
+    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)base;
+    IMAGE_NT_HEADERS *nt  = (IMAGE_NT_HEADERS *)(base + dos->e_lfanew);
+    IMAGE_DATA_DIRECTORY dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!dir.VirtualAddress) {
+        STEREO_ERR("[SysDll] no import directory");
+        return;
+    }
+    for (IMAGE_IMPORT_DESCRIPTOR *d = (IMAGE_IMPORT_DESCRIPTOR *)(base + dir.VirtualAddress);
+         d->Name; d++)
+    {
+        const char *dll = (const char *)(base + d->Name);
+        bool target = false;
+        for (int i = 0; k_sysdll_names[i]; i++)
+            if (!_stricmp(dll, k_sysdll_names[i])) { target = true; break; }
+        if (!target)
+            continue;
+
+        HMODULE cur = GetModuleHandleA(dll);
+        char cur_path[MAX_PATH] = "<not loaded>";
+        if (cur) GetModuleFileNameA(cur, cur_path, sizeof(cur_path));
+        HMODULE sys = sysdll_load(dll);
+        if (!sys) {
+            STEREO_ERR("[SysDll] %s: no system module, imports stay on '%s'", dll, cur_path);
+            continue;
+        }
+        IMAGE_THUNK_DATA *oft = (IMAGE_THUNK_DATA *)(base +
+            (d->OriginalFirstThunk ? d->OriginalFirstThunk : d->FirstThunk));
+        IMAGE_THUNK_DATA *ft  = (IMAGE_THUNK_DATA *)(base + d->FirstThunk);
+        unsigned bound = 0, missed = 0;
+        for (; oft->u1.AddressOfData; oft++, ft++) {
+            FARPROC fn;
+            if (IMAGE_SNAP_BY_ORDINAL(oft->u1.Ordinal))
+                fn = GetProcAddress(sys, (LPCSTR)IMAGE_ORDINAL(oft->u1.Ordinal));
+            else
+                fn = GetProcAddress(sys, ((IMAGE_IMPORT_BY_NAME *)(base + oft->u1.AddressOfData))->Name);
+            if (!fn) { missed++; continue; }
+            DWORD old = 0;
+            if (VirtualProtect(&ft->u1.Function, sizeof(ft->u1.Function), PAGE_READWRITE, &old)) {
+                ft->u1.Function = (ULONG_PTR)fn;
+                VirtualProtect(&ft->u1.Function, sizeof(ft->u1.Function), old, &old);
+                bound++;
+            } else {
+                missed++;
+            }
+        }
+        char sys_path[MAX_PATH];
+        sys_path[0] = '\0';
+        GetModuleFileNameA(sys, sys_path, sizeof(sys_path));
+        STEREO_LOG("[SysDll] %s: was '%s' -> now '%s' (%u imports rebound, %u missed)",
+                   dll, cur_path, sys_path, bound, missed);
+    }
+}
+#endif /* _WIN32 */
+
 /* Helper: strip filename to get directory (no trailing slash) */
 static void dir_of_path(const char *full, char *out, size_t out_size)
 {

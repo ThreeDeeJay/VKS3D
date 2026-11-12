@@ -12863,9 +12863,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                      * real geometry even when no OpMatrixTimes/OpDot is visible (dp4 helper
                      * functions, e.g. DXVK dxbc output): never a fullscreen quad. */
                     bool vs_attr_buffer = vm.has_buffer_var && vm.has_vertex_attr;
-                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer;
-                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer;
-                    vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
+                    bool vs_attr_buffer_position = vs_attr_buffer && !vm.proj_found;
+                    bool vs_vector_matrix_geometry = vm.has_vector_matrix_ops && vm.dot_count > 0;
+                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer_position && !vs_vector_matrix_geometry;
+                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer_position && !vs_vector_matrix_geometry;
+                    vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex && !vs_vector_matrix_geometry;
                     bool vs_z_one_position = false;
                     uint32_t vs_position_ptr = 0;
                     uint32_t vs_position_value = 0;
@@ -12984,6 +12986,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG(
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                STEREO_LOG("VS_ROUTE_DETAIL hash=%016llx vector_matrix=%u proj=%u buffer_var=%u vertex_attr=%u dot=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vm.has_vector_matrix_ops,vm.proj_found,vm.has_buffer_var,vm.has_vertex_attr,vm.dot_count);
                 }
                 if (sd->stereo.mono_ui)
                 {
