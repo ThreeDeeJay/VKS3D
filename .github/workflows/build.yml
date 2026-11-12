@@ -181,7 +181,7 @@ jobs:
           echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
           echo "CommitTitle=$(git show --pretty=format:%s -s HEAD)" >> $env:GITHUB_ENV
           echo "AttemptCount=${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_ENV
-          echo "CommitDescription=$(git show --format=%b -s HEAD)" >> $env:GITHUB_ENV
+          echo "CommitDescription=$(git show --pretty=format:%b -s HEAD)" >> $env:GITHUB_ENV
           echo "CommitDate=$(git show -s --date=format:'%Y-%m-%d' --format=%cd)" >> $env:GITHUB_ENV
 
       - name: Download Win32
