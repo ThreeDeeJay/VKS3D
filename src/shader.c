@@ -12864,9 +12864,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                      * functions, e.g. DXVK dxbc output): never a fullscreen quad. */
                     bool vs_attr_buffer = vm.has_buffer_var && vm.has_vertex_attr;
                     bool vs_attr_buffer_position = vs_attr_buffer && !vm.proj_found;
-                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer_position;
-                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer_position;
-                    vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex;
+                    bool vs_vector_matrix_geometry = vm.has_vector_matrix_ops && vm.dot_count > 0;
+                    vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer_position && !vs_vector_matrix_geometry;
+                    vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer_position && !vs_vector_matrix_geometry;
+                    vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex && !vs_vector_matrix_geometry;
                     bool vs_z_one_position = false;
                     uint32_t vs_position_ptr = 0;
                     uint32_t vs_position_value = 0;
