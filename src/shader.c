@@ -12985,6 +12985,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     vs_pure_quad = vs_quad_fs && !vs_has_user_output;
                     STEREO_LOG(
                     "VS_ROUTE hash=%016llx fullscreen=%u quad_fs=%u screen_space=%u pure_quad=%u user_output=%u background=%u matrix=%u direct_pos=%u v2_pos=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vs_fullscreen,vs_quad_fs,vs_screen_space,vs_pure_quad,vs_has_user_output,vs_background,vm.has_matrix_ops,vm.has_direct_position_write,vm.has_v2_position_input);
+                STEREO_LOG("VS_ROUTE_DETAIL hash=%016llx vector_matrix=%u proj=%u buffer_var=%u vertex_attr=%u dot=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),vm.has_vector_matrix_ops,vm.proj_found,vm.has_buffer_var,vm.has_vertex_attr,vm.dot_count);
                 }
                 if (sd->stereo.mono_ui)
                 {
