@@ -14,7 +14,6 @@ on:
 
 jobs:
   Build:
-    if: github.event_name != 'release' || github.event.release.tag_name != 'stable'
     name: ${{matrix.Settings.Name}}-${{matrix.Configuration}}
     runs-on: windows-2022
     strategy:
@@ -160,7 +159,6 @@ jobs:
           build/${{matrix.Configuration}}/VKS3D_${{matrix.Settings.Architecture}}.dll
 
   Release:
-    if: github.event_name != 'release' || github.event.release.tag_name != 'stable'
     name: Release
     runs-on: windows-latest
     needs: Build
