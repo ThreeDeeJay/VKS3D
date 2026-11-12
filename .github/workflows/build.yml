@@ -10,7 +10,7 @@ env:
 on:
   push:
     branches: '**'
-    tags-ignore: stable
+    tags-ignore: 'stable'
   workflow_dispatch:
 
 jobs:
