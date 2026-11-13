@@ -7,9 +7,13 @@ If not "%*"=="" (
 
 <# :
 @echo off
+
+Echo Clearing environment variables required by VKS3D...
 setx DXVK_STATE_CACHE "" 1>>NUL 2>&1
 setx VKD3D_VULKAN_DEVICE "" 1>>NUL 2>&1
 setx VKD3D_SHADER_CACHE_PATH "" 1>>NUL 2>&1
+setx ZINK_DEBUG "" 1>>NUL 2>&1
+
 net session >nul 2>&1
 if %errorLevel% neq 0 (
     echo Requesting administrator privileges ^(required to unregister Vulkan ICDs^)...
