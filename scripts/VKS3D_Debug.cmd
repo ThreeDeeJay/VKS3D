@@ -23,14 +23,14 @@ for /f "tokens=4 delims==." %%V in (
 
 for /f "tokens=3 delims=/#@" %%C in (
   'wmic datafile where name^="!DLLPath!" get Manufacturer /value 2^>Nul'
-) do Set "VKS3DCompany=%%C"
-If defined VKS3DCompany (
-    Set VKS3D_BUILDS=%~dp0Builds\!VKS3DCompany!
+) do Set "VKS3DRevision=%%C"
+If defined VKS3DRevision (
+    Set VKS3D_BUILDS=%~dp0VKS3D\Builds\!VKS3DRevision!
 ) 
 
 If not "%~1"=="" (
     For %%A in (%*) do (
-        Set "DumpPath=%~dp0VKS3D_Dump/%%~nA + VKS3D v!VKS3DVersion!"
+        Set "DumpPath=%~dp0VKS3D\Dump\%%~nA + VKS3D v!VKS3DVersion!"
         Set "DumpPath=!DumpPath:/=\!"
         If exist "%%~A\*.dll" (
             copy /y "%%~A\*.dll" "!VKS3D_DIR!"
@@ -45,9 +45,9 @@ If not "%~1"=="" (
                     7z -y e "%%~A" -o"!VKS3D_DIR!" "-i^!*.dll" 1>>NUL 2>&1
                     for /f "tokens=3 delims=/#@" %%C in (
                       'wmic datafile where name^="!DLLPath!" get Manufacturer /value 2^>Nul'
-                  ) do Set "VKS3DCompany=%%C"
-                    If defined VKS3DCompany (
-                        Set VKS3D_BUILDS=%~dp0Builds\!VKS3DCompany!
+                  ) do Set "VKS3DRevision=%%C"
+                    If defined VKS3DRevision (
+                        Set VKS3D_BUILDS=%~dp0\VKS3D\Builds\!VKS3DRevision!
                     ) 
                     If not exist "!VKS3D_BUILDS!\%%R" (MkDir "!VKS3D_BUILDS!\%%R")
                     7z -y e "%%~A" -o"!VKS3D_BUILDS!\%%R" "-i^!*.dll"
@@ -154,7 +154,7 @@ If not "%~1"=="" (
         )
     )
 ) else (
-    Set "DumpPath=%~dp0VKS3D_Dump"
+    Set "DumpPath=%~dp0VKS3D\Dump"
     Set "DumpPath=!DumpPath:/=\!"
     Echo [93mNo drag and drop input specified.
     Echo [94mEnabling temporary logging and shader dumping for games that fail to dump them via drag and drop...

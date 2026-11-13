@@ -1,3 +1,10 @@
+@echo off
+
+PushD "%~dp0"
+If not "%*"=="" (
+    Call VKS3D_Debug.cmd %*
+)
+
 <# :
 @echo off
 setx DXVK_STATE_CACHE "" 1>>NUL 2>&1
@@ -79,7 +86,7 @@ Write-Host ""
 Write-Host "Uninstallation complete. Original ICDs restored." -ForegroundColor Green
 Write-Host ""
 
-Write-Host "Press Enter to delete the VKS3D files from the current folder."
+Write-Host "Press Enter to delete the VKS3D* files/folders."
 Read-Host
 
 Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D*")
