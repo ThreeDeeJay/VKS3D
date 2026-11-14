@@ -6,6 +6,8 @@
 #include "stereo_icd.h"
 #include "NV3D.hpp"
 
+extern "C" void vks3d_bind_system_d3d_imports(void);
+
 /* ------------------------------------------------------------------------- */
 /* Local helpers                                                             */
 /* ------------------------------------------------------------------------- */
@@ -96,6 +98,9 @@ if (sd->nv3d_ok &&
 
 nv3d_destroy(sd);
 
+/* NV3D-Lib must talk to the real system D3D/DXGI/NvAPI, not DXVK's copies in the app folder */
+vks3d_bind_system_d3d_imports();
+
 NV3D::InterfaceVulkan *iface = nullptr;
 
 NV3D::InitParams params = {};
@@ -150,7 +155,7 @@ NV3D::SetLogSink(
             nullptr,
             nullptr);
 
-        //STEREO_LOG("[NV3D] %s", utf8);
+        STEREO_LOG("[NV3D-Lib] %s", utf8);
     },
     nullptr);
 
@@ -191,7 +196,7 @@ if (id.deviceLUIDValid)
     static_assert(sizeof(LUID) == VK_LUID_SIZE, "LUID mismatch");
     std::memcpy(&params.external_luid, id.deviceLUID, VK_LUID_SIZE);
 
-    //STEREO_LOG("[NV3D] passing external LUID to NV3D-Lib");
+    STEREO_LOG("[NV3D] passing external LUID to NV3D-Lib");
 }
 
 HRESULT hr =
@@ -210,9 +215,7 @@ HRESULT hr =
 
 if (FAILED(hr) || !iface)
 {
-    //STEREO_ERR(
-    //    "[NV3D] CreateInterfaceVulkan failed: 0x%08x",
-    //    (unsigned)hr);
+    STEREO_ERR("[NV3D] CreateInterfaceVulkan failed: 0x%08x", (unsigned)hr);
     return false;
 }
 
@@ -232,9 +235,7 @@ hr =
 
 if (FAILED(hr))
 {
-//    STEREO_ERR(
-//        "[NV3D] InitSharedResources failed: 0x%08x",
-//        (unsigned)hr);
+STEREO_ERR("[NV3D] InitSharedResources failed: 0x%08x", (unsigned)hr);
 
     iface->Delete();
     return false;
@@ -249,9 +250,7 @@ sd->nv3d_value        = 0;
 
 if (FAILED(hr))
 {
-//    STEREO_ERR(
-//        "[NV3D] InitSharedResources failed: 0x%08x",
-//        (unsigned)hr);
+STEREO_ERR("[NV3D] InitSharedResources failed: 0x%08x", (unsigned)hr);
 
     iface->Delete();
     return false;
@@ -296,7 +295,7 @@ if (sd->real.CreateImage(
         NULL,
         &sd->nv3d_image) != VK_SUCCESS)
 {
-    //STEREO_ERR("[NV3D] CreateImage failed");
+    STEREO_ERR("[NV3D] CreateImage failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -314,7 +313,7 @@ uint32_t mem_type =
 
 if (mem_type == UINT32_MAX)
 {
-    //STEREO_ERR("[NV3D] no compatible memory type");
+    STEREO_ERR("[NV3D] no compatible memory type");
     nv3d_destroy(sd);
     return false;
 }
@@ -340,7 +339,7 @@ if (sd->real.AllocateMemory(
         NULL,
         &sd->nv3d_memory) != VK_SUCCESS)
 {
-    //STEREO_ERR("[NV3D] AllocateMemory failed");
+    STEREO_ERR("[NV3D] AllocateMemory failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -351,7 +350,7 @@ if (sd->real.BindImageMemory(
         sd->nv3d_memory,
         0) != VK_SUCCESS)
 {
-    //STEREO_ERR("[NV3D] BindImageMemory failed");
+    STEREO_ERR("[NV3D] BindImageMemory failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -378,7 +377,7 @@ if (sd->real.CreateSemaphore(
         NULL,
         &sd->nv3d_timeline) != VK_SUCCESS)
 {
-    //STEREO_ERR("[NV3D] CreateSemaphore failed");
+    STEREO_ERR("[NV3D] CreateSemaphore failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -406,7 +405,7 @@ if (sd->real.ImportSemaphoreWin32HandleKHR(
         sd->real_device,
         &import_sem) != VK_SUCCESS)
 {
-    //STEREO_ERR("[NV3D] ImportSemaphoreWin32HandleKHR failed");
+    STEREO_ERR("[NV3D] ImportSemaphoreWin32HandleKHR failed");
     nv3d_destroy(sd);
     return false;
 }
@@ -681,9 +680,7 @@ HRESULT hr =
 
 //if (FAILED(hr))
 //{
-//    STEREO_ERR(
-//        "[NV3D] Present failed: 0x%08x",
-//        (unsigned)hr);
+STEREO_ERR("[NV3D] Present failed: 0x%08x", (unsigned)hr);
 //}
 
 return VK_SUCCESS;
