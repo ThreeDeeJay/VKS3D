@@ -7022,12 +7022,16 @@ fs_prescan(
     for (uint32_t i = 0; i < s->n_img; ++i)
     {
         STEREO_LOG(
-            "FS_IMAGE_FINAL idx=%u id=%u sampledImage=%u owner=%u binding=%u",
+            "FS_IMAGE_FINAL idx=%u id=%u sampledImage=%u owner=%u binding=%u patchable=%u stereo=%u pointer=%u descriptor_pointer=%u",
             i,
             s->images[i].id,
             s->images[i].sampled_type,
             s->images[i].owner_var,
-            s->images[i].binding);
+            s->images[i].binding,
+            s->images[i].patchable,
+            s->images[i].stereo,
+            s->images[i].pointer_type,
+            s->images[i].descriptor_pointer_type);
     }
     STEREO_LOG(
         "FS_PRESCAN_EXIT");
