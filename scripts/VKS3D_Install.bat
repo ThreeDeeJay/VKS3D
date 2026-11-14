@@ -1,6 +1,22 @@
 @echo off
 
 PushD "%~dp0"
+If "%~x1"==".dll" (
+    copy "%~1" "%~nx1"
+    if %errorLevel% neq 0 (
+        Echo Failed to copy "%~nx1".
+        pause
+    )
+    exit
+)
+If "%~x1"==".bak" (
+    ren "%~nx1" "%~n1"
+    if %errorLevel% neq 0 (
+        Echo Failed to rename "%~nx1".
+        pause
+    )
+    exit
+)
 If not "%*"=="" (
     Call VKS3D_Debug.cmd %*
 )
