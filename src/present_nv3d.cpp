@@ -28,6 +28,10 @@
 #include "ini.h"
 #include "NV3D.hpp"
 
+/* stereo.c: rebinds this DLL's d3d9/d3d11/dxgi/d3d12/nvapi imports to the real system DLLs
+ * (otherwise NV3D-Lib talks to DXVK's copies in the app folder and crashes). */
+extern "C" void vks3d_bind_system_d3d_imports(void);
+
 /* Logging that works regardless of how STEREO_LOG is configured. */
 #define NV3D_LOG(fmt, ...) \
     do { if (g_vks3d_log_enabled) vks3d_logf("[NV3D] ", fmt, ##__VA_ARGS__); } while (0)
@@ -406,6 +410,9 @@ extern "C" bool nv3d_init(
     }
 
     nv3d_destroy(sd);   /* clean any partial earlier attempt */
+
+    /* MUST happen before NV3D-Lib touches D3D9/D3D11/DXGI/NvAPI (DXVK processes) */
+    vks3d_bind_system_d3d_imports();
 
     /* 3D Vision only works at 90/100/110/120/144 Hz. */
     nv3d_force_3dv_refresh(sd->stereo.refresh_rate);
