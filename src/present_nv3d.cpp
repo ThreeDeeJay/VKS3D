@@ -73,7 +73,7 @@ sd->real.CmdPipelineBarrier(
     0, NULL,
     0, NULL,
     1, &imb);
-
+}
 
 static uint32_t find_memory_type(
     StereoDevice *sd,
