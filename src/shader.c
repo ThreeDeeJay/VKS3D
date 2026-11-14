@@ -13830,6 +13830,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
          * Non-multiview passes include deferred G-buffer, shadow, SSAO,
          * and post-processing passes that must remain center-eye.
          */
+        STEREO_LOG("PATHB_GATE p=%u mv=%u stages=%u has_vs=%u has_tcs=%u vs_stage=%u pure_quad=%u uv_quad=%u vs_hash=%016llx",p,in_mv_rp,ci->stageCount,has_vs,has_tcs,vs_stage,vs_pure_quad,vs_uv_quad,(unsigned long long)((has_vs && vs_stage != ~0u) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module) ? cache_find(sd,ci->pStages[vs_stage].module)->spv : NULL,cache_find(sd,ci->pStages[vs_stage].module) ? cache_find(sd,ci->pStages[vs_stage].module)->words : 0) : 0));
         if (in_mv_rp &&
             ci->stageCount > 0 &&
             has_vs &&
