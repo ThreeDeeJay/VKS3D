@@ -8,14 +8,26 @@ Set VKS3D_DIR=%~dp0
 set DLLPath=%~dp0VKS3D_x64.dll
 set DLLPath=!DLLPath:\=\\!
 
+::Optional settings:
+::Set STEREO_ENABLED=1
+::Set STEREO_FLIP_EYES=0
+::Set STEREO_REAL_ICD=C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_...\nvoglv64.dll
+::Set STEREO_REAL_ICD=C:\Windows\System32\DriverStore\FileRepository\igdlh64.inf_amd64_...\igvk64.dll
+::Set VKD3D_FRAME_RATE=144
+
+::Add regular expression pattern between = and " to limit/concentrate logging to improve performance.
+Set "VKS3D_LOG_REGEX_MATCH="
+
+::Aruments to append when calling an executable.
+::Examples: VKS3D_LAUNCH_PARAMETERS=-fullscreen --fullscreen --full-screen --width 1920 --height 1080 /width=1920 /height=1080 -mode 1920x1080x144x32 --benchmark --benchmarkframes 1
+Set VKS3D_LAUNCH_PARAMETERS=
+
 ::Set comma-separated list of shader hashes to skip.
 ::You can drag and drop a game executable into this script to dump shader patches,
 ::then you can copy the string before the +vs.spv to skip UI shaders so they're at screen depth.
 ::Though it might require trial and error to identify them.
+::To disable patching all shaders, Set VKS3D_SKIP_SHADER_PATCHES=* 
 Set VKS3D_SKIP_SHADER_PATCHES=
-
-::Add regular expression pattern between = and " to limit/concentrate logging to improve performance.
-Set "VKS3D_LOG_REGEX_MATCH="
 
 for /f "tokens=4 delims==." %%V in (
   'wmic datafile where name^="!DLLPath!" get Version /value 2^>Nul'
@@ -23,14 +35,14 @@ for /f "tokens=4 delims==." %%V in (
 
 for /f "tokens=3 delims=/#@" %%C in (
   'wmic datafile where name^="!DLLPath!" get Manufacturer /value 2^>Nul'
-) do Set "VKS3DCompany=%%C"
-If defined VKS3DCompany (
-    Set VKS3D_BUILDS=%~dp0Builds\!VKS3DCompany!
+) do Set "VKS3DRevision=%%C"
+If defined VKS3DRevision (
+    Set VKS3D_BUILDS=%~dp0VKS3D\Builds\!VKS3DRevision!
 ) 
 
 If not "%~1"=="" (
     For %%A in (%*) do (
-        Set "DumpPath=%~dp0VKS3D_Dump/%%~nA + VKS3D v!VKS3DVersion!"
+        Set "DumpPath=%~dp0VKS3D\Dump\%%~nA + VKS3D v!VKS3DVersion!"
         Set "DumpPath=!DumpPath:/=\!"
         If exist "%%~A\*.dll" (
             copy /y "%%~A\*.dll" "!VKS3D_DIR!"
@@ -45,9 +57,9 @@ If not "%~1"=="" (
                     7z -y e "%%~A" -o"!VKS3D_DIR!" "-i^!*.dll" 1>>NUL 2>&1
                     for /f "tokens=3 delims=/#@" %%C in (
                       'wmic datafile where name^="!DLLPath!" get Manufacturer /value 2^>Nul'
-                  ) do Set "VKS3DCompany=%%C"
-                    If defined VKS3DCompany (
-                        Set VKS3D_BUILDS=%~dp0Builds\!VKS3DCompany!
+                  ) do Set "VKS3DRevision=%%C"
+                    If defined VKS3DRevision (
+                        Set VKS3D_BUILDS=%~dp0\VKS3D\Builds\!VKS3DRevision!
                     ) 
                     If not exist "!VKS3D_BUILDS!\%%R" (MkDir "!VKS3D_BUILDS!\%%R")
                     7z -y e "%%~A" -o"!VKS3D_BUILDS!\%%R" "-i^!*.dll"
@@ -93,7 +105,7 @@ If not "%~1"=="" (
                     If exist "%%~dpAvkd3d-proton.cache.write" (del "%%~dpAvkd3d-proton.cache.write")
                     If exist "%%~dpAvkd3d-proton.cache" (del "%%~dpAvkd3d-proton.cache")
                     If exist "%%~dpA*_dxgi.log" (del "%%~dpA*_dxgi.log")
-                    "%%~dpA%%~nxA"
+                    "%%~dpA%%~nxA" !VKS3D_LAUNCH_PARAMETERS!
                     Rem -fullscreen --fullscreen --full-screen --width 1920 --height 1080 /width=1920 /height=1080 -mode 1920x1080x144x32 --benchmark --benchmarkframes 1
                     if !ErrorLevel! NEQ 0 (
                        Echo.
@@ -154,7 +166,7 @@ If not "%~1"=="" (
         )
     )
 ) else (
-    Set "DumpPath=%~dp0VKS3D_Dump"
+    Set "DumpPath=%~dp0VKS3D\Dump"
     Set "DumpPath=!DumpPath:/=\!"
     Echo [93mNo drag and drop input specified.
     Echo [94mEnabling temporary logging and shader dumping for games that fail to dump them via drag and drop...

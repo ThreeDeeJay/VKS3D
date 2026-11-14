@@ -207,11 +207,21 @@ jobs:
           mv "scripts\VKS3D_Install.bat" "Release/VKS3D_Install.bat"
           mv "scripts\VKS3D_Uninstall.bat" "Release/VKS3D_Uninstall.bat"
           mv "scripts\VKS3D_Debug.cmd" "Release/VKS3D_Debug.cmd"
-          mv "LICENSE" "Release/VKS3D_License.txt"
-          mv "README.md" "Release/VKS3D_ReadMe.txt"
-          gh api repos/${{github.repository}}/releases/tags/stable --jq .body > "Release/VKS3D_ReadMe.txt" || true
-          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/oneup03/NV3D-Lib/refs/heads/main/LICENSE" -o "Release/VKS3D_License_NV3D-Lib.txt"
-  
+          mkdir "Release/VKS3D/Documentation"
+          mv "LICENSE" "Release/VKS3D/Documentation/VKS3D_License.txt"
+          mv "README.md" "Release/VKS3D/Documentation/VKS3D_ReadMe.txt"
+          gh api repos/${{github.repository}}/releases/tags/stable --jq .body > "Release/VKS3D/Documentation/VKS3D_ReadMe.txt" || true
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/oneup03/NV3D-Lib/refs/heads/main/LICENSE"                            -o "Release/VKS3D/Documentation/NV3D-Lib_License_LGPL-2.1.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/refs/heads/main/LICENSES/Apache-2.0.txt" -o "Release/VKS3D/Documentation/Vulkan-Headers_License_Apache-2.0.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/refs/heads/main/LICENSES/MIT.txt"        -o "Release/VKS3D/Documentation/Vulkan-Headers_License_MIT.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/LICENSES/Apache-2.0.txt"            -o "Release/VKS3D/Documentation/json_License_Apache-2.0.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/LICENSES/BSD-3-Clause.txt"          -o "Release/VKS3D/Documentation/json_License_BSD-3-Clause.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/LICENSES/CC0-1.0.txt"               -o "Release/VKS3D/Documentation/json_License_CC0-1.0.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/LICENSES/GPL-3.0-only.txt"          -o "Release/VKS3D/Documentation/json_License_GPL-3.0-only.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/nlohmann/json/refs/heads/develop/LICENSES/MIT.txt"                   -o "Release/VKS3D/Documentation/json_License_MIT.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/TsudaKageyu/minhook/refs/heads/master/LICENSE.txt"                   -o "Release/VKS3D/Documentation/minhook_License.txt"
+          curl --ssl-revoke-best-effort --fail -L "https://raw.githubusercontent.com/NVIDIA/nvapi/refs/heads/main/License.txt"                            -o "Release/VKS3D/Documentation/nvapi_License_MIT.txt"
+
       - name: Compress artifacts
         if: github.event_name == 'push'
         run: |
