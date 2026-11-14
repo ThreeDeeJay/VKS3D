@@ -297,6 +297,40 @@ stereo_GetPhysicalDeviceSurfaceFormatsKHR(
         STEREO_ERR("stereo_GetPhysicalDeviceSurfaceFormatsKHR: real fn is NULL");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
+    /* NV3D mode: the shared D3D11/D3D9 texture is B8G8R8A8.  Offer only BGRA surface
+     * formats so apps/DXVK pick a swapchain format that matches it (DXVK picks
+     * R8G8B8A8 for D3D10/11 apps otherwise -> red/blue swapped).                    */
+    if (_si->stereo.enabled && _si->stereo.present_mode == STEREO_PRESENT_NV3DLIB) {
+        uint32_t n = 0;
+        VkResult r0 = _si->real.GetPhysicalDeviceSurfaceFormatsKHR(_real, surface, &n, NULL);
+        if (r0 == VK_SUCCESS && n) {
+            VkSurfaceFormatKHR *all = (VkSurfaceFormatKHR *)malloc(n * sizeof(*all));
+            if (all) {
+                r0 = _si->real.GetPhysicalDeviceSurfaceFormatsKHR(_real, surface, &n, all);
+                if (r0 == VK_SUCCESS || r0 == VK_INCOMPLETE) {
+                    uint32_t k = 0;
+                    for (uint32_t i = 0; i < n; i++)
+                        if (all[i].format == VK_FORMAT_B8G8R8A8_UNORM ||
+                            all[i].format == VK_FORMAT_B8G8R8A8_SRGB)
+                            all[k++] = all[i];
+                    if (k) {
+                        n = k;
+                        if (!pFormats) {
+                            *pCount = n;
+                            free(all);
+                            return VK_SUCCESS;
+                        }
+                        uint32_t w = (*pCount < n) ? *pCount : n;
+                        memcpy(pFormats, all, w * sizeof(*all));
+                        *pCount = w;
+                        free(all);
+                        return (w < n) ? VK_INCOMPLETE : VK_SUCCESS;
+                    }
+                }
+                free(all);
+            }
+        }
+    }
     VkResult _r = _si->real.GetPhysicalDeviceSurfaceFormatsKHR(_real, surface, pCount, pFormats);
     if (_r) STEREO_ERR("stereo_GetPhysicalDeviceSurfaceFormatsKHR: real returned %d", (int)_r);
     return _r;

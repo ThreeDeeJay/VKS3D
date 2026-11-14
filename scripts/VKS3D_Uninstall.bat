@@ -1,8 +1,19 @@
+@echo off
+
+PushD "%~dp0"
+If not "%*"=="" (
+    Call VKS3D_Debug.cmd %*
+)
+
 <# :
 @echo off
+
+Echo Clearing environment variables required by VKS3D...
 setx DXVK_STATE_CACHE "" 1>>NUL 2>&1
 setx VKD3D_VULKAN_DEVICE "" 1>>NUL 2>&1
 setx VKD3D_SHADER_CACHE_PATH "" 1>>NUL 2>&1
+setx ZINK_DEBUG "" 1>>NUL 2>&1
+
 net session >nul 2>&1
 if %errorLevel% neq 0 (
     echo Requesting administrator privileges ^(required to unregister Vulkan ICDs^)...
@@ -79,7 +90,7 @@ Write-Host ""
 Write-Host "Uninstallation complete. Original ICDs restored." -ForegroundColor Green
 Write-Host ""
 
-Write-Host "Press Enter to delete the VKS3D files from the current folder."
+Write-Host "Press Enter to delete the VKS3D* files/folders."
 Read-Host
 
 Remove-Item -ErrorAction SilentlyContinue -Recurse -Force -Path (Join-Path $InstallDir "VKS3D*")
