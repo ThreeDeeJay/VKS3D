@@ -255,6 +255,9 @@ void stereo_config_init(StereoConfig *cfg)
     cfg_str("hotkey_rate_decrease_modifier", "VK_MENU", cfg->hotkey_rate_decrease_modifier, sizeof(cfg->hotkey_rate_decrease_modifier));
     cfg_str("hotkey_save_settings", "VK_CONTROL+VK_F7", cfg->hotkey_save_settings, sizeof(cfg->hotkey_save_settings));
 
+    /* NV3D-Lib. */
+    cfg->nv3d_tracked_game = cfg_bool("nv3d_tracked_game", true);
+
     stereo_config_compute_offsets(cfg);
     STEREO_LOG(
         "Stereo config: enabled=%d separation=%.4f convergence=%.4f "
