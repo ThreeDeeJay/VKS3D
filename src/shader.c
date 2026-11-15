@@ -1775,6 +1775,7 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         cc_  = dc;
         bgx_ = db;
         STEREO_LOG("VS_DYN_LOAD left=%u right=%u conv=%u bg=%u ptr_t=%u", dl, dr, dc, db, c->dyn_ptr_t);
+        STEREO_LOG("VS_EYE_OFFSETS left=%+.9f right=%+.9f baked_left=%+.9f baked_right=%+.9f", c->lo_dbg, c->ro_dbg, c->lo_dbg, c->ro_dbg);
     }
     if (m->pos_is_block)
     {
@@ -3806,13 +3807,20 @@ bool spirv_patch_stereo_vertex(
                 ins_t = i;
             in_entry_function =
                 (wcx >= 4 &&
-                 in[i + 2] ==
-                 (m.position_function ?
-                  m.position_function :
-                  m.entry_function));
+                in[i + 2] ==
+                (m.position_function ?
+                    m.position_function :
+                    m.entry_function));
+            STEREO_LOG("VS_ENTRY_SCAN hash=%016llx function=%u target=%u selected=%u matched=%u", (unsigned long long)spv_hash, in[i + 2], m.entry_function, m.position_function ? m.position_function : m.entry_function, in_entry_function);
         }
         if (in_entry_function &&
             opx == SpvOpReturn)
+        {
+            STEREO_LOG("VS_ENTRY_RETURN hash=%016llx function=%u offset=%zu", (unsigned long long)spv_hash, m.position_function ? m.position_function : m.entry_function, i);
+            ins_b = i;
+        }
+        if (in_entry_function &&
+            opx == SpvOpFunctionEnd)
         {
             ins_b = i;
         }
@@ -3825,12 +3833,14 @@ bool spirv_patch_stereo_vertex(
     }
     if (!ins_t)
     {
+        STEREO_LOG("VS_PATCH_ABORT hash=%016llx reason=no_function", (unsigned long long)spv_hash);
         sb_free(&te);
         free_spv_provenance(&m);
         return false;
     }
     if (!is_gs && !ins_b)
     {
+        STEREO_LOG("VS_PATCH_ABORT hash=%016llx reason=no_entry_return entry=%u position_function=%u", (unsigned long long)spv_hash, m.entry_function, m.position_function);
         sb_free(&te);
         free_spv_provenance(&m);
         return false;
