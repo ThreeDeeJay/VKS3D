@@ -570,8 +570,7 @@ static void nv3d_stop_keeper(void)
 extern "C" bool nv3d_init(
     StereoDevice *sd,
     uint32_t width,
-    uint32_t height,
-    StereoConfig *cfg)
+    uint32_t height)
 {
     /* Device-lifetime: swapchain (re)creation / resize / fullscreen never recreates NV3D. */
     if (sd->nv3d_ok)
