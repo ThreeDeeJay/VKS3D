@@ -224,6 +224,7 @@ typedef struct StereoConfig {
     char                    hotkey_rate_decrease_modifier[64];
     char                    hotkey_save_settings[64];
     uint64_t                dyn_addr;   /* device address of StereoUBO (0 = bake offsets into shaders) */
+    bool                    nv3d_tracked_game;
 } StereoConfig;
 
 void stereo_config_init(StereoConfig *cfg);

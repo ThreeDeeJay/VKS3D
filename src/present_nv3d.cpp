@@ -602,7 +602,7 @@ extern "C" bool nv3d_init(
      * keeper below stops the popup from stealing focus from the app window.
      * nv3d_tracked_game=1 = VRto3D-style: popup stays up regardless of focus. */
     {
-        const bool tracked = ini_flag(sd, "nv3d_tracked_game", false);
+        const bool tracked = cfg->nv3d_tracked_game;
         NV3D_LOG("focus mode: %s (nv3d_tracked_game=%d)", tracked ? "tracked" : "legacy", tracked ? 1 : 0);
         if (tracked)
             params.tracked_game_pid = GetCurrentProcessId();
