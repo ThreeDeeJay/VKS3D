@@ -943,7 +943,8 @@ extern "C" {
 bool nv3d_init(
     StereoDevice*,
     uint32_t,
-    uint32_t);
+    uint32_t,
+    StereoConfig)
 
 void nv3d_destroy(
     StereoDevice*);

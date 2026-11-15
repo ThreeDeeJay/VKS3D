@@ -1,7 +1,8 @@
 bool nv3d_init(
     StereoDevice* sd,
     uint32_t width,
-    uint32_t height);
+    uint32_t height,
+    StereoConfig *cfg)
 
 void nv3d_destroy(
     StereoDevice* sd);
