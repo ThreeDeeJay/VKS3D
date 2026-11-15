@@ -15,8 +15,10 @@
  *    otherwise they pull the mode out from under the D3D9 FSE device.
  *  * Before NV3D is created the desktop refresh rate is forced to a 3D Vision
  *    compatible one (90/100/110/120/144, preferring `refresh_rate` from vks3d.ini).
- *  * The popup is created in "tracked game" mode (stays topmost, never auto-minimizes
- *    on focus loss).  vks3d.ini [VKS3D] nv3d_tracked_game=0 restores auto-minimize.
+ *  * Before NV3D starts, the native desktop mode is restored (DXVK may have changed it).
+ *  * A focus keeper hands foreground back to the app when the popup steals it and keeps
+ *    the popup above the app window.  vks3d.ini [VKS3D] nv3d_tracked_game=1 selects the
+ *    VRto3D-style tracked focus mode instead of the default legacy mode.
  */
 #include <windows.h>
 #include <tlhelp32.h>
@@ -393,6 +395,175 @@ static void nv3d_install_display_mode_hook(void)
 }
 
 /* ------------------------------------------------------------------------- */
+/* Restore the native desktop mode before NV3D starts                        */
+/*                                                                           */
+/* DXVK switches the desktop (e.g. 800x600@144) BEFORE our first swapchain.  */
+/* NV3D-Lib's LightBoost snapshots that mode and hangs; put the native one   */
+/* back first.                                                               */
+/* ------------------------------------------------------------------------- */
+
+static void nv3d_restore_native_mode(void)
+{
+    DEVMODEW reg, cur;
+    std::memset(&reg, 0, sizeof(reg));
+    std::memset(&cur, 0, sizeof(cur));
+    reg.dmSize = cur.dmSize = sizeof(reg);
+    if (!EnumDisplaySettingsW(NULL, ENUM_REGISTRY_SETTINGS, &reg) ||
+        !EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &cur))
+        return;
+    if (reg.dmPelsWidth < 640 || reg.dmPelsHeight < 480)
+        return;
+    if (reg.dmPelsWidth        == cur.dmPelsWidth  &&
+        reg.dmPelsHeight       == cur.dmPelsHeight &&
+        reg.dmDisplayFrequency == cur.dmDisplayFrequency)
+        return;
+
+    NV3D_LOG("desktop mode %lux%lu@%lu differs from native %lux%lu@%lu (changed by app/DXVK) - restoring",
+             cur.dmPelsWidth, cur.dmPelsHeight, cur.dmDisplayFrequency,
+             reg.dmPelsWidth, reg.dmPelsHeight, reg.dmDisplayFrequency);
+    LONG r = ChangeDisplaySettingsExW(NULL, NULL, NULL, 0, NULL);   /* back to registry mode */
+    NV3D_LOG("native mode restore -> %ld", (long)r);
+    Sleep(500);   /* let the display settle before LightBoost looks at it */
+}
+
+/* ------------------------------------------------------------------------- */
+/* Focus keeper                                                              */
+/*                                                                           */
+/* The NV3D popup grabs foreground when its D3D9 FSE device is created.      */
+/* DXUT-style apps then see WM_ACTIVATEAPP(FALSE): they pause/minimize       */
+/* (frozen frame, 160x28 swapchain).  Clicking the app afterwards raises its */
+/* window above the popup (black screen).  So: hand foreground back to the   */
+/* app window whenever the popup holds it, and keep the popup above the app. */
+/* Never touches focus while ANOTHER process is in front (Alt+Tab works).    */
+/* ------------------------------------------------------------------------- */
+
+static HANDLE        g_keeper_thread = NULL;
+static volatile LONG g_keeper_stop   = 0;
+
+struct Nv3dFindCtx
+{
+    DWORD pid;
+    HWND  popup;
+    HWND  host;
+    long  best;
+};
+
+static BOOL CALLBACK nv3d_enum_cb(HWND h, LPARAM lp)
+{
+    Nv3dFindCtx *c = (Nv3dFindCtx *)lp;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != c->pid)
+        return TRUE;
+
+    wchar_t cls[96];
+    cls[0] = L'\0';
+    GetClassNameW(h, cls, 96);
+    if (wcsstr(cls, L"NV3D") || wcsstr(cls, L"PresentWindow"))
+    {
+        if (!c->popup) c->popup = h;
+        return TRUE;
+    }
+    if (!IsWindowVisible(h) || GetWindow(h, GW_OWNER))
+        return TRUE;
+    if (GetWindowLongW(h, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)
+        return TRUE;
+    if (wcsstr(cls, L"ConsoleWindowClass") || wcsstr(cls, L"IME") || wcsstr(cls, L"MSCTFIME"))
+        return TRUE;
+
+    RECT r;
+    if (!GetWindowRect(h, &r))
+        return TRUE;
+    long area = (long)(r.right - r.left) * (long)(r.bottom - r.top);
+    if (IsIconic(h))
+        area = 1;                 /* a minimized host is still the host */
+    if (area > c->best)
+    {
+        c->best = area;
+        c->host = h;
+    }
+    return TRUE;
+}
+
+static bool nv3d_popup_below_host(HWND popup, HWND host)
+{
+    HWND w = popup;
+    for (int i = 0; i < 128 && (w = GetWindow(w, GW_HWNDPREV)) != NULL; i++)
+        if (w == host)
+            return true;
+    return false;
+}
+
+static DWORD WINAPI nv3d_keeper_proc(LPVOID)
+{
+    const DWORD self_pid = GetCurrentProcessId();
+    ULONGLONG   last_focus = 0, last_raise = 0;
+    unsigned    focus_logs = 0, raise_logs = 0;
+
+    NV3D_LOG("focus keeper started");
+    while (!g_keeper_stop)
+    {
+        Sleep(100);
+
+        Nv3dFindCtx c;
+        c.pid = self_pid; c.popup = NULL; c.host = NULL; c.best = 0;
+        EnumWindows(nv3d_enum_cb, (LPARAM)&c);
+        if (!c.popup || !c.host)
+            continue;
+
+        HWND  fg     = GetForegroundWindow();
+        DWORD fg_pid = 0;
+        if (fg) GetWindowThreadProcessId(fg, &fg_pid);
+        if (fg_pid != self_pid)
+            continue;             /* user is in another app: hands off */
+
+        ULONGLONG now = GetTickCount64();
+
+        /* popup stole foreground -> give it back to the app window */
+        if (fg == c.popup && now - last_focus > 750)
+        {
+            last_focus = now;
+            if (IsIconic(c.host))
+                ShowWindow(c.host, SW_RESTORE);
+            BOOL ok = SetForegroundWindow(c.host);
+            if (focus_logs++ < 8)
+                NV3D_LOG("focus keeper: foreground popup %p -> host %p (%s)",
+                         (void *)c.popup, (void *)c.host, ok ? "ok" : "refused");
+        }
+
+        /* app window raised above the popup -> put the popup back on top */
+        if (now - last_raise > 300 && nv3d_popup_below_host(c.popup, c.host))
+        {
+            last_raise = now;
+            SetWindowPos(c.popup, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (raise_logs++ < 8)
+                NV3D_LOG("focus keeper: popup %p was below host %p - raised", (void *)c.popup, (void *)c.host);
+        }
+    }
+    NV3D_LOG("focus keeper stopped");
+    return 0;
+}
+
+static void nv3d_start_keeper(void)
+{
+    if (g_keeper_thread)
+        return;
+    g_keeper_stop = 0;
+    g_keeper_thread = CreateThread(NULL, 0, nv3d_keeper_proc, NULL, 0, NULL);
+}
+
+static void nv3d_stop_keeper(void)
+{
+    if (!g_keeper_thread)
+        return;
+    g_keeper_stop = 1;
+    WaitForSingleObject(g_keeper_thread, 2000);
+    CloseHandle(g_keeper_thread);
+    g_keeper_thread = NULL;
+}
+
+/* ------------------------------------------------------------------------- */
 /* NV3D resource creation                                                    */
 /* ------------------------------------------------------------------------- */
 
@@ -414,7 +585,9 @@ extern "C" bool nv3d_init(
     /* MUST happen before NV3D-Lib touches D3D9/D3D11/DXGI/NvAPI (DXVK processes) */
     vks3d_bind_system_d3d_imports();
 
-    /* 3D Vision only works at 90/100/110/120/144 Hz. */
+    /* Undo mode changes the app/DXVK made before our first swapchain, then make sure
+     * the refresh rate is one 3D Vision can use (90/100/110/120/144 Hz). */
+    nv3d_restore_native_mode();
     nv3d_force_3dv_refresh(sd->stereo.refresh_rate);
 
     uint32_t eye_w = width, eye_h = height;
@@ -424,12 +597,15 @@ extern "C" bool nv3d_init(
     NV3D::InterfaceVulkan *iface = nullptr;
     NV3D::InitParams params = {};
 
-    /* Keep the popup topmost instead of auto-minimizing it whenever the host process
-     * loses focus (DXVK's fullscreen switch does that -> iconic popup -> hang on teardown). */
-    if (ini_flag(sd, "nv3d_tracked_game", true))
+    /* Focus mode.  Default = library "legacy" mode: popup is shown while ANY window of this
+     * process is foreground and minimizes when another app is (Alt+Tab works).  The focus
+     * keeper below stops the popup from stealing focus from the app window.
+     * nv3d_tracked_game=1 = VRto3D-style: popup stays up regardless of focus. */
     {
-        params.tracked_game_pid = GetCurrentProcessId();
-        NV3D_LOG("tracked-game focus mode (pid %lu)", (unsigned long)params.tracked_game_pid);
+        const bool tracked = ini_flag(sd, "nv3d_tracked_game", false);
+        NV3D_LOG("focus mode: %s (nv3d_tracked_game=%d)", tracked ? "tracked" : "legacy", tracked ? 1 : 0);
+        if (tracked)
+            params.tracked_game_pid = GetCurrentProcessId();
     }
 
     NV3D::SetLogSink(
@@ -599,6 +775,7 @@ extern "C" bool nv3d_init(
     /* From now on NV3D owns the display mode. */
     nv3d_install_display_mode_hook();
     InterlockedExchange(&g_nv3d_modes_locked, 1);
+    nv3d_start_keeper();
 
     NV3D_LOG("initialized: shared texture %ux%u (per eye %ux%u), display mode locked",
              sd->nv3d_width, sd->nv3d_height, eye_w, eye_h);
@@ -614,6 +791,7 @@ extern "C" void nv3d_destroy(
         return;
 
     InterlockedExchange(&g_nv3d_modes_locked, 0);
+    nv3d_stop_keeper();
 
     /* Make sure no queued present/blit still touches the imported resources. */
     if (sd->real_device && sd->real.DeviceWaitIdle &&
