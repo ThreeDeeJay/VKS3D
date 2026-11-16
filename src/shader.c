@@ -10253,16 +10253,16 @@ bool spirv_patch_stereo_fs(
             if (projected_sample)
             {
                 /* Extract projective divisor q. */
-                uint32_t w[]={(5u<<16)|SpvOpCompositeExtract, s.float_id, id_q, coord_id, 2};
-                sb_push_n(&ob,w,5);
+                uint32_t extract_q[]={(5u<<16)|SpvOpCompositeExtract, s.float_id, id_q, coord_id, 2};
+                sb_push_n(&ob,extract_q,5);
                 /* Divide x and y by q. */
                 uint32_t div_u[]={(5u<<16)|SpvOpFDiv, s.float_id, id_up, id_u, id_q};
                 uint32_t div_v[]={(5u<<16)|SpvOpFDiv, s.float_id, id_vp, id_v, id_q};
                 sb_push_n(&ob,div_u,5);
                 sb_push_n(&ob,div_v,5);
                 /* Construct array coordinate: x/q, y/q, ViewIndex. */
-                uint32_t w[]={(6u<<16)|SpvOpCompositeConstruct, new_v3f_id, id_c3, id_up, id_vp, id_cvt};
-                sb_push_n(&ob,w,6);
+                uint32_t construct_proj[]={(6u<<16)|SpvOpCompositeConstruct, new_v3f_id, id_c3, id_up, id_vp, id_cvt};
+                sb_push_n(&ob,construct_proj,6);
             }
             else
             {
