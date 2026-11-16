@@ -11260,20 +11260,6 @@ bool spirv_patch_stereo_fs(
                 i += wc;
                 continue;
             }
-            if (!image_type_rewritten)
-            {
-                STEREO_LOG(
-                    "FS_FETCH_SKIP_UNCONFIRMED image=%u descriptor=%u",
-                    in[i+3],
-                    descriptor_var);
-                sb_push_n(&ob, &in[i], wc);
-                if (in[i + 1] < id_bound)
-                {
-                    emitted_type[in[i + 1]] = true;
-                }
-                i += wc;
-                continue;
-            }
             STEREO_LOG(
                 "FS_FETCH_PATCH hash=%016llx image=%u descriptor=%u set=%u binding=%u",
                 (unsigned long long)h,
