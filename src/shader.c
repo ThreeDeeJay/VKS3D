@@ -7884,7 +7884,7 @@ bool spirv_patch_stereo_fs(
             }
             i += wc; continue;
         }
-        if (op == SpvOpTypeFunction &&
+        if (false && op == SpvOpTypeFunction &&
             wc >= 3)
         {
             uint32_t function_type_id = in[i + 1];
