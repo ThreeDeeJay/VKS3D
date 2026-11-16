@@ -7884,7 +7884,7 @@ bool spirv_patch_stereo_fs(
             }
             i += wc; continue;
         }
-        if (false && op == SpvOpTypeFunction &&
+        if (op == SpvOpTypeFunction &&
             wc >= 3)
         {
             uint32_t function_type_id = in[i + 1];
@@ -9281,7 +9281,7 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
         }
-        if (false && op == SpvOpVariable &&
+        if (op == SpvOpVariable &&
             wc >= 4 &&
             in[i + 3] == SpvStorageClassUniformConstant)
         {
@@ -9328,7 +9328,7 @@ bool spirv_patch_stereo_fs(
             }
         }
         if (op == SpvOpFunction) in_func = true;
-        if (false && in_func &&
+        if (in_func &&
             (op == SpvOpAccessChain ||
                 op == SpvOpInBoundsAccessChain ||
                 op == SpvOpPtrAccessChain ||
@@ -9398,8 +9398,7 @@ bool spirv_patch_stereo_fs(
                 }
             }
         }
-        if (false &&
-            in_func &&
+        if (in_func &&
             op == SpvOpLoad &&
             wc >= 4)
         {
@@ -9690,7 +9689,7 @@ bool spirv_patch_stereo_fs(
             i += wc;
             continue;
         }
-        if (false && in_func &&
+        if (in_func &&
             op == SpvOpImageTexelPointer &&
             wc >= 6)
         {
@@ -10995,7 +10994,7 @@ bool spirv_patch_stereo_fs(
             continue;
         }
         /* Patch OpSampledImage result type to match its image operand. */
-        if (false && in_func && op == SpvOpSampledImage && wc == 5)
+        if (in_func && op == SpvOpSampledImage && wc == 5)
         {
             uint32_t image_id = in[i+3];
             uint32_t image_value_type = 0;
