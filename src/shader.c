@@ -3822,11 +3822,6 @@ bool spirv_patch_stereo_vertex(
         if (in_entry_function &&
             opx == SpvOpFunctionEnd)
         {
-            ins_b = i;
-        }
-        if (in_entry_function &&
-            opx == SpvOpFunctionEnd)
-        {
             break;
         }
         i += wcx;
