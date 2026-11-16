@@ -9328,7 +9328,7 @@ bool spirv_patch_stereo_fs(
             }
         }
         if (op == SpvOpFunction) in_func = true;
-        if (in_func &&
+        if (false && in_func &&
             (op == SpvOpAccessChain ||
                 op == SpvOpInBoundsAccessChain ||
                 op == SpvOpPtrAccessChain ||
