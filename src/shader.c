@@ -8350,7 +8350,7 @@ bool spirv_patch_stereo_fs(
                     s.images[ii].binding,
                     s.images[ii].stereo,
                     s.images[ii].sampled_type_id);
-                if (s.images[ii].id == in[i + 1])
+                if (s.images[ii].id == in[i + 1] && s.images[ii].stereo)
                 {
                     img_idx = (int)ii;
                     break;
@@ -8481,6 +8481,8 @@ bool spirv_patch_stereo_fs(
                             img->replacement_pointer_type = existing_pointer;
                             for (uint32_t copy = 0; copy < s.n_img; ++copy)
                             {
+                                if (!s.images[copy].stereo)
+                                    continue;
                                 if (s.images[copy].sampled_type_id != s.images[img_idx].sampled_type_id ||
                                     s.images[copy].sampled_type != s.images[img_idx].sampled_type ||
                                     s.images[copy].dim != s.images[img_idx].dim ||
@@ -8599,6 +8601,8 @@ bool spirv_patch_stereo_fs(
                 s.images[patch_img_idx].replacement_type = duplicate_array_type;
                 for (uint32_t copy = 0; copy < s.n_img; ++copy)
                 {
+                    if (!s.images[copy].stereo)
+                        continue;
                     if (s.images[copy].sampled_type_id != s.images[patch_img_idx].sampled_type_id ||
                         s.images[copy].sampled_type != s.images[patch_img_idx].sampled_type ||
                         s.images[copy].dim != s.images[patch_img_idx].dim ||
