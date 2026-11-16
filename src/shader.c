@@ -11246,7 +11246,7 @@ bool spirv_patch_stereo_fs(
                 break;
             }
             bool fetch_stereo_attachment = fs_binding_is_stereo_attachment(&s, descriptor_var);
-            if (!fetch_stereo_attachment && !image_type_rewritten)
+            if (!descriptor_var || !image_type_rewritten)
             {
                 STEREO_LOG(
                     "FS_FETCH_SKIP_MONO image=%u descriptor=%u binding_not_stereo",
