@@ -4656,13 +4656,9 @@ uint32_t var)
      * binding 2 = albedo
      * binding 3 = specular
      * binding 4 = SSAO/deferred intermediate
-     * set 1 bindings 24-29 = screen-space buffers
-     * set 1 binding 34 = SSIL buffer
      */
     bool stereo =
-        (v->binding <= 4) ||
-        (v->set == 1 && v->binding >= 24 && v->binding <= 29) ||
-        (v->set == 1 && v->binding == 34);
+        (v->binding <= 4);
     STEREO_LOG(
         "FS_BINDING_RESULT "
         "var=%u "
