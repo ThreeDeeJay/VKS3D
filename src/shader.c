@@ -9690,7 +9690,7 @@ bool spirv_patch_stereo_fs(
             i += wc;
             continue;
         }
-        if (in_func &&
+        if (false && in_func &&
             op == SpvOpImageTexelPointer &&
             wc >= 6)
         {
