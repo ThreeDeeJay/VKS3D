@@ -6975,10 +6975,11 @@ fs_prescan(
                         s,
                         dst->owner_var);
                 STEREO_LOG(
-                    "FS_DUP_IMAGE idx=%u image=%u owner=%u binding=%u stereo=%u",
+                    "FS_DUP_IMAGE idx=%u image=%u owner=%u set=%u binding=%u stereo=%u",
                     s->n_img - 1,
                     dst->id,
                     dst->owner_var,
+                    dst->set,
                     dst->binding,
                     dst->stereo);
                 found = true;
