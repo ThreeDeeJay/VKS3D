@@ -9845,8 +9845,8 @@ bool spirv_patch_stereo_fs(
         if (in_func && wc >= 5 &&
             (op == SpvOpImageSampleImplicitLod ||
              op == SpvOpImageSampleExplicitLod ||
-             op == SpvOpImageSampleDrefImplicitLod ||
              op == SpvOpImageSampleDrefExplicitLod ||
+             op == SpvOpImageSampleProjDrefExplicitLod ||
              op == SpvOpImageGather ||
              op == SpvOpImageDrefGather))
         {
@@ -10234,6 +10234,10 @@ bool spirv_patch_stereo_fs(
             STEREO_LOG("FS_SAMPNID_ALLOC assigned=%u next=%u", id_v, samp_nid);
             uint32_t id_c3  = samp_nid++;
             STEREO_LOG("FS_SAMPNID_ALLOC assigned=%u next=%u", id_c3, samp_nid);
+            bool projected_sample = op == SpvOpImageSampleProjDrefExplicitLod;
+            uint32_t id_q = projected_sample ? samp_nid++ : 0;
+            uint32_t id_up = projected_sample ? samp_nid++ : 0;
+            uint32_t id_vp = projected_sample ? samp_nid++ : 0;
             /* OpLoad %int %vi → id_lv */
             { uint32_t w[]={(4u<<16)|SpvOpLoad, new_int_id, id_lv, new_vi_id};
               sb_push_n(&ob,w,4); }
@@ -10246,9 +10250,26 @@ bool spirv_patch_stereo_fs(
             /* OpCompositeExtract %float coord 1 → id_v */
             { uint32_t w[]={(5u<<16)|SpvOpCompositeExtract, s.float_id, id_v, coord_id, 1};
               sb_push_n(&ob,w,5); }
-            /* OpCompositeConstruct %v3float id_u id_v id_cvt → id_c3 */
-            { uint32_t w[]={(6u<<16)|SpvOpCompositeConstruct, new_v3f_id, id_c3, id_u, id_v, id_cvt};
-              sb_push_n(&ob,w,6); }
+            if (projected_sample)
+            {
+                /* Extract projective divisor q. */
+                uint32_t w[]={(5u<<16)|SpvOpCompositeExtract, s.float_id, id_q, coord_id, 2};
+                sb_push_n(&ob,w,5);
+                /* Divide x and y by q. */
+                uint32_t div_u[]={(5u<<16)|SpvOpFDiv, s.float_id, id_up, id_u, id_q};
+                uint32_t div_v[]={(5u<<16)|SpvOpFDiv, s.float_id, id_vp, id_v, id_q};
+                sb_push_n(&ob,div_u,5);
+                sb_push_n(&ob,div_v,5);
+                /* Construct array coordinate: x/q, y/q, ViewIndex. */
+                uint32_t w[]={(6u<<16)|SpvOpCompositeConstruct, new_v3f_id, id_c3, id_up, id_vp, id_cvt};
+                sb_push_n(&ob,w,6);
+            }
+            else
+            {
+                /* Construct array coordinate: x, y, ViewIndex. */
+                uint32_t w[]={(6u<<16)|SpvOpCompositeConstruct, new_v3f_id, id_c3, id_u, id_v, id_cvt};
+                sb_push_n(&ob,w,6);
+            }
             /* Emit modified sample instruction: word[4] = new coord */
             STEREO_LOG(
                 "FS_SAMPLE_REWRITE "
@@ -10294,7 +10315,7 @@ bool spirv_patch_stereo_fs(
                 in[i + 3],
                 in[i + 4],
                 id_c3);
-            sb_push(&ob, in[i]);          /* opcode */
+            sb_push(&ob, projected_sample ? ((in[i] & 0xffff0000u) | SpvOpImageSampleDrefExplicitLod) : in[i]); /* opcode */
             sb_push(&ob, in[i+1]);        /* result type */
             sb_push(&ob, in[i+2]);        /* result id */
             sb_push(&ob, in[i+3]);        /* sampled image (unchanged) */
