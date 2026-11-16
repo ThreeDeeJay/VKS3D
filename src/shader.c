@@ -10995,7 +10995,7 @@ bool spirv_patch_stereo_fs(
             continue;
         }
         /* Patch OpSampledImage result type to match its image operand. */
-        if (in_func && op == SpvOpSampledImage && wc == 5)
+        if (false && in_func && op == SpvOpSampledImage && wc == 5)
         {
             uint32_t image_id = in[i+3];
             uint32_t image_value_type = 0;
