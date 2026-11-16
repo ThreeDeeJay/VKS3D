@@ -11223,6 +11223,8 @@ bool spirv_patch_stereo_fs(
             {
                 if (!s.images[img].replacement_type)
                     continue;
+                if (!descriptor_var || s.images[img].owner_var != descriptor_var)
+                    continue;
                 if (s.images[img].id != fetch_image_type &&
                     s.images[img].replacement_type != fetch_image_type &&
                     s.images[img].sampled_type_id != fetch_image_type &&
