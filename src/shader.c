@@ -11064,6 +11064,35 @@ bool spirv_patch_stereo_fs(
                 fs_find_load(
                     &s,
                     in[i+3]);
+            if (load < 0)
+            {
+                for (size_t scan = 5; scan < in_c;)
+                {
+                    uint32_t sw = in[scan] >> 16;
+                    uint32_t sop = in[scan] & 0xffffu;
+                    if (sw == 0 || scan + sw > in_c)
+                        break;
+                    if (sop == SpvOpImage && sw >= 4 && in[scan+2] == in[i+3])
+                    {
+                        uint32_t sampled_image_id = in[scan+3];
+                        for (size_t scan2 = 5; scan2 < in_c;)
+                        {
+                            uint32_t sw2 = in[scan2] >> 16;
+                            uint32_t sop2 = in[scan2] & 0xffffu;
+                            if (sw2 == 0 || scan2 + sw2 > in_c)
+                                break;
+                            if (sop2 == SpvOpSampledImage && sw2 >= 5 && in[scan2+2] == sampled_image_id)
+                            {
+                                load = fs_find_load(&s, in[scan2+3]);
+                                break;
+                            }
+                            scan2 += sw2;
+                        }
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
             if (load >= 0)
             {
                 descriptor_var =
