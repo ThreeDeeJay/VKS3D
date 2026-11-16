@@ -11047,7 +11047,7 @@ bool spirv_patch_stereo_fs(
             continue;
         }
         /* Extend OpImageFetch ivec2 -> ivec3(x,y,ViewIndex) */
-        if (in_func && (op == SpvOpImageFetch || op == SpvOpImageRead) && wc >= 5)
+        if (false && in_func && (op == SpvOpImageFetch || op == SpvOpImageRead) && wc >= 5)
         {
             //STEREO_LOG(
             //    "FS_FETCH opcode image=%u coord=%u result=%u",
