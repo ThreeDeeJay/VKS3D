@@ -9281,7 +9281,7 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
         }
-        if (op == SpvOpVariable &&
+        if (false && op == SpvOpVariable &&
             wc >= 4 &&
             in[i + 3] == SpvStorageClassUniformConstant)
         {
