@@ -9845,6 +9845,7 @@ bool spirv_patch_stereo_fs(
         if (in_func && wc >= 5 &&
             (op == SpvOpImageSampleImplicitLod ||
              op == SpvOpImageSampleExplicitLod ||
+             op == SpvOpImageSampleDrefImplicitLod ||
              op == SpvOpImageSampleDrefExplicitLod ||
              op == SpvOpImageSampleProjDrefExplicitLod ||
              op == SpvOpImageGather ||
