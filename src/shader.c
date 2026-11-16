@@ -9318,7 +9318,10 @@ bool spirv_patch_stereo_fs(
                     image->owner_var != in[i + 2] ||
                     !image->replacement_pointer_type ||
                     !image->replacement_type ||
-                    pointer_target != image->id)
+                    (pointer_target != image->id &&
+                        pointer_target != image->sampled_type_id) ||
+                    (pointer_target == image->sampled_type_id &&
+                        !image->replacement_sampled_type))
                     continue;
                 uint32_t *w = malloc(wc * sizeof(uint32_t));
                 if (!w)
@@ -9368,7 +9371,10 @@ bool spirv_patch_stereo_fs(
                 if (!image->stereo ||
                     !image->replacement_type ||
                     !image->replacement_pointer_type ||
-                    image->id != pointer_target)
+                    (image->id != pointer_target &&
+                        image->sampled_type_id != pointer_target) ||
+                    (pointer_target == image->sampled_type_id &&
+                        !image->replacement_sampled_type))
                     continue;
                 replacement_pointer = image->replacement_pointer_type;
                 break;
