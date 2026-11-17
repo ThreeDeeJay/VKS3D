@@ -14097,7 +14097,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             STEREO_LOG("PIPE_PNEXT p=%u sType=%u ptr=%p next=%p",
                 p,(unsigned)x->sType,(void *)x,(void *)x->pNext);
         }
-        STEREO_LOG("PIPE_GPL p=%u flags=0x%llx gpl=0x%x libs=%u flags2=%u",(unsigned)p,(unsigned long long)pCI[p].flags,gpl_ci?(unsigned)gpl_ci->flags:0,lib_ci?(unsigned)lib_ci->libraryCount:0,flags2_ci?1:0);
+        STEREO_LOG("PIPE_GPL p=%u flags=0x%llx library_bit=%u gpl=0x%x libs=%u flags2_present=%u flags2=0x%llx",(unsigned)p,(unsigned long long)pCI[p].flags,(unsigned)((pCI[p].flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0),gpl_ci?(unsigned)gpl_ci->flags:0,lib_ci?(unsigned)lib_ci->libraryCount:0,flags2_ci?1:0,(unsigned long long)(flags2_ci ? flags2_ci->flags : 0));
         if (lib_ci && lib_ci->pLibraries)
         {
             for (uint32_t l = 0; l < lib_ci->libraryCount; ++l)
@@ -14267,6 +14267,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (unsigned)created_depth,
             (unsigned)created_stencil,
             created_view_mask);
+        if (res == VK_SUCCESS && (created_gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT))
+        {
+            for (uint32_t s = 0; s < infos[p].stageCount; ++s)
+            {
+                if (infos[p].pStages[s].stage == VK_SHADER_STAGE_FRAGMENT_BIT)
+                {
+                    StereoShaderCache *created_fs_cache = cache_find(sd, infos[p].pStages[s].module);
+                    STEREO_LOG("PIPE_GPL_FS_HANDLE handle=%p module=%p patched=%u hash=%016llx",
+                        (void *)pP[p],
+                        (void *)infos[p].pStages[s].module,
+                        (unsigned)(tmp_fs_mod[p] != VK_NULL_HANDLE && infos[p].pStages[s].module == tmp_fs_mod[p]),
+                        (unsigned long long)(created_fs_cache ? hash_spv(created_fs_cache->spv, created_fs_cache->words) : 0));
+                }
+            }
+        }
         if (res == VK_SUCCESS)
         {
             StereoPipelineInfo *info =
