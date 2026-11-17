@@ -8004,7 +8004,14 @@ bool spirv_patch_stereo_fs(
         {
             uint32_t sampled_id = in[i + 1];
             uint32_t sampled_words[3] = {in[i], in[i + 1], in[i + 2]};
-            for (uint32_t img = 0; img < s.n_img; ++img)
+            sb_push_n(&ob, sampled_words, 3);
+            if (sampled_id < id_bound)
+                emitted_type[sampled_id] = true;
+            i += wc;
+            continue;
+        }
+        if (op == SpvOpTypeRuntimeArray &&
+            wc >= 3)
             {
                 FsImageInfo *image = &s.images[img];
                 if (!image->stereo ||
