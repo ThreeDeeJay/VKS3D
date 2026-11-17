@@ -10427,6 +10427,58 @@ bool spirv_patch_stereo_fs(
             }
             uint32_t w[4];
             memcpy(w, &in[i], sizeof(w));
+            uint32_t sampled_image_result_type = 0;
+            for (size_t scan = 5; scan < ob.n;)
+            {
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (!sw || scan + sw > ob.n)
+                    break;
+                if (sop == SpvOpSampledImage && sw >= 5 &&
+                    ob.w[scan + 2] == in[i + 3])
+                {
+                    sampled_image_result_type = ob.w[scan + 1];
+                    break;
+                }
+                scan += sw;
+            }
+            uint32_t actual_image_type = 0;
+            if (sampled_image_result_type)
+            {
+                for (size_t scan = 5; scan < ob.n;)
+                {
+                    uint32_t sw = ob.w[scan] >> 16;
+                    uint32_t sop = ob.w[scan] & 0xffffu;
+                    if (!sw || scan + sw > ob.n)
+                        break;
+                    if (sop == SpvOpTypeSampledImage && sw >= 3 &&
+                        ob.w[scan + 1] == sampled_image_result_type)
+                    {
+                        actual_image_type = ob.w[scan + 2];
+                        break;
+                    }
+                    scan += sw;
+                }
+            }
+            if (actual_image_type)
+            {
+                w[1] = actual_image_type;
+                STEREO_LOG(
+                    "FS_OPIMAGE_RESOLVED "
+                    "result=%u "
+                    "sampledImage=%u "
+                    "sampledImageType=%u "
+                    "imageType=%u",
+                    w[2],
+                    in[i + 3],
+                    sampled_image_result_type,
+                    actual_image_type);
+                sb_push_n(&ob, w, wc);
+                if (w[1] < id_bound)
+                    emitted_type[w[1]] = true;
+                i += wc;
+                continue;
+            }
             uint32_t sampled_type = 0;
             uint32_t sampled_image_type = 0;
             for (size_t scan = 5; scan < in_c;)
