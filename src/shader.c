@@ -14239,7 +14239,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         VkFormat created_depth = VK_FORMAT_UNDEFINED;
         VkFormat created_stencil = VK_FORMAT_UNDEFINED;
         uint32_t created_view_mask = 0;
-        VkPipelineCreateFlags2 created_flags2 = pCI[p].flags;
+        VkPipelineCreateFlags2KHR created_flags2 = pCI[p].flags;
         for (const VkBaseInStructure *x = (const VkBaseInStructure *)pCI[p].pNext; x; x = (const VkBaseInStructure *)x->pNext)
         {
             if (x->sType == VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR)
