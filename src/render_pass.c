@@ -323,9 +323,8 @@ stereo_CreateRenderPass(
     pCreateInfo->attachmentCount > 0 &&
     !shadow_pass;
     STEREO_LOG(
-        "RenderPass classify: rp=%p depth_only=%d shadow_pass=%d present_pass=%d mv_eligible=%d attachments=%u subpasses=%u fmt0=%u",
+        "RenderPass classify: rp=%p shadow_pass=%d present_pass=%d mv_eligible=%d attachments=%u subpasses=%u fmt0=%u",
         (void*)*pRenderPass,
-        depth_only,
         shadow_pass,
         present_pass,
         mv_eligible,
