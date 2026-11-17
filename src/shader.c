@@ -12496,12 +12496,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
                 view_mask = rw->viewMask;
                 STEREO_LOG(
-                    "PIPE_RENDERING_CAPTURE p=%u viewMask=0x%x colors=%u depth=%u stencil=%u",
+                    "PIPE_RENDERING_INFO p=%u gpl=0x%x colors=%u color0=%u depth=%u stencil=%u viewMask=0x%x shadow=%u",
                     p,
-                    rw->viewMask,
+                    gpl_flags,
                     ri->colorAttachmentCount,
-                    ri->depthAttachmentFormat,
-                    ri->stencilAttachmentFormat);
+                    ri->colorAttachmentCount && ri->pColorAttachmentFormats ? (unsigned)ri->pColorAttachmentFormats[0] : (unsigned)VK_FORMAT_UNDEFINED,
+                    (unsigned)ri->depthAttachmentFormat,
+                    (unsigned)ri->stencilAttachmentFormat,
+                    rw->viewMask,
+                    (unsigned)is_shadow_pipeline);
             }
             base = base->pNext;
         }
@@ -12560,6 +12563,17 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         else if (!is_shadow_pipeline && sd->stereo.multiview && (view_mask & 0x3) != 0) {
             in_mv_rp = true;
         }
+        STEREO_LOG(
+            "PIPE_STEREO_CLASSIFY p=%u gpl=0x%x rp=%p rpi=%p rp_mv=%u rp_shadow=%u viewMask=0x%x shadow=%u in_mv=%u",
+            p,
+            gpl_flags,
+            (void *)ci->renderPass,
+            (void *)rpi,
+            (unsigned)(rpi && rpi->has_multiview),
+            (unsigned)(rpi && rpi->is_shadow_pass),
+            view_mask,
+            (unsigned)is_shadow_pipeline,
+            (unsigned)in_mv_rp);
         if (in_mv_rp &&
             rpi &&
             rpi->has_multiview &&
