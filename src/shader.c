@@ -12462,6 +12462,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("PIPE_GPL_ROUTE p=%u gpl=0x%x",p,gpl_flags);
         uint32_t view_mask = 0;
+        bool is_shadow_pipeline = false;
         /* ── Safety: Vulkan 1.3 dynamic rendering pipelines may not use pNext ── */
         while (base)
         {
@@ -12473,10 +12474,18 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 VkPipelineRenderingCreateInfo *rw =
                  (VkPipelineRenderingCreateInfo*)base;
                 
+                is_shadow_pipeline =
+                    ri->colorAttachmentCount == 1 &&
+                    ri->pColorAttachmentFormats &&
+                    ri->pColorAttachmentFormats[0] == VK_FORMAT_R32_SFLOAT &&
+                    ri->depthAttachmentFormat != VK_FORMAT_UNDEFINED;
+                if (is_shadow_pipeline)
+                    rw->viewMask = 0;
+
                 /* Dynamic rendering path: if stereo is enabled and the app left
                  * viewMask at 0, promote it to 0x3 so the pipeline is actually
                  * created for multiview. */
-                if (sd->stereo.multiview && rw->viewMask == 0) {
+                if (!is_shadow_pipeline && sd->stereo.multiview && rw->viewMask == 0) {
                  STEREO_LOG(
                   "PIPE_RENDERING_UPGRADE p=%u viewMask 0x0->0x3 colors=%u depth=%u stencil=%u",
                   p,
@@ -12541,11 +12550,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         VkRenderPass pipeline_rp = ci->renderPass;
         if (ci->renderPass != VK_NULL_HANDLE) {
             rpi = stereo_rp_lookup(sd, ci->renderPass);
+            is_shadow_pipeline =
+                is_shadow_pipeline || (rpi && rpi->is_shadow_pass);
             in_mv_rp =
-                (rpi && rpi->has_multiview) ||
-                ((view_mask & 0x3) != 0);
+                !is_shadow_pipeline &&
+                ((rpi && rpi->has_multiview) ||
+                ((view_mask & 0x3) != 0));
         }
-        else if (sd->stereo.multiview && (view_mask & 0x3) != 0) {
+        else if (!is_shadow_pipeline && sd->stereo.multiview && (view_mask & 0x3) != 0) {
             in_mv_rp = true;
         }
         if (in_mv_rp &&
