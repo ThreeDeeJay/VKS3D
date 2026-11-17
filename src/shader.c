@@ -8997,22 +8997,13 @@ bool spirv_patch_stereo_fs(
                     bool target_is_runtime_array =
                     (variable_target_type == image->runtime_array_type &&
                         image->replacement_runtime_array_type);
-                    if (owner_match)
-                    {
-                        if (variable_target_type != 0 &&
-                            !target_is_image &&
+                    if (image->owner_var && !owner_match)
+                        continue;
+                    if (variable_target_type == 0 ||
+                        (!target_is_image &&
                             !target_is_sampled &&
-                            !target_is_runtime_array)
-                            continue;
-                    }
-                    else
-                    {
-                        if (variable_target_type == 0 ||
-                            (!target_is_image &&
-                                !target_is_sampled &&
-                                !target_is_runtime_array))
-                            continue;
-                    }
+                            !target_is_runtime_array))
+                        continue;
                     uint32_t replacement_pointer =
                     target_is_runtime_array ?
                     image->replacement_descriptor_pointer_type :
@@ -9202,6 +9193,18 @@ bool spirv_patch_stereo_fs(
                             }
                             scan += sw;
                         }
+                    }
+                    if (!emitted_type[replacement_pointer] &&
+                        emitted_type[replacement_target])
+                    {
+                        uint32_t pointer_words[4] = {
+                            (4u << 16) | SpvOpTypePointer,
+                            replacement_pointer,
+                            in[i + 3],
+                            replacement_target
+                        };
+                        sb_push_n(&ob, pointer_words, 4);
+                        emitted_type[replacement_pointer] = true;
                     }
                     if (!emitted_type[replacement_pointer])
                         continue;
