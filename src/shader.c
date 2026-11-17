@@ -1775,7 +1775,6 @@ static void emit_body(SpvBuf *out, const BodyCtx *c, uint32_t *nid)
         cc_  = dc;
         bgx_ = db;
         STEREO_LOG("VS_DYN_LOAD left=%u right=%u conv=%u bg=%u ptr_t=%u", dl, dr, dc, db, c->dyn_ptr_t);
-        STEREO_LOG("VS_EYE_OFFSETS left=%+.9f right=%+.9f baked_left=%+.9f baked_right=%+.9f", c->lo_dbg, c->ro_dbg, c->lo_dbg, c->ro_dbg);
     }
     if (m->pos_is_block)
     {
@@ -3807,16 +3806,14 @@ bool spirv_patch_stereo_vertex(
                 ins_t = i;
             in_entry_function =
                 (wcx >= 4 &&
-                in[i + 2] ==
-                (m.position_function ?
-                    m.position_function :
-                    m.entry_function));
-            STEREO_LOG("VS_ENTRY_SCAN hash=%016llx function=%u target=%u selected=%u matched=%u", (unsigned long long)spv_hash, in[i + 2], m.entry_function, m.position_function ? m.position_function : m.entry_function, in_entry_function);
+                 in[i + 2] ==
+                 (m.position_function ?
+                  m.position_function :
+                  m.entry_function));
         }
         if (in_entry_function &&
             opx == SpvOpReturn)
         {
-            STEREO_LOG("VS_ENTRY_RETURN hash=%016llx function=%u offset=%zu", (unsigned long long)spv_hash, m.position_function ? m.position_function : m.entry_function, i);
             ins_b = i;
         }
         if (in_entry_function &&
@@ -3828,14 +3825,12 @@ bool spirv_patch_stereo_vertex(
     }
     if (!ins_t)
     {
-        STEREO_LOG("VS_PATCH_ABORT hash=%016llx reason=no_function", (unsigned long long)spv_hash);
         sb_free(&te);
         free_spv_provenance(&m);
         return false;
     }
     if (!is_gs && !ins_b)
     {
-        STEREO_LOG("VS_PATCH_ABORT hash=%016llx reason=no_entry_return entry=%u position_function=%u", (unsigned long long)spv_hash, m.entry_function, m.position_function);
         sb_free(&te);
         free_spv_provenance(&m);
         return false;
@@ -9841,8 +9836,8 @@ bool spirv_patch_stereo_fs(
         if (in_func && wc >= 5 &&
             (op == SpvOpImageSampleImplicitLod ||
              op == SpvOpImageSampleExplicitLod ||
+             op == SpvOpImageSampleDrefImplicitLod ||
              op == SpvOpImageSampleDrefExplicitLod ||
-             op == SpvOpImageSampleProjDrefExplicitLod ||
              op == SpvOpImageGather ||
              op == SpvOpImageDrefGather))
         {
@@ -10230,10 +10225,6 @@ bool spirv_patch_stereo_fs(
             STEREO_LOG("FS_SAMPNID_ALLOC assigned=%u next=%u", id_v, samp_nid);
             uint32_t id_c3  = samp_nid++;
             STEREO_LOG("FS_SAMPNID_ALLOC assigned=%u next=%u", id_c3, samp_nid);
-            bool projected_sample = op == SpvOpImageSampleProjDrefExplicitLod;
-            uint32_t id_q = projected_sample ? samp_nid++ : 0;
-            uint32_t id_up = projected_sample ? samp_nid++ : 0;
-            uint32_t id_vp = projected_sample ? samp_nid++ : 0;
             /* OpLoad %int %vi → id_lv */
             { uint32_t w[]={(4u<<16)|SpvOpLoad, new_int_id, id_lv, new_vi_id};
               sb_push_n(&ob,w,4); }
@@ -10246,26 +10237,9 @@ bool spirv_patch_stereo_fs(
             /* OpCompositeExtract %float coord 1 → id_v */
             { uint32_t w[]={(5u<<16)|SpvOpCompositeExtract, s.float_id, id_v, coord_id, 1};
               sb_push_n(&ob,w,5); }
-            if (projected_sample)
-            {
-                /* Extract projective divisor q. */
-                uint32_t extract_q[]={(5u<<16)|SpvOpCompositeExtract, s.float_id, id_q, coord_id, 2};
-                sb_push_n(&ob,extract_q,5);
-                /* Divide x and y by q. */
-                uint32_t div_u[]={(5u<<16)|SpvOpFDiv, s.float_id, id_up, id_u, id_q};
-                uint32_t div_v[]={(5u<<16)|SpvOpFDiv, s.float_id, id_vp, id_v, id_q};
-                sb_push_n(&ob,div_u,5);
-                sb_push_n(&ob,div_v,5);
-                /* Construct array coordinate: x/q, y/q, ViewIndex. */
-                uint32_t construct_proj[]={(6u<<16)|SpvOpCompositeConstruct, new_v3f_id, id_c3, id_up, id_vp, id_cvt};
-                sb_push_n(&ob,construct_proj,6);
-            }
-            else
-            {
-                /* Construct array coordinate: x, y, ViewIndex. */
-                uint32_t w[]={(6u<<16)|SpvOpCompositeConstruct, new_v3f_id, id_c3, id_u, id_v, id_cvt};
-                sb_push_n(&ob,w,6);
-            }
+            /* OpCompositeConstruct %v3float id_u id_v id_cvt → id_c3 */
+            { uint32_t w[]={(6u<<16)|SpvOpCompositeConstruct, new_v3f_id, id_c3, id_u, id_v, id_cvt};
+              sb_push_n(&ob,w,6); }
             /* Emit modified sample instruction: word[4] = new coord */
             STEREO_LOG(
                 "FS_SAMPLE_REWRITE "
@@ -10311,7 +10285,7 @@ bool spirv_patch_stereo_fs(
                 in[i + 3],
                 in[i + 4],
                 id_c3);
-            sb_push(&ob, projected_sample ? ((in[i] & 0xffff0000u) | SpvOpImageSampleDrefExplicitLod) : in[i]); /* opcode */
+            sb_push(&ob, in[i]);          /* opcode */
             sb_push(&ob, in[i+1]);        /* result type */
             sb_push(&ob, in[i+2]);        /* result id */
             sb_push(&ob, in[i+3]);        /* sampled image (unchanged) */
@@ -12438,7 +12412,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     if (!sd->stereo.enabled)
         return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
     VkShaderModule                   *tmp_mod = calloc(N, sizeof(VkShaderModule));
-    VkShaderModule                   *tmp_fs_mod = calloc(N, sizeof(VkShaderModule));
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
@@ -12449,8 +12422,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         dbg_out[i].proj_member_mask     = UINT32_MAX;
         dbg_out[i].proj_var             = UINT32_MAX;
     }
-    if (!tmp_mod||!tmp_fs_mod||!tst||!infos) {
-        free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+    if (!tmp_mod||!tst||!infos) {
+        free(tmp_mod); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
@@ -13376,8 +13349,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (stereo_stage_inline_spv(&st[fs_s]))
             st[fs_s].pNext = NULL;
             infos[p].pStages = st;
-            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp);
-            tmp_fs_mod[p] = tmp;
+            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp_mod[p]);
+            tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
             STEREO_LOG("FS_STAGE_INSTALL p=%u fs_s=%u orig=%p patched=%p infos_stages=%u infos_pStages=%p st=%p",(unsigned)p,fs_s,(void*)ci->pStages[fs_s].module,(void*)infos[p].pStages[fs_s].module,infos[p].stageCount,(void*)infos[p].pStages,(void*)st);
@@ -13393,10 +13366,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 p,
                 sc2);
             STEREO_LOG(
-                "SHADER_PATH_FS p=%u patched_fs=1 has_vs=%u vs_stage=%u",
+                "SHADER_PATH_FINAL p=%u path=FS patched_fs=1 has_vs=%u vs_stage=%u",
                 p,
                 (unsigned)has_vs,
                 vs_stage);
+            continue;
             }
         }
         if (in_mv_rp &&
@@ -14010,12 +13984,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (mr!=VK_SUCCESS) {
                 STEREO_ERR("Pipe %u PathB: VS module err %d",p,mr); continue; }
             uint32_t sc=ci->stageCount;
-            VkPipelineShaderStageCreateInfo *st=tst[p];
-            if (!st) {
-            st=malloc(sc*sizeof(*st));
+            VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
-            }
             st[vs_stage].module = tmp;
             if (stereo_stage_inline_spv(&st[vs_stage]))
             st[vs_stage].pNext = NULL;
@@ -14138,8 +14109,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 pst->stage,
                 (void *)pst->module,
                 (unsigned)(
-                    (pst->module == tmp_mod[p] && tmp_mod[p] != VK_NULL_HANDLE) ||
-                    (pst->module == tmp_fs_mod[p] && tmp_fs_mod[p] != VK_NULL_HANDLE)),
+                    tmp_mod[p] != VK_NULL_HANDLE &&
+                    pst->module == tmp_mod[p]),
                 has_identifier);
         }
     }
@@ -14191,11 +14162,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         {
             if (tmp_mod[p])
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
-            if (tmp_fs_mod[p])
-                sd->real.DestroyShaderModule(sd->real_device,tmp_fs_mod[p],NULL);
             free(tst[p]);
         }
-        free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+        free(tmp_mod); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     for (uint32_t p=0;p<N;p++)
@@ -14290,8 +14259,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     {
                         info->fs_module = st->module;
                         info->patched_fs =
-                            (tmp_fs_mod[p] != VK_NULL_HANDLE &&
-                             st->module == tmp_fs_mod[p]);
+                            (tmp_mod[p] != VK_NULL_HANDLE &&
+                             st->module == tmp_mod[p]);
                         /*
                          * Always probe the fragment shader too.
                          * VS/TES may already have filled proj info, but FS can carry
@@ -14329,16 +14298,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             else
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
         }
-        if (tmp_fs_mod[p]) {
-            if (sd->tmp_module_count<MAX_TMP_MODULES)
-                sd->tmp_modules[sd->tmp_module_count++]=tmp_fs_mod[p];
-            else
-                sd->real.DestroyShaderModule(sd->real_device,tmp_fs_mod[p],NULL);
-        }
         free(tst[p]);
     }
     free(original_vs_hash);
-    free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+    free(tmp_mod); free(tst); free(infos);
     return res;
 }
 
