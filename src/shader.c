@@ -7988,7 +7988,7 @@ bool spirv_patch_stereo_fs(
                 FsImageInfo *image = &s.images[img];
                 if (!image->stereo ||
                     !image->replacement_type ||
-                    image->id != sampled_id)
+                    image->id != in[i + 2])
                     continue;
                 uint32_t replacement_image = image->replacement_type;
                 uint32_t existing_sampled_id = 0;
