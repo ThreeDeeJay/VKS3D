@@ -4661,6 +4661,7 @@ uint32_t var)
      */
     bool stereo =
         (v->binding <= 4) ||
+        (v->set == 0 && (v->binding == 9 || v->binding == 10)) ||
         (v->set == 1 && ((v->binding >= 24 && v->binding <= 29) || v->binding == 34));
     STEREO_LOG(
         "FS_BINDING_RESULT "
