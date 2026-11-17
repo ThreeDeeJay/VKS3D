@@ -14098,6 +14098,13 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 p,(unsigned)x->sType,(void *)x,(void *)x->pNext);
         }
         STEREO_LOG("PIPE_GPL p=%u flags=0x%llx gpl=0x%x libs=%u flags2=%u",(unsigned)p,(unsigned long long)pCI[p].flags,gpl_ci?(unsigned)gpl_ci->flags:0,lib_ci?(unsigned)lib_ci->libraryCount:0,flags2_ci?1:0);
+        if (lib_ci && lib_ci->pLibraries)
+        {
+            for (uint32_t l = 0; l < lib_ci->libraryCount; ++l)
+            {
+                STEREO_LOG("PIPE_GPL_LINK p=%u index=%u library=%p",p,l,(void *)lib_ci->pLibraries[l]);
+            }
+        }
         STEREO_LOG(
             "PIPE_FINAL p=%u ci_rp=%p final_rp=%p stages=%u",
             p,
@@ -14226,6 +14233,40 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (void*)infos[p].renderPass,
             (void*)pCI[p].renderPass,
             infos[p].stageCount);
+        uint32_t created_gpl_flags = 0;
+        uint32_t created_colors = 0;
+        VkFormat created_color0 = VK_FORMAT_UNDEFINED;
+        VkFormat created_depth = VK_FORMAT_UNDEFINED;
+        VkFormat created_stencil = VK_FORMAT_UNDEFINED;
+        uint32_t created_view_mask = 0;
+        for (const VkBaseInStructure *x = (const VkBaseInStructure *)pCI[p].pNext; x; x = (const VkBaseInStructure *)x->pNext)
+        {
+            if (x->sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT)
+            {
+                const VkGraphicsPipelineLibraryCreateInfoEXT *gli = (const VkGraphicsPipelineLibraryCreateInfoEXT *)x;
+                created_gpl_flags = gli->flags;
+            }
+            if (x->sType == VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO)
+            {
+                const VkPipelineRenderingCreateInfo *ri = (const VkPipelineRenderingCreateInfo *)x;
+                created_colors = ri->colorAttachmentCount;
+                if (ri->colorAttachmentCount && ri->pColorAttachmentFormats)
+                    created_color0 = ri->pColorAttachmentFormats[0];
+                created_depth = ri->depthAttachmentFormat;
+                created_stencil = ri->stencilAttachmentFormat;
+                created_view_mask = ri->viewMask;
+            }
+        }
+        STEREO_LOG("PIPE_GPL_CREATED p=%u handle=%p library=%u gpl=0x%x colors=%u color0=%u depth=%u stencil=%u viewMask=0x%x",
+            p,
+            (res == VK_SUCCESS) ? (void *)pP[p] : NULL,
+            (unsigned)((pCI[p].flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0),
+            created_gpl_flags,
+            created_colors,
+            (unsigned)created_color0,
+            (unsigned)created_depth,
+            (unsigned)created_stencil,
+            created_view_mask);
         if (res == VK_SUCCESS)
         {
             StereoPipelineInfo *info =
