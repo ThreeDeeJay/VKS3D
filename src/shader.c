@@ -12412,7 +12412,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     if (!sd->stereo.enabled)
         return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
     VkShaderModule                   *tmp_mod = calloc(N, sizeof(VkShaderModule));
-    VkShaderModule                   *tmp_fs_mod = calloc(N, sizeof(VkShaderModule));
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
@@ -12423,8 +12422,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         dbg_out[i].proj_member_mask     = UINT32_MAX;
         dbg_out[i].proj_var             = UINT32_MAX;
     }
-    if (!tmp_mod||!tmp_fs_mod||!tst||!infos) {
-        free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+    if (!tmp_mod||!tst||!infos) {
+        free(tmp_mod); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
@@ -12462,7 +12461,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         STEREO_LOG("PIPE_GPL_ROUTE p=%u gpl=0x%x",p,gpl_flags);
         uint32_t view_mask = 0;
-        bool is_shadow_pipeline = false;
         /* ── Safety: Vulkan 1.3 dynamic rendering pipelines may not use pNext ── */
         while (base)
         {
@@ -12474,18 +12472,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 VkPipelineRenderingCreateInfo *rw =
                  (VkPipelineRenderingCreateInfo*)base;
                 
-                is_shadow_pipeline =
-                    ri->colorAttachmentCount == 1 &&
-                    ri->pColorAttachmentFormats &&
-                    ri->pColorAttachmentFormats[0] == VK_FORMAT_R32_SFLOAT &&
-                    ri->depthAttachmentFormat != VK_FORMAT_UNDEFINED;
-                if (is_shadow_pipeline)
-                    rw->viewMask = 0;
-
                 /* Dynamic rendering path: if stereo is enabled and the app left
                  * viewMask at 0, promote it to 0x3 so the pipeline is actually
                  * created for multiview. */
-                if (!is_shadow_pipeline && sd->stereo.multiview && rw->viewMask == 0) {
+                if (sd->stereo.multiview && rw->viewMask == 0) {
                  STEREO_LOG(
                   "PIPE_RENDERING_UPGRADE p=%u viewMask 0x0->0x3 colors=%u depth=%u stencil=%u",
                   p,
@@ -12496,15 +12486,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 }
                 view_mask = rw->viewMask;
                 STEREO_LOG(
-                    "PIPE_RENDERING_INFO p=%u gpl=0x%x colors=%u color0=%u depth=%u stencil=%u viewMask=0x%x shadow=%u",
+                    "PIPE_RENDERING_CAPTURE p=%u viewMask=0x%x colors=%u depth=%u stencil=%u",
                     p,
-                    gpl_flags,
-                    ri->colorAttachmentCount,
-                    ri->colorAttachmentCount && ri->pColorAttachmentFormats ? (unsigned)ri->pColorAttachmentFormats[0] : (unsigned)VK_FORMAT_UNDEFINED,
-                    (unsigned)ri->depthAttachmentFormat,
-                    (unsigned)ri->stencilAttachmentFormat,
                     rw->viewMask,
-                    (unsigned)is_shadow_pipeline);
+                    ri->colorAttachmentCount,
+                    ri->depthAttachmentFormat,
+                    ri->stencilAttachmentFormat);
             }
             base = base->pNext;
         }
@@ -12553,27 +12540,13 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         VkRenderPass pipeline_rp = ci->renderPass;
         if (ci->renderPass != VK_NULL_HANDLE) {
             rpi = stereo_rp_lookup(sd, ci->renderPass);
-            is_shadow_pipeline =
-                is_shadow_pipeline || (rpi && rpi->is_shadow_pass);
             in_mv_rp =
-                !is_shadow_pipeline &&
-                ((rpi && rpi->has_multiview) ||
-                ((view_mask & 0x3) != 0));
+                (rpi && rpi->has_multiview) ||
+                ((view_mask & 0x3) != 0);
         }
-        else if (!is_shadow_pipeline && sd->stereo.multiview && (view_mask & 0x3) != 0) {
+        else if (sd->stereo.multiview && (view_mask & 0x3) != 0) {
             in_mv_rp = true;
         }
-        STEREO_LOG(
-            "PIPE_STEREO_CLASSIFY p=%u gpl=0x%x rp=%p rpi=%p rp_mv=%u rp_shadow=%u viewMask=0x%x shadow=%u in_mv=%u",
-            p,
-            gpl_flags,
-            (void *)ci->renderPass,
-            (void *)rpi,
-            (unsigned)(rpi && rpi->has_multiview),
-            (unsigned)(rpi && rpi->is_shadow_pass),
-            view_mask,
-            (unsigned)is_shadow_pipeline,
-            (unsigned)in_mv_rp);
         if (in_mv_rp &&
             rpi &&
             rpi->has_multiview &&
@@ -12629,11 +12602,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             fs_stage);
         for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
         {
-            StereoShaderCache inline_sc = {0};
             StereoShaderCache *sc =
-            stereo_stage_spv(sd, &ci->pStages[s2], &inline_sc);
+            cache_find(sd, ci->pStages[s2].module);
             STEREO_LOG(
-                "SHADER_STAGE p=%u index=%u stage=0x%x module=%p available=%u hash=%016llx words=%zu",
+                "SHADER_STAGE p=%u index=%u stage=0x%x module=%p cached=%u hash=%016llx words=%zu",
                 p,
                 s2,
                 ci->pStages[s2].stage,
@@ -13097,7 +13069,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 free_spv_provenance(&vm);
             }
         }
-        STEREO_LOG("QUAD_CLASSIFY p=%u is_quad=%u vs_fullscreen=%u vs_quad_fs=%u vs_pure_quad=%u has_vs=%u has_fs=%u gpl=0x%x",p,is_quad,vs_fullscreen,vs_quad_fs,vs_pure_quad,has_vs,has_fs,gpl_flags);
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
         STEREO_LOG("ROUTE_SHADERS p=%u vs_hash=%016llx fs_hash=%016llx in_mv=%u quad=%u vs_fullscreen=%u",(unsigned)p,(unsigned long long)((has_vs && vs_stage != ~0u && cache_find(sd,ci->pStages[vs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[vs_stage].module)->spv,cache_find(sd,ci->pStages[vs_stage].module)->words) : 0),(unsigned long long)((has_fs && fs_stage != ~0u && cache_find(sd,ci->pStages[fs_stage].module)) ? hash_spv(cache_find(sd,ci->pStages[fs_stage].module)->spv,cache_find(sd,ci->pStages[fs_stage].module)->words) : 0),in_mv_rp,is_quad,vs_fullscreen);
         if (((vs_fullscreen) || (is_quad && vs_quad_fs) || (!has_vs && (gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) != 0)) &&
@@ -13378,8 +13349,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (stereo_stage_inline_spv(&st[fs_s]))
             st[fs_s].pNext = NULL;
             infos[p].pStages = st;
-            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp);
-            tmp_fs_mod[p] = tmp;
+            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp_mod[p]);
+            tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
             STEREO_LOG("FS_STAGE_INSTALL p=%u fs_s=%u orig=%p patched=%p infos_stages=%u infos_pStages=%p st=%p",(unsigned)p,fs_s,(void*)ci->pStages[fs_s].module,(void*)infos[p].pStages[fs_s].module,infos[p].stageCount,(void*)infos[p].pStages,(void*)st);
@@ -13395,10 +13366,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 p,
                 sc2);
             STEREO_LOG(
-                "SHADER_PATH_FS p=%u patched_fs=1 has_vs=%u vs_stage=%u",
+                "SHADER_PATH_FINAL p=%u path=FS patched_fs=1 has_vs=%u vs_stage=%u",
                 p,
                 (unsigned)has_vs,
                 vs_stage);
+            continue;
             }
         }
         if (in_mv_rp &&
@@ -14012,12 +13984,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (mr!=VK_SUCCESS) {
                 STEREO_ERR("Pipe %u PathB: VS module err %d",p,mr); continue; }
             uint32_t sc=ci->stageCount;
-            VkPipelineShaderStageCreateInfo *st=tst[p];
-            if (!st) {
-            st=malloc(sc*sizeof(*st));
+            VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
-            }
             st[vs_stage].module = tmp;
             if (stereo_stage_inline_spv(&st[vs_stage]))
             st[vs_stage].pNext = NULL;
@@ -14097,14 +14066,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             STEREO_LOG("PIPE_PNEXT p=%u sType=%u ptr=%p next=%p",
                 p,(unsigned)x->sType,(void *)x,(void *)x->pNext);
         }
-        STEREO_LOG("PIPE_GPL p=%u flags=0x%llx library_bit=%u gpl=0x%x libs=%u flags2_present=%u flags2=0x%llx",(unsigned)p,(unsigned long long)pCI[p].flags,(unsigned)((pCI[p].flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) != 0),gpl_ci?(unsigned)gpl_ci->flags:0,lib_ci?(unsigned)lib_ci->libraryCount:0,flags2_ci?1:0,(unsigned long long)(flags2_ci ? flags2_ci->flags : 0));
-        if (lib_ci && lib_ci->pLibraries)
-        {
-            for (uint32_t l = 0; l < lib_ci->libraryCount; ++l)
-            {
-                STEREO_LOG("PIPE_GPL_LINK p=%u index=%u library=%p",p,l,(void *)lib_ci->pLibraries[l]);
-            }
-        }
+        STEREO_LOG("PIPE_GPL p=%u flags=0x%llx gpl=0x%x libs=%u flags2=%u",(unsigned)p,(unsigned long long)pCI[p].flags,gpl_ci?(unsigned)gpl_ci->flags:0,lib_ci?(unsigned)lib_ci->libraryCount:0,flags2_ci?1:0);
         STEREO_LOG(
             "PIPE_FINAL p=%u ci_rp=%p final_rp=%p stages=%u",
             p,
@@ -14147,8 +14109,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 pst->stage,
                 (void *)pst->module,
                 (unsigned)(
-                    (pst->module == tmp_mod[p] && tmp_mod[p] != VK_NULL_HANDLE) ||
-                    (pst->module == tmp_fs_mod[p] && tmp_fs_mod[p] != VK_NULL_HANDLE)),
+                    tmp_mod[p] != VK_NULL_HANDLE &&
+                    pst->module == tmp_mod[p]),
                 has_identifier);
         }
     }
@@ -14200,11 +14162,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         {
             if (tmp_mod[p])
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
-            if (tmp_fs_mod[p])
-                sd->real.DestroyShaderModule(sd->real_device,tmp_fs_mod[p],NULL);
             free(tst[p]);
         }
-        free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+        free(tmp_mod); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     for (uint32_t p=0;p<N;p++)
@@ -14233,61 +14193,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (void*)infos[p].renderPass,
             (void*)pCI[p].renderPass,
             infos[p].stageCount);
-        uint32_t created_gpl_flags = 0;
-        uint32_t created_colors = 0;
-        VkFormat created_color0 = VK_FORMAT_UNDEFINED;
-        VkFormat created_depth = VK_FORMAT_UNDEFINED;
-        VkFormat created_stencil = VK_FORMAT_UNDEFINED;
-        uint32_t created_view_mask = 0;
-        VkPipelineCreateFlags2KHR created_flags2 = pCI[p].flags;
-        for (const VkBaseInStructure *x = (const VkBaseInStructure *)pCI[p].pNext; x; x = (const VkBaseInStructure *)x->pNext)
-        {
-            if (x->sType == VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO_KHR)
-            {
-                const VkPipelineCreateFlags2CreateInfoKHR *f2 = (const VkPipelineCreateFlags2CreateInfoKHR *)x;
-                created_flags2 = f2->flags;
-            }
-            if (x->sType == VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT)
-            {
-                const VkGraphicsPipelineLibraryCreateInfoEXT *gli = (const VkGraphicsPipelineLibraryCreateInfoEXT *)x;
-                created_gpl_flags = gli->flags;
-            }
-            if (x->sType == VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO)
-            {
-                const VkPipelineRenderingCreateInfo *ri = (const VkPipelineRenderingCreateInfo *)x;
-                created_colors = ri->colorAttachmentCount;
-                if (ri->colorAttachmentCount && ri->pColorAttachmentFormats)
-                    created_color0 = ri->pColorAttachmentFormats[0];
-                created_depth = ri->depthAttachmentFormat;
-                created_stencil = ri->stencilAttachmentFormat;
-                created_view_mask = ri->viewMask;
-            }
-        }
-        STEREO_LOG("PIPE_GPL_CREATED p=%u handle=%p library=%u gpl=0x%x colors=%u color0=%u depth=%u stencil=%u viewMask=0x%x",
-            p,
-            (res == VK_SUCCESS) ? (void *)pP[p] : NULL,
-            (unsigned)((created_flags2 & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR) != 0),
-            created_gpl_flags,
-            created_colors,
-            (unsigned)created_color0,
-            (unsigned)created_depth,
-            (unsigned)created_stencil,
-            created_view_mask);
-        if (res == VK_SUCCESS && (created_gpl_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT))
-        {
-            for (uint32_t s = 0; s < infos[p].stageCount; ++s)
-            {
-                if (infos[p].pStages[s].stage == VK_SHADER_STAGE_FRAGMENT_BIT)
-                {
-                    StereoShaderCache *created_fs_cache = cache_find(sd, infos[p].pStages[s].module);
-                    STEREO_LOG("PIPE_GPL_FS_HANDLE handle=%p module=%p patched=%u hash=%016llx",
-                        (void *)pP[p],
-                        (void *)infos[p].pStages[s].module,
-                        (unsigned)(tmp_fs_mod[p] != VK_NULL_HANDLE && infos[p].pStages[s].module == tmp_fs_mod[p]),
-                        (unsigned long long)(created_fs_cache ? hash_spv(created_fs_cache->spv, created_fs_cache->words) : 0));
-                }
-            }
-        }
         if (res == VK_SUCCESS)
         {
             StereoPipelineInfo *info =
@@ -14354,8 +14259,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     {
                         info->fs_module = st->module;
                         info->patched_fs =
-                            (tmp_fs_mod[p] != VK_NULL_HANDLE &&
-                             st->module == tmp_fs_mod[p]);
+                            (tmp_mod[p] != VK_NULL_HANDLE &&
+                             st->module == tmp_mod[p]);
                         /*
                          * Always probe the fragment shader too.
                          * VS/TES may already have filled proj info, but FS can carry
@@ -14393,16 +14298,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             else
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
         }
-        if (tmp_fs_mod[p]) {
-            if (sd->tmp_module_count<MAX_TMP_MODULES)
-                sd->tmp_modules[sd->tmp_module_count++]=tmp_fs_mod[p];
-            else
-                sd->real.DestroyShaderModule(sd->real_device,tmp_fs_mod[p],NULL);
-        }
         free(tst[p]);
     }
     free(original_vs_hash);
-    free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+    free(tmp_mod); free(tst); free(infos);
     return res;
 }
 
