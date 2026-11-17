@@ -8164,6 +8164,7 @@ bool spirv_patch_stereo_fs(
                 continue;
             }
             bool target_defined = target_type < id_bound && emitted_type[target_type];
+            bool pointer_targets_stereo_replacement = false;
             if (!target_defined)
             {
                 for (size_t scan = 5; scan < ob.n;)
@@ -8206,6 +8207,11 @@ bool spirv_patch_stereo_fs(
                                 emitted_type[target_type] = true;
                             target_defined = true;
                         }
+                        else
+                        {
+                            target_defined = true;
+                            pointer_targets_stereo_replacement = true;
+                        }
                         break;
                     }
                     scan += sw;
@@ -8217,9 +8223,12 @@ bool spirv_patch_stereo_fs(
                 i += wc;
                 continue;
             }
-            sb_push_n(&ob, &in[i], wc);
-            if (pointer_id < id_bound)
-                emitted_type[pointer_id] = true;
+            if (!pointer_targets_stereo_replacement)
+            {
+                sb_push_n(&ob, &in[i], wc);
+                if (pointer_id < id_bound)
+                    emitted_type[pointer_id] = true;
+            }
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 FsImageInfo *image = &s.images[img];
