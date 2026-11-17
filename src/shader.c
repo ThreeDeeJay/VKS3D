@@ -6986,6 +6986,26 @@ fs_prescan(
                     dst->set,
                     dst->binding,
                     dst->stereo);
+                STEREO_LOG(
+                    "FS_DUP_IMAGE_STATE "
+                    "idx=%u "
+                    "image=%u "
+                    "owner=%u "
+                    "set=%u "
+                    "binding=%u "
+                    "stereo=%u "
+                    "replacement=%u "
+                    "sampled=%u "
+                    "pointer=%u",
+                    (uint32_t)(dst - s->images),
+                    dst->id,
+                    dst->owner_var,
+                    dst->set,
+                    dst->binding,
+                    dst->stereo,
+                    dst->replacement_type,
+                    dst->replacement_sampled_type,
+                    dst->replacement_pointer_type);
                 found = true;
             }
         }
