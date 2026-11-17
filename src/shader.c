@@ -12602,10 +12602,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             fs_stage);
         for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
         {
+            StereoShaderCache inline_sc = {0};
             StereoShaderCache *sc =
-            cache_find(sd, ci->pStages[s2].module);
+            stereo_stage_spv(sd, &ci->pStages[s2], &inline_sc);
             STEREO_LOG(
-                "SHADER_STAGE p=%u index=%u stage=0x%x module=%p cached=%u hash=%016llx words=%zu",
+                "SHADER_STAGE p=%u index=%u stage=0x%x module=%p available=%u hash=%016llx words=%zu",
                 p,
                 s2,
                 ci->pStages[s2].stage,
