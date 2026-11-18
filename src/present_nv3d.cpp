@@ -3,10 +3,10 @@
  *
  * Design (fullscreen-safe)
  * ------------------------
- *  * NV3D (popup window + D3D9Ex FSE device + shared texture/fence) is created ONCE and
- *    lives until the VkDevice is destroyed.  Creating/destroying it on every swapchain
- *    (re)creation hung inside D3D9Presenter::Shutdown / D3D9 FSE creation whenever the
- *    app toggled fullscreen.
+ *  * NV3D (popup window + D3D9Ex FSE device + shared texture/fence) is PROCESS-lifetime:
+ *    created once on a worker thread, kept across swapchain / VkDevice / VkInstance
+ *    re-creation (DXUT apps rebuild the whole device on fullscreen toggles), shut down only
+ *    after a 3 s grace period with no device or after sustained present failures.
  *  * The shared texture is always (2*W) x H where W x H is the display mode (per eye).
  *    Whatever size the app renders at is scaled into it with vkCmdBlitImage, so
  *    swapchain resizes / fullscreen switches never touch NV3D.
@@ -174,16 +174,16 @@ static void nv3d_force_3dv_refresh(uint32_t want)
 }
 
 static void nv3d_pick_eye_size(
-    StereoDevice *sd,
+    uint32_t ovr_w, uint32_t ovr_h,
     uint32_t app_w, uint32_t app_h,
     uint32_t *out_w, uint32_t *out_h)
 {
     uint32_t w = app_w, h = app_h;
 
-    if (sd->stereo.override_width && sd->stereo.override_height)
+    if (ovr_w && ovr_h)
     {
-        w = sd->stereo.override_width;
-        h = sd->stereo.override_height;
+        w = ovr_w;
+        h = ovr_h;
     }
     else
     {
@@ -564,49 +564,94 @@ static void nv3d_stop_keeper(void)
 }
 
 /* ------------------------------------------------------------------------- */
-/* NV3D resource creation                                                    */
+/* Process-lifetime NV3D                                                     */
+/*                                                                           */
+/* DXUT-style apps destroy and re-create the whole D3D device (and with DXVK */
+/* the VkDevice, sometimes the VkInstance) when toggling fullscreen.  NV3D   */
+/* (popup + D3D9 FSE device + LightBoost + shared texture/fence) does NOT    */
+/* depend on the VkDevice after init, so it is created ONCE (on a worker     */
+/* thread, so the app's threads are never blocked), kept across device /     */
+/* instance re-creation, and only torn down after a grace period with no     */
+/* device, or after sustained present failures.  Each VkDevice just          */
+/* re-imports the same NT handles.                                           */
 /* ------------------------------------------------------------------------- */
 
-extern "C" bool nv3d_init(
-    StereoDevice *sd,
-    uint32_t width,
-    uint32_t height)
+enum { NV3D_NONE = 0, NV3D_CREATING = 1, NV3D_READY = 2, NV3D_FAILED = 3 };
+
+static SRWLOCK                 g_lock        = SRWLOCK_INIT;
+static NV3D::InterfaceVulkan  *g_iface       = nullptr;
+static HANDLE                  g_mem         = NULL;
+static HANDLE                  g_fence       = NULL;
+static uint32_t                g_eye_w       = 0;
+static uint32_t                g_eye_h       = 0;
+static uint64_t                g_value       = 0;
+static volatile LONG           g_state       = NV3D_NONE;
+static volatile LONG           g_dead        = 0;
+static volatile LONG           g_users       = 0;
+static volatile LONG           g_grace_gen   = 0;
+static ULONGLONG               g_create_tick = 0;
+
+struct Nv3dCreateReq
 {
-    /* Device-lifetime: swapchain (re)creation / resize / fullscreen never recreates NV3D. */
-    if (sd->nv3d_ok)
+    VkInstance       inst;
+    VkPhysicalDevice phys;
+    VkDevice         dev;
+    uint32_t         qf;
+    bool             has_luid;
+    uint8_t          luid[VK_LUID_SIZE];
+    uint32_t         want_hz;
+    uint32_t         ovr_w, ovr_h;
+    uint32_t         app_w, app_h;
+    bool             tracked;
+    bool             recreate;
+};
+
+static void nv3d_shutdown_global(void)
+{
+    nv3d_stop_keeper();
+    InterlockedExchange(&g_nv3d_modes_locked, 0);
+
+    AcquireSRWLockExclusive(&g_lock);
+    NV3D::InterfaceVulkan *i = g_iface;
+    g_iface = nullptr;
+    g_mem   = NULL;
+    g_fence = NULL;
+    InterlockedExchange(&g_state, NV3D_NONE);
+    InterlockedExchange(&g_dead, 0);
+    if (i)
     {
-        NV3D_LOG("nv3d_init: already running (%ux%u per eye), app swapchain %ux%u -> scaled",
-                 sd->nv3d_width / 2, sd->nv3d_height, width, height);
-        return true;
+        NV3D_LOG("shutting down NV3D");
+        i->Delete();
     }
+    ReleaseSRWLockExclusive(&g_lock);
+}
 
-    nv3d_destroy(sd);   /* clean any partial earlier attempt */
+static DWORD WINAPI nv3d_create_proc(LPVOID arg)
+{
+    Nv3dCreateReq *rq = (Nv3dCreateReq *)arg;
+    ULONGLONG t0 = GetTickCount64();
+    NV3D_LOG("create: begin%s", rq->recreate ? " (recreate after failure)" : "");
 
-    /* MUST happen before NV3D-Lib touches D3D9/D3D11/DXGI/NvAPI (DXVK processes) */
-    vks3d_bind_system_d3d_imports();
+    if (rq->recreate)
+        nv3d_shutdown_global();
 
-    /* Undo mode changes the app/DXVK made before our first swapchain, then make sure
-     * the refresh rate is one 3D Vision can use (90/100/110/120/144 Hz). */
+    /* Undo mode changes the app/DXVK made before us, then make sure the refresh rate is
+     * one 3D Vision can use (90/100/110/120/144 Hz). */
     nv3d_restore_native_mode();
-    nv3d_force_3dv_refresh(sd->stereo.refresh_rate);
+    nv3d_force_3dv_refresh(rq->want_hz);
 
-    uint32_t eye_w = width, eye_h = height;
-    nv3d_pick_eye_size(sd, width, height, &eye_w, &eye_h);
-    NV3D_LOG("nv3d_init: per-eye %ux%u (app swapchain %ux%u)", eye_w, eye_h, width, height);
+    uint32_t eye_w = rq->app_w, eye_h = rq->app_h;
+    nv3d_pick_eye_size(rq->ovr_w, rq->ovr_h, rq->app_w, rq->app_h, &eye_w, &eye_h);
+    NV3D_LOG("create: per-eye %ux%u (first app swapchain %ux%u)", eye_w, eye_h, rq->app_w, rq->app_h);
 
-    NV3D::InterfaceVulkan *iface = nullptr;
     NV3D::InitParams params = {};
-
-    /* Focus mode.  Default = library "legacy" mode: popup is shown while ANY window of this
-     * process is foreground and minimizes when another app is (Alt+Tab works).  The focus
-     * keeper below stops the popup from stealing focus from the app window.
-     * nv3d_tracked_game=1 = VRto3D-style: popup stays up regardless of focus. */
+    if (rq->tracked)
+        params.tracked_game_pid = GetCurrentProcessId();
+    if (rq->has_luid)
     {
-        StereoConfig *cfg = &sd->stereo;
-        const bool tracked = cfg->nv3d_tracked_game;
-        NV3D_LOG("focus mode: %s (nv3d_tracked_game=%d)", tracked ? "tracked" : "legacy", tracked ? 1 : 0);
-        if (tracked)
-            params.tracked_game_pid = GetCurrentProcessId();
+        params.has_external_luid = true;
+        static_assert(sizeof(LUID) == VK_LUID_SIZE, "LUID mismatch");
+        std::memcpy(&params.external_luid, rq->luid, VK_LUID_SIZE);
     }
 
     NV3D::SetLogSink(
@@ -619,57 +664,154 @@ extern "C" bool nv3d_init(
         },
         nullptr);
 
+    NV3D::InterfaceVulkan *iface = nullptr;
+    HRESULT hr = NV3D::CreateInterfaceVulkan(rq->inst, rq->phys, rq->dev, rq->qf, &params, &iface);
+    NV3D_LOG("create: CreateInterfaceVulkan hr=0x%08x iface=%p (+%llu ms)",
+             (unsigned)hr, (void *)iface, (unsigned long long)(GetTickCount64() - t0));
+    if (FAILED(hr) || !iface)
+    {
+        InterlockedExchange(&g_state, NV3D_FAILED);
+        free(rq);
+        return 0;
+    }
+
+    HANDLE mem_handle = NULL, fence_handle = NULL;
+    hr = iface->InitSharedResources(eye_w * 2, eye_h, 87 /* DXGI_FORMAT_B8G8R8A8_UNORM */,
+                                    &mem_handle, &fence_handle);
+    NV3D_LOG("create: InitSharedResources hr=0x%08x (+%llu ms)",
+             (unsigned)hr, (unsigned long long)(GetTickCount64() - t0));
+    if (FAILED(hr))
+    {
+        iface->Delete();
+        InterlockedExchange(&g_state, NV3D_FAILED);
+        free(rq);
+        return 0;
+    }
+
+    AcquireSRWLockExclusive(&g_lock);
+    g_iface = iface;
+    g_mem   = mem_handle;
+    g_fence = fence_handle;
+    g_eye_w = eye_w;
+    g_eye_h = eye_h;
+    g_value = 0;
+    InterlockedExchange(&g_dead, 0);
+    ReleaseSRWLockExclusive(&g_lock);
+
+    /* From now on NV3D owns the display mode. */
+    nv3d_install_display_mode_hook();
+    InterlockedExchange(&g_nv3d_modes_locked, 1);
+    nv3d_start_keeper();
+
+    InterlockedExchange(&g_state, NV3D_READY);
+    NV3D_LOG("ready: shared texture %ux%u (per eye %ux%u), display mode locked (+%llu ms)",
+             eye_w * 2, eye_h, eye_w, eye_h, (unsigned long long)(GetTickCount64() - t0));
+    free(rq);
+    return 0;
+}
+
+static void nv3d_start_create(StereoDevice *sd, uint32_t width, uint32_t height, bool recreate)
+{
+    Nv3dCreateReq *rq = (Nv3dCreateReq *)calloc(1, sizeof(*rq));
+    if (!rq)
+    {
+        InterlockedExchange(&g_state, NV3D_FAILED);
+        return;
+    }
+    rq->inst  = sd->si->real_instance;
+    rq->phys  = sd->real_physdev;
+    rq->dev   = sd->real_device;
+    rq->qf    = sd->gfx_qf;
+    rq->want_hz = sd->stereo.refresh_rate;
+    rq->ovr_w = sd->stereo.override_width;
+    rq->ovr_h = sd->stereo.override_height;
+    rq->app_w = width;
+    rq->app_h = height;
+    rq->recreate = recreate;
+
+    const bool tracked = ini_flag(sd, "nv3d_tracked_game", false);
+    NV3D_LOG("focus mode: %s (nv3d_tracked_game=%d)", tracked ? "tracked" : "legacy", tracked ? 1 : 0);
+    rq->tracked = tracked;
+
     VkPhysicalDeviceIDProperties id = {};
     id.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
     VkPhysicalDeviceProperties2 props2 = {};
     props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     props2.pNext = &id;
     sd->si->real.GetPhysicalDeviceProperties2(sd->real_physdev, &props2);
-
     if (id.deviceLUIDValid)
     {
-        params.has_external_luid = true;
-        static_assert(sizeof(LUID) == VK_LUID_SIZE, "LUID mismatch");
-        std::memcpy(&params.external_luid, id.deviceLUID, VK_LUID_SIZE);
-        NV3D_LOG("passing external LUID to NV3D-Lib");
+        rq->has_luid = true;
+        std::memcpy(rq->luid, id.deviceLUID, VK_LUID_SIZE);
     }
 
-    HRESULT hr = NV3D::CreateInterfaceVulkan(
-        sd->si->real_instance,
-        sd->real_physdev,
-        sd->real_device,
-        sd->gfx_qf,
-        &params,
-        &iface);
-    if (FAILED(hr) || !iface)
+    /* MUST happen before NV3D-Lib touches D3D9/D3D11/DXGI/NvAPI (DXVK processes) */
+    vks3d_bind_system_d3d_imports();
+
+    g_create_tick = GetTickCount64();
+    HANDLE th = CreateThread(NULL, 0, nv3d_create_proc, rq, 0, NULL);
+    if (!th)
     {
-        NV3D_LOG("CreateInterfaceVulkan failed: 0x%08x", (unsigned)hr);
-        return false;
+        NV3D_LOG("create: CreateThread failed (%lu)", (unsigned long)GetLastError());
+        free(rq);
+        InterlockedExchange(&g_state, NV3D_FAILED);
+        return;
     }
+    CloseHandle(th);
+}
 
-    HANDLE mem_handle   = NULL;
-    HANDLE fence_handle = NULL;
-    hr = iface->InitSharedResources(
-        eye_w * 2,
-        eye_h,
-        87, /* DXGI_FORMAT_B8G8R8A8_UNORM */
-        &mem_handle,
-        &fence_handle);
-    if (FAILED(hr))
+static DWORD WINAPI nv3d_grace_proc(LPVOID arg)
+{
+    LONG gen = (LONG)(INT_PTR)arg;
+    for (int i = 0; i < 30; i++)
     {
-        NV3D_LOG("InitSharedResources failed: 0x%08x", (unsigned)hr);
-        iface->Delete();
-        return false;
+        Sleep(100);
+        if (g_grace_gen != gen || g_users > 0)
+            return 0;
     }
+    if (g_grace_gen == gen && g_users <= 0)
+    {
+        NV3D_LOG("no Vulkan device for 3 s - shutting NV3D down");
+        nv3d_shutdown_global();
+    }
+    return 0;
+}
 
-    sd->nv3d_iface        = iface;
-    sd->nv3d_mem_handle   = mem_handle;
-    sd->nv3d_fence_handle = fence_handle;
-    sd->nv3d_width        = eye_w * 2;
-    sd->nv3d_height       = eye_h;
-    sd->nv3d_value        = 0;
+/* ------------------------------------------------------------------------- */
+/* Per-VkDevice import of the shared texture / fence                         */
+/* ------------------------------------------------------------------------- */
 
-    /* Imported image */
+static void nv3d_release_device(StereoDevice *sd)
+{
+    if (sd->nv3d_timeline)
+    {
+        sd->real.DestroySemaphore(sd->real_device, sd->nv3d_timeline, NULL);
+        sd->nv3d_timeline = VK_NULL_HANDLE;
+    }
+    if (sd->nv3d_image)
+    {
+        sd->real.DestroyImage(sd->real_device, sd->nv3d_image, NULL);
+        sd->nv3d_image = VK_NULL_HANDLE;
+    }
+    if (sd->nv3d_memory)
+    {
+        sd->real.FreeMemory(sd->real_device, sd->nv3d_memory, NULL);
+        sd->nv3d_memory = VK_NULL_HANDLE;
+    }
+    sd->nv3d_ok         = false;
+    sd->nv3d_mem_handle = NULL;
+    sd->nv3d_fence_handle = NULL;
+    sd->nv3d_width      = 0;
+    sd->nv3d_height     = 0;
+}
+
+/* caller holds g_lock (shared) and g_state == READY */
+static bool nv3d_import_device(StereoDevice *sd)
+{
+    nv3d_release_device(sd);
+
+    const uint32_t eye_w = g_eye_w, eye_h = g_eye_h;
+
     VkExternalMemoryImageCreateInfo ext_img = {};
     ext_img.sType       = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
     ext_img.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT;
@@ -694,61 +836,55 @@ extern "C" bool nv3d_init(
 
     if (sd->real.CreateImage(sd->real_device, &ici, NULL, &sd->nv3d_image) != VK_SUCCESS)
     {
-        NV3D_LOG("CreateImage failed");
-        nv3d_destroy(sd);
+        NV3D_LOG("import: CreateImage failed");
+        nv3d_release_device(sd);
         return false;
     }
 
     VkMemoryRequirements mr;
     sd->real.GetImageMemoryRequirements(sd->real_device, sd->nv3d_image, &mr);
-
-    uint32_t mem_type = find_memory_type(sd, mr.memoryTypeBits,
-                                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    uint32_t mem_type = find_memory_type(sd, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (mem_type == UINT32_MAX)
     {
-        NV3D_LOG("no compatible memory type");
-        nv3d_destroy(sd);
+        NV3D_LOG("import: no compatible memory type");
+        nv3d_release_device(sd);
         return false;
     }
 
     VkImportMemoryWin32HandleInfoKHR import_info = {};
     import_info.sType      = VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR;
     import_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT;
-    import_info.handle     = mem_handle;
+    import_info.handle     = g_mem;
 
     VkMemoryAllocateInfo ai = {};
     ai.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     ai.pNext           = &import_info;
     ai.allocationSize  = mr.size;
     ai.memoryTypeIndex = mem_type;
-
     if (sd->real.AllocateMemory(sd->real_device, &ai, NULL, &sd->nv3d_memory) != VK_SUCCESS)
     {
-        NV3D_LOG("AllocateMemory failed");
-        nv3d_destroy(sd);
+        NV3D_LOG("import: AllocateMemory failed");
+        nv3d_release_device(sd);
         return false;
     }
     if (sd->real.BindImageMemory(sd->real_device, sd->nv3d_image, sd->nv3d_memory, 0) != VK_SUCCESS)
     {
-        NV3D_LOG("BindImageMemory failed");
-        nv3d_destroy(sd);
+        NV3D_LOG("import: BindImageMemory failed");
+        nv3d_release_device(sd);
         return false;
     }
 
-    /* Imported timeline semaphore */
     VkSemaphoreTypeCreateInfo sem_type = {};
     sem_type.sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
     sem_type.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
     sem_type.initialValue  = 0;
-
     VkSemaphoreCreateInfo sci = {};
     sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     sci.pNext = &sem_type;
-
     if (sd->real.CreateSemaphore(sd->real_device, &sci, NULL, &sd->nv3d_timeline) != VK_SUCCESS)
     {
-        NV3D_LOG("CreateSemaphore failed");
-        nv3d_destroy(sd);
+        NV3D_LOG("import: CreateSemaphore failed");
+        nv3d_release_device(sd);
         return false;
     }
 
@@ -756,80 +892,118 @@ extern "C" bool nv3d_init(
     import_sem.sType      = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_WIN32_HANDLE_INFO_KHR;
     import_sem.semaphore  = sd->nv3d_timeline;
     import_sem.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT;
-    import_sem.handle     = fence_handle;
-
-    if (!sd->real.ImportSemaphoreWin32HandleKHR)
+    import_sem.handle     = g_fence;
+    if (!sd->real.ImportSemaphoreWin32HandleKHR ||
+        sd->real.ImportSemaphoreWin32HandleKHR(sd->real_device, &import_sem) != VK_SUCCESS)
     {
-        NV3D_LOG("ImportSemaphoreWin32HandleKHR not loaded");
-        nv3d_destroy(sd);
-        return false;
-    }
-    if (sd->real.ImportSemaphoreWin32HandleKHR(sd->real_device, &import_sem) != VK_SUCCESS)
-    {
-        NV3D_LOG("ImportSemaphoreWin32HandleKHR failed");
-        nv3d_destroy(sd);
+        NV3D_LOG("import: ImportSemaphoreWin32HandleKHR failed");
+        nv3d_release_device(sd);
         return false;
     }
 
-    sd->nv3d_ok = true;
-
-    /* From now on NV3D owns the display mode. */
-    nv3d_install_display_mode_hook();
-    InterlockedExchange(&g_nv3d_modes_locked, 1);
-    nv3d_start_keeper();
-
-    NV3D_LOG("initialized: shared texture %ux%u (per eye %ux%u), display mode locked",
-             sd->nv3d_width, sd->nv3d_height, eye_w, eye_h);
+    sd->nv3d_mem_handle   = g_mem;
+    sd->nv3d_fence_handle = g_fence;
+    sd->nv3d_width        = eye_w * 2;
+    sd->nv3d_height       = eye_h;
+    sd->nv3d_ok           = true;
+    NV3D_LOG("import: device %p imported shared texture %ux%u", (void *)sd->real_device, eye_w * 2, eye_h);
     return true;
 }
 
 /* ------------------------------------------------------------------------- */
+/* Public API                                                                */
+/* ------------------------------------------------------------------------- */
 
+/* Called for every NV3D swapchain creation.  Never blocks and never restarts NV3D
+ * unless it failed / died. */
+extern "C" bool nv3d_init(
+    StereoDevice *sd,
+    uint32_t width,
+    uint32_t height)
+{
+    InterlockedIncrement(&g_grace_gen);              /* cancel a pending grace shutdown */
+
+    if (sd->nv3d_iface != (void *)sd)                /* register this device as a user */
+    {
+        sd->nv3d_iface = (void *)sd;
+        InterlockedIncrement(&g_users);
+    }
+
+    LONG st = g_state;
+    bool recreate = false;
+    if (st == NV3D_READY && g_dead)
+    {
+        NV3D_LOG("nv3d_init: NV3D was marked dead (Present failing) - recreating");
+        if (InterlockedCompareExchange(&g_state, NV3D_CREATING, NV3D_READY) == NV3D_READY)
+        {
+            nv3d_start_create(sd, width, height, true);
+        }
+        return true;
+    }
+    if (st == NV3D_NONE || st == NV3D_FAILED)
+    {
+        if (InterlockedCompareExchange(&g_state, NV3D_CREATING, st) == st)
+        {
+            NV3D_LOG("nv3d_init: starting NV3D (app swapchain %ux%u)", width, height);
+            nv3d_start_create(sd, width, height, recreate);
+        }
+        return true;
+    }
+    NV3D_LOG("nv3d_init: NV3D %s (%ux%u per eye), app swapchain %ux%u -> scaled",
+             st == NV3D_READY ? "already running" : "still starting",
+             g_eye_w, g_eye_h, width, height);
+    return true;
+}
+
+/* Called when a swapchain / the device goes away: frees only the Vulkan-side imports.
+ * NV3D itself stays alive (grace period) so the app's device re-creation doesn't reset it. */
 extern "C" void nv3d_destroy(
     StereoDevice *sd)
 {
     if (!sd)
         return;
 
-    InterlockedExchange(&g_nv3d_modes_locked, 0);
-    nv3d_stop_keeper();
-
-    /* Make sure no queued present/blit still touches the imported resources. */
     if (sd->real_device && sd->real.DeviceWaitIdle &&
-        (sd->nv3d_image || sd->nv3d_timeline || sd->nv3d_iface))
+        (sd->nv3d_image || sd->nv3d_timeline))
         sd->real.DeviceWaitIdle(sd->real_device);
 
-    if (sd->nv3d_iface)
-    {
-        NV3D_LOG("shutting down NV3D");
-        ((NV3D::InterfaceVulkan *)sd->nv3d_iface)->Delete();
-        sd->nv3d_iface = NULL;
-    }
-    if (sd->nv3d_timeline)
-    {
-        sd->real.DestroySemaphore(sd->real_device, sd->nv3d_timeline, NULL);
-        sd->nv3d_timeline = VK_NULL_HANDLE;
-    }
-    if (sd->nv3d_image)
-    {
-        sd->real.DestroyImage(sd->real_device, sd->nv3d_image, NULL);
-        sd->nv3d_image = VK_NULL_HANDLE;
-    }
-    if (sd->nv3d_memory)
-    {
-        sd->real.FreeMemory(sd->real_device, sd->nv3d_memory, NULL);
-        sd->nv3d_memory = VK_NULL_HANDLE;
-    }
+    AcquireSRWLockShared(&g_lock);
+    nv3d_release_device(sd);
+    ReleaseSRWLockShared(&g_lock);
 
-    sd->nv3d_ok     = false;
-    sd->nv3d_width  = 0;
-    sd->nv3d_height = 0;
-    sd->nv3d_value  = 0;
+    if (sd->nv3d_iface == (void *)sd)
+    {
+        sd->nv3d_iface = NULL;
+        if (InterlockedDecrement(&g_users) <= 0)
+        {
+            LONG gen = InterlockedIncrement(&g_grace_gen);
+            HANDLE th = CreateThread(NULL, 0, nv3d_grace_proc, (LPVOID)(INT_PTR)gen, 0, NULL);
+            if (th) CloseHandle(th);
+            NV3D_LOG("last Vulkan device released - NV3D stays up for a 3 s grace period");
+        }
+    }
 }
 
 /* ------------------------------------------------------------------------- */
 /* Present                                                                    */
 /* ------------------------------------------------------------------------- */
+
+/* Not ready: still consume the app's render-complete semaphores so they can be reused. */
+static void nv3d_consume_waits(StereoDevice *sd, VkQueue queue,
+                               uint32_t n, const VkSemaphore *sems)
+{
+    if (!n)
+        return;
+    VkPipelineStageFlags *stages = (VkPipelineStageFlags *)alloca(sizeof(VkPipelineStageFlags) * n);
+    for (uint32_t i = 0; i < n; i++)
+        stages[i] = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkSubmitInfo sub = {};
+    sub.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    sub.waitSemaphoreCount = n;
+    sub.pWaitSemaphores    = sems;
+    sub.pWaitDstStageMask  = stages;
+    sd->real.QueueSubmit(queue, 1, &sub, VK_NULL_HANDLE);
+}
 
 extern "C" VkResult nv3d_present(
     StereoDevice *sd,
@@ -838,21 +1012,54 @@ extern "C" VkResult nv3d_present(
     uint32_t wait_sem_count,
     const VkSemaphore *wait_sems)
 {
-    static uint32_t s_fail_count = 0;
-    static bool     s_warned_fmt = false;
+    static uint32_t  s_fail_count = 0;
+    static bool      s_warned_fmt = false;
+    static ULONGLONG s_last_wait_log = 0;
 
-    if (!sd->nv3d_iface || !sd->nv3d_ok)
-        return VK_ERROR_INITIALIZATION_FAILED;
+    if (g_state != NV3D_READY)
+    {
+        ULONGLONG now = GetTickCount64();
+        if (now - s_last_wait_log > 2000)
+        {
+            s_last_wait_log = now;
+            NV3D_LOG("present skipped: NV3D state=%ld (creating for %llu ms)",
+                     (long)g_state, (unsigned long long)(now - g_create_tick));
+        }
+        nv3d_consume_waits(sd, queue, wait_sem_count, wait_sems);
+        return VK_SUCCESS;
+    }
+
     if (!sc->barrier_cmds || !sc->barrier_cmds[0] || !sc->stereo_images)
+    {
+        nv3d_consume_waits(sd, queue, wait_sem_count, wait_sems);
         return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    AcquireSRWLockShared(&g_lock);
+    if (!g_iface || g_state != NV3D_READY)
+    {
+        ReleaseSRWLockShared(&g_lock);
+        nv3d_consume_waits(sd, queue, wait_sem_count, wait_sems);
+        return VK_SUCCESS;
+    }
+
+    /* (Re)import when this VkDevice is new or NV3D was recreated */
+    if (!sd->nv3d_ok || sd->nv3d_mem_handle != g_mem)
+    {
+        if (!nv3d_import_device(sd))
+        {
+            ReleaseSRWLockShared(&g_lock);
+            nv3d_consume_waits(sd, queue, wait_sem_count, wait_sems);
+            return VK_SUCCESS;
+        }
+    }
 
     VkCommandBuffer cmd = sc->barrier_cmds[0];
 
-    const uint32_t eye_w = sd->nv3d_width / 2;
-    const uint32_t eye_h = sd->nv3d_height;
+    const uint32_t eye_w = g_eye_w;
+    const uint32_t eye_h = g_eye_h;
     const bool     scaled = (sc->app_width != eye_w) || (sc->app_height != eye_h);
     const bool     bgra   = is_bgra_format(sc->format);
-    const bool     first  = (sd->nv3d_value == 0);
 
     if (!bgra && !s_warned_fmt)
     {
@@ -877,10 +1084,10 @@ extern "C" VkResult nv3d_present(
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    /* NV3D imported texture -> transfer destination */
+    /* NV3D imported texture -> transfer destination (fully overwritten every frame) */
     cmd_image_barrier(
         sd, cmd, sd->nv3d_image, 1,
-        first ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         0,
         VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -963,7 +1170,7 @@ extern "C" VkResult nv3d_present(
 
     sd->real.EndCommandBuffer(cmd);
 
-    sd->nv3d_value++;
+    sd->nv3d_value = ++g_value;   /* continues across devices: the D3D fence outlives them */
 
     VkTimelineSemaphoreSubmitInfo tsi = {};
     tsi.sType                     = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
@@ -992,15 +1199,18 @@ extern "C" VkResult nv3d_present(
     VkResult vr = sd->real.QueueSubmit(queue, 1, &sub, VK_NULL_HANDLE);
     if (vr != VK_SUCCESS)
     {
+        ReleaseSRWLockShared(&g_lock);
         NV3D_LOG("QueueSubmit failed: %d", (int)vr);
         return vr;
     }
 
     LARGE_INTEGER t0, t1, fq;
     QueryPerformanceCounter(&t0);
-    HRESULT hr = ((NV3D::InterfaceVulkan *)sd->nv3d_iface)->Present(sd->nv3d_value);
+    HRESULT hr = g_iface->Present(sd->nv3d_value);
     QueryPerformanceCounter(&t1);
     QueryPerformanceFrequency(&fq);
+    ReleaseSRWLockShared(&g_lock);
+
     double ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)fq.QuadPart;
     if (ms > 250.0)
         NV3D_LOG("Present(%llu) took %.1f ms", (unsigned long long)sd->nv3d_value, ms);
@@ -1010,6 +1220,11 @@ extern "C" VkResult nv3d_present(
         s_fail_count++;
         if (s_fail_count <= 5 || (s_fail_count % 1000) == 0)
             NV3D_LOG("Present failed: 0x%08x (x%u)", (unsigned)hr, s_fail_count);
+        if (s_fail_count == 240)
+        {
+            NV3D_LOG("Present failed 240x in a row - NV3D marked dead, will be recreated with the next swapchain");
+            InterlockedExchange(&g_dead, 1);
+        }
     }
     else if (s_fail_count)
     {
