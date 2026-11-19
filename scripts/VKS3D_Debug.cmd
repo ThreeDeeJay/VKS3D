@@ -220,10 +220,8 @@ If not "%~1"=="" (
         )
     )
 )
-If not defined Run (
-    If exist "!DumpPath!\VKS3D.log" (
-        Set "Run=!DumpPath!\VKS3D.log"
-    )
+If exist "!DumpPath!\VKS3D.log" (
+    Set "Run=!DumpPath!\VKS3D.log"
 )
 
 If "!ValidationStarted!"=="True" (

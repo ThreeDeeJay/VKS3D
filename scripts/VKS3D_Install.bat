@@ -1,19 +1,22 @@
 @echo off
 
 PushD "%~dp0"
-If "%~x1"==".dll" (
-    copy "%~1" "%~nx1"
-    if %errorLevel% neq 0 (
-        Echo Failed to copy "%~nx1".
-        pause
-    )
-    exit
-)
-If "%~x1"==".bak" (
-    ren "%~nx1" "%~n1"
-    if %errorLevel% neq 0 (
-        Echo Failed to rename "%~nx1".
-        pause
+If not "%~1"=="" (
+    For %%I in (%*) do (
+        If "%%~xI"==".dll" (
+            copy "%%~I" "%~dp0%%~nxI" 1>>NUL 2>&1
+            if %errorLevel% neq 0 (
+                Echo Failed to copy "%%~nxI".
+                pause
+            )
+        )
+        If "%%~xI"==".bak" (
+            ren "%%~I" "%%~nI" 1>>NUL 2>&1
+            if %errorLevel% neq 0 (
+                Echo Failed to rename "%%~nxI".
+                pause
+            )
+        )
     )
     exit
 )
