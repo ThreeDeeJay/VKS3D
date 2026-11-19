@@ -9,19 +9,19 @@ If not "%~1"=="" (
                 Echo Failed to copy "%%~nxI".
                 pause
             )
-        )
-        If "%%~xI"==".bak" (
-            ren "%%~I" "%%~nI" 1>>NUL 2>&1
-            if %errorLevel% neq 0 (
-                Echo Failed to rename "%%~nxI".
-                pause
+        ) else (
+            If "%%~xI"==".bak" (
+                ren "%%~I" "%%~nI" 1>>NUL 2>&1
+                if %errorLevel% neq 0 (
+                    Echo Failed to rename "%%~nxI".
+                    pause
+                )
+            ) else (
+                Call VKS3D_Debug.cmd %*
             )
         )
     )
     exit
-)
-If not "%*"=="" (
-    Call VKS3D_Debug.cmd %*
 )
 
 <# :
