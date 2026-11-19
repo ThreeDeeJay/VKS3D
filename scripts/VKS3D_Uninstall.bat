@@ -9,19 +9,19 @@ If not "%~1"=="" (
                 Echo Failed to rename "%%~nxI".
                 pause
             )
-        )
-        If "%%~xI"==".bak" (
-            del "%%~I" 1>>NUL 2>&1
-            if %errorLevel% neq 0 (
-                Echo Failed to delete "%%~nxI".
-                pause
+        ) else (
+            If "%%~xI"==".bak" (
+                del "%%~I" 1>>NUL 2>&1
+                if %errorLevel% neq 0 (
+                    Echo Failed to delete "%%~nxI".
+                    pause
+                )
+            ) else (
+                Call VKS3D_Debug.cmd %*
             )
         )
     )
     exit
-)
-If not "%*"=="" (
-    Call VKS3D_Debug.cmd %*
 )
 
 <# :
