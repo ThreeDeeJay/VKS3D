@@ -49,7 +49,7 @@ jobs:
 
     - name: Get current commit hash and counts
       run: |
-        echo "PullRequest=$(gh pr list --state merged --limit 1 --json number --jq ".[0].number")" >> $env:GITHUB_ENV
+        echo "PullRequest=$(git log --merges --format=%B | sed -n 's/.*Merge pull request #\([0-9]*\).*/\1/p' | head -1)" >> $env:GITHUB_ENV
         echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
         echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV
         echo "CommitCount=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
@@ -174,7 +174,7 @@ jobs:
 
       - name: Get current date, commit hash and count
         run: |
-          echo "PullRequest=$(gh pr list --state merged --limit 1 --json number --jq ".[0].number")" >> $env:GITHUB_ENV
+          echo "PullRequest=$(git log --merges --format=%B | sed -n 's/.*Merge pull request #\([0-9]*\).*/\1/p' | head -1)" >> $env:GITHUB_ENV
           echo "FirstCommitHash=$(git rev-list --max-parents=0 HEAD --first-parent)" >> $env:GITHUB_ENV
           echo "CommitHash=$(git rev-parse HEAD)" >> $env:GITHUB_ENV
           echo "CommitHashShort=$(git rev-parse --short=7 HEAD)" >> $env:GITHUB_ENV

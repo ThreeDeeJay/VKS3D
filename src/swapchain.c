@@ -890,8 +890,9 @@ stereo_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
             "[NV3D] QueuePresent mode=%d sc=%p",
             (int)sc->present_mode,
             sc);
-        if (sc->present_mode == STEREO_PRESENT_NV3DLIB)
-            nv3d_destroy(sd);
+        /* NV3D (popup + D3D9 FSE device + shared texture) is device-lifetime now:
+         * tearing it down while the app toggles fullscreen hangs inside
+         * D3D9Presenter::Shutdown / D3D9 FSE re-creation.  Freed in DestroyDevice. */
 
         //STEREO_LOG("[DESTROY SC] before gpu_compose_sc_destroy");
         gpu_compose_sc_destroy(sd, sc);     /* semaphores + comp_sc_images array */

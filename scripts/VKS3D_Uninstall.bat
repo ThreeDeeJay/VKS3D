@@ -1,8 +1,27 @@
 @echo off
 
 PushD "%~dp0"
-If not "%*"=="" (
-    Call VKS3D_Debug.cmd %*
+If not "%~1"=="" (
+    For %%I in (%*) do (
+        If "%%~xI"==".dll" (
+            ren "%%~I" "%%~nxI.bak" 1>>NUL 2>&1
+            if %errorLevel% neq 0 (
+                Echo Failed to rename "%%~nxI".
+                pause
+            )
+        ) else (
+            If "%%~xI"==".bak" (
+                del "%%~I" 1>>NUL 2>&1
+                if %errorLevel% neq 0 (
+                    Echo Failed to delete "%%~nxI".
+                    pause
+                )
+            ) else (
+                Call VKS3D_Debug.cmd %*
+            )
+        )
+    )
+    exit
 )
 
 <# :
