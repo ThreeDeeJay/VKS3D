@@ -12541,6 +12541,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             (dynamic_depth == VK_FORMAT_D16_UNORM ||
              dynamic_depth == VK_FORMAT_X8_D24_UNORM_PACK32 ||
              dynamic_depth == VK_FORMAT_D32_SFLOAT ||
+             dynamic_depth == VK_FORMAT_S8_UINT ||
              dynamic_depth == VK_FORMAT_D16_UNORM_S8_UINT ||
              dynamic_depth == VK_FORMAT_D24_UNORM_S8_UINT ||
              dynamic_depth == VK_FORMAT_D32_SFLOAT_S8_UINT);
