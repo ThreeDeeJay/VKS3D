@@ -12467,6 +12467,20 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         VkFormat dynamic_depth = VK_FORMAT_UNDEFINED;
         VkFormat dynamic_stencil = VK_FORMAT_UNDEFINED;
         uint32_t dynamic_color_count = 0;
+        uint64_t vs_hash = 0;
+        uint64_t fs_hash = 0;
+        for (uint32_t hs = 0; hs < ci->stageCount; hs++)
+        {
+            StereoShaderCache hash_tmp;
+            StereoShaderCache *hash_sc = stereo_stage_spv(sd, &ci->pStages[hs], &hash_tmp);
+            if (hash_sc)
+            {
+                if (ci->pStages[hs].stage == VK_SHADER_STAGE_VERTEX_BIT)
+                    vs_hash = hash_spv(hash_sc->spv, hash_sc->words);
+                else if (ci->pStages[hs].stage == VK_SHADER_STAGE_FRAGMENT_BIT)
+                    fs_hash = hash_spv(hash_sc->spv, hash_sc->words);
+            }
+        }
         /* ── Safety: Vulkan 1.3 dynamic rendering pipelines may not use pNext ── */
         while (base)
         {
@@ -12496,20 +12510,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 dynamic_depth = ri->depthAttachmentFormat;
                 dynamic_stencil = ri->stencilAttachmentFormat;
                 dynamic_color0 = (ri->colorAttachmentCount > 0 && ri->pColorAttachmentFormats) ? ri->pColorAttachmentFormats[0] : VK_FORMAT_UNDEFINED;
-                uint64_t vs_hash = 0;
-                uint64_t fs_hash = 0;
-                for (uint32_t hs = 0; hs < ci->stageCount; hs++)
-                {
-                    StereoShaderCache hash_tmp;
-                    StereoShaderCache *hash_sc = stereo_stage_spv(sd, &ci->pStages[hs], &hash_tmp);
-                    if (hash_sc)
-                    {
-                        if (ci->pStages[hs].stage == VK_SHADER_STAGE_VERTEX_BIT)
-                            vs_hash = hash_spv(hash_sc->spv, hash_sc->words);
-                        else if (ci->pStages[hs].stage == VK_SHADER_STAGE_FRAGMENT_BIT)
-                            fs_hash = hash_spv(hash_sc->spv, hash_sc->words);
-                    }
-                }
                 STEREO_LOG(
                     "PIPE_RENDERING_CAPTURE p=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u gpl=0x%x vs_hash=%016llx fs_hash=%016llx",
                     p,
