@@ -12544,6 +12544,11 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              dynamic_depth == VK_FORMAT_D16_UNORM_S8_UINT ||
              dynamic_depth == VK_FORMAT_D24_UNORM_S8_UINT ||
              dynamic_depth == VK_FORMAT_D32_SFLOAT_S8_UINT);
+        if (dynamic_shadow_signature)
+        {
+            STEREO_LOG("PIPE_SHADOW_STEREO_SKIP p=%u viewMask=0x%x color0=%u depth=%u stencil=%u",p,view_mask,dynamic_color0,dynamic_depth,dynamic_stencil);
+            goto PIPE_DECISION_CONTINUE;
+        }
         STEREO_LOG(
             "PIPE_ATTACHMENT_CLASSIFY p=%u dynamic=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u shadow_signature=%u gpl=0x%x vs_hash=%016llx fs_hash=%016llx",
             p,
