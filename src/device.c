@@ -415,6 +415,7 @@ stereo_DestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator)
             sd->real.DestroyShaderModule(sd->real_device, sd->tmp_modules[i], NULL);
     }
     sd->tmp_module_count = 0;
+    nv3d_destroy(sd);   /* no-op unless NV3D was used */
     for (uint32_t i = 0; i < sd->shader_cache_count; i++)
     {
         free(sd->shader_cache[i].spv);

@@ -277,6 +277,41 @@ stereo_GetPhysicalDeviceSurfaceFormats2KHR(
         const VkPhysicalDeviceSurfaceInfo2KHR *, uint32_t *, VkSurfaceFormat2KHR *);
     PFN fn = (PFN)ext_fn(_si, "vkGetPhysicalDeviceSurfaceFormats2KHR");
     if (!fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    /* NV3D mode: offer BGRA surface formats only (see stereo_GetPhysicalDeviceSurfaceFormatsKHR) */
+    if (_si->stereo.enabled && _si->stereo.present_mode == STEREO_PRESENT_NV3DLIB) {
+        uint32_t n = 0;
+        VkResult r0 = fn(_real, pInfo, &n, NULL);
+        if (r0 == VK_SUCCESS && n) {
+            VkSurfaceFormat2KHR *all = (VkSurfaceFormat2KHR *)calloc(n, sizeof(*all));
+            if (all) {
+                for (uint32_t i = 0; i < n; i++)
+                    all[i].sType = VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR;
+                r0 = fn(_real, pInfo, &n, all);
+                if (r0 == VK_SUCCESS || r0 == VK_INCOMPLETE) {
+                    uint32_t k = 0;
+                    for (uint32_t i = 0; i < n; i++)
+                        if (all[i].surfaceFormat.format == VK_FORMAT_B8G8R8A8_UNORM ||
+                            all[i].surfaceFormat.format == VK_FORMAT_B8G8R8A8_SRGB)
+                            all[k++].surfaceFormat = all[i].surfaceFormat;
+                    if (k) {
+                        n = k;
+                        if (!pFormats) {
+                            *pCount = n;
+                            free(all);
+                            return VK_SUCCESS;
+                        }
+                        uint32_t w = (*pCount < n) ? *pCount : n;
+                        for (uint32_t i = 0; i < w; i++)
+                            pFormats[i].surfaceFormat = all[i].surfaceFormat;
+                        *pCount = w;
+                        free(all);
+                        return (w < n) ? VK_INCOMPLETE : VK_SUCCESS;
+                    }
+                }
+                free(all);
+            }
+        }
+    }
     return fn(_real, pInfo, pCount, pFormats);
 }
 
