@@ -12496,22 +12496,41 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 dynamic_depth = ri->depthAttachmentFormat;
                 dynamic_stencil = ri->stencilAttachmentFormat;
                 dynamic_color0 = (ri->colorAttachmentCount > 0 && ri->pColorAttachmentFormats) ? ri->pColorAttachmentFormats[0] : VK_FORMAT_UNDEFINED;
+                uint64_t vs_hash = 0;
+                uint64_t fs_hash = 0;
+                for (uint32_t hs = 0; hs < ci->stageCount; hs++)
+                {
+                    StereoShaderCache hash_tmp;
+                    StereoShaderCache *hash_sc = stereo_stage_spv(sd, &ci->pStages[hs], &hash_tmp);
+                    if (hash_sc)
+                    {
+                        if (ci->pStages[hs].stage == VK_SHADER_STAGE_VERTEX_BIT)
+                            vs_hash = hash_spv(hash_sc->spv, hash_sc->words);
+                        else if (ci->pStages[hs].stage == VK_SHADER_STAGE_FRAGMENT_BIT)
+                            fs_hash = hash_spv(hash_sc->spv, hash_sc->words);
+                    }
+                }
                 STEREO_LOG(
-                    "PIPE_RENDERING_CAPTURE p=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u gpl=0x%x",
+                    "PIPE_RENDERING_CAPTURE p=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u gpl=0x%x vs_hash=%016llx fs_hash=%016llx",
                     p,
                     rw->viewMask,
                     ri->colorAttachmentCount,
                     dynamic_color0,
                     ri->depthAttachmentFormat,
                     ri->stencilAttachmentFormat,
-                    gpl_flags);
+                    gpl_flags,
+                    (unsigned long long)vs_hash,
+                    (unsigned long long)fs_hash);
                 for (uint32_t ca = 0; ca < ri->colorAttachmentCount; ca++)
                 {
                     STEREO_LOG(
-                        "PIPE_RENDERING_COLOR p=%u attachment=%u format=%u",
+                        "PIPE_RENDERING_COLOR p=%u attachment=%u format=%u gpl=0x%x vs_hash=%016llx fs_hash=%016llx",
                         p,
                         ca,
-                        ri->pColorAttachmentFormats ? ri->pColorAttachmentFormats[ca] : VK_FORMAT_UNDEFINED);
+                        ri->pColorAttachmentFormats ? ri->pColorAttachmentFormats[ca] : VK_FORMAT_UNDEFINED,
+                        gpl_flags,
+                        (unsigned long long)vs_hash,
+                        (unsigned long long)fs_hash);
                 }
             }
             base = base->pNext;
@@ -12526,7 +12545,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              dynamic_depth == VK_FORMAT_D24_UNORM_S8_UINT ||
              dynamic_depth == VK_FORMAT_D32_SFLOAT_S8_UINT);
         STEREO_LOG(
-            "PIPE_ATTACHMENT_CLASSIFY p=%u dynamic=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u shadow_signature=%u gpl=0x%x",
+            "PIPE_ATTACHMENT_CLASSIFY p=%u dynamic=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u shadow_signature=%u gpl=0x%x vs_hash=%016llx fs_hash=%016llx",
             p,
             has_dynamic_rendering,
             view_mask,
@@ -12535,7 +12554,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             dynamic_depth,
             dynamic_stencil,
             dynamic_shadow_signature,
-            gpl_flags);
+            gpl_flags,
+            (unsigned long long)vs_hash,
+            (unsigned long long)fs_hash);
         if (!ci || ci->stageCount == 0 || !ci->pStages) {
             STEREO_LOG(
                 "PIPE_EMPTY_STAGE_PIPELINE p=%u rp=%p pNext=%p stageCount=%u pStages=%p isUI=%d isComputeLike=%d",
@@ -12643,17 +12664,22 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             fs_stage);
         for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
         {
-            StereoShaderCache *sc =
-            cache_find(sd, ci->pStages[s2].module);
+            StereoShaderCache stage_tmp;
+            const VkPipelineShaderStageCreateInfo *stage = &ci->pStages[s2];
+            const VkShaderModuleCreateInfo *inline_smci = stereo_stage_inline_spv(stage);
+            StereoShaderCache *sc = stereo_stage_spv(sd, stage, &stage_tmp);
+            uint64_t stage_hash = sc ? hash_spv(sc->spv, sc->words) : 0;
             STEREO_LOG(
-                "SHADER_STAGE p=%u index=%u stage=0x%x module=%p cached=%u hash=%016llx words=%zu",
+                "SHADER_STAGE p=%u index=%u stage=0x%x module=%p cached=%u inline=%u hash=%016llx words=%zu gpl=0x%x",
                 p,
                 s2,
-                ci->pStages[s2].stage,
-                (void*)ci->pStages[s2].module,
-                sc != NULL,
-                (unsigned long long)(sc ? hash_spv(sc->spv, sc->words) : 0),
-                sc ? sc->words : 0);
+                stage->stage,
+                (void*)stage->module,
+                cache_find(sd, stage->module) != NULL,
+                inline_smci != NULL,
+                (unsigned long long)stage_hash,
+                sc ? sc->words : 0,
+                gpl_flags);
         }
         uint32_t gs_input_count=0;
         uint64_t gs_hash=0;
