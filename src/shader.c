@@ -12537,7 +12537,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         }
         bool dynamic_shadow_signature =
             has_dynamic_rendering &&
-            dynamic_color0 == VK_FORMAT_R32_SFLOAT &&
+            (dynamic_color_count == 0 || dynamic_color0 == VK_FORMAT_R32_SFLOAT) &&
             (dynamic_depth == VK_FORMAT_D16_UNORM ||
              dynamic_depth == VK_FORMAT_X8_D24_UNORM_PACK32 ||
              dynamic_depth == VK_FORMAT_D32_SFLOAT ||
@@ -12546,7 +12546,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              dynamic_depth == VK_FORMAT_D32_SFLOAT_S8_UINT);
         if (dynamic_shadow_signature)
         {
-            STEREO_LOG("PIPE_SHADOW_STEREO_SKIP p=%u viewMask=0x%x color0=%u depth=%u stencil=%u",p,view_mask,dynamic_color0,dynamic_depth,dynamic_stencil);
+            STEREO_LOG("PIPE_SHADOW_STEREO_SKIP p=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u",p,view_mask,dynamic_color_count,dynamic_color0,dynamic_depth,dynamic_stencil);
             goto PIPE_DECISION_CONTINUE;
         }
         STEREO_LOG(
