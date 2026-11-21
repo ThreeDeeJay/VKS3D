@@ -12469,8 +12469,10 @@ stereo_classify_vsm_fs(const uint32_t *w, size_t words)
     uint32_t result = 0;
     if (frag_z_loads && moment_squares && output_vec2_count && stores >= 2)
         result |= 1;
-    if (output_vec2_count && samples >= 3 && offset_samples >= 2 && extracts >= 4 && adds >= 2 && multiplies >= 2)
+    if (output_vec2_count && samples >= 3 && extracts >= 4 && adds >= 2 && multiplies >= 2)
         result |= 2;
+    STEREO_LOG("VSM_FS_CLASSIFY role=0x%x words=%zu frag_z=%u squares=%u outputs2=%u samples=%u offset_samples=%u extracts=%u adds=%u multiplies=%u stores=%u",
+        result,words,frag_z_loads,moment_squares,output_vec2_count,samples,offset_samples,extracts,adds,multiplies,stores);
     free(fragcoord); free(frag_z_ptr); free(frag_z_value); free(float_type); free(vec2_type); free(output_vec2); free(pointer_pointee); free(pointer_storage); free(constant_value); free(constant_known);
     return result;
 }
@@ -12663,12 +12665,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         {
             STEREO_LOG("PIPE_SHADOW_STEREO_SKIP p=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u",p,view_mask,dynamic_color_count,dynamic_color0,dynamic_depth,dynamic_stencil);
             goto PIPE_DECISION_CONTINUE;
+        }
         if (vsm_fs_role && (view_mask & 0x3) != 0)
         {
             STEREO_LOG("VSM_STEREO_SKIP p=%u role=0x%x viewMask=0x%x dynamic=%u gpl=0x%x stages=%u",
                 p,vsm_fs_role,view_mask,has_dynamic_rendering,gpl_flags,ci->stageCount);
             continue;
-        }
         }
         STEREO_LOG(
             "PIPE_ATTACHMENT_CLASSIFY p=%u dynamic=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u shadow_signature=%u vsm_fs_role=0x%x gpl=0x%x vs_hash=%016llx fs_hash=%016llx",
