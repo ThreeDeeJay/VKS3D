@@ -12468,7 +12468,7 @@ vsm_spv_has_location0_vec2(const uint32_t *w,size_t n)
 static bool
 vsm_spv_is_moment_encode(const uint32_t *w,size_t n)
 {
-    uint32_t frag=0,zptr=0,zid=0;
+    uint32_t frag=0,frag_value=0,zptr=0,zid=0;
     bool frag_input=false,z_squared=false;
     if(!w||n<5||!vsm_spv_has_location0_vec2(w,n))return false;
     for(size_t i=5;i<n;)
@@ -12492,10 +12492,15 @@ vsm_spv_is_moment_encode(const uint32_t *w,size_t n)
     for(size_t i=5;i<n;)
     {
         uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        int32_t component=-1;
         if(!wc||wc>n-i)break;
         if(op==SpvOpLoad&&wc>=4&&w[i+3]==frag)
+            frag_value=w[i+2];
+        if(op==SpvOpCompositeExtract&&wc>=5&&frag_value&&w[i+3]==frag_value&&w[i+4]==2)
+            zid=w[i+2];
+        if((op==SpvOpAccessChain||op==SpvOpInBoundsAccessChain)&&wc>=5&&w[i+3]==frag&&vsm_spv_i32(w,n,w[i+4],&component)&&component==2)
             zptr=w[i+2];
-        if(op==SpvOpCompositeExtract&&wc>=5&&zptr&&w[i+3]==zptr&&w[i+4]==2)
+        if(op==SpvOpLoad&&wc>=4&&zptr&&w[i+3]==zptr)
             zid=w[i+2];
         if(op==SpvOpFMul&&wc>=5&&zid&&w[i+3]==zid&&w[i+4]==zid)
             z_squared=true;
@@ -13350,7 +13355,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 free_spv_provenance(&vm);
             }
         }
-        if(gpl_flags==0&&ci->renderPass==VK_NULL_HANDLE&&in_mv_rp&&(view_mask&3u)==3u&&has_vs&&has_fs&&!has_tcs&&!has_tes&&!has_gs&&!has_ms&&fs_stage!=~0u)
+        bool vsm_complete_pipeline=gpl_flags==0&&has_vs&&has_fs;
+        bool vsm_fragment_library=(gpl_flags&VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)&&!(gpl_flags&~(VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT|VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT))&&!has_vs&&has_fs;
+        if((vsm_complete_pipeline||vsm_fragment_library)&&ci->renderPass==VK_NULL_HANDLE&&in_mv_rp&&(view_mask&3u)==3u&&!has_tcs&&!has_tes&&!has_gs&&!has_ms&&fs_stage!=~0u)
         {
             StereoShaderCache vsm_inline_tmp={0};
             StereoShaderCache *vsm_fs=stereo_stage_spv(sd,&ci->pStages[fs_stage],&vsm_inline_tmp);
@@ -13360,7 +13367,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 bool vsm_blur=vsm_spv_is_blur(vsm_fs->spv,vsm_fs->words);
                 if(vsm_moment||vsm_blur)
                 {
-                    STEREO_LOG("VSM_PIPELINE_SKIP p=%u kind=%s view_mask=0x%x topology=%u bindings=%u attrs=%u",p,vsm_moment?"MOMENT":"BLUR",view_mask,ci->pInputAssemblyState?ci->pInputAssemblyState->topology:UINT32_MAX,ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:UINT32_MAX,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:UINT32_MAX);
+                    STEREO_LOG("VSM_PIPELINE_SKIP p=%u kind=%s view_mask=0x%x gpl=0x%x topology=%u bindings=%u attrs=%u",p,vsm_moment?"MOMENT":"BLUR",view_mask,gpl_flags,ci->pInputAssemblyState?ci->pInputAssemblyState->topology:UINT32_MAX,ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:UINT32_MAX,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:UINT32_MAX);
                     goto PIPE_DECISION_CONTINUE;
                 }
             }
