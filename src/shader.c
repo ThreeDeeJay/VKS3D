@@ -12418,57 +12418,51 @@ vsm_spv_i32_vec2(const uint32_t *w,size_t n,uint32_t id,int32_t *x,int32_t *y)
 }
 
 static bool
-vsm_spv_has_location0_vec2(const uint32_t *w,size_t n)
+vsm_spv_is_float_vec2(const uint32_t *w,size_t n,uint32_t type)
 {
-    uint32_t ft=0,v2=0,ptr=0;
-    bool decorated=false,variable=false;
+    uint32_t component=0;
     for(size_t i=5;i<n;)
     {
         uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
         if(!wc||wc>n-i)break;
-        if(op==SpvOpTypeFloat&&wc==3&&w[i+2]==32)ft=w[i+1];
-        if(op==SpvOpTypeVector&&wc==4&&w[i+3]==2)v2=w[i+1];
-        if(op==SpvOpTypePointer&&wc==4&&w[i+2]==SpvStorageClassOutput)ptr=w[i+1];
+        if(op==SpvOpTypeVector&&wc==4&&w[i+1]==type&&w[i+3]==2)
+            component=w[i+2];
         i+=wc;
     }
-    if(!ft||!v2)return false;
+    if(!component)return false;
     for(size_t i=5;i<n;)
     {
         uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
         if(!wc||wc>n-i)break;
-        if(op==SpvOpTypeVector&&wc==4&&w[i+1]==v2&&w[i+2]==ft&&w[i+3]==2)
+        if(op==SpvOpTypeFloat&&wc==3&&w[i+1]==component&&w[i+2]==32)return true;
+        i+=wc;
+    }
+    return false;
+}
+static bool
+vsm_spv_has_location0_vec2(const uint32_t *w,size_t n)
+{
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if(op==SpvOpVariable&&wc>=4&&w[i+3]==SpvStorageClassOutput)
         {
+            uint32_t var=w[i+2],ptr=w[i+1],pointee=0;
+            bool location0=false;
             for(size_t j=5;j<n;)
             {
                 uint32_t jwc=w[j]>>16,jop=w[j]&0xffffu;
                 if(!jwc||jwc>n-j)break;
-                if(jop==SpvOpTypePointer&&jwc==4&&w[j+1]==ptr&&w[j+2]==SpvStorageClassOutput&&w[j+3]==v2)
-                {
-                    for(size_t k=5;k<n;)
-                    {
-                        uint32_t kwc=w[k]>>16,kop=w[k]&0xffffu;
-                        if(!kwc||kwc>n-k)break;
-                        if(kop==SpvOpVariable&&kwc>=4&&w[k+1]==ptr&&w[k+3]==SpvStorageClassOutput)
-                        {
-                            for(size_t d=5;d<n;)
-                            {
-                                uint32_t dwc=w[d]>>16,dop=w[d]&0xffffu;
-                                if(!dwc||dwc>n-d)break;
-                                if(dop==SpvOpDecorate&&dwc>=4&&w[d+1]==w[k+2]&&w[d+2]==SpvDecorationLocation&&w[d+3]==0)
-                                    decorated=true;
-                                d+=dwc;
-                            }
-                            if(decorated)variable=true;
-                        }
-                        k+=kwc;
-                    }
-                }
+                if(jop==SpvOpDecorate&&jwc>=4&&w[j+1]==var&&w[j+2]==SpvDecorationLocation&&w[j+3]==0)location0=true;
+                if(jop==SpvOpTypePointer&&jwc==4&&w[j+1]==ptr&&w[j+2]==SpvStorageClassOutput)pointee=w[j+3];
                 j+=jwc;
             }
+            if(location0&&pointee&&vsm_spv_is_float_vec2(w,n,pointee))return true;
         }
         i+=wc;
     }
-    return variable;
+    return false;
 }
 
 static bool
@@ -12499,13 +12493,9 @@ vsm_spv_is_moment_encode(const uint32_t *w,size_t n)
     {
         uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
         if(!wc||wc>n-i)break;
-        if((op==SpvOpAccessChain||op==SpvOpInBoundsAccessChain)&&wc>=5&&w[i+3]==frag)
-        {
-            int32_t component=-1;
-            if(vsm_spv_i32(w,n,w[i+4],&component)&&component==2)
-                zptr=w[i+2];
-        }
-        if(op==SpvOpLoad&&wc>=4&&zptr&&w[i+3]==zptr)
+        if(op==SpvOpLoad&&wc>=4&&w[i+3]==frag)
+            zptr=w[i+2];
+        if(op==SpvOpCompositeExtract&&wc>=5&&zptr&&w[i+3]==zptr&&w[i+4]==2)
             zid=w[i+2];
         if(op==SpvOpFMul&&wc>=5&&zid&&w[i+3]==zid&&w[i+4]==zid)
             z_squared=true;
@@ -13351,6 +13341,12 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         STEREO_LOG("PIPELINE_UI_SKIP hash=%016llx gs_hash=%016llx gs_inputs=%u gs_skip=%u screen_space=%u depth_test=%u depth_write=%u matrix=%u vmatrix=%u v2pos=%u dots=%u",(unsigned long long)hash_spv(vs_cache->spv,vs_cache->words),(unsigned long long)gs_hash,gs_input_count,mono_ui_gs_candidate,vs_screen_space,ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,vm.has_matrix_ops,vm.has_vector_matrix_ops,vm.has_v2_position_input,vm.dot_count);
                         goto PIPE_DECISION_CONTINUE;
                     }
+                if((gpl_flags&VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT)&&!(gpl_flags&~(VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT|VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT))&&in_mv_rp&&(view_mask&3u)==3u&&has_vs&&!has_fs&&vm.exec_model==SpvExecVertex&&vs_quad_fs&&!vm.has_vertex_attr&&!vm.has_matrix_ops&&!vm.has_direct_position_write)
+                {
+                    STEREO_LOG("VSM_PIPELINE_SKIP p=%u kind=PROCEDURAL_FULLSCREEN_VS view_mask=0x%x gpl=0x%x attrs=%u",p,view_mask,gpl_flags,vm.has_vertex_attr);
+                    free_spv_provenance(&vm);
+                    goto PIPE_DECISION_CONTINUE;
+                }
                 free_spv_provenance(&vm);
             }
         }
