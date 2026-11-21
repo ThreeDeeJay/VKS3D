@@ -12364,6 +12364,117 @@ static const VkShaderModuleCreateInfo *stereo_stage_inline_spv(const VkPipelineS
     return NULL;
 }
 
+/* Semantic VSM fragment signatures:
+ * bit 0: output moments (z, z*z) from FragCoord.z
+ * bit 1: multi-tap, offset moment filtering into a vec2 output
+ */
+static uint32_t
+stereo_classify_vsm_fs(const uint32_t *w, size_t words)
+{
+    if (!w || words < 5 || w[0] != SPIRV_MAGIC || !w[3] || w[3] > 1048576)
+        return 0;
+    uint32_t bound = w[3];
+    uint8_t *fragcoord = calloc(bound, 1);
+    uint8_t *frag_z_ptr = calloc(bound, 1);
+    uint8_t *frag_z_value = calloc(bound, 1);
+    uint8_t *float_type = calloc(bound, 1);
+    uint8_t *vec2_type = calloc(bound, 1);
+    uint8_t *output_vec2 = calloc(bound, 1);
+    uint32_t *pointer_pointee = calloc(bound, sizeof(uint32_t));
+    uint32_t *pointer_storage = calloc(bound, sizeof(uint32_t));
+    uint32_t *constant_value = calloc(bound, sizeof(uint32_t));
+    uint8_t *constant_known = calloc(bound, 1);
+    if (!fragcoord || !frag_z_ptr || !frag_z_value || !float_type || !vec2_type || !output_vec2 || !pointer_pointee || !pointer_storage || !constant_value || !constant_known)
+    {
+        free(fragcoord); free(frag_z_ptr); free(frag_z_value); free(float_type); free(vec2_type); free(output_vec2); free(pointer_pointee); free(pointer_storage); free(constant_value); free(constant_known);
+        return 0;
+    }
+    for (size_t i = 5; i < words;)
+    {
+        uint32_t wc = w[i] >> 16;
+        uint32_t op = w[i] & 0xffff;
+        if (!wc || i + wc > words)
+            break;
+        if (op == SpvOpDecorate && wc >= 4 && w[i + 2] == SpvDecorationBuiltIn && w[i + 3] == SpvBuiltInFragCoord && w[i + 1] < bound)
+            fragcoord[w[i + 1]] = 1;
+        else if (op == SpvOpTypeFloat && wc >= 3 && w[i + 1] < bound)
+            float_type[w[i + 1]] = 1;
+        else if (op == SpvOpTypeVector && wc >= 4 && w[i + 1] < bound && w[i + 3] == 2 && w[i + 2] < bound && float_type[w[i + 2]])
+            vec2_type[w[i + 1]] = 1;
+        else if (op == SpvOpTypePointer && wc >= 4 && w[i + 1] < bound)
+        {
+            pointer_storage[w[i + 1]] = w[i + 2];
+            pointer_pointee[w[i + 1]] = w[i + 3];
+        }
+        else if (op == SpvOpConstant && wc >= 4 && w[i + 2] < bound)
+        {
+            constant_value[w[i + 2]] = w[i + 3];
+            constant_known[w[i + 2]] = 1;
+        }
+        else if (op == SpvOpVariable && wc >= 4 && w[i + 2] < bound && w[i + 1] < bound)
+        {
+            if (w[i + 3] == SpvStorageClassInput && fragcoord[w[i + 2]])
+                fragcoord[w[i + 2]] = 2;
+            if (w[i + 3] == SpvStorageClassOutput && pointer_storage[w[i + 1]] == SpvStorageClassOutput && pointer_pointee[w[i + 1]] < bound && vec2_type[pointer_pointee[w[i + 1]]])
+                output_vec2[w[i + 2]] = 1;
+        }
+        i += wc;
+    }
+    uint32_t frag_z_loads = 0;
+    uint32_t moment_squares = 0;
+    uint32_t stores = 0;
+    uint32_t samples = 0;
+    uint32_t offset_samples = 0;
+    uint32_t extracts = 0;
+    uint32_t adds = 0;
+    uint32_t multiplies = 0;
+    uint32_t output_vec2_count = 0;
+    for (uint32_t id = 1; id < bound; ++id)
+        output_vec2_count += output_vec2[id] != 0;
+    for (size_t i = 5; i < words;)
+    {
+        uint32_t wc = w[i] >> 16;
+        uint32_t op = w[i] & 0xffff;
+        if (!wc || i + wc > words)
+            break;
+        if (op == SpvOpAccessChain && wc >= 5 && w[i + 2] < bound && w[i + 3] < bound)
+        {
+            uint32_t last = w[i + wc - 1];
+            if (fragcoord[w[i + 3]] == 2 && last < bound && constant_known[last] && constant_value[last] == 2)
+                frag_z_ptr[w[i + 2]] = 1;
+        }
+        else if (op == SpvOpLoad && wc >= 4 && w[i + 2] < bound && w[i + 3] < bound && frag_z_ptr[w[i + 3]])
+        {
+            frag_z_value[w[i + 2]] = 1;
+            frag_z_loads++;
+        }
+        else if (op == SpvOpFMul && wc >= 5 && w[i + 3] == w[i + 4] && w[i + 3] < bound && frag_z_value[w[i + 3]])
+            moment_squares++;
+        else if (op == SpvOpStore && wc >= 3)
+            stores++;
+        else if ((op == SpvOpImageSampleImplicitLod || op == SpvOpImageSampleExplicitLod) && wc >= 6)
+        {
+            samples++;
+            if (w[i + 5] & 8)
+                offset_samples++;
+        }
+        else if (op == SpvOpCompositeExtract && wc >= 4)
+            extracts++;
+        else if (op == SpvOpFAdd && wc >= 5)
+            adds++;
+        else if (op == SpvOpFMul && wc >= 5)
+            multiplies++;
+        i += wc;
+    }
+    uint32_t result = 0;
+    if (frag_z_loads && moment_squares && output_vec2_count && stores >= 2)
+        result |= 1;
+    if (output_vec2_count && samples >= 3 && offset_samples >= 2 && extracts >= 4 && adds >= 2 && multiplies >= 2)
+        result |= 2;
+    free(fragcoord); free(frag_z_ptr); free(frag_z_value); free(float_type); free(vec2_type); free(output_vec2); free(pointer_pointee); free(pointer_storage); free(constant_value); free(constant_known);
+    return result;
+}
+
 /* Stage SPIR-V: cached shader module if known, else the inline
  * VkShaderModuleCreateInfo chained into the stage (DXVK GPL / module-less stages).
  * tmp is caller storage; the returned pointer is valid for the caller's scope. */
@@ -12469,6 +12580,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         uint32_t dynamic_color_count = 0;
         uint64_t vs_hash = 0;
         uint64_t fs_hash = 0;
+        uint32_t vsm_fs_role = 0;
         for (uint32_t hs = 0; hs < ci->stageCount; hs++)
         {
             StereoShaderCache hash_tmp;
@@ -12478,7 +12590,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 if (ci->pStages[hs].stage == VK_SHADER_STAGE_VERTEX_BIT)
                     vs_hash = hash_spv(hash_sc->spv, hash_sc->words);
                 else if (ci->pStages[hs].stage == VK_SHADER_STAGE_FRAGMENT_BIT)
+                {
                     fs_hash = hash_spv(hash_sc->spv, hash_sc->words);
+                    vsm_fs_role = stereo_classify_vsm_fs(hash_sc->spv, hash_sc->words);
+                }
             }
         }
         /* ── Safety: Vulkan 1.3 dynamic rendering pipelines may not use pNext ── */
@@ -12548,9 +12663,15 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         {
             STEREO_LOG("PIPE_SHADOW_STEREO_SKIP p=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u",p,view_mask,dynamic_color_count,dynamic_color0,dynamic_depth,dynamic_stencil);
             goto PIPE_DECISION_CONTINUE;
+        if (vsm_fs_role && (view_mask & 0x3) != 0)
+        {
+            STEREO_LOG("VSM_STEREO_SKIP p=%u role=0x%x viewMask=0x%x dynamic=%u gpl=0x%x stages=%u",
+                p,vsm_fs_role,view_mask,has_dynamic_rendering,gpl_flags,ci->stageCount);
+            continue;
+        }
         }
         STEREO_LOG(
-            "PIPE_ATTACHMENT_CLASSIFY p=%u dynamic=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u shadow_signature=%u gpl=0x%x vs_hash=%016llx fs_hash=%016llx",
+            "PIPE_ATTACHMENT_CLASSIFY p=%u dynamic=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u shadow_signature=%u vsm_fs_role=0x%x gpl=0x%x vs_hash=%016llx fs_hash=%016llx",
             p,
             has_dynamic_rendering,
             view_mask,
@@ -12559,6 +12680,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             dynamic_depth,
             dynamic_stencil,
             dynamic_shadow_signature,
+            vsm_fs_role,
             gpl_flags,
             (unsigned long long)vs_hash,
             (unsigned long long)fs_hash);
