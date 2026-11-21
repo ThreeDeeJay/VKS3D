@@ -12386,6 +12386,175 @@ stereo_stage_spv(StereoDevice *sd, const VkPipelineShaderStageCreateInfo *st,
     return NULL;
 }
 
+static bool
+vsm_spv_i32(const uint32_t *w,size_t n,uint32_t id,int32_t *value)
+{
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if(op==SpvOpConstant&&wc>=4&&w[i+2]==id)
+        {
+            *value=(int32_t)w[i+3];
+            return true;
+        }
+        i+=wc;
+    }
+    return false;
+}
+
+static bool
+vsm_spv_i32_vec2(const uint32_t *w,size_t n,uint32_t id,int32_t *x,int32_t *y)
+{
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if(op==SpvOpConstantComposite&&wc==5&&w[i+2]==id)
+            return vsm_spv_i32(w,n,w[i+3],x)&&vsm_spv_i32(w,n,w[i+4],y);
+        i+=wc;
+    }
+    return false;
+}
+
+static bool
+vsm_spv_has_location0_vec2(const uint32_t *w,size_t n)
+{
+    uint32_t ft=0,v2=0,ptr=0;
+    bool decorated=false,variable=false;
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if(op==SpvOpTypeFloat&&wc==3&&w[i+2]==32)ft=w[i+1];
+        if(op==SpvOpTypeVector&&wc==4&&w[i+3]==2)v2=w[i+1];
+        if(op==SpvOpTypePointer&&wc==4&&w[i+2]==SpvStorageClassOutput)ptr=w[i+1];
+        i+=wc;
+    }
+    if(!ft||!v2)return false;
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if(op==SpvOpTypeVector&&wc==4&&w[i+1]==v2&&w[i+2]==ft&&w[i+3]==2)
+        {
+            for(size_t j=5;j<n;)
+            {
+                uint32_t jwc=w[j]>>16,jop=w[j]&0xffffu;
+                if(!jwc||jwc>n-j)break;
+                if(jop==SpvOpTypePointer&&jwc==4&&w[j+1]==ptr&&w[j+2]==SpvStorageClassOutput&&w[j+3]==v2)
+                {
+                    for(size_t k=5;k<n;)
+                    {
+                        uint32_t kwc=w[k]>>16,kop=w[k]&0xffffu;
+                        if(!kwc||kwc>n-k)break;
+                        if(kop==SpvOpVariable&&kwc>=4&&w[k+1]==ptr&&w[k+3]==SpvStorageClassOutput)
+                        {
+                            for(size_t d=5;d<n;)
+                            {
+                                uint32_t dwc=w[d]>>16,dop=w[d]&0xffffu;
+                                if(!dwc||dwc>n-d)break;
+                                if(dop==SpvOpDecorate&&dwc>=4&&w[d+1]==w[k+2]&&w[d+2]==SpvDecorationLocation&&w[d+3]==0)
+                                    decorated=true;
+                                d+=dwc;
+                            }
+                            if(decorated)variable=true;
+                        }
+                        k+=kwc;
+                    }
+                }
+                j+=jwc;
+            }
+        }
+        i+=wc;
+    }
+    return variable;
+}
+
+static bool
+vsm_spv_is_moment_encode(const uint32_t *w,size_t n)
+{
+    uint32_t frag=0,zptr=0,zid=0;
+    bool frag_input=false,z_squared=false;
+    if(!w||n<5||!vsm_spv_has_location0_vec2(w,n))return false;
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if(op==SpvOpDecorate&&wc>=4&&w[i+2]==SpvDecorationBuiltIn&&w[i+3]==SpvBuiltInFragCoord)
+            frag=w[i+1];
+        i+=wc;
+    }
+    if(!frag)return false;
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if(op==SpvOpVariable&&wc>=4&&w[i+2]==frag&&w[i+3]==SpvStorageClassInput)
+            frag_input=true;
+        i+=wc;
+    }
+    if(!frag_input)return false;
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if((op==SpvOpAccessChain||op==SpvOpInBoundsAccessChain)&&wc>=5&&w[i+3]==frag)
+        {
+            int32_t component=-1;
+            if(vsm_spv_i32(w,n,w[i+4],&component)&&component==2)
+                zptr=w[i+2];
+        }
+        if(op==SpvOpLoad&&wc>=4&&zptr&&w[i+3]==zptr)
+            zid=w[i+2];
+        if(op==SpvOpFMul&&wc>=5&&zid&&w[i+3]==zid&&w[i+4]==zid)
+            z_squared=true;
+        i+=wc;
+    }
+    return z_squared;
+}
+
+static bool
+vsm_spv_is_blur(const uint32_t *w,size_t n)
+{
+    uint32_t sampled=0,coord=0;
+    int32_t offsets[3][2];
+    uint32_t samples=0,adds=0,muls=0;
+    bool horizontal=false,vertical=false,center=false;
+    if(!w||n<5||!vsm_spv_has_location0_vec2(w,n))return false;
+    for(size_t i=5;i<n;)
+    {
+        uint32_t wc=w[i]>>16,op=w[i]&0xffffu;
+        if(!wc||wc>n-i)break;
+        if(op==SpvOpFAdd)adds++;
+        if(op==SpvOpFMul)muls++;
+        if(op==SpvOpImageSampleImplicitLod&&wc>=7)
+        {
+            if(w[i+5]!=(1u<<3)||samples>=3)return false;
+            if(samples&&(w[i+3]!=sampled||w[i+4]!=coord))return false;
+            sampled=w[i+3];
+            coord=w[i+4];
+            if(!vsm_spv_i32_vec2(w,n,w[i+6],&offsets[samples][0],&offsets[samples][1]))return false;
+            samples++;
+        }
+        i+=wc;
+    }
+    if(samples!=3||adds<2||muls<1)return false;
+    for(uint32_t i=0;i<3;i++)
+    {
+        int32_t x=offsets[i][0],y=offsets[i][1];
+        if(x==0&&y==0)center=true;
+        if((x==-1&&y==0)||(x==1&&y==0))horizontal=true;
+        if((x==0&&y==-1)||(x==0&&y==1))vertical=true;
+    }
+    if(!center)return false;
+    if(horizontal&&offsets[0][1]==0&&offsets[1][1]==0&&offsets[2][1]==0)
+        return (offsets[0][0]+offsets[1][0]+offsets[2][0])==0;
+    if(vertical&&offsets[0][0]==0&&offsets[1][0]==0&&offsets[2][0]==0)
+        return (offsets[0][1]+offsets[1][1]+offsets[2][1])==0;
+    return false;
+}
+
 /* ── vkCreateGraphicsPipelines ───────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
@@ -13183,6 +13352,21 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         goto PIPE_DECISION_CONTINUE;
                     }
                 free_spv_provenance(&vm);
+            }
+        }
+        if(gpl_flags==0&&ci->renderPass==VK_NULL_HANDLE&&in_mv_rp&&(view_mask&3u)==3u&&has_vs&&has_fs&&!has_tcs&&!has_tes&&!has_gs&&!has_ms&&fs_stage!=~0u)
+        {
+            StereoShaderCache vsm_inline_tmp={0};
+            StereoShaderCache *vsm_fs=stereo_stage_spv(sd,&ci->pStages[fs_stage],&vsm_inline_tmp);
+            if(vsm_fs&&vsm_fs->spv&&vsm_fs->words>=5)
+            {
+                bool vsm_moment=vsm_spv_is_moment_encode(vsm_fs->spv,vsm_fs->words);
+                bool vsm_blur=vsm_spv_is_blur(vsm_fs->spv,vsm_fs->words);
+                if(vsm_moment||vsm_blur)
+                {
+                    STEREO_LOG("VSM_PIPELINE_SKIP p=%u kind=%s view_mask=0x%x topology=%u bindings=%u attrs=%u",p,vsm_moment?"MOMENT":"BLUR",view_mask,ci->pInputAssemblyState?ci->pInputAssemblyState->topology:UINT32_MAX,ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:UINT32_MAX,ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:UINT32_MAX);
+                    goto PIPE_DECISION_CONTINUE;
+                }
             }
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
