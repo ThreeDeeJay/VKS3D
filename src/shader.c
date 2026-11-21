@@ -12386,6 +12386,261 @@ stereo_stage_spv(StereoDevice *sd, const VkPipelineShaderStageCreateInfo *st,
     return NULL;
 }
 
+static bool
+spv_find_u32_constant(
+    const uint32_t *w,
+    size_t c,
+    uint32_t id,
+    uint32_t *value)
+{
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpConstant&&wc>=4&&w[i+2]==id)
+        {
+            *value=w[i+3];
+            return true;
+        }
+        i+=wc;
+    }
+    return false;
+}
+
+static bool
+spv_find_i32_vec2_constant(
+    const uint32_t *w,
+    size_t c,
+    uint32_t id,
+    int32_t *x,
+    int32_t *y)
+{
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpConstantComposite&&wc>=5&&w[i+2]==id)
+        {
+            uint32_t vx,vy;
+            if(!spv_find_u32_constant(w,c,w[i+3],&vx)||!spv_find_u32_constant(w,c,w[i+4],&vy))return false;
+            *x=(int32_t)vx;
+            *y=(int32_t)vy;
+            return true;
+        }
+        i+=wc;
+    }
+    return false;
+}
+
+static bool
+spv_fs_output_location0_vec2(
+    const uint32_t *w,
+    size_t c,
+    uint32_t *out_var)
+{
+    uint32_t var=0,ptr=0,pointee=0;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpDecorate&&wc>=4&&w[i+2]==SpvDecorationLocation&&w[i+3]==0)
+            var=w[i+1];
+        i+=wc;
+    }
+    if(!var)return false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpVariable&&wc>=4&&w[i+2]==var&&w[i+3]==SpvStorageClassOutput)
+        {
+            ptr=w[i+1];
+            break;
+        }
+        i+=wc;
+    }
+    if(!ptr)return false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpTypePointer&&wc>=4&&w[i+1]==ptr&&w[i+2]==SpvStorageClassOutput)
+        {
+            pointee=w[i+3];
+            break;
+        }
+        i+=wc;
+    }
+    if(!pointee)return false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpTypeVector&&wc>=4&&w[i+1]==pointee&&w[i+3]==2)
+        {
+            *out_var=var;
+            return true;
+        }
+        i+=wc;
+    }
+    return false;
+}
+
+static bool
+spv_fs_is_vsm_moment_encode(
+    const uint32_t *w,
+    size_t c)
+{
+    uint32_t frag_var=0,out_var=0,frag_ptr=0,frag_z=0,square=0;
+    bool out_z=false,out_square=false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpDecorate&&wc>=4&&w[i+2]==SpvDecorationBuiltIn&&w[i+3]==SpvBuiltInFragCoord)
+            frag_var=w[i+1];
+        i+=wc;
+    }
+    if(!frag_var||!spv_fs_output_location0_vec2(w,c,&out_var))return false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpVariable&&wc>=4&&w[i+2]==frag_var&&w[i+3]==SpvStorageClassInput)
+            break;
+        if(op==SpvOpAccessChain&&wc>=5&&w[i+3]==frag_var)
+        {
+            uint32_t index=0;
+            if(spv_find_u32_constant(w,c,w[i+wc-1],&index)&&index==2)
+            {
+                frag_ptr=w[i+2];
+                break;
+            }
+        }
+        i+=wc;
+    }
+    if(!frag_ptr)return false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpLoad&&wc>=4&&w[i+3]==frag_ptr)
+        {
+            frag_z=w[i+2];
+            break;
+        }
+        i+=wc;
+    }
+    if(!frag_z)return false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpFMul&&wc>=5&&w[i+3]==frag_z&&w[i+4]==frag_z)
+        {
+            square=w[i+2];
+            break;
+        }
+        i+=wc;
+    }
+    if(!square)return false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpStore&&wc>=3&&(w[i+2]==frag_z||w[i+2]==square))
+        {
+            for(size_t j=5;j<c;)
+            {
+                uint32_t jwc=w[j]>>16;
+                uint32_t jop=w[j]&0xffffu;
+                if(!jwc||j+jwc>c)break;
+                if(jop==SpvOpAccessChain&&jwc>=5&&w[j+2]==w[i+1]&&w[j+3]==out_var)
+                {
+                    uint32_t index=0;
+                    if(spv_find_u32_constant(w,c,w[j+jwc-1],&index))
+                    {
+                        if(index==0&&w[i+2]==frag_z)out_z=true;
+                        if(index==1&&w[i+2]==square)out_square=true;
+                    }
+                    break;
+                }
+                j+=jwc;
+            }
+        }
+        i+=wc;
+    }
+    return out_z&&out_square;
+}
+
+static bool
+spv_fs_is_vsm_blur(
+    const uint32_t *w,
+    size_t c)
+{
+    uint32_t out_var=0,image_id=0,sampler_id=0,coord_id=0;
+    int32_t ox[3],oy[3];
+    uint32_t samples=0,fadds=0,fmuls=0;
+    bool center=false,neg_x=false,pos_x=false,neg_y=false,pos_y=false;
+    if(!spv_fs_output_location0_vec2(w,c,&out_var))return false;
+    for(size_t i=5;i<c;)
+    {
+        uint32_t wc=w[i]>>16;
+        uint32_t op=w[i]&0xffffu;
+        if(!wc||i+wc>c)break;
+        if(op==SpvOpImageSampleExplicitLod||op==SpvOpImageSampleDrefImplicitLod||op==SpvOpImageSampleDrefExplicitLod)
+            return false;
+        if(op==SpvOpImageSampleImplicitLod)
+        {
+            if(samples>=3||wc<7||w[i+5]!=(1u<<3))return false;
+            uint32_t sample_image=0,sample_sampler=0;
+            for(size_t j=5;j<c;)
+            {
+                uint32_t jwc=w[j]>>16;
+                uint32_t jop=w[j]&0xffffu;
+                if(!jwc||j+jwc>c)break;
+                if(jop==SpvOpSampledImage&&jwc>=5&&w[j+2]==w[i+3])
+                {
+                    sample_image=w[j+3];
+                    sample_sampler=w[j+4];
+                    break;
+                }
+                j+=jwc;
+            }
+            if(!sample_image||!sample_sampler)return false;
+            if(samples==0)
+            {
+                image_id=sample_image;
+                sampler_id=sample_sampler;
+                coord_id=w[i+4];
+            }
+            else if(sample_image!=image_id||sample_sampler!=sampler_id||w[i+4]!=coord_id)return false;
+            if(!spv_find_i32_vec2_constant(w,c,w[i+6],&ox[samples],&oy[samples]))return false;
+            if(ox[samples]==0&&oy[samples]==0)center=true;
+            if(ox[samples]==-1&&oy[samples]==0)neg_x=true;
+            if(ox[samples]==1&&oy[samples]==0)pos_x=true;
+            if(ox[samples]==0&&oy[samples]==-1)neg_y=true;
+            if(ox[samples]==0&&oy[samples]==1)pos_y=true;
+            samples++;
+        }
+        if(op==SpvOpFAdd)fadds++;
+        if(op==SpvOpFMul)fmuls++;
+        i+=wc;
+    }
+    return samples==3&&center&&((neg_x&&pos_x)||(neg_y&&pos_y))&&fadds>=4&&fmuls>=2;
+}
+
 /* ── vkCreateGraphicsPipelines ───────────────────────────────────────────── */
 VKAPI_ATTR VkResult VKAPI_CALL
 stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
@@ -13183,6 +13438,30 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                         goto PIPE_DECISION_CONTINUE;
                     }
                 free_spv_provenance(&vm);
+            }
+        }
+        if(gpl_flags==0&&in_mv_rp&&(view_mask&0x3u)==0x3u&&has_vs&&has_fs&&!has_tcs&&!has_tes&&!has_gs&&!has_ms&&fs_stage!=~0u)
+        {
+            const VkPipelineRenderingCreateInfo *shadow_ri=NULL;
+            for(const VkBaseInStructure *shadow_base=(const VkBaseInStructure*)ci->pNext;shadow_base;shadow_base=shadow_base->pNext)
+            {
+                if(shadow_base->sType==VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO)
+                {
+                    shadow_ri=(const VkPipelineRenderingCreateInfo*)shadow_base;
+                    break;
+                }
+            }
+            StereoShaderCache shadow_fs_inline;
+            StereoShaderCache *shadow_fs=stereo_stage_spv(sd,&ci->pStages[fs_stage],&shadow_fs_inline);
+            bool shadow_moment_fs=shadow_fs&&spv_fs_is_vsm_moment_encode(shadow_fs->spv,shadow_fs->words);
+            bool shadow_blur_fs=shadow_fs&&spv_fs_is_vsm_blur(shadow_fs->spv,shadow_fs->words);
+            bool shadow_common_state=ci->renderPass==VK_NULL_HANDLE&&shadow_ri&&(shadow_ri->viewMask&0x3u)==0x3u&&shadow_ri->colorAttachmentCount==1&&ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&!ci->pDepthStencilState->depthWriteEnable&&ci->pColorBlendState&&ci->pColorBlendState->pAttachments&&ci->pColorBlendState->attachmentCount==1&&!ci->pColorBlendState->pAttachments[0].blendEnable&&ci->pColorBlendState->pAttachments[0].colorWriteMask!=0;
+            bool shadow_moment_state=shadow_common_state&&shadow_ri->depthAttachmentFormat!=VK_FORMAT_UNDEFINED&&ci->pVertexInputState&&ci->pVertexInputState->vertexBindingDescriptionCount==1&&ci->pVertexInputState->vertexAttributeDescriptionCount==1&&ci->pInputAssemblyState&&ci->pInputAssemblyState->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            bool shadow_blur_state=shadow_common_state&&shadow_ri->depthAttachmentFormat==VK_FORMAT_UNDEFINED&&ci->pVertexInputState&&ci->pVertexInputState->vertexBindingDescriptionCount==0&&ci->pVertexInputState->vertexAttributeDescriptionCount==0&&ci->pInputAssemblyState&&ci->pInputAssemblyState->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP&&ci->pInputAssemblyState->primitiveRestartEnable;
+            if((shadow_moment_fs&&shadow_moment_state)||(shadow_blur_fs&&shadow_blur_state))
+            {
+                STEREO_LOG("VSM_PIPELINE_SKIP p=%u kind=%s view_mask=0x%x topology=%u bindings=%u attrs=%u",p,shadow_moment_fs?"moment_encode":"three_tap_blur",view_mask,ci->pInputAssemblyState->topology,ci->pVertexInputState->vertexBindingDescriptionCount,ci->pVertexInputState->vertexAttributeDescriptionCount);
+                goto PIPE_DECISION_CONTINUE;
             }
         }
         STEREO_LOG("FS_GATE p=%u quad=%u vs_fullscreen=%u vs_quad_fs=%u has_vs=%u has_fs=%u in_mv=%u ms=%u gs=%u tes=%u tcs=%u fs_stage=%u stages=%u",p,is_quad,vs_fullscreen,vs_quad_fs,has_vs,has_fs,in_mv_rp,has_ms,has_gs,has_tes,has_tcs,fs_stage,ci->stageCount);
