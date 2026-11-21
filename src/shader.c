@@ -12667,6 +12667,50 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             ms_stage,
             (unsigned)has_fs,
             fs_stage);
+        STEREO_LOG("PIPE_STATE_SIGNATURE p=%u vs_hash=%016llx fs_hash=%016llx gpl=0x%x rp=%p rpi=%p in_mv=%u view_mask=0x%x dynamic=%u colors=%u color0=%u depth_format=%u stencil_format=%u topology=%u primitive_restart=%u depth_state=%u depth_test=%u depth_write=%u depth_compare=%u stencil_test=%u cull=%u front=%u polygon=%u bindings=%u attrs=%u blend_attachments=%u subpass=%u",
+            p,
+            (unsigned long long)vs_hash,
+            (unsigned long long)fs_hash,
+            gpl_flags,
+            (void*)ci->renderPass,
+            (void*)rpi,
+            in_mv_rp,
+            view_mask,
+            has_dynamic_rendering,
+            dynamic_color_count,
+            dynamic_color0,
+            dynamic_depth,
+            dynamic_stencil,
+            ci->pInputAssemblyState?ci->pInputAssemblyState->topology:UINT32_MAX,
+            ci->pInputAssemblyState?ci->pInputAssemblyState->primitiveRestartEnable:0,
+            ci->pDepthStencilState!=NULL,
+            ci->pDepthStencilState?ci->pDepthStencilState->depthTestEnable:0,
+            ci->pDepthStencilState?ci->pDepthStencilState->depthWriteEnable:0,
+            ci->pDepthStencilState?ci->pDepthStencilState->depthCompareOp:UINT32_MAX,
+            ci->pDepthStencilState?ci->pDepthStencilState->stencilTestEnable:0,
+            ci->pRasterizationState?ci->pRasterizationState->cullMode:UINT32_MAX,
+            ci->pRasterizationState?ci->pRasterizationState->frontFace:UINT32_MAX,
+            ci->pRasterizationState?ci->pRasterizationState->polygonMode:UINT32_MAX,
+            ci->pVertexInputState?ci->pVertexInputState->vertexBindingDescriptionCount:UINT32_MAX,
+            ci->pVertexInputState?ci->pVertexInputState->vertexAttributeDescriptionCount:UINT32_MAX,
+            ci->pColorBlendState?ci->pColorBlendState->attachmentCount:UINT32_MAX,
+            ci->subpass);
+        if (ci->pVertexInputState && ci->pVertexInputState->pVertexAttributeDescriptions)
+        {
+            for (uint32_t pa = 0; pa < ci->pVertexInputState->vertexAttributeDescriptionCount; pa++)
+            {
+                const VkVertexInputAttributeDescription *ad = &ci->pVertexInputState->pVertexAttributeDescriptions[pa];
+                STEREO_LOG("PIPE_STATE_ATTR p=%u location=%u binding=%u format=%u offset=%u",p,ad->location,ad->binding,ad->format,ad->offset);
+            }
+        }
+        if (ci->pColorBlendState && ci->pColorBlendState->pAttachments)
+        {
+            for (uint32_t pb = 0; pb < ci->pColorBlendState->attachmentCount; pb++)
+            {
+                const VkPipelineColorBlendAttachmentState *ba = &ci->pColorBlendState->pAttachments[pb];
+                STEREO_LOG("PIPE_STATE_BLEND p=%u attachment=%u enable=%u src_color=%u dst_color=%u color_op=%u src_alpha=%u dst_alpha=%u alpha_op=%u write_mask=%u",p,pb,ba->blendEnable,ba->srcColorBlendFactor,ba->dstColorBlendFactor,ba->colorBlendOp,ba->srcAlphaBlendFactor,ba->dstAlphaBlendFactor,ba->alphaBlendOp,ba->colorWriteMask);
+            }
+        }
         for (uint32_t s2 = 0; s2 < ci->stageCount; s2++)
         {
             StereoShaderCache stage_tmp;
