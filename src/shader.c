@@ -12469,7 +12469,7 @@ stereo_classify_vsm_fs(const uint32_t *w, size_t words)
     uint32_t result = 0;
     if (frag_z_loads && moment_squares && output_vec2_count && stores >= 2)
         result |= 1;
-    if (output_vec2_count && samples >= 3 && extracts >= 4 && adds >= 2 && multiplies >= 2)
+    if (output_vec2_count && samples >= 2 && offset_samples >= 2 && extracts >= 4 && adds >= 2 && multiplies >= 2)
         result |= 2;
     STEREO_LOG("VSM_FS_CLASSIFY role=0x%x words=%zu frag_z=%u squares=%u outputs2=%u samples=%u offset_samples=%u extracts=%u adds=%u multiplies=%u stores=%u",
         result,words,frag_z_loads,moment_squares,output_vec2_count,samples,offset_samples,extracts,adds,multiplies,stores);
