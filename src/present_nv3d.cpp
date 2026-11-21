@@ -217,28 +217,62 @@ static void nv3d_pick_eye_size(
 /* owns the display mode.                                                    */
 /* ------------------------------------------------------------------------- */
 
-static volatile LONG g_nv3d_modes_locked = 0;
+static volatile LONG g_nv3d_modes_locked = 0;    /* 1 = NV3D active, app display/window changes are filtered */
 static volatile LONG g_nv3d_swallow_logged = 0;
+static volatile LONG g_host_mode  = 0;           /* 1 = D3D9 FSE device lives on the game window */
+static volatile LONG g_popup_mode = 0;           /* 1 = separate NV3D popup window */
+static HWND volatile g_host_hwnd  = NULL;
 static bool          g_nv3d_hook_installed = false;
+
+#ifndef HWND_TOP
+#define HWND_TOP ((HWND)0)
+#endif
 
 typedef LONG (WINAPI *PFN_CDSExW)(LPCWSTR, DEVMODEW *, HWND, DWORD, LPVOID);
 typedef LONG (WINAPI *PFN_CDSExA)(LPCSTR,  DEVMODEA *, HWND, DWORD, LPVOID);
 typedef LONG (WINAPI *PFN_CDSW)(DEVMODEW *, DWORD);
 typedef LONG (WINAPI *PFN_CDSA)(DEVMODEA *, DWORD);
+typedef BOOL (WINAPI *PFN_SetWindowPos)(HWND, HWND, int, int, int, int, UINT);
+typedef BOOL (WINAPI *PFN_MoveWindow)(HWND, int, int, int, int, BOOL);
+typedef BOOL (WINAPI *PFN_ShowWindow)(HWND, int);
+typedef LONG (WINAPI *PFN_SetWindowLongA)(HWND, int, LONG);
+typedef LONG (WINAPI *PFN_SetWindowLongW)(HWND, int, LONG);
+typedef LONG_PTR (WINAPI *PFN_SetWindowLongPtrA)(HWND, int, LONG_PTR);
+typedef LONG_PTR (WINAPI *PFN_SetWindowLongPtrW)(HWND, int, LONG_PTR);
 
 static PFN_CDSExW g_real_CDSExW = NULL;
 static PFN_CDSExA g_real_CDSExA = NULL;
 static PFN_CDSW   g_real_CDSW   = NULL;
 static PFN_CDSA   g_real_CDSA   = NULL;
+static PFN_SetWindowPos       g_real_SetWindowPos       = NULL;
+static PFN_MoveWindow         g_real_MoveWindow         = NULL;
+static PFN_ShowWindow         g_real_ShowWindow         = NULL;
+static PFN_SetWindowLongA     g_real_SetWindowLongA     = NULL;
+static PFN_SetWindowLongW     g_real_SetWindowLongW     = NULL;
+static PFN_SetWindowLongPtrA  g_real_SetWindowLongPtrA  = NULL;
+static PFN_SetWindowLongPtrW  g_real_SetWindowLongPtrW  = NULL;
 
 static bool nv3d_swallow(const char *api, DWORD flags)
 {
     if (!g_nv3d_modes_locked)
         return false;
-    if (InterlockedIncrement(&g_nv3d_swallow_logged) <= 16)
-        NV3D_LOG("display-mode change swallowed (%s flags=0x%lx) - NV3D owns the display mode",
+    if (InterlockedIncrement(&g_nv3d_swallow_logged) <= 24)
+        NV3D_LOG("app call swallowed (%s flags=0x%lx) - NV3D owns the display/window state",
                  api, (unsigned long)flags);
     return true;
+}
+
+static bool nv3d_is_host(HWND h)
+{
+    return g_nv3d_modes_locked && g_host_mode && h && h == g_host_hwnd;
+}
+
+static bool nv3d_is_nv3d_window(HWND h)
+{
+    wchar_t cls[96];
+    cls[0] = L'\0';
+    GetClassNameW(h, cls, 96);
+    return wcsstr(cls, L"NV3D") || wcsstr(cls, L"PresentWindow");
 }
 
 static LONG WINAPI hk_CDSExW(LPCWSTR dev, DEVMODEW *dm, HWND hwnd, DWORD fl, LPVOID p)
@@ -262,7 +296,78 @@ static LONG WINAPI hk_CDSA(DEVMODEA *dm, DWORD fl)
     return g_real_CDSA ? g_real_CDSA(dm, fl) : DISP_CHANGE_FAILED;
 }
 
-/* POD-only (SEH) - rewrites user32!ChangeDisplaySettings* imports of one module. */
+/* Host-window mode: the D3D9 FSE device owns the game window; the app must not fight it.
+ * Popup mode: the app must never put its window ABOVE the NV3D popup (HWND_TOPMOST), that
+ * uncovers a gap in which 3D Vision disengages (black/mono frame on windowed->fullscreen). */
+static BOOL WINAPI hk_SetWindowPos(HWND h, HWND after, int x, int y, int cx, int cy, UINT fl)
+{
+    if (nv3d_is_host(h))
+    {
+        nv3d_swallow("SetWindowPos(host)", fl);
+        return TRUE;
+    }
+    if (g_nv3d_modes_locked && g_popup_mode && after == HWND_TOPMOST && h && !nv3d_is_nv3d_window(h))
+    {
+        if (InterlockedIncrement(&g_nv3d_swallow_logged) <= 24)
+            NV3D_LOG("SetWindowPos(%p, HWND_TOPMOST) -> HWND_TOP (keep the NV3D popup on top)", (void *)h);
+        after = HWND_TOP;
+    }
+    return g_real_SetWindowPos ? g_real_SetWindowPos(h, after, x, y, cx, cy, fl) : FALSE;
+}
+static BOOL WINAPI hk_MoveWindow(HWND h, int x, int y, int w, int hh, BOOL repaint)
+{
+    if (nv3d_is_host(h)) { nv3d_swallow("MoveWindow(host)", 0); return TRUE; }
+    return g_real_MoveWindow ? g_real_MoveWindow(h, x, y, w, hh, repaint) : FALSE;
+}
+static BOOL WINAPI hk_ShowWindow(HWND h, int cmd)
+{
+    if (nv3d_is_host(h)) { nv3d_swallow("ShowWindow(host)", (DWORD)cmd); return IsWindowVisible(h); }
+    return g_real_ShowWindow ? g_real_ShowWindow(h, cmd) : FALSE;
+}
+#define NV3D_GWL_STYLE   (-16)
+#define NV3D_GWL_EXSTYLE (-20)
+static LONG WINAPI hk_SetWindowLongA(HWND h, int idx, LONG v)
+{
+    if (nv3d_is_host(h) && (idx == NV3D_GWL_STYLE || idx == NV3D_GWL_EXSTYLE))
+    { nv3d_swallow("SetWindowLongA(host)", (DWORD)idx); return GetWindowLongA(h, idx); }
+    return g_real_SetWindowLongA ? g_real_SetWindowLongA(h, idx, v) : 0;
+}
+static LONG WINAPI hk_SetWindowLongW(HWND h, int idx, LONG v)
+{
+    if (nv3d_is_host(h) && (idx == NV3D_GWL_STYLE || idx == NV3D_GWL_EXSTYLE))
+    { nv3d_swallow("SetWindowLongW(host)", (DWORD)idx); return GetWindowLongW(h, idx); }
+    return g_real_SetWindowLongW ? g_real_SetWindowLongW(h, idx, v) : 0;
+}
+static LONG_PTR WINAPI hk_SetWindowLongPtrA(HWND h, int idx, LONG_PTR v)
+{
+    if (nv3d_is_host(h) && (idx == NV3D_GWL_STYLE || idx == NV3D_GWL_EXSTYLE))
+    { nv3d_swallow("SetWindowLongPtrA(host)", (DWORD)idx); return GetWindowLongPtrA(h, idx); }
+    return g_real_SetWindowLongPtrA ? g_real_SetWindowLongPtrA(h, idx, v) : 0;
+}
+static LONG_PTR WINAPI hk_SetWindowLongPtrW(HWND h, int idx, LONG_PTR v)
+{
+    if (nv3d_is_host(h) && (idx == NV3D_GWL_STYLE || idx == NV3D_GWL_EXSTYLE))
+    { nv3d_swallow("SetWindowLongPtrW(host)", (DWORD)idx); return GetWindowLongPtrW(h, idx); }
+    return g_real_SetWindowLongPtrW ? g_real_SetWindowLongPtrW(h, idx, v) : 0;
+}
+
+struct Nv3dHookEntry { const char *name; void *stub; void **real; };
+static const Nv3dHookEntry k_hooks[] = {
+    { "ChangeDisplaySettingsExW", (void *)hk_CDSExW,            (void **)&g_real_CDSExW },
+    { "ChangeDisplaySettingsExA", (void *)hk_CDSExA,            (void **)&g_real_CDSExA },
+    { "ChangeDisplaySettingsW",   (void *)hk_CDSW,              (void **)&g_real_CDSW },
+    { "ChangeDisplaySettingsA",   (void *)hk_CDSA,              (void **)&g_real_CDSA },
+    { "SetWindowPos",             (void *)hk_SetWindowPos,      (void **)&g_real_SetWindowPos },
+    { "MoveWindow",               (void *)hk_MoveWindow,        (void **)&g_real_MoveWindow },
+    { "ShowWindow",               (void *)hk_ShowWindow,        (void **)&g_real_ShowWindow },
+    { "SetWindowLongA",           (void *)hk_SetWindowLongA,    (void **)&g_real_SetWindowLongA },
+    { "SetWindowLongW",           (void *)hk_SetWindowLongW,    (void **)&g_real_SetWindowLongW },
+    { "SetWindowLongPtrA",        (void *)hk_SetWindowLongPtrA, (void **)&g_real_SetWindowLongPtrA },
+    { "SetWindowLongPtrW",        (void *)hk_SetWindowLongPtrW, (void **)&g_real_SetWindowLongPtrW },
+};
+static const int k_hook_count = (int)(sizeof(k_hooks) / sizeof(k_hooks[0]));
+
+/* POD-only (SEH): rewrites the user32 imports listed in k_hooks for one module. */
 static unsigned patch_user32_imports(HMODULE mod)
 {
     BYTE    *base  = (BYTE *)mod;
@@ -298,10 +403,12 @@ static unsigned patch_user32_imports(HMODULE mod)
                 const char *fn =
                     ((IMAGE_IMPORT_BY_NAME *)(base + oft->u1.AddressOfData))->Name;
                 void *stub = NULL;
-                if      (!strcmp(fn, "ChangeDisplaySettingsExW")) stub = (void *)hk_CDSExW;
-                else if (!strcmp(fn, "ChangeDisplaySettingsExA")) stub = (void *)hk_CDSExA;
-                else if (!strcmp(fn, "ChangeDisplaySettingsW"))   stub = (void *)hk_CDSW;
-                else if (!strcmp(fn, "ChangeDisplaySettingsA"))   stub = (void *)hk_CDSA;
+                for (int i = 0; i < k_hook_count; i++)
+                    if (*k_hooks[i].real && !strcmp(fn, k_hooks[i].name))
+                    {
+                        stub = k_hooks[i].stub;
+                        break;
+                    }
                 if (!stub)
                     continue;
 
@@ -339,10 +446,8 @@ static void nv3d_install_display_mode_hook(void)
         user32 = LoadLibraryA("user32.dll");
     if (!user32)
         return;
-    g_real_CDSExW = (PFN_CDSExW)(void *)GetProcAddress(user32, "ChangeDisplaySettingsExW");
-    g_real_CDSExA = (PFN_CDSExA)(void *)GetProcAddress(user32, "ChangeDisplaySettingsExA");
-    g_real_CDSW   = (PFN_CDSW)  (void *)GetProcAddress(user32, "ChangeDisplaySettingsW");
-    g_real_CDSA   = (PFN_CDSA)  (void *)GetProcAddress(user32, "ChangeDisplaySettingsA");
+    for (int i = 0; i < k_hook_count; i++)
+        *k_hooks[i].real = (void *)GetProcAddress(user32, k_hooks[i].name);
 
     HMODULE self = NULL;
     GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -385,12 +490,12 @@ static void nv3d_install_display_mode_hook(void)
             {
                 patched_total += n;
                 patched_modules++;
-                NV3D_LOG("display-mode hook: %u import(s) patched in %s", n, me.szExePath);
+                NV3D_LOG("user32 hook: %u import(s) patched in %s", n, me.szExePath);
             }
         } while (Module32Next(snap, &me));
     }
     CloseHandle(snap);
-    NV3D_LOG("display-mode hook installed: %u import(s) in %u module(s)",
+    NV3D_LOG("user32 hooks installed: %u import(s) in %u module(s)",
              patched_total, patched_modules);
 }
 
