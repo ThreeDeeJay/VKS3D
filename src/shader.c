@@ -12661,14 +12661,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
              dynamic_depth == VK_FORMAT_D16_UNORM_S8_UINT ||
              dynamic_depth == VK_FORMAT_D24_UNORM_S8_UINT ||
              dynamic_depth == VK_FORMAT_D32_SFLOAT_S8_UINT);
-        if (dynamic_shadow_signature)
+        if (cfg&&cfg->mono_shadow && dynamic_shadow_signature)
         {
             STEREO_LOG("PIPE_SHADOW_STEREO_SKIP p=%u viewMask=0x%x colors=%u color0=%u depth=%u stencil=%u",p,view_mask,dynamic_color_count,dynamic_color0,dynamic_depth,dynamic_stencil);
             goto PIPE_DECISION_CONTINUE;
         }
-        if (vsm_fs_role && (view_mask & 0x3) != 0)
+        if (cfg&&cfg->mono_shadow && (vsm_fs_role && (view_mask & 0x3) != 0))
         {
-            STEREO_LOG("VSM_STEREO_SKIP p=%u role=0x%x viewMask=0x%x dynamic=%u gpl=0x%x stages=%u",
+            STEREO_LOG("PIPE_VARIANCE_SHADOW_STEREO_SKIP p=%u role=0x%x viewMask=0x%x dynamic=%u gpl=0x%x stages=%u",
                 p,vsm_fs_role,view_mask,has_dynamic_rendering,gpl_flags,ci->stageCount);
             continue;
         }
