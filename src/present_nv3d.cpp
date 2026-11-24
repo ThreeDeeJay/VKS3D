@@ -608,7 +608,7 @@ static DWORD WINAPI nv3d_keeper_proc(LPVOID)
     NV3D_LOG("focus keeper started");
     while (!g_keeper_stop)
     {
-        Sleep(100);
+        Sleep(30);
 
         Nv3dFindCtx c;
         c.pid = self_pid; c.popup = NULL; c.host = NULL; c.best = 0;
@@ -637,7 +637,7 @@ static DWORD WINAPI nv3d_keeper_proc(LPVOID)
         }
 
         /* app window raised above the popup -> put the popup back on top */
-        if (now - last_raise > 300 && nv3d_popup_below_host(c.popup, c.host))
+        if (now - last_raise > 30 && nv3d_popup_below_host(c.popup, c.host))
         {
             last_raise = now;
             SetWindowPos(c.popup, HWND_TOPMOST, 0, 0, 0, 0,
@@ -709,12 +709,108 @@ struct Nv3dCreateReq
     uint32_t         app_w, app_h;
     bool             tracked;
     bool             recreate;
+    HWND             host_hwnd;   /* non-NULL = D3D9 FSE device on the game window */
 };
+
+/* ---- window mode selection: separate popup (default) or the game's own window ---- */
+
+/* "Disable fullscreen optimizations" (true exclusive fullscreen) is stored as the
+ * DISABLEDXMAXIMIZEDWINDOWEDMODE compatibility layer for the exe. */
+static bool nv3d_fso_disabled(void)
+{
+    char exe[MAX_PATH];
+    if (!GetModuleFileNameA(NULL, exe, MAX_PATH))
+        return false;
+    static const HKEY roots[2] = { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE };
+    for (int r = 0; r < 2; r++)
+    {
+        HKEY k = NULL;
+        if (RegOpenKeyExA(roots[r],
+                          "Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers",
+                          0, KEY_READ | KEY_WOW64_64KEY, &k) != ERROR_SUCCESS)
+            continue;
+        char data[1024];
+        DWORD sz = sizeof(data) - 1, type = 0;
+        LONG rc = RegQueryValueExA(k, exe, NULL, &type, (LPBYTE)data, &sz);
+        RegCloseKey(k);
+        if (rc == ERROR_SUCCESS && type == REG_SZ)
+        {
+            data[sz] = '\0';
+            if (strstr(data, "DISABLEDXMAXIMIZEDWINDOWEDMODE"))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* vks3d.ini [VKS3D] nv3d_host_window = auto (default) | 0 | 1
+ *   0    separate NV3D popup window (works with fullscreen optimizations enabled)
+ *   1    D3D9 FSE device on the game's own window (needed for true exclusive fullscreen)
+ *   auto = 1 only if "Disable fullscreen optimizations" is set for the exe, else 0 */
+static HWND nv3d_pick_host_window(StereoDevice *sd)
+{
+    char mode[24] = "auto";
+    char tmp[24];
+    if (ini_read_str(sd->global_ini, "VKS3D", "nv3d_host_window", tmp, sizeof(tmp)))
+        strcpy(mode, tmp);
+    if (ini_read_str(sd->local_ini, "VKS3D", "nv3d_host_window", tmp, sizeof(tmp)))
+        strcpy(mode, tmp);
+
+    bool fso_off = nv3d_fso_disabled();
+    bool want;
+    if (!_stricmp(mode, "1") || !_stricmp(mode, "true") || !_stricmp(mode, "yes") || !_stricmp(mode, "host"))
+        want = true;
+    else if (!_stricmp(mode, "0") || !_stricmp(mode, "false") || !_stricmp(mode, "no") || !_stricmp(mode, "popup"))
+        want = false;
+    else
+        want = fso_off;
+
+    Nv3dFindCtx c;
+    c.pid = GetCurrentProcessId(); c.popup = NULL; c.host = NULL; c.best = 0;
+    EnumWindows(nv3d_enum_cb, (LPARAM)&c);
+
+    NV3D_LOG("window mode request: nv3d_host_window='%s' fullscreen-optimizations-disabled=%d -> %s (game window %p)",
+             mode, fso_off ? 1 : 0, want ? "HOST WINDOW" : "POPUP", (void *)c.host);
+    if (want && !c.host)
+    {
+        NV3D_LOG("no game window found - using popup mode");
+        return NULL;
+    }
+    return want ? c.host : NULL;
+}
+
+/* Give a freshly started app a moment to become visible and foreground before NV3D engages. */
+static void nv3d_wait_for_app_window(void)
+{
+    const DWORD self = GetCurrentProcessId();
+    for (int i = 0; i < 60; i++)             /* up to ~3 s */
+    {
+        Nv3dFindCtx c;
+        c.pid = self; c.popup = NULL; c.host = NULL; c.best = 0;
+        EnumWindows(nv3d_enum_cb, (LPARAM)&c);
+        if (c.host && IsWindowVisible(c.host) && !IsIconic(c.host))
+        {
+            HWND fg = GetForegroundWindow();
+            DWORD fg_pid = 0;
+            if (fg) GetWindowThreadProcessId(fg, &fg_pid);
+            if (fg_pid == self || i >= 40)
+            {
+                NV3D_LOG("app window %p ready (foreground=%d) after %d ms", (void *)c.host, fg_pid == self ? 1 : 0, i * 50);
+                return;
+            }
+        }
+        Sleep(50);
+    }
+    NV3D_LOG("app window wait timed out - continuing");
+}
 
 static void nv3d_shutdown_global(void)
 {
     nv3d_stop_keeper();
     InterlockedExchange(&g_nv3d_modes_locked, 0);
+    InterlockedExchange(&g_host_mode, 0);
+    InterlockedExchange(&g_popup_mode, 0);
+    g_host_hwnd = NULL;
 
     AcquireSRWLockExclusive(&g_lock);
     NV3D::InterfaceVulkan *i = g_iface;
@@ -739,6 +835,8 @@ static DWORD WINAPI nv3d_create_proc(LPVOID arg)
 
     if (rq->recreate)
         nv3d_shutdown_global();
+
+    nv3d_wait_for_app_window();
 
     /* Undo mode changes the app/DXVK made before us, then make sure the refresh rate is
      * one 3D Vision can use (90/100/110/120/144 Hz). */
@@ -770,24 +868,38 @@ static DWORD WINAPI nv3d_create_proc(LPVOID arg)
         nullptr);
 
     NV3D::InterfaceVulkan *iface = nullptr;
-    HRESULT hr = NV3D::CreateInterfaceVulkan(rq->inst, rq->phys, rq->dev, rq->qf, &params, &iface);
-    NV3D_LOG("create: CreateInterfaceVulkan hr=0x%08x iface=%p (+%llu ms)",
-             (unsigned)hr, (void *)iface, (unsigned long long)(GetTickCount64() - t0));
-    if (FAILED(hr) || !iface)
-    {
-        InterlockedExchange(&g_state, NV3D_FAILED);
-        free(rq);
-        return 0;
-    }
-
     HANDLE mem_handle = NULL, fence_handle = NULL;
-    hr = iface->InitSharedResources(eye_w * 2, eye_h, 87 /* DXGI_FORMAT_B8G8R8A8_UNORM */,
-                                    &mem_handle, &fence_handle);
-    NV3D_LOG("create: InitSharedResources hr=0x%08x (+%llu ms)",
-             (unsigned)hr, (unsigned long long)(GetTickCount64() - t0));
-    if (FAILED(hr))
+    HRESULT hr = E_FAIL;
+    for (int attempt = 0; attempt < 2; attempt++)
     {
-        iface->Delete();
+        params.host_hwnd = rq->host_hwnd;       /* NULL = library-owned popup */
+        iface = nullptr;
+        mem_handle = fence_handle = NULL;
+        hr = NV3D::CreateInterfaceVulkan(rq->inst, rq->phys, rq->dev, rq->qf, &params, &iface);
+        NV3D_LOG("create: CreateInterfaceVulkan(%s) hr=0x%08x iface=%p (+%llu ms)",
+                 rq->host_hwnd ? "host window" : "popup",
+                 (unsigned)hr, (void *)iface, (unsigned long long)(GetTickCount64() - t0));
+        if (SUCCEEDED(hr) && iface)
+        {
+            hr = iface->InitSharedResources(eye_w * 2, eye_h, 87 /* DXGI_FORMAT_B8G8R8A8_UNORM */,
+                                            &mem_handle, &fence_handle);
+            NV3D_LOG("create: InitSharedResources hr=0x%08x (+%llu ms)",
+                     (unsigned)hr, (unsigned long long)(GetTickCount64() - t0));
+            if (SUCCEEDED(hr))
+                break;
+            iface->Delete();
+            iface = nullptr;
+        }
+        if (rq->host_hwnd)
+        {
+            NV3D_LOG("create: host-window mode failed - falling back to popup mode");
+            rq->host_hwnd = NULL;
+            continue;
+        }
+        break;
+    }
+    if (!iface || FAILED(hr))
+    {
         InterlockedExchange(&g_state, NV3D_FAILED);
         free(rq);
         return 0;
@@ -805,8 +917,13 @@ static DWORD WINAPI nv3d_create_proc(LPVOID arg)
 
     /* From now on NV3D owns the display mode. */
     nv3d_install_display_mode_hook();
+    g_host_hwnd = rq->host_hwnd;                       /* non-NULL only if host mode is really in use */
+    InterlockedExchange(&g_host_mode,  rq->host_hwnd ? 1 : 0);
+    InterlockedExchange(&g_popup_mode, rq->host_hwnd ? 0 : 1);
     InterlockedExchange(&g_nv3d_modes_locked, 1);
-    nv3d_start_keeper();
+    NV3D_LOG("window mode: %s", rq->host_hwnd ? "HOST WINDOW (D3D9 FSE on the game window)" : "POPUP (separate NV3D window)");
+    if (!rq->host_hwnd)
+        nv3d_start_keeper();
 
     InterlockedExchange(&g_state, NV3D_READY);
     NV3D_LOG("ready: shared texture %ux%u (per eye %ux%u), display mode locked (+%llu ms)",
@@ -837,6 +954,7 @@ static void nv3d_start_create(StereoDevice *sd, uint32_t width, uint32_t height,
     const bool tracked = ini_flag(sd, "nv3d_tracked_game", false);
     NV3D_LOG("focus mode: %s (nv3d_tracked_game=%d)", tracked ? "tracked" : "legacy", tracked ? 1 : 0);
     rq->tracked = tracked;
+    rq->host_hwnd = nv3d_pick_host_window(sd);
 
     VkPhysicalDeviceIDProperties id = {};
     id.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
@@ -1165,6 +1283,14 @@ extern "C" VkResult nv3d_present(
     const uint32_t eye_h = g_eye_h;
     const bool     scaled = (sc->app_width != eye_w) || (sc->app_height != eye_h);
     const bool     bgra   = is_bgra_format(sc->format);
+    static uint32_t s_last_w = 0, s_last_h = 0; static VkFormat s_last_fmt = VK_FORMAT_UNDEFINED;
+    if (s_last_w != sc->app_width || s_last_h != sc->app_height || s_last_fmt != sc->format)
+    {
+        s_last_w = sc->app_width; s_last_h = sc->app_height; s_last_fmt = sc->format;
+        NV3D_LOG("present path: app %ux%u fmt=%d -> eye %ux%u via %s",
+                 sc->app_width, sc->app_height, (int)sc->format, eye_w, eye_h,
+                 (!scaled && bgra) ? "raw copy (layer0->left, layer1->right)" : "scaling blit (layer0->left, layer1->right)");
+    }
 
     if (!bgra && !s_warned_fmt)
     {
