@@ -12998,6 +12998,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                        ci->pVertexInputState->vertexBindingDescriptionCount == 0;
         bool vs_fullscreen = false;
         bool vs_quad_fs = false;
+        bool vs_procedural_index_quad = false;
         bool vs_screen_space = false;
         bool vs_background = false;
         bool vs_procedural_sky = false;
@@ -13019,6 +13020,19 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 vm.is_view_value = calloc(vm.value_capacity,sizeof(uint8_t));
                 if (vm.value_from_matrix && vm.is_matrix_type && vm.is_matrix_ptr && vm.is_proj_value && vm.is_view_value) {
                     spv_scan(&vm);
+                    bool vs_has_vertex_index = false;
+                    for (size_t bi = 5; bi < vs_cache->words;)
+                    {
+                        uint32_t bw = vs_cache->spv[bi] >> 16;
+                        uint32_t bo = vs_cache->spv[bi] & 0xffff;
+                        if (!bw || bi + bw > vs_cache->words)
+                            break;
+                        if (bo == SpvOpDecorate && bw >= 4 &&
+                            vs_cache->spv[bi + 2] == SpvDecorationBuiltIn &&
+                            vs_cache->spv[bi + 3] == SpvBuiltInVertexIndex)
+                            vs_has_vertex_index = true;
+                        bi += bw;
+                    }
                     bool vs_has_user_output = false;
                     bool vs_has_v3_user_output = false;
                     uint32_t vs_location_id = 0;
@@ -13106,6 +13120,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     bool vs_attr_buffer_position = vs_attr_buffer && !vm.proj_found;
                     bool vs_vector_matrix_geometry = vm.has_vector_matrix_ops && vm.dot_count > 0;
                     vs_quad_fs = !vm.has_matrix_ops && !vm.has_direct_position_write && !vs_attr_buffer_position && !vs_vector_matrix_geometry;
+                    vs_procedural_index_quad = vm.exec_model == SpvExecVertex && vs_has_vertex_index && vs_has_user_output && !vs_has_v3_user_output && !vm.has_vertex_attr && !vm.has_buffer_var && !vm.has_matrix_ops && !vm.has_vector_matrix_ops && !vm.has_direct_position_write && !vm.has_v2_position_input && vm.pos_is_block && vm.location0_count == 2 && vs_quad_fs;
                     vs_fullscreen = !vm.has_matrix_ops && !vm.has_direct_position_write && vm.has_v2_position_input && !vs_attr_buffer_position && !vs_vector_matrix_geometry;
                     vs_screen_space = vm.pos_is_block && !vm.has_matrix_ops && vm.has_v2_position_input && !vm.has_emit_vertex && vm.exec_model == SpvExecVertex && !vs_vector_matrix_geometry;
                     bool vs_z_one_position = false;
@@ -14167,6 +14182,14 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             bool procedural_sky = vs_procedural_sky && sd->stereo.sky_extend;
             bool flatten_sky = vs_background && !vs_procedural_sky && sd->stereo.sky_flatten;
             bool force_sky_depth = flatten_sky || procedural_sky;
+            const char *patch_procedural_quad = stereo_getenv("VKS3D_PATCH_PROCEDURAL_QUADS");
+            bool allow_procedural_quad_patch = patch_procedural_quad && strcmp(patch_procedural_quad, "1") == 0;
+            bool procedural_quad_pipeline = vs_procedural_index_quad && has_fs && gpl_flags == 0 && has_dynamic_rendering && dynamic_color_count == 1 && dynamic_color0 != VK_FORMAT_UNDEFINED && dynamic_depth == VK_FORMAT_UNDEFINED && ci->pDepthStencilState == NULL && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pVertexInputState && ci->pVertexInputState->vertexBindingDescriptionCount == 0 && ci->pVertexInputState->vertexAttributeDescriptionCount == 0 && ci->pColorBlendState && ci->pColorBlendState->pAttachments && ci->pColorBlendState->attachmentCount == 1 && !ci->pColorBlendState->pAttachments[0].blendEnable && ci->pColorBlendState->pAttachments[0].colorWriteMask != 0;
+            if (procedural_quad_pipeline && !allow_procedural_quad_patch)
+            {
+                STEREO_LOG("PROCEDURAL_QUAD_VS_SKIP p=%u procedural=%u color=%u depth=%u blend=%u",p,vs_procedural_index_quad,dynamic_color0,dynamic_depth,ci->pColorBlendState->pAttachments[0].blendEnable);
+                continue;
+            }
             STEREO_LOG("VS_SKY_CLASS hash=%016llx background=%u procedural=%u flatten=%u quad_fs=%u matrix=%u uv_quad=%u",
                 (unsigned long long)hash_spv(e->spv, e->words),
                 vs_background,
