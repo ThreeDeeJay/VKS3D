@@ -212,7 +212,6 @@ typedef struct StereoConfig {
     bool                    shader_objects_mono;
     bool                    mono_ui;
     bool                    mono_shadow;
-    bool                    mono_fullscreen_quad;
     bool                    sky_flatten;
     bool                    sky_extend;
     StereoProjectionMode    projection;
