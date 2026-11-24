@@ -4646,25 +4646,59 @@ uint32_t var)
     /*
      * Deferred rendering attachments:
      *
-     * binding 0 = depth/position
-     * binding 1 = normal
-     * binding 2 = albedo
-     * binding 3 = specular
-     * binding 4 = SSAO/deferred intermediate
+     * set 0 binding 0 = depth/position
+     * set 0 binding 1 = normal
+     * set 0 binding 2 = albedo
+     * set 0 binding 3 = specular
+     * set 0 binding 4 = SSAO/deferred intermediate
+     *
+     * Existing array textures are material resources, not stereo
+     * render targets. Never append ViewIndex to their layer coordinates.
      */
-    bool stereo =
-        (v->binding <= 4);
+    if (v->storage != SpvStorageClassUniformConstant ||
+        v->set != 0 ||
+        v->binding > 4)
+    {
+        STEREO_LOG(
+            "FS_BINDING_SKIP_STEREO var=%u set=%u binding=%u storage=%u reason=descriptor_layout",
+            var,
+            v->set,
+            v->binding,
+            v->storage);
+        return false;
+    }
+    bool has_image = false;
+    for (uint32_t i = 0; i < s->n_img; ++i)
+    {
+        const FsImageInfo *img = &s->images[i];
+        if (img->owner_var != var)
+            continue;
+        has_image = true;
+        if (img->dim != SpvDim2D || img->arrayed != 0)
+        {
+            STEREO_LOG(
+                "FS_BINDING_SKIP_STEREO var=%u image=%u dim=%u arrayed=%u reason=existing_array",
+                var,
+                img->id,
+                img->dim,
+                img->arrayed);
+            return false;
+        }
+    }
+    bool stereo = has_image;
     STEREO_LOG(
         "FS_BINDING_RESULT "
         "var=%u "
         "storage=%u "
         "set=%u "
         "binding=%u "
+        "has_image=%u "
         "stereo=%u",
         var,
         v->storage,
         v->set,
         v->binding,
+        has_image,
         stereo);
     return stereo;
 }
