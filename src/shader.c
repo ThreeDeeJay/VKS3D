@@ -10350,15 +10350,15 @@ bool spirv_patch_stereo_fs(
             memcpy(w, &in[i], sizeof(w));
             uint32_t sampled_type = 0;
             uint32_t sampled_image_type = 0;
-            for (size_t scan = 5; scan < in_c;)
+            for (size_t scan = 5; scan < ob.n;)
             {
-                uint32_t sw = in[scan] >> 16;
-                uint32_t sop = in[scan] & 0xffffu;
-                if (sw == 0 || scan + sw > in_c)
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > ob.n)
                     break;
-                if (sop == SpvOpLoad && sw >= 4 && in[scan + 2] == in[i + 3])
+                if (sop == SpvOpLoad && sw >= 4 && ob.w[scan + 2] == in[i + 3])
                 {
-                    sampled_type = in[scan + 1];
+                    sampled_type = ob.w[scan + 1];
                     break;
                 }
                 scan += sw;
