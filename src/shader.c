@@ -14182,10 +14182,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             bool procedural_sky = vs_procedural_sky && sd->stereo.sky_extend;
             bool flatten_sky = vs_background && !vs_procedural_sky && sd->stereo.sky_flatten;
             bool force_sky_depth = flatten_sky || procedural_sky;
-            const char *patch_procedural_quad = stereo_getenv("VKS3D_PATCH_PROCEDURAL_QUADS");
-            bool allow_procedural_quad_patch = patch_procedural_quad && strcmp(patch_procedural_quad, "1") == 0;
             bool procedural_quad_pipeline = vs_procedural_index_quad && has_fs && gpl_flags == 0 && has_dynamic_rendering && dynamic_color_count == 1 && dynamic_color0 != VK_FORMAT_UNDEFINED && dynamic_depth == VK_FORMAT_UNDEFINED && ci->pDepthStencilState == NULL && ci->pInputAssemblyState && ci->pInputAssemblyState->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST && ci->pVertexInputState && ci->pVertexInputState->vertexBindingDescriptionCount == 0 && ci->pVertexInputState->vertexAttributeDescriptionCount == 0 && ci->pColorBlendState && ci->pColorBlendState->pAttachments && ci->pColorBlendState->attachmentCount == 1 && !ci->pColorBlendState->pAttachments[0].blendEnable && ci->pColorBlendState->pAttachments[0].colorWriteMask != 0;
-            if (procedural_quad_pipeline && !allow_procedural_quad_patch)
+            if (sd->stereo.mono_fullscreen_quad && procedural_quad_pipeline)
             {
                 STEREO_LOG("PROCEDURAL_QUAD_VS_SKIP p=%u procedural=%u color=%u depth=%u blend=%u",p,vs_procedural_index_quad,dynamic_color0,dynamic_depth,ci->pColorBlendState->pAttachments[0].blendEnable);
                 continue;
