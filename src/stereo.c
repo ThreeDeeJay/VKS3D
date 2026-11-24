@@ -238,6 +238,7 @@ void stereo_config_init(StereoConfig *cfg)
     /* Skip certain types of shaders. */
     cfg->mono_ui = cfg_bool("mono_ui", true);
     cfg->mono_shadow = cfg_bool("mono_shadow", true);
+    cfg->mono_shadow = cfg_bool("mono_fullscreen_quad", true);
 
     /* Push sky to far plane. */
     cfg->sky_flatten = cfg_bool("sky_flatten", true);
@@ -262,7 +263,7 @@ void stereo_config_init(StereoConfig *cfg)
     stereo_config_compute_offsets(cfg);
     STEREO_LOG(
         "Stereo config: enabled=%d separation=%.4f convergence=%.4f "
-        "projection=%s flip=%d mono_ui=%d mono_shadow=%d sky_flatten=%d sky_extend=%d mode=%d",
+        "projection=%s flip=%d mono_ui=%d mono_shadow=%d mono_fullscreen_quad=%d sky_flatten=%d sky_extend=%d mode=%d",
         cfg->enabled,
         cfg->separation,
         cfg->convergence,
@@ -271,6 +272,7 @@ void stereo_config_init(StereoConfig *cfg)
         cfg->flip_eyes,
         cfg->mono_ui,
         cfg->mono_shadow,
+        cfg->mono_fullscreen_quad,
         cfg->sky_flatten,
         cfg->sky_extend,
         (int)cfg->present_mode);
