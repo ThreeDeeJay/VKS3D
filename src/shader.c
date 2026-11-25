@@ -9049,8 +9049,7 @@ bool spirv_patch_stereo_fs(
                     bool target_is_runtime_array =
                     (variable_target_type == image->runtime_array_type &&
                         image->replacement_runtime_array_type);
-                    if (!owner_match &&
-                        variable_target_type != image->id)
+                    if (!owner_match)
                     {
                         STEREO_LOG(
                             "FS_VAR_OWNER_REJECT "
