@@ -10813,7 +10813,7 @@ bool spirv_patch_stereo_fs(
             int img_idx = -1;
             for (uint32_t ii = 0; ii < s.n_img; ++ii)
             {
-                if (!image_owner_known || s.images[ii].owner_var != image_owner)
+                if (!image_owner_known)
                     continue;
                 if (!s.images[ii].stereo)
                     continue;
