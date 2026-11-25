@@ -11250,7 +11250,7 @@ bool spirv_patch_stereo_fs(
                 fetch_image_type);
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
-                if (s.images[img].owner_var != descriptor_var)
+                if (!image_known)
                     continue;
                 if (!s.images[img].stereo)
                     continue;
