@@ -11139,20 +11139,20 @@ bool spirv_patch_stereo_fs(
             uint32_t fetch_image_type = 0;
             uint32_t fetch_def_opcode = 0;
             uint32_t fetch_def_type = 0;
-            for (size_t scan = 5; scan < in_c;)
+            for (size_t scan = 5; scan < ob.n;)
             {
-                uint32_t sw = in[scan] >> 16;
-                uint32_t sop = in[scan] & 0xffffu;
-                if (sw == 0 || scan + sw > in_c)
+                uint32_t sw = ob.w[scan] >> 16;
+                uint32_t sop = ob.w[scan] & 0xffffu;
+                if (sw == 0 || scan + sw > ob.n)
                     break;
                 bool has_result_type =
                 (sop == SpvOpLoad && sw >= 4) ||
                 (sop == SpvOpImage && sw >= 4) ||
                 (sop == SpvOpSampledImage && sw >= 5);
-                if (has_result_type && in[scan + 2] == in[i + 3])
+                if (has_result_type && ob.w[scan + 2] == in[i + 3])
                 {
                     fetch_def_opcode = sop;
-                    fetch_def_type = in[scan + 1];
+                    fetch_def_type = ob.w[scan + 1];
                     break;
                 }
                 scan += sw;
@@ -11175,17 +11175,17 @@ bool spirv_patch_stereo_fs(
                 else if (fetch_def_opcode == SpvOpSampledImage)
                 {
                     uint32_t sampled_image_type = fetch_def_type;
-                    for (size_t scan = 5; scan < in_c;)
+                    for (size_t scan = 5; scan < ob.n;)
                     {
-                        uint32_t sw = in[scan] >> 16;
-                        uint32_t sop = in[scan] & 0xffffu;
-                        if (sw == 0 || scan + sw > in_c)
+                        uint32_t sw = ob.w[scan] >> 16;
+                        uint32_t sop = ob.w[scan] & 0xffffu;
+                        if (sw == 0 || scan + sw > ob.n)
                             break;
                         if (sop == SpvOpTypeSampledImage &&
                             sw >= 3 &&
-                            in[scan + 1] == sampled_image_type)
+                            ob.w[scan + 1] == sampled_image_type)
                         {
-                            fetch_image_type = in[scan + 2];
+                            fetch_image_type = ob.w[scan + 2];
                             break;
                         }
                         scan += sw;
