@@ -11248,6 +11248,7 @@ bool spirv_patch_stereo_fs(
                 "imageType=%u",
                 in[i+3],
                 fetch_image_type);
+            bool fetch_stereo_attachment = fs_binding_is_stereo_attachment(&s, descriptor_var);
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
                 if (!image_known)
@@ -11257,6 +11258,9 @@ bool spirv_patch_stereo_fs(
                 if (!s.images[img].replacement_type)
                     continue;
                 if (s.images[img].replacement_type != fetch_image_type)
+                    continue;
+                if (s.images[img].owner_var != descriptor_var &&
+                    !(s.images[img].owner_var == UINT32_MAX && fetch_stereo_attachment))
                     continue;
                 image_type_rewritten = true;
                 STEREO_LOG(
@@ -11273,7 +11277,6 @@ bool spirv_patch_stereo_fs(
                     s.images[img].replacement_type);
                 break;
             }
-            bool fetch_stereo_attachment = fs_binding_is_stereo_attachment(&s, descriptor_var);
             if (!fetch_stereo_attachment && !image_type_rewritten)
             {
                 STEREO_LOG(
