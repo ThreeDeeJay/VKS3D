@@ -4513,6 +4513,47 @@ fs_var_index(
     return -1;
 }
 
+static uint32_t
+fs_descriptor_image_type(
+    const uint32_t *spv,
+    size_t word_count,
+    uint32_t type_id)
+{
+    for (uint32_t depth = 0; depth < 8; ++depth)
+    {
+        bool found = false;
+        for (size_t i = 5; i < word_count;)
+        {
+            uint32_t wc = spv[i] >> 16;
+            uint32_t op = spv[i] & 0xffffu;
+            if (!wc || i + wc > word_count)
+                break;
+            if (wc >= 2 && spv[i + 1] == type_id)
+            {
+                if (op == SpvOpTypeImage)
+                    return type_id;
+                if (op == SpvOpTypePointer && wc >= 4)
+                    type_id = spv[i + 3];
+                else if ((op == SpvOpTypeSampledImage ||
+                          op == SpvOpTypeArray ||
+                          op == SpvOpTypeRuntimeArray) && wc >= 3)
+                    type_id = spv[i + 2];
+                else
+                {
+                    i += wc;
+                    continue;
+                }
+                found = true;
+                break;
+            }
+            i += wc;
+        }
+        if (!found)
+            return 0;
+    }
+    return 0;
+}
+
 static void
 fs_dump_descriptor_chain(
     const FsScan *s,
@@ -11249,11 +11290,22 @@ bool spirv_patch_stereo_fs(
                 in[i+3],
                 fetch_image_type);
             bool fetch_stereo_attachment = fs_binding_is_stereo_attachment(&s, descriptor_var);
+            uint32_t descriptor_image_type = (vi >= 0) ? fs_descriptor_image_type(in, in_c, s.vars[vi].type) : 0;
+            STEREO_LOG(
+                "FS_FETCH_DESCRIPTOR_IMAGE_TYPE image=%u descriptor=%u originalType=%u",
+                in[i+3],
+                descriptor_var,
+                descriptor_image_type);
             for (uint32_t img = 0; img < s.n_img; ++img)
             {
-                if (!image_known)
+                if (!image_known || !descriptor_image_type)
                     continue;
                 if (!s.images[img].stereo)
+                    continue;
+                if (s.images[img].id != descriptor_image_type)
+                    continue;
+                if (s.images[img].owner_var != UINT32_MAX &&
+                    s.images[img].owner_var != descriptor_var)
                     continue;
                 if (!s.images[img].replacement_type)
                     continue;
