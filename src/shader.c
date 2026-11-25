@@ -7655,7 +7655,14 @@ bool spirv_patch_stereo_fs(
             bool sampled_type_reusable = s.images[img].sampled != 2 && s.images[img].sampled_type_id != 0;
             for (uint32_t other = 0; other < s.n_img; ++other)
             {
-                if (other == img || !s.images[other].patchable || s.images[other].sampled_type_id != s.images[img].sampled_type_id)
+                if (other == img || s.images[other].sampled_type_id != s.images[img].sampled_type_id)
+                    continue;
+                if (!s.images[other].stereo)
+                {
+                    sampled_type_reusable = false;
+                    break;
+                }
+                if (!s.images[other].patchable)
                     continue;
                 if (s.images[other].dim != s.images[img].dim || s.images[other].depth != s.images[img].depth || s.images[other].arrayed != s.images[img].arrayed || s.images[other].ms != s.images[img].ms || s.images[other].sampled != s.images[img].sampled || s.images[other].format != s.images[img].format)
                 {
@@ -8125,6 +8132,7 @@ bool spirv_patch_stereo_fs(
                     scan += sw;
                 }
                 if (!replacement_sampled_exists && compatible_image_type &&
+                    image->replacement_sampled_type == sampled_id &&
                     (replacement_pointer_emitted || pointer_uses_sampled_type))
                 {
                     sampled_words[2] = replacement_image;
@@ -8132,7 +8140,7 @@ bool spirv_patch_stereo_fs(
                 }
                 else
                 {
-                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_KEEP sampled=%u targetImage=%u existingSampled=%u compatible=%u pointerEmitted=%u", sampled_id, replacement_image, existing_sampled_id, compatible_image_type, replacement_pointer_emitted);
+                    STEREO_LOG("FS_PATCH_SAMPLED_IMAGE_KEEP sampled=%u targetImage=%u existingSampled=%u compatible=%u pointerEmitted=%u replacementSampled=%u", sampled_id, replacement_image, existing_sampled_id, compatible_image_type, replacement_pointer_emitted, image->replacement_sampled_type);
                 }
                 break;
             }
