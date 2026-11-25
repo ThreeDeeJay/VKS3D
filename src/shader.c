@@ -9032,8 +9032,27 @@ bool spirv_patch_stereo_fs(
                     bool target_is_runtime_array =
                     (variable_target_type == image->runtime_array_type &&
                         image->replacement_runtime_array_type);
-                    if (!owner_match)
+                    if (!owner_match &&
+                        (variable_target_type == image->id ||
+                            target_is_sampled ||
+                            target_is_runtime_array))
+                    {
+                        STEREO_LOG(
+                            "FS_VAR_OWNER_REJECT "
+                            "var=%u "
+                            "owner=%u "
+                            "targetType=%u "
+                            "image=%u "
+                            "sampledType=%u "
+                            "replacementSampled=%u",
+                            variable_id,
+                            image->owner_var,
+                            variable_target_type,
+                            image->id,
+                            image->sampled_type_id,
+                            image->replacement_sampled_type);
                         continue;
+                    }
                     if (variable_target_type != 0 &&
                         !target_is_image &&
                         !target_is_sampled &&
@@ -11144,6 +11163,23 @@ bool spirv_patch_stereo_fs(
                     }
                     scan += sw;
                 }
+            }
+            if (matching_sampled_type != in[i+1])
+            {
+                STEREO_LOG(
+                    "FS_SAMPLED_IMAGE_TYPE "
+                    "result=%u "
+                    "oldType=%u "
+                    "image=%u "
+                    "imageType=%u "
+                    "sampler=%u "
+                    "matchingType=%u",
+                    in[i+2],
+                    in[i+1],
+                    image_id,
+                    image_value_type,
+                    in[i+4],
+                    matching_sampled_type);
             }
             if (matching_sampled_type)
             {
