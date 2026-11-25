@@ -5518,7 +5518,8 @@ fs_scan_type_instruction(
                     s->images[img].sampled_type,
                     s->images[img].sampled_type_id,
                     ins[3]);
-                if (s->images[img].sampled_type_id == ins[3])
+                if (s->images[img].id == ins[3] ||
+                    s->images[img].sampled_type_id == ins[3])
                 {
                     s->images[img].pointer_type = ins[1];
                     STEREO_LOG(
