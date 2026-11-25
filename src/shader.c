@@ -13328,7 +13328,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     mono_ui_alpha_blend=ba->blendEnable&&ba->colorWriteMask!=0&&ba->srcColorBlendFactor==VK_BLEND_FACTOR_SRC_ALPHA&&ba->dstColorBlendFactor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
                 }
                 bool mono_ui_shared_screen_pipeline=vs_screen_space&&ci->pVertexInputState&&ci->pVertexInputState->vertexBindingDescriptionCount==1&&ci->pVertexInputState->vertexAttributeDescriptionCount==13;
-                bool mono_ui_shared_screen_candidate=sd->stereo.mono_ui&&mono_ui_shared_screen_pipeline&&mono_ui_depth_disabled&&mono_ui_alpha_blend;
+                bool mono_ui_shared_screen_candidate=sd->stereo.mono_ui&&mono_ui_shared_screen_pipeline&&mono_ui_depth_disabled;
                 bool mono_ui_passthrough_pipeline=ci->pDepthStencilState&&!ci->pDepthStencilState->depthTestEnable&&ci->pVertexInputState&&ci->pVertexInputState->vertexBindingDescriptionCount==1&&ci->pVertexInputState->vertexAttributeDescriptionCount==3&&ci->pInputAssemblyState&&ci->pInputAssemblyState->topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST&&mono_ui_alpha_blend;
                 bool mono_ui_passthrough_vs=vm.exec_model==SpvExecVertex&&vm.pos_is_block&&vm.has_v2_position_input&&!vm.has_matrix_ops&&!vm.has_vector_matrix_ops&&!vm.proj_found&&vm.dot_count==0&&!vm.has_direct_position_write&&!vm.has_emit_vertex&&vm.screen_has_zw_use;
                 bool mono_ui_always_depth_attrs=false;
