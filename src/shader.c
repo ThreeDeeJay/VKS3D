@@ -11392,6 +11392,9 @@ bool spirv_patch_stereo_fs(
                     continue;
                 if (s.images[img].replacement_type != fetch_image_type)
                     continue;
+                if (s.images[img].owner_var != descriptor_var &&
+                    !(s.images[img].owner_var == UINT32_MAX && fetch_stereo_attachment))
+                    continue;
                 image_type_rewritten = true;
                 STEREO_LOG(
                     "FS_FETCH_REWRITTEN_IMAGE "
