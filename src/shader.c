@@ -9033,9 +9033,7 @@ bool spirv_patch_stereo_fs(
                     (variable_target_type == image->runtime_array_type &&
                         image->replacement_runtime_array_type);
                     if (!owner_match &&
-                        (variable_target_type == image->id ||
-                            target_is_sampled ||
-                            target_is_runtime_array))
+                        variable_target_type != image->id)
                     {
                         STEREO_LOG(
                             "FS_VAR_OWNER_REJECT "
@@ -11162,6 +11160,35 @@ bool spirv_patch_stereo_fs(
                         break;
                     }
                     scan += sw;
+                }
+            }
+            if (!matching_sampled_type && in[i+1] < id_bound)
+            {
+                uint32_t original_image_type = 0;
+                for (uint32_t img = 0; img < s.n_img; ++img)
+                {
+                    if (s.images[img].replacement_type == image_value_type ||
+                        s.images[img].replacement_runtime_array_type == image_value_type)
+                    {
+                        original_image_type = s.images[img].id;
+                        break;
+                    }
+                }
+                if (original_image_type)
+                {
+                    for (size_t scan = 5; scan < in_c;)
+                    {
+                        uint32_t sw = in[scan] >> 16;
+                        uint32_t sop = in[scan] & 0xffffu;
+                        if (!sw || scan + sw > in_c)
+                            break;
+                        if (sop == SpvOpTypeSampledImage && sw >= 3 && in[scan+2] == original_image_type)
+                        {
+                            matching_sampled_type = in[scan+1];
+                            break;
+                        }
+                        scan += sw;
+                    }
                 }
             }
             if (matching_sampled_type != in[i+1])
