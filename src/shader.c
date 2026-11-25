@@ -9032,22 +9032,13 @@ bool spirv_patch_stereo_fs(
                     bool target_is_runtime_array =
                     (variable_target_type == image->runtime_array_type &&
                         image->replacement_runtime_array_type);
-                    if (owner_match)
-                    {
-                        if (variable_target_type != 0 &&
-                            !target_is_image &&
-                            !target_is_sampled &&
-                            !target_is_runtime_array)
-                            continue;
-                    }
-                    else
-                    {
-                        if (variable_target_type == 0 ||
-                            (!target_is_image &&
-                                !target_is_sampled &&
-                                !target_is_runtime_array))
-                            continue;
-                    }
+                    if (!owner_match)
+                        continue;
+                    if (variable_target_type != 0 &&
+                        !target_is_image &&
+                        !target_is_sampled &&
+                        !target_is_runtime_array)
+                        continue;
                     uint32_t replacement_pointer =
                     target_is_runtime_array ?
                     image->replacement_descriptor_pointer_type :
@@ -9228,7 +9219,7 @@ bool spirv_patch_stereo_fs(
                             if (sop == SpvOpTypePointer &&
                                 sw >= 4 &&
                                 in[scan + 1] == replacement_pointer &&
-                                in[scan + 2] == SpvStorageClassUniformConstant &&
+                                in[scan + 2] == in[i + 3] &&
                                 in[scan + 3] == replacement_target)
                             {
                                 sb_push_n(&ob, &in[scan], sw);
@@ -9236,6 +9227,25 @@ bool spirv_patch_stereo_fs(
                                 break;
                             }
                             scan += sw;
+                        }
+                        if (!emitted_type[replacement_pointer])
+                        {
+                            uint32_t pointer_words[4] = {
+                                (4u << 16) | SpvOpTypePointer,
+                                replacement_pointer,
+                                in[i + 3],
+                                replacement_target
+                            };
+                            sb_push_n(&ob, pointer_words, 4);
+                            emitted_type[replacement_pointer] = true;
+                            STEREO_LOG(
+                                "FS_VAR_EMIT_POINTER "
+                                "var=%u "
+                                "pointer=%u "
+                                "target=%u",
+                                variable_id,
+                                replacement_pointer,
+                                replacement_target);
                         }
                     }
                     if (!emitted_type[replacement_pointer])
