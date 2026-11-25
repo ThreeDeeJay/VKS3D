@@ -10670,28 +10670,9 @@ bool spirv_patch_stereo_fs(
                     owner);
                 for (uint32_t img = 0; img < s.n_img; ++img)
                 {
-                    if (s.images[img].dim != SpvDim2D)
-                        continue;
-                    if (s.images[img].id != w[1])
-                        continue;
-                    if (!s.images[img].replacement_type)
-                        continue;
-                    STEREO_LOG(
-                        "FS_PATCH_IMAGE_TYPE_REWRITE "
-                        "result=%u "
-                        "oldType=%u "
-                        "newType=%u "
-                        "image=%u",
-                        w[2],
-                        w[1],
-                        s.images[img].replacement_type,
-                        s.images[img].id);
-                    w[1] = s.images[img].replacement_type;
-                    break;
-                }
-                for (uint32_t img = 0; img < s.n_img; ++img)
-                {
                     if (s.images[img].owner_var != owner)
+                        continue;
+                    if (!s.images[img].stereo)
                         continue;
                     if (s.images[img].dim != SpvDim2D)
                         continue;
@@ -10728,6 +10709,8 @@ bool spirv_patch_stereo_fs(
                 for (uint32_t img = 0; img < s.n_img; ++img)
                 {
                     if (s.images[img].owner_var != owner)
+                        continue;
+                    if (!s.images[img].stereo)
                         continue;
                     if (s.images[img].dim != SpvDim2D)
                         continue;
