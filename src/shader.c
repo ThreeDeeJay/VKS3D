@@ -7022,6 +7022,14 @@ fs_prescan(
         bool found = false;
         for (uint32_t v = 0; v < s->n_var; ++v)
         {
+            STEREO_LOG(
+                "FS_IMAGE_OWNER_TEST image=%u var=%u varType=%u pointerType=%u descriptorPointerType=%u sampledType=%u",
+                src->id,
+                s->vars[v].id,
+                s->vars[v].type,
+                src->pointer_type,
+                src->descriptor_pointer_type,
+                src->sampled_type_id);
             if ((src->pointer_type &&
                 s->vars[v].type == src->pointer_type) ||
                 (src->descriptor_pointer_type &&
@@ -7039,6 +7047,14 @@ fs_prescan(
                 dst->owner_var = s->vars[v].id;
                 dst->binding   = s->vars[v].binding;
                 dst->set       = s->vars[v].set;
+                STEREO_LOG(
+                    "FS_IMAGE_OWNER_CLASSIFY image=%u owner=%u set=%u binding=%u dim=%u arrayed=%u",
+                    dst->id,
+                    dst->owner_var,
+                    dst->set,
+                    dst->binding,
+                    dst->dim,
+                    dst->arrayed);
                 dst->stereo =
                     fs_binding_is_stereo_attachment(
                         s,
