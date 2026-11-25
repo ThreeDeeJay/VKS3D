@@ -650,6 +650,82 @@ static DWORD WINAPI nv3d_keeper_proc(LPVOID)
     return 0;
 }
 
+/* ------------------------------------------------------------------------- */
+/* Host-window mode keeper                                                   */
+/*                                                                           */
+/* In host mode NV3D-Lib builds the D3D9 FSE device on the GAME's window and */
+/* then makes that window click-through (WS_EX_TRANSPARENT|WS_EX_LAYERED),   */
+/* which is right for a separate popup but wrong for the game itself:        */
+/* clicks fall through to the windows behind, the window is never activated  */
+/* (it also makes the library's own foreground grab a no-op) and, in true    */
+/* exclusive fullscreen, the click moves focus away and the device is lost.  */
+/* So: keep the click-through styles off the game window and give it         */
+/* foreground when NV3D comes up.                                            */
+/* ------------------------------------------------------------------------- */
+
+static DWORD WINAPI nv3d_host_keeper_proc(LPVOID)
+{
+    unsigned strip_logs = 0, focus_tries = 0;
+    bool focused = false;
+
+    NV3D_LOG("host keeper started (window %p)", (void *)g_host_hwnd);
+    while (!g_keeper_stop)
+    {
+        Sleep(50);
+        HWND host = g_host_hwnd;
+        if (!host || !IsWindow(host))
+            continue;
+
+        LONG_PTR ex = GetWindowLongPtrW(host, GWL_EXSTYLE);
+        if (ex & (WS_EX_TRANSPARENT | WS_EX_LAYERED))
+        {
+            SetWindowLongPtrW(host, GWL_EXSTYLE, ex & ~(LONG_PTR)(WS_EX_TRANSPARENT | WS_EX_LAYERED));
+            SetWindowPos(host, NULL, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            if (strip_logs++ < 6)
+                NV3D_LOG("host keeper: removed click-through from game window %p (exstyle 0x%08lx -> 0x%08lx)",
+                         (void *)host, (unsigned long)ex,
+                         (unsigned long)(ex & ~(LONG_PTR)(WS_EX_TRANSPARENT | WS_EX_LAYERED)));
+        }
+
+        /* bring the game window to the foreground once NV3D is up (a few seconds of tries) */
+        if (!focused && focus_tries < 100)
+        {
+            HWND fg = GetForegroundWindow();
+            if (fg == host)
+            {
+                focused = true;
+                NV3D_LOG("host keeper: game window %p is foreground", (void *)host);
+            }
+            else
+            {
+                DWORD fg_pid = 0;
+                if (fg) GetWindowThreadProcessId(fg, &fg_pid);
+                focus_tries++;
+                if (IsIconic(host))
+                    ShowWindow(host, SW_RESTORE);
+                BOOL ok = SetForegroundWindow(host);
+                if (!ok || GetForegroundWindow() != host)
+                    SwitchToThisWindow(host, TRUE);
+                if (focus_tries <= 3)
+                    NV3D_LOG("host keeper: foreground request #%u for %p (was %p pid %lu) -> %s",
+                             focus_tries, (void *)host, (void *)fg, (unsigned long)fg_pid,
+                             GetForegroundWindow() == host ? "ok" : "pending");
+            }
+        }
+    }
+    NV3D_LOG("host keeper stopped");
+    return 0;
+}
+
+static void nv3d_start_host_keeper(void)
+{
+    if (g_keeper_thread)
+        return;
+    g_keeper_stop = 0;
+    g_keeper_thread = CreateThread(NULL, 0, nv3d_host_keeper_proc, NULL, 0, NULL);
+}
+
 static void nv3d_start_keeper(void)
 {
     if (g_keeper_thread)
@@ -924,6 +1000,8 @@ static DWORD WINAPI nv3d_create_proc(LPVOID arg)
     NV3D_LOG("window mode: %s", rq->host_hwnd ? "HOST WINDOW (D3D9 FSE on the game window)" : "POPUP (separate NV3D window)");
     if (!rq->host_hwnd)
         nv3d_start_keeper();
+    else
+        nv3d_start_host_keeper();
 
     InterlockedExchange(&g_state, NV3D_READY);
     NV3D_LOG("ready: shared texture %ux%u (per eye %ux%u), display mode locked (+%llu ms)",
