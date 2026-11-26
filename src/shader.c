@@ -12752,7 +12752,6 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
     if (!sd->stereo.enabled)
         return sd->real.CreateGraphicsPipelines(sd->real_device,pc,N,pCI,pAlloc,pP);
     VkShaderModule                   *tmp_mod = calloc(N, sizeof(VkShaderModule));
-    VkShaderModule                   *tmp_fs_mod = calloc(N, sizeof(VkShaderModule));
     VkPipelineShaderStageCreateInfo **tst     = calloc(N, sizeof(void*));
     VkGraphicsPipelineCreateInfo     *infos   = malloc(N * sizeof(*infos));
     StereoDebugCtx                   *dbg_out = calloc(N, sizeof(*dbg_out));
@@ -12763,8 +12762,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         dbg_out[i].proj_member_mask     = UINT32_MAX;
         dbg_out[i].proj_var             = UINT32_MAX;
     }
-    if (!tmp_mod||!tmp_fs_mod||!tst||!infos) {
-        free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+    if (!tmp_mod||!tst||!infos) {
+        free(tmp_mod); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     memcpy(infos, pCI, N * sizeof(*infos));
@@ -13838,8 +13837,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (stereo_stage_inline_spv(&st[fs_s]))
             st[fs_s].pNext = NULL;
             infos[p].pStages = st;
-            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp);
-            tmp_fs_mod[p] = tmp;
+            STEREO_LOG("FS_PATCH_MODULE_CREATED p=%u module=%p",p,(void *)tmp_mod[p]);
+            tmp_mod[p] = tmp;
             tst[p] = st;
             infos[p].renderPass = pipeline_rp;
             STEREO_LOG("FS_STAGE_INSTALL p=%u fs_s=%u orig=%p patched=%p infos_stages=%u infos_pStages=%p st=%p",(unsigned)p,fs_s,(void*)ci->pStages[fs_s].module,(void*)infos[p].pStages[fs_s].module,infos[p].stageCount,(void*)infos[p].pStages,(void*)st);
@@ -13855,7 +13854,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 p,
                 sc2);
             STEREO_LOG(
-                "SHADER_PATH_FS p=%u patched_fs=1 has_vs=%u vs_stage=%u",
+                "SHADER_PATH_FINAL p=%u path=FS patched_fs=1 has_vs=%u vs_stage=%u",
                 p,
                 (unsigned)has_vs,
                 vs_stage);
@@ -14478,12 +14477,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             if (mr!=VK_SUCCESS) {
                 STEREO_ERR("Pipe %u PathB: VS module err %d",p,mr); continue; }
             uint32_t sc=ci->stageCount;
-            VkPipelineShaderStageCreateInfo *st=tst[p];
-            if (!st) {
-            st=malloc(sc*sizeof(*st));
+            VkPipelineShaderStageCreateInfo *st=malloc(sc*sizeof(*st));
             if (!st) { sd->real.DestroyShaderModule(sd->real_device,tmp,NULL); continue; }
             memcpy(st,ci->pStages,sc*sizeof(*st));
-            }
             st[vs_stage].module = tmp;
             if (stereo_stage_inline_spv(&st[vs_stage]))
             st[vs_stage].pNext = NULL;
@@ -14606,8 +14602,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 pst->stage,
                 (void *)pst->module,
                 (unsigned)(
-                    (pst->module == tmp_mod[p] && tmp_mod[p] != VK_NULL_HANDLE) ||
-                    (pst->module == tmp_fs_mod[p] && tmp_fs_mod[p] != VK_NULL_HANDLE)),
+                    tmp_mod[p] != VK_NULL_HANDLE &&
+                    pst->module == tmp_mod[p]),
                 has_identifier);
         }
     }
@@ -14659,11 +14655,9 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
         {
             if (tmp_mod[p])
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
-            if (tmp_fs_mod[p])
-                sd->real.DestroyShaderModule(sd->real_device,tmp_fs_mod[p],NULL);
             free(tst[p]);
         }
-        free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+        free(tmp_mod); free(tst); free(infos);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     for (uint32_t p=0;p<N;p++)
@@ -14758,8 +14752,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                     {
                         info->fs_module = st->module;
                         info->patched_fs =
-                            (tmp_fs_mod[p] != VK_NULL_HANDLE &&
-                             st->module == tmp_fs_mod[p]);
+                            (tmp_mod[p] != VK_NULL_HANDLE &&
+                             st->module == tmp_mod[p]);
                         /*
                          * Always probe the fragment shader too.
                          * VS/TES may already have filled proj info, but FS can carry
@@ -14797,16 +14791,10 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             else
                 sd->real.DestroyShaderModule(sd->real_device,tmp_mod[p],NULL);
         }
-        if (tmp_fs_mod[p]) {
-            if (sd->tmp_module_count<MAX_TMP_MODULES)
-                sd->tmp_modules[sd->tmp_module_count++]=tmp_fs_mod[p];
-            else
-                sd->real.DestroyShaderModule(sd->real_device,tmp_fs_mod[p],NULL);
-        }
         free(tst[p]);
     }
     free(original_vs_hash);
-    free(tmp_mod); free(tmp_fs_mod); free(tst); free(infos);
+    free(tmp_mod); free(tst); free(infos);
     return res;
 }
 
