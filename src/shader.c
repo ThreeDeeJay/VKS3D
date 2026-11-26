@@ -5518,8 +5518,7 @@ fs_scan_type_instruction(
                     s->images[img].sampled_type,
                     s->images[img].sampled_type_id,
                     ins[3]);
-                if (s->images[img].id == ins[3] ||
-                    s->images[img].sampled_type_id == ins[3])
+                if (s->images[img].sampled_type_id == ins[3])
                 {
                     s->images[img].pointer_type = ins[1];
                     STEREO_LOG(
@@ -9049,7 +9048,8 @@ bool spirv_patch_stereo_fs(
                     bool target_is_runtime_array =
                     (variable_target_type == image->runtime_array_type &&
                         image->replacement_runtime_array_type);
-                    if (!owner_match)
+                    if (!owner_match &&
+                        variable_target_type != image->id)
                     {
                         STEREO_LOG(
                             "FS_VAR_OWNER_REJECT "
