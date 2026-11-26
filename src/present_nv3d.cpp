@@ -663,6 +663,35 @@ static DWORD WINAPI nv3d_keeper_proc(LPVOID)
 /* foreground when NV3D comes up.                                            */
 /* ------------------------------------------------------------------------- */
 
+/* NV3D-Lib subclasses the window it renders on and, while its "click-through" flag is set,
+ * answers WM_NCHITTEST with HTTRANSPARENT.  On the game's own window that sends every mouse
+ * click to the windows behind it.  We subclass OUTSIDE the library's proc and never let that
+ * answer through: hit-testing falls back to the default (client area = HTCLIENT). */
+static WNDPROC g_host_prev_proc   = NULL;
+static HWND    g_host_subclassed  = NULL;
+
+static LRESULT CALLBACK nv3d_host_wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+{
+    if (msg == WM_NCHITTEST)
+        return DefWindowProcW(h, msg, wp, lp);
+    return CallWindowProcW(g_host_prev_proc, h, msg, wp, lp);
+}
+
+static void nv3d_install_host_subclass(HWND host)
+{
+    if (g_host_subclassed == host)
+        return;
+    WNDPROC cur = (WNDPROC)GetWindowLongPtrW(host, GWLP_WNDPROC);
+    if (!cur || cur == nv3d_host_wndproc)
+        return;
+    g_host_prev_proc = cur;
+    SetLastError(0);
+    WNDPROC old = (WNDPROC)SetWindowLongPtrW(host, GWLP_WNDPROC, (LONG_PTR)nv3d_host_wndproc);
+    g_host_subclassed = host;
+    NV3D_LOG("host keeper: hit-test override installed on game window %p (prev proc %p, old %p, err %lu)",
+             (void *)host, (void *)cur, (void *)old, (unsigned long)GetLastError());
+}
+
 static DWORD WINAPI nv3d_host_keeper_proc(LPVOID)
 {
     unsigned strip_logs = 0, focus_tries = 0;
@@ -675,6 +704,8 @@ static DWORD WINAPI nv3d_host_keeper_proc(LPVOID)
         HWND host = g_host_hwnd;
         if (!host || !IsWindow(host))
             continue;
+
+        nv3d_install_host_subclass(host);
 
         LONG_PTR ex = GetWindowLongPtrW(host, GWL_EXSTYLE);
         if (ex & (WS_EX_TRANSPARENT | WS_EX_LAYERED))
@@ -887,6 +918,7 @@ static void nv3d_shutdown_global(void)
     InterlockedExchange(&g_host_mode, 0);
     InterlockedExchange(&g_popup_mode, 0);
     g_host_hwnd = NULL;
+    g_host_subclassed = NULL;
 
     AcquireSRWLockExclusive(&g_lock);
     NV3D::InterfaceVulkan *i = g_iface;
