@@ -13858,6 +13858,7 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
                 p,
                 (unsigned)has_vs,
                 vs_stage);
+            continue;
             }
         }
         if (in_mv_rp &&
