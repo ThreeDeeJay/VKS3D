@@ -9530,12 +9530,17 @@ bool spirv_patch_stereo_fs(
             }
             memcpy(w, &in[i], wc * sizeof(uint32_t));
             uint32_t pointer_id = in[i + 3];
+            uint32_t pointer_owner = pointer_id;
+            int pointer_load = fs_find_load(&s, pointer_id);
+            if (pointer_load >= 0)
+                pointer_owner = s.loads[pointer_load].owner_var;
             uint32_t pointer_type = 0;
             uint32_t pointer_target = 0;
             STEREO_LOG(
                 "FS_LOAD_REWRITE_CHECK "
-                "ptr=%u",
-                pointer_id);
+                "ptr=%u owner=%u",
+                pointer_id,
+                pointer_owner);
             STEREO_LOG(
                 "FS_LOAD "
                 "off=%zu "
@@ -9634,7 +9639,7 @@ bool spirv_patch_stereo_fs(
             {
                 FsImageInfo *image = &s.images[j];
                 if (!image->stereo ||
-                    image->owner_var != pointer_id ||
+                    image->owner_var != pointer_owner ||
                     !image->replacement_pointer_type)
                     continue;
                 if (pointer_target == image->sampled_type_id &&
