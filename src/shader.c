@@ -14319,7 +14319,8 @@ stereo_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pc,
             has_vs &&
             !has_tcs &&
             vs_stage != ~0u &&
-            !vs_pure_quad) 
+            !vs_pure_quad &&
+            !(sd->stereo.mono_fullscreen_quad && vs_quad_fs))
         {
             StereoShaderCache inline_e;
             StereoShaderCache *e=cache_find(sd, ci->pStages[vs_stage].module);
