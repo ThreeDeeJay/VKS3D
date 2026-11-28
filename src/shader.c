@@ -4715,24 +4715,14 @@ uint32_t var)
         if (img->owner_var != var)
             continue;
         has_image = true;
-        if (img->dim != SpvDim2D)
+        if (img->dim != SpvDim2D || img->arrayed != 0)
         {
             STEREO_LOG(
-                "FS_BINDING_SKIP_STEREO var=%u image=%u dim=%u arrayed=%u reason=non2d",
+                "FS_BINDING_SKIP_STEREO var=%u image=%u dim=%u arrayed=%u reason=non2d_or_existing_array",
                 var,
                 img->id,
                 img->dim,
                 img->arrayed);
-            return false;
-        }
-        if (img->arrayed == 0 && v->set != 0)
-        {
-            STEREO_LOG(
-                "FS_BINDING_SKIP_STEREO var=%u image=%u set=%u binding=%u arrayed=0 reason=descriptor_layout",
-                var,
-                img->id,
-                v->set,
-                v->binding);
             return false;
         }
         stereo = true;
