@@ -2098,11 +2098,14 @@ stereo_UpdateDescriptorSets(
                 }
             }
             STEREO_LOG(
-                "DESC_WRITE binding=%u view=%p layout=%u type=%u",
+                "DESC_WRITE set=%p binding=%u element=%u view=%p layout=%u type=%u upgraded=%u",
+                (void *)(uintptr_t)w->dstSet,
                 w->dstBinding,
+                w->dstArrayElement + j,
                 (void *)(uintptr_t)view,
                 w->pImageInfo[j].imageLayout,
-                w->descriptorType);
+                w->descriptorType,
+                upgraded);
             STEREO_LOG(
                 "DESC_IMAGE_WRITE binding=%u view=%p upgraded=%d",
                 w->dstBinding,
