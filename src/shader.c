@@ -4697,7 +4697,6 @@ uint32_t var)
      * render targets. Never append ViewIndex to their layer coordinates.
      */
     if (v->storage != SpvStorageClassUniformConstant ||
-        v->set != 0 ||
         v->binding > 4)
     {
         STEREO_LOG(
@@ -4709,37 +4708,55 @@ uint32_t var)
         return false;
     }
     bool has_image = false;
+    bool stereo = false;
     for (uint32_t i = 0; i < s->n_img; ++i)
     {
         const FsImageInfo *img = &s->images[i];
         if (img->owner_var != var)
             continue;
         has_image = true;
-        if (img->dim != SpvDim2D || img->arrayed != 0)
+        if (img->dim != SpvDim2D)
         {
             STEREO_LOG(
-                "FS_BINDING_SKIP_STEREO var=%u image=%u dim=%u arrayed=%u reason=existing_array",
+                "FS_BINDING_SKIP_STEREO var=%u image=%u dim=%u arrayed=%u reason=non2d",
                 var,
                 img->id,
                 img->dim,
                 img->arrayed);
             return false;
         }
+        if (img->arrayed == 0 && v->set != 0)
+        {
+            STEREO_LOG(
+                "FS_BINDING_SKIP_STEREO var=%u image=%u set=%u binding=%u arrayed=0 reason=descriptor_layout",
+                var,
+                img->id,
+                v->set,
+                v->binding);
+            return false;
+        }
+        stereo = true;
+        STEREO_LOG(
+            "FS_BINDING_IMAGE_CLASSIFY var=%u image=%u set=%u binding=%u arrayed=%u stereo=1 conversion=%u",
+            var,
+            img->id,
+            v->set,
+            v->binding,
+            img->arrayed,
+            img->patchable);
     }
-    bool stereo = has_image;
+    stereo = stereo && has_image;
     STEREO_LOG(
         "FS_BINDING_RESULT "
         "var=%u "
         "storage=%u "
         "set=%u "
         "binding=%u "
-        "has_image=%u "
         "stereo=%u",
         var,
         v->storage,
         v->set,
         v->binding,
-        has_image,
         stereo);
     return stereo;
 }
